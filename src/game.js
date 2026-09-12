@@ -1314,28 +1314,33 @@ async function renderAdmin(){
 async function loadAdminList(){
   const list = document.getElementById('admin-list');
   const msg = document.getElementById('admin-msg');
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('id, username, role, is_banned, created_at')
-    .order('created_at', { ascending: false })
-    .limit(100);
+  const [profilesRes, charsRes] = await Promise.all([
+    supabase.from('profiles').select('id, username, role, is_banned, hidden_from_leaderboard, created_at').order('created_at', { ascending: false }).limit(100),
+    supabase.from('characters').select('user_id')
+  ]);
+  const { data, error } = profilesRes;
   if(!list) return; // el jugador cerró el panel antes de que llegara la respuesta
   if(error){
     list.innerHTML = `<p class="inv-empty-msg">No se pudo cargar la lista de cuentas.</p>`;
     return;
   }
+  const hasCharacter = new Set((charsRes.data || []).map(c => c.user_id));
+
   list.innerHTML = data.map(p=>{
     const isSelf = p.id === currentUser.id;
     const bannedLabel = p.is_banned ? 'Suspendida' : 'Activa';
     const created = new Date(p.created_at).toLocaleDateString();
+    const ownsCharacter = hasCharacter.has(p.id);
     return `<div class="inv-item-row">
       <div>
-        <b>${p.username}</b> <span class="slot-tag">${p.role}</span> <span class="slot-tag" style="${p.is_banned?'color:var(--blood-light); border-color:rgba(178,68,68,0.4);':'color:var(--good);'}">${bannedLabel}</span>
-        <div class="inv-item-bonus neutral">Creada: ${created}</div>
+        <b>${p.username}</b> <span class="slot-tag">${p.role}</span> <span class="slot-tag" style="${p.is_banned?'color:var(--blood-light); border-color:rgba(178,68,68,0.4);':'color:var(--good);'}">${bannedLabel}</span>${p.hidden_from_leaderboard ? ' <span class="slot-tag">Oculta del ranking</span>' : ''}
+        <div class="inv-item-bonus neutral">Creada: ${created}${ownsCharacter ? '' : ' · sin personaje'}</div>
       </div>
       <div style="display:flex; gap:8px; flex-shrink:0; flex-wrap:wrap;">
         <button class="inv-btn ${p.is_banned?'':'danger'}" data-toggle-ban="${p.id}" ${isSelf?'disabled title="No puedes suspender tu propia cuenta"':''}>${p.is_banned?'Reactivar':'Suspender'}</button>
         <button class="inv-btn" data-toggle-role="${p.id}" ${isSelf?'disabled title="No puedes quitarte el rol admin a ti mismo"':''}>${p.role==='admin'?'Quitar admin':'Hacer admin'}</button>
+        <button class="inv-btn" data-toggle-ranking="${p.id}">${p.hidden_from_leaderboard?'Mostrar en ranking':'Ocultar del ranking'}</button>
+        <button class="inv-btn danger" data-delete-char="${p.id}" ${ownsCharacter?'':'disabled title="Esta cuenta no tiene personaje"'}>Eliminar personaje</button>
       </div>
     </div>`;
   }).join('') || `<p class="inv-empty-msg">No hay cuentas registradas.</p>`;
@@ -1359,6 +1364,35 @@ async function loadAdminList(){
       btn.disabled = true;
       const { error } = await supabase.from('profiles').update({ role: newRole }).eq('id', id);
       if(error) msg.textContent = 'No se pudo actualizar: ' + error.message;
+      else msg.textContent = '';
+      await loadAdminList();
+    };
+  });
+  list.querySelectorAll('[data-toggle-ranking]').forEach(btn=>{
+    btn.onclick = async ()=>{
+      const id = btn.dataset.toggleRanking;
+      const target = data.find(p=>p.id===id);
+      btn.disabled = true;
+      const { error } = await supabase.from('profiles').update({ hidden_from_leaderboard: !target.hidden_from_leaderboard }).eq('id', id);
+      if(error) msg.textContent = 'No se pudo actualizar: ' + error.message;
+      else msg.textContent = '';
+      await loadAdminList();
+    };
+  });
+  list.querySelectorAll('[data-delete-char]').forEach(btn=>{
+    btn.onclick = async ()=>{
+      const id = btn.dataset.deleteChar;
+      const target = data.find(p=>p.id===id);
+      if(!confirm(`¿Eliminar el personaje de "${target.username}"? Esta acción no se puede deshacer.`)) return;
+      const typed = prompt(`Para confirmar, escribe exactamente el nombre de usuario "${target.username}":`);
+      if(typed === null) return;
+      if(typed.trim().toLowerCase() !== target.username.toLowerCase()){
+        msg.textContent = 'El nombre no coincide. No se eliminó nada.';
+        return;
+      }
+      btn.disabled = true;
+      const { error } = await supabase.from('characters').delete().eq('user_id', id);
+      if(error) msg.textContent = 'No se pudo eliminar: ' + error.message;
       else msg.textContent = '';
       await loadAdminList();
     };

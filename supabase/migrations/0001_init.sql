@@ -8,12 +8,13 @@ create extension if not exists citext;
 -- PROFILES — espejo público de auth.users + rol de juego
 -- ============================================================
 create table public.profiles (
-  id            uuid primary key references auth.users(id) on delete cascade,
-  username      citext not null unique,
-  username_set  boolean not null default false, -- false = nombre autogenerado, aún no elegido por el jugador
-  role          text not null default 'player' check (role in ('player','admin')),
-  is_banned     boolean not null default false,
-  created_at    timestamptz not null default now()
+  id                     uuid primary key references auth.users(id) on delete cascade,
+  username               citext not null unique,
+  username_set           boolean not null default false, -- false = nombre autogenerado, aún no elegido por el jugador
+  role                   text not null default 'player' check (role in ('player','admin')),
+  is_banned              boolean not null default false,
+  hidden_from_leaderboard boolean not null default false, -- para cuentas de prueba/admin que no deben salir en el ranking público
+  created_at             timestamptz not null default now()
 );
 
 alter table public.profiles enable row level security;
@@ -70,6 +71,7 @@ begin
     if acting_role is distinct from 'admin' then
       new.role := old.role;
       new.is_banned := old.is_banned;
+      new.hidden_from_leaderboard := old.hidden_from_leaderboard;
     end if;
   end if;
   return new;
@@ -284,7 +286,7 @@ create view public.leaderboard_top10 as
 select p.username, c.record_level, c.record_floor_idx, c.updated_at
 from public.characters c
 join public.profiles p on p.id = c.user_id
-where not p.is_banned
+where not p.is_banned and not p.hidden_from_leaderboard
 order by c.record_level desc, c.record_floor_idx desc, c.updated_at asc
 limit 10;
 
