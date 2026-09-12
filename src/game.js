@@ -1,0 +1,2525 @@
+"use strict";
+
+import { supabase } from './supabaseClient.js';
+import * as auth from './auth.js';
+
+/* ============================================================
+   DATA
+   ============================================================ */
+
+const RACES = {
+  barbaro: {
+    id:'barbaro', name:'Bárbaro', icon:'🪓',
+    desc:'Carne y furia. El más fuerte y el más despreciado fuera del combate.',
+    stats:{fis:8, esp:3, hab:5},
+    res:{fisico:15, fuego:-10, hielo:0, veneno:0, aturdimiento:20},
+    passive:'Furia de sangre', passiveDesc:'Por debajo del 30% de vida, tu daño físico aumenta un 20%.'
+  },
+  enano: {
+    id:'enano', name:'Enano', icon:'⛏️',
+    desc:'Robusto y terco. Resiste lo que otros no soportarían.',
+    stats:{fis:7, esp:4, hab:4},
+    res:{fisico:10, fuego:0, hielo:10, veneno:25, aturdimiento:5},
+    passive:'Piel de piedra', passiveDesc:'Reduce todo daño físico recibido en una cantidad plana adicional.'
+  },
+  hada: {
+    id:'hada', name:'Hada', icon:'🦋',
+    desc:'Frágil pero certera. Vive de no ser tocada.',
+    stats:{fis:3, esp:9, hab:6},
+    res:{fisico:-10, fuego:15, hielo:15, veneno:5, aturdimiento:0},
+    passive:'Gracia', passiveDesc:'+15% de probabilidad de esquivar cualquier ataque.'
+  },
+  humano: {
+    id:'humano', name:'Humano', icon:'🗡️',
+    desc:'Sin extremos, sin techo. Aprende más rápido que el resto.',
+    stats:{fis:5, esp:5, hab:6},
+    res:{fisico:5, fuego:5, hielo:5, veneno:5, aturdimiento:5},
+    passive:'Adaptable', passiveDesc:'Ganas un 10% más de experiencia de cada victoria.'
+  },
+  draconido: {
+    id:'draconido', name:'Dracónido', icon:'🐉',
+    desc:'Sangre de bestia antigua. Poderoso, pero torpe con el hielo.',
+    stats:{fis:7, esp:7, hab:3},
+    res:{fisico:0, fuego:30, hielo:-15, veneno:0, aturdimiento:10},
+    passive:'Sangre ancestral', passiveDesc:'Tus habilidades de fuego infligen un 15% adicional de daño.'
+  },
+  bestia: {
+    id:'bestia', name:'Hombre bestia', icon:'🐺',
+    desc:'Instinto puro. Golpea primero, golpea fuerte, golpea rápido.',
+    stats:{fis:6, esp:2, hab:9},
+    res:{fisico:5, fuego:0, hielo:0, veneno:-10, aturdimiento:15},
+    passive:'Instinto cazador', passiveDesc:'+15% de probabilidad de golpe crítico.'
+  }
+};
+
+const STYLES = {
+  pesada: {
+    id:'pesada', name:'Arma pesada', icon:'🔨', scaleStat:'fis',
+    desc:'Mazos y hachas. Rompe la guardia y remata al aturdido.',
+    skills:['golpe_bruto','machacar','grito_guerra']
+  },
+  doblefilo: {
+    id:'doblefilo', name:'Doble filo', icon:'🔪', scaleStat:'fishab',
+    desc:'Dagas gemelas. Desangra a tu presa y luego termina el trabajo.',
+    skills:['corte_rapido','danza_cuchillas','golpe_gracia']
+  },
+  tirador: {
+    id:'tirador', name:'Tirador', icon:'🏹', scaleStat:'hab',
+    desc:'Distancia y precisión. Marca, retrocede, dispara.',
+    skills:['disparo_certero','marca_cazador','lluvia_flechas']
+  },
+  canalizador: {
+    id:'canalizador', name:'Canalizador', icon:'🔥', scaleStat:'esp',
+    desc:'Fuego y hielo. Siembra el elemento y detónalo después.',
+    skills:['bola_fuego','lanza_hielo','explosion_arcana']
+  }
+};
+
+// skill definitions
+const SKILLS = {
+  ataque_basico: {
+    id:'ataque_basico', name:'Ataque básico', cost:null, dmgType:'fisico', mult:0.55,
+    desc:'Un golpe simple y confiable. No cuesta recursos.', targetMode:'front'
+  },
+  defender: {
+    id:'defender', name:'Defenderse', cost:null, utility:'defend',
+    desc:'Reduces el daño recibido a la mitad hasta tu próximo turno.', targetMode:'self'
+  },
+  reposicionar: {
+    id:'reposicionar', name:'Reposicionarse', cost:null, utility:'reposition',
+    desc:'Cambia entre Frente y Retaguardia. Ocupa tu turno.', targetMode:'self'
+  },
+
+  golpe_bruto: {
+    id:'golpe_bruto', name:'Golpe bruto', cost:{tipo:'estamina', valor:15}, dmgType:'fisico', mult:1.0,
+    requiresPos:'frente', applies:{name:'Tambaleo', chance:0.7, duration:2},
+    desc:'Daño físico. 70% de aplicar Tambaleo.', targetMode:'front'
+  },
+  machacar: {
+    id:'machacar', name:'Machacar', cost:{tipo:'estamina', valor:20}, dmgType:'fisico', mult:0.7,
+    requiresPos:'frente', consumes:{name:'Tambaleo', bonusMult:1.8, applies:{name:'Aturdido', duration:1}},
+    desc:'Si el objetivo está Tambaleante: lo aturde y hace mucho más daño.', targetMode:'front'
+  },
+  grito_guerra: {
+    id:'grito_guerra', name:'Grito de guerra', cost:{tipo:'espiritu', valor:10}, utility:'buff_self',
+    applySelf:{name:'Furioso', duration:2, dmgMult:1.3, evasionDelta:-10},
+    desc:'+30% daño físico, -10% evasión durante 2 turnos.', targetMode:'self'
+  },
+
+  corte_rapido: {
+    id:'corte_rapido', name:'Corte rápido', cost:{tipo:'estamina', valor:12}, dmgType:'fisico', mult:0.6,
+    requiresPos:'frente', applies:{name:'Sangrado', chance:0.85, duration:3, stack:true, maxStack:3},
+    desc:'Daño físico. Apila Sangrado (hasta x3).', targetMode:'front'
+  },
+  danza_cuchillas: {
+    id:'danza_cuchillas', name:'Danza de cuchillas', cost:{tipo:'estamina', valor:22}, dmgType:'fisico', mult:0.5, hits:2,
+    requiresPos:'frente', scalesWithStack:{name:'Sangrado', perStackMult:0.15},
+    desc:'Golpea dos veces. +15% de daño por cada carga de Sangrado en el objetivo.', targetMode:'front'
+  },
+  golpe_gracia: {
+    id:'golpe_gracia', name:'Golpe de gracia', cost:{tipo:'estamina', valor:18}, dmgType:'fisico', mult:0.9,
+    requiresPos:'frente', consumesStackBonus:{name:'Sangrado', perStackMult:0.25},
+    desc:'Consume el Sangrado del objetivo: +25% de daño por carga consumida.', targetMode:'front'
+  },
+
+  disparo_certero: {
+    id:'disparo_certero', name:'Disparo certero', cost:{tipo:'estamina', valor:10}, dmgType:'fisico', mult:0.8,
+    ignoreResist:0.5, penaltyIfFrente:0.2,
+    desc:'Ignora 50% de la resistencia física. Menos preciso desde el Frente.', targetMode:'any'
+  },
+  marca_cazador: {
+    id:'marca_cazador', name:'Marca del cazador', cost:{tipo:'espiritu', valor:8}, utility:'mark',
+    applies:{name:'Marcado', chance:1, duration:3},
+    desc:'No hace daño. El objetivo recibe +20% de todo el daño durante 3 turnos.', targetMode:'any'
+  },
+  lluvia_flechas: {
+    id:'lluvia_flechas', name:'Lluvia de flechas', cost:{tipo:'estamina', valor:20}, dmgType:'fisico', mult:0.55, aoe:true,
+    bonusVsMarked:0.25,
+    desc:'Daño a todos los enemigos vivos. +25% contra los Marcados.', targetMode:'all'
+  },
+
+  bola_fuego: {
+    id:'bola_fuego', name:'Bola de fuego', cost:{tipo:'espiritu', valor:15}, dmgType:'fuego', mult:0.9,
+    applies:{name:'Quemadura', chance:0.8, duration:3},
+    desc:'Daño de fuego. Aplica Quemadura (daño por turno).', targetMode:'any'
+  },
+  lanza_hielo: {
+    id:'lanza_hielo', name:'Lanza de hielo', cost:{tipo:'espiritu', valor:15}, dmgType:'hielo', mult:0.8,
+    applies:{name:'Ralentizado', chance:0.8, duration:2},
+    desc:'Daño de hielo. Aplica Ralentizado (-20% evasión, actúa después).', targetMode:'any'
+  },
+  explosion_arcana: {
+    id:'explosion_arcana', name:'Explosión arcana', cost:{tipo:'espiritu', valor:25}, dmgType:'arcano', mult:0.75,
+    consumesEither:[{name:'Quemadura', bonusMult:0.6},{name:'Ralentizado', bonusMult:0.6}], penaltyIfNone:0.3,
+    desc:'Consume Quemadura o Ralentizado del objetivo para +60% de daño.', targetMode:'any'
+  }
+};
+
+const ENEMY_TEMPLATES = [
+  {id:'rata', name:'Rata colosal', icon:'🐀', hp:1.0, atk:0.9, res:{fisico:0,fuego:-10,hielo:0,veneno:20,aturdimiento:0}, moves:['pegar']},
+  {id:'bandido', name:'Bandido del laberinto', icon:'🗡️', hp:1.1, atk:1.1, res:{fisico:5,fuego:0,hielo:0,veneno:0,aturdimiento:0}, moves:['pegar','robar']},
+  {id:'esqueleto', name:'Esqueleto óseo', icon:'💀', hp:1.2, atk:1.0, res:{fisico:25,fuego:-15,hielo:10,veneno:40,aturdimiento:-10}, moves:['pegar']},
+  {id:'arana', name:'Araña venenosa', icon:'🕷️', hp:0.9, atk:0.85, res:{fisico:0,fuego:0,hielo:-10,veneno:30,aturdimiento:10}, moves:['pegar','morder']},
+  {id:'espectro', name:'Espectro errante', icon:'👻', hp:1.0, atk:1.05, res:{fisico:30,fuego:0,hielo:0,veneno:0,aturdimiento:-15}, moves:['pegar','debilitar']},
+  {id:'trol', name:'Trol de piedra', icon:'🗿', hp:1.9, atk:1.4, res:{fisico:20,fuego:-10,hielo:5,veneno:10,aturdimiento:25}, moves:['pegar','aplastar'], elite:true},
+  {id:'guardian', name:'Guardián del laberinto', icon:'🛡️', hp:3.2, atk:1.6, res:{fisico:15,fuego:5,hielo:5,veneno:15,aturdimiento:30}, moves:['pegar','aplastar','debilitar'], boss:true}
+];
+
+const POTION_TEMPLATES = {
+  vida_menor: {id:'vida_menor', name:'Poción de vida menor', icon:'🧪', desc:'Restaura el 35% de tu vida máxima.', effect:{heal:'hp', amount:0.35}},
+  vida_mayor: {id:'vida_mayor', name:'Poción de vida mayor', icon:'🍷', desc:'Restaura el 70% de tu vida máxima.', effect:{heal:'hp', amount:0.7}},
+  estamina: {id:'estamina', name:'Tónico de MP', icon:'🥃', desc:'Restaura el 50% de tu MP máximo.', effect:{heal:'sta', amount:0.5}},
+  espiritu: {id:'espiritu', name:'Elixir de espíritu', icon:'💠', desc:'Restaura el 50% de tu espíritu máximo.', effect:{heal:'spi', amount:0.5}},
+  antidoto: {id:'antidoto', name:'Antídoto', icon:'🌿', desc:'Elimina todos tus efectos negativos activos.', effect:{cure:true}}
+};
+
+/* ============================================================
+   ITEM RARITY, TIENDA (SHOP) & GUARDIAN REWARDS
+   ============================================================ */
+const RARITIES = {
+  comun: {id:'comun', name:'Común', color:'#a3a3a3'},
+  poco_comun: {id:'poco_comun', name:'Poco común', color:'#3ecf6e'}
+  // futuras rarezas (pendientes de implementar): unico, epico, legendario, mitico, dios
+};
+
+// weapon/offhand options the shop sells, keyed by combat style; each subclass can only
+// buy the gear that fits its playstyle (heavy weapons + shield, dual blades, bow + quiver, staff + focus)
+const WEAPON_OPTIONS = {
+  pesada: {
+    arma: ['Martillo de guerra','Maza de combate','Espadón pesado'],
+    arma2: ['Escudo de hierro']
+  },
+  doblefilo: {
+    arma: ['Daga curva','Cuchillo largo'],
+    arma2: ['Daga gemela']
+  },
+  tirador: {
+    arma: ['Arco corto','Arco largo'],
+    arma2: ['Carcaj de cuero']
+  },
+  canalizador: {
+    arma: ['Vara arcana','Bastón rúnico'],
+    arma2: ['Foco arcano']
+  }
+};
+const OFFHAND_LABELS = {pesada:'Escudo', doblefilo:'Arma 2', tirador:'Carcaj', canalizador:'Foco'};
+// which stat a subclass's weapons feed (pure damage, no other stats — as requested)
+const SHOP_WEAPON_STAT = {pesada:'fis', doblefilo:'hab', tirador:'hab', canalizador:'esp'};
+// sub-perk poco-común (guardian) weapons roll, following each subclass's logic:
+// heavy weapons never get life steal, dps (doble filo) never gets stun
+const SPECIALS_BY_STYLE = {
+  pesada: {type:'aturdir', label:'posibilidad de aturdir', chance:0.12},
+  doblefilo: {type:'robovida', label:'robo de vida', percent:0.10},
+  tirador: {type:'aturdir', label:'posibilidad de aturdir', chance:0.10},
+  canalizador: {type:'robovida', label:'robo de vida', percent:0.08}
+};
+
+function shopWeaponValue(){ return 3 + Math.floor(state.char.level/2); }
+function shopWeaponPrice(isOffhand){ return isOffhand ? 40 + state.char.level*4 : 55 + state.char.level*6; }
+const SHOP_POTION_PRICES = {vida_menor:12, vida_mayor:30, estamina:12, espiritu:12};
+
+function buyWeapon(slot){
+  const styleId = state.char.style;
+  const opts = WEAPON_OPTIONS[styleId];
+  if(!opts || !opts[slot]) return;
+  const price = shopWeaponPrice(slot==='arma2');
+  if(state.char.gold < price){ log('No tienes suficiente oro para eso.'); return; }
+  state.char.gold -= price;
+  const name = pick(opts[slot]);
+  const statKey = SHOP_WEAPON_STAT[styleId] || 'fis';
+  addToInventory({slot, name, bonus:{stat:statKey, value:shopWeaponValue()}, rarity:'comun'});
+  log(`Compras <b>${name}</b> por ${price} de oro.`);
+  renderAll(); save();
+}
+
+function buyPotion(potionId){
+  const price = SHOP_POTION_PRICES[potionId] || 15;
+  if(state.char.gold < price){ log('No tienes suficiente oro para eso.'); return; }
+  state.char.gold -= price;
+  addToInventory({kind:'potion', potionId});
+  log(`Compras <b>${POTION_TEMPLATES[potionId].name}</b> por ${price} de oro.`);
+  renderAll(); save();
+}
+
+const SOUL_STONE_SELL_BASE = {E:20, F:40, D:80, C:160, B:320, A:640, S:1280, SS:2560}; // se duplica por rango, igual que las piedras
+function itemSellValue(item){
+  if(item.kind==='potion') return Math.round((SHOP_POTION_PRICES[item.potionId]||15) * 0.5);
+  if(item.kind==='soulstone') return Math.round((SOUL_STONE_SELL_BASE[item.tier]||20) * 0.5);
+  // equipo: mitad de un valor estimado a partir de su rareza y la magnitud de su bono
+  const rarityBase = {comun:20, poco_comun:50}[item.rarity] || 15;
+  let bonusValue = 0;
+  if(item.bonus){
+    if(item.bonus.stat) bonusValue = item.bonus.value*4;
+    else if(item.bonus.res) bonusValue = item.bonus.value*1.5;
+  }
+  const specialBonus = item.special ? 15 : 0;
+  return Math.round((rarityBase + bonusValue + specialBonus) * 0.5);
+}
+function sellEquipOrStone(uid){
+  const idx = state.char.inventory.findIndex(i=>i.uid===uid);
+  if(idx<0) return;
+  const item = state.char.inventory[idx];
+  const value = itemSellValue(item);
+  state.char.inventory.splice(idx,1);
+  state.char.gold += value;
+  log(`Vendes <b>${item.name}</b> por ${value} de oro (50% de su valor original).`);
+  renderAll(); save();
+}
+function sellPotionStack(potionId){
+  const item = state.char.inventory.find(i=>i.kind==='potion' && i.potionId===potionId);
+  if(!item) return;
+  const value = itemSellValue(item);
+  item.qty -= 1;
+  if(item.qty<=0) state.char.inventory = state.char.inventory.filter(i=>i!==item);
+  state.char.gold += value;
+  log(`Vendes <b>${POTION_TEMPLATES[potionId].name}</b> por ${value} de oro (50% de su valor original).`);
+  renderAll(); save();
+}
+
+// every guardian from level 2 onward hands out a fixed, subclass-appropriate poco-común item
+const GUARDIAN_REWARD_SLOTS = {2:'arma', 3:'casco', 4:'arma2', 5:'guantes', 6:'armadura', 7:'botas', 8:'amuleto', 9:'arma', 10:'armadura'};
+const GUARDIAN_SLOT_STAT = {casco:'hab', guantes:'fis', botas:'hab'}; // themed stat for the new slots
+const GUARDIAN_SLOT_NAMES = {
+  casco:['Yelmo del guardián','Corona vigilante','Máscara custodia'],
+  botas:['Botas del guardián','Grebas vigilantes','Sandalias del custodio'],
+  guantes:['Guanteletes del guardián','Manoplas vigilantes','Garras del custodio']
+};
+function generateGuardianReward(level){
+  const slot = GUARDIAN_REWARD_SLOTS[level];
+  if(!slot) return null;
+  const styleId = state.char.style;
+  const opts = WEAPON_OPTIONS[styleId] || WEAPON_OPTIONS.pesada;
+  let name, bonus, special = null;
+  if(slot==='arma' || slot==='arma2'){
+    name = pick(opts[slot]) + ' del guardián';
+    const statKey = SHOP_WEAPON_STAT[styleId] || 'fis';
+    bonus = {stat:statKey, value: shopWeaponValue()+3};
+    special = SPECIALS_BY_STYLE[styleId] || null;
+  } else if(slot==='armadura'){
+    name = pick(['Coraza del guardián','Placa ancestral','Manto del vigía']);
+    bonus = {stat:'maxhp', value: 3 + Math.floor(state.char.level/2)};
+  } else if(slot==='amuleto'){
+    name = pick(['Sello del guardián','Reliquia custodiada','Talismán antiguo']);
+    const resKeys = ['fisico','fuego','hielo','veneno','aturdimiento'];
+    bonus = {res: pick(resKeys), value: 10};
+  } else {
+    // casco, botas, guantes
+    name = pick(GUARDIAN_SLOT_NAMES[slot]);
+    bonus = {stat: GUARDIAN_SLOT_STAT[slot], value: 3 + Math.floor(state.char.level/3)};
+  }
+  const item = {slot, name, bonus, rarity:'poco_comun'};
+  if(special) item.special = special;
+  return item;
+}
+
+/* ============================================================
+   PIEDRAS DE ALMA (SOUL STONES) — v2, familias con fórmulas por rango
+   ============================================================
+   Investigué la novela «Sobreviviendo siendo un bárbaro»: usa "Esencias" con
+   rango numérico 9 (débil) a 1 (fuerte), no piedras con letras. Este sistema
+   sigue siendo una capa propia de nuestro juego, con el ranking pedido:
+   E (más bajo) < F < D < C < B < A < S < SS (más alto).
+   Solo caen piedras de rango E y F por ahora. Las fórmulas de D/C/B ya están
+   listas (se duplican por rango, igual que E→F), y las de A/S/SS también
+   (efectos "avanzados" que empiezan en A y suben +10 puntos porcentuales por
+   rango) — simplemente no hay forma de conseguir esos rangos todavía. */
+const SOUL_STONE_TIERS = ['E','F','D','C','B','A','S','SS']; // ascendente: E la más baja, SS la más alta
+const AVAILABLE_SOUL_TIERS = ['E','F']; // únicos rangos obtenibles por ahora
+const SOUL_TIER_COLORS = {E:'#9a9a9a', F:'#6fae6f', D:'#4f9bd1', C:'#8a7fd1', B:'#c17fd1', A:'#d1a84f', S:'#d1594f', SS:'#e23c6b'};
+function soulTierIdx(tier){ return SOUL_STONE_TIERS.indexOf(tier); }
+
+// Fórmulas de escalado por familia (documentadas para cuando D-SS estén disponibles).
+// statValue: se duplica por cada rango. procChance: se duplica desde F en adelante.
+// advValue: "efecto avanzado" que arranca en rango A y sube +10 puntos/rango (o tabla fija).
+const SOUL_FAMILIES = {
+  vigor:     {name:'Vigor',           statKey:'fis',    baseE:4,  procBaseAtF:0.02, advBaseAtA:0.10, advLabel:'robo de vida (% del daño causado)'},
+  sabiduria: {name:'Sabiduría',       statKey:'maxsta', baseE:16, procBaseAtF:0.05, advBaseAtA:0.10, advLabel:'probabilidad de escudo de maná'},
+  voluntad:  {name:'Voluntad',        statKey:'esp',    baseE:4,  procBaseAtF:0.05, advBaseAtA:0.10, advLabel:'probabilidad de que tu próxima habilidad cueste la mitad de espíritu'},
+  instinto:  {name:'Instinto',        statKey:'hab',    baseE:4,  procBaseAtF:0.02, advBaseAtA:0.10, advLabel:'probabilidad de doble lanzamiento (el segundo gratis y sin turno)'},
+  vitalidad: {name:'Vitalidad',       statKey:'maxhp',  baseE:2,  procBaseAtF:0.02, advBaseAtA:0.10, advLabel:'probabilidad de curar 10% de tu vida máxima'},
+  furia:     {name:'Furia Contenida', statKey:null,     advTable:{A:0.25, S:0.50, SS:1.00}, advLabel:'probabilidad de revivir una vez por laberinto'},
+  sombra:    {name:'Sombra Cazadora', statKey:null,     advTable:{A:0.01, S:0.05, SS:0.10}, advLabel:'probabilidad de invocar una sombra que atrae el agro'}
+};
+function soulStatValue(famId, tier){
+  const fam = SOUL_FAMILIES[famId];
+  if(!fam || !fam.statKey) return 0;
+  return fam.baseE * Math.pow(2, soulTierIdx(tier)); // se duplica por cada categoría que sube
+}
+function soulProcChance(famId, tier){
+  const fam = SOUL_FAMILIES[famId];
+  if(!fam || !fam.procBaseAtF) return 0;
+  const idx = soulTierIdx(tier);
+  if(idx < 1) return 0; // sin proc en rango E
+  return fam.procBaseAtF * Math.pow(2, idx-1); // se duplica desde F en adelante
+}
+function soulAdvancedValue(famId, tier){
+  const fam = SOUL_FAMILIES[famId];
+  if(!fam) return 0;
+  const idx = soulTierIdx(tier);
+  if(fam.advTable) return fam.advTable[tier] || 0;
+  if(idx < 5) return 0; // 5 = rango A; antes de eso no hay efecto avanzado
+  return fam.advBaseAtA + (idx-5)*0.10;
+}
+function soulFuriaBase(tier){ const idx=soulTierIdx(tier); return idx===0 ? 0.10 : 0.18 + (idx-1)*0.001; }
+function soulFuriaMissingScale(tier){ const idx=soulTierIdx(tier); return idx===0 ? 0.005 : 0.006 + (idx-1)*0.001; }
+
+const SOUL_STONES = {
+  vigor_e:     {id:'vigor_e',     family:'vigor',     name:'Piedra del Alma: Vigor (E)',            tier:'E', icon:'🟤', bonus:{stat:'fis', value:4},
+    desc:'+4 Físico permanente.', preview:'Desde F: probabilidad de aturdir al golpear. Desde A: roba vida.'},
+  vigor_f:     {id:'vigor_f',     family:'vigor',     name:'Piedra del Alma: Vigor (F)',            tier:'F', icon:'🟤', bonus:{stat:'fis', value:8},
+    special:{type:'aturdir', chance:0.02},
+    desc:'+8 Físico. 2% de probabilidad de aturdir al enemigo al golpear.', preview:'Desde A: roba vida (% del daño causado).'},
+  sabiduria_e: {id:'sabiduria_e', family:'sabiduria', name:'Piedra del Alma: Sabiduría (E)',        tier:'E', icon:'📘', bonus:{stat:'maxsta', value:16},
+    desc:'+16 MP máximo.', preview:'Desde F: probabilidad de recuperar MP gastado. Desde A: escudo de maná.'},
+  sabiduria_f: {id:'sabiduria_f', family:'sabiduria', name:'Piedra del Alma: Sabiduría (F)',        tier:'F', icon:'📘', bonus:{stat:'maxsta', value:32},
+    special:{type:'mp_refund', chance:0.05, amount:0.05},
+    desc:'+32 MP máximo. 5% de probabilidad de recuperar el 5% del MP gastado.', preview:'Desde A: probabilidad de escudo de maná (cubre daño físico y mágico según tu MP máximo).'},
+  voluntad_e:  {id:'voluntad_e',  family:'voluntad',  name:'Piedra del Alma: Voluntad (E)',         tier:'E', icon:'🔷', bonus:{stat:'esp', value:4},
+    desc:'+4 Espíritu permanente.', preview:'Desde F: probabilidad de recuperar espíritu gastado. Desde A: próxima habilidad a mitad de costo.'},
+  voluntad_f:  {id:'voluntad_f',  family:'voluntad',  name:'Piedra del Alma: Voluntad (F)',         tier:'F', icon:'🔷', bonus:{stat:'esp', value:8},
+    special:{type:'esp_refund', chance:0.05, amount:0.05},
+    desc:'+8 Espíritu. 5% de probabilidad de recuperar el 5% del espíritu gastado.', preview:'Desde A: probabilidad de que tu próxima habilidad cueste la mitad de espíritu.'},
+  instinto_e:  {id:'instinto_e',  family:'instinto',  name:'Piedra del Alma: Instinto (E)',         tier:'E', icon:'🟢', bonus:{stat:'hab', value:4},
+    desc:'+4 Habilidad permanente.', preview:'Desde F: probabilidad de quemar o congelar según la habilidad. Desde A: doble lanzamiento.'},
+  instinto_f:  {id:'instinto_f',  family:'instinto',  name:'Piedra del Alma: Instinto (F)',         tier:'F', icon:'🟢', bonus:{stat:'hab', value:8},
+    special:{type:'elemental_proc', chance:0.02},
+    desc:'+8 Habilidad. 2% de probabilidad de quemar (fuego) o congelar/ralentizar (hielo) al enemigo, según la habilidad usada.', preview:'Desde A: probabilidad de lanzar la habilidad dos veces (la segunda gratis, sin gastar turno).'},
+  vitalidad_e: {id:'vitalidad_e', family:'vitalidad', name:'Piedra del Alma: Vitalidad (E)',        tier:'E', icon:'❤️', bonus:{stat:'maxhp', value:2},
+    desc:'+16 Vida máxima aprox.', preview:'Desde F: refleja parte del daño recibido. Desde A: probabilidad de autocurarte.'},
+  vitalidad_f: {id:'vitalidad_f', family:'vitalidad', name:'Piedra del Alma: Vitalidad (F)',        tier:'F', icon:'❤️', bonus:{stat:'maxhp', value:4},
+    special:{type:'reflect', pct:0.02},
+    desc:'+32 Vida máxima aprox. Devuelves el 2% del daño físico que recibes a tu atacante.', preview:'Desde A: probabilidad de recuperar el 10% de tu vida máxima.'},
+  furia_e:     {id:'furia_e',     family:'furia',     name:'Piedra del Alma: Furia Contenida (E)',  tier:'E', icon:'🔥',
+    special:{type:'lowhp_dmg_v2', threshold:0.3, base:0.10, missingScale:0.005},
+    desc:'Por debajo del 30% de vida: +10% de daño, y +0.5% adicional por cada 1% de vida que te falte.', preview:'Desde A: probabilidad de revivir una vez por entrada al laberinto (25% en A, 50% en S, 100% en SS).'},
+  furia_f:     {id:'furia_f',     family:'furia',     name:'Piedra del Alma: Furia Contenida (F)',  tier:'F', icon:'🔥',
+    special:{type:'lowhp_dmg_v2', threshold:0.3, base:0.18, missingScale:0.006},
+    desc:'Por debajo del 30% de vida: +18% de daño, y +0.6% adicional por cada 1% de vida que te falte.', preview:'Desde A: probabilidad de revivir una vez por entrada al laberinto (25% en A, 50% en S, 100% en SS).'},
+  sombra_e:    {id:'sombra_e',    family:'sombra',    name:'Piedra del Alma: Sombra Cazadora (E)',  tier:'E', icon:'🌑',
+    desc:'Sin efecto todavía en este rango.', preview:'Desde A: probabilidad de invocar una sombra que atrae el agro de los enemigos (1% en A, 5% en S, 10% en SS; máximo una sombra a la vez).'},
+  sombra_f:    {id:'sombra_f',    family:'sombra',    name:'Piedra del Alma: Sombra Cazadora (F)',  tier:'F', icon:'🌑',
+    desc:'Sin efecto todavía en este rango.', preview:'Desde A: probabilidad de invocar una sombra que atrae el agro de los enemigos (1% en A, 5% en S, 10% en SS; máximo una sombra a la vez).'}
+};
+
+function maxSoulSlots(level){ return Math.floor((level||1)/10); } // 1 espacio cada 10 niveles
+function ensureSoulSlots(){
+  if(!state || !state.char) return;
+  if(!state.char.soulSlots) state.char.soulSlots = [];
+  const need = maxSoulSlots(state.char.level);
+  while(state.char.soulSlots.length < need) state.char.soulSlots.push(null);
+}
+function socketedStones(){ return (state.char.soulSlots||[]).filter(Boolean); }
+
+function socketStone(uid){
+  ensureSoulSlots();
+  const idx = state.char.inventory.findIndex(i=>i.kind==='soulstone' && i.uid===uid);
+  if(idx<0) return;
+  const stone = state.char.inventory[idx];
+  // solo 1 piedra por familia a la vez: si ya tienes una de la misma familia,
+  // la nueva la reemplaza SOLO si es de rango igual o superior; la anterior se destruye.
+  const sameFamilySlot = state.char.soulSlots.findIndex(s=>s && s.family===stone.family);
+  if(sameFamilySlot>=0){
+    const old = state.char.soulSlots[sameFamilySlot];
+    if(soulTierIdx(stone.tier) < soulTierIdx(old.tier)){
+      log(`Ya llevas una piedra de ${SOUL_FAMILIES[stone.family].name} de rango igual o superior (${old.tier}). No la reemplazas.`);
+      return;
+    }
+    state.char.inventory.splice(idx,1);
+    state.char.soulSlots[sameFamilySlot] = stone;
+    log(`Tu <b>${old.name}</b> se destruye al ser reemplazada por <b>${stone.name}</b>.`);
+    renderSheet();
+    if(invOpen) renderInventory();
+    save();
+    return;
+  }
+  const emptySlot = state.char.soulSlots.findIndex(s=>!s);
+  if(emptySlot<0){ log('No tienes espacios de alma libres. Retira una piedra primero.'); return; }
+  state.char.inventory.splice(idx,1);
+  state.char.soulSlots[emptySlot] = stone;
+  log(`Engarzas <b>${stone.name}</b> en tu espacio de alma.`);
+  renderSheet();
+  if(invOpen) renderInventory();
+  save();
+}
+function unsocketStone(slotIdx){
+  const stone = state.char.soulSlots[slotIdx];
+  if(!stone) return;
+  state.char.soulSlots[slotIdx] = null;
+  state.char.inventory.push(stone);
+  log(`Retiras <b>${stone.name}</b> de tu espacio de alma.`);
+  renderSheet();
+  if(invOpen) renderInventory();
+  save();
+}
+
+/* ============================================================
+   STATE
+   ============================================================ */
+
+let state = null;
+let combat = null; // transient combat state, rebuilt each fight
+let invOpen = false; // whether the inventory/equipment panel is showing
+let homeOpen = false; // whether the Hogar (home stash) panel is showing
+let shopOpen = false; // whether the Tienda (shop) panel is showing
+let rankingOpen = false; // whether the Ranking panel is showing
+let currentUser = null; // Supabase auth user
+let currentProfile = null; // {id, username, role, is_banned}
+
+function freshState(raceId, styleId){
+  return {
+    char:{
+      race:raceId, style:styleId,
+      level:1, xp:0,
+      gold:20,
+      curHP:null, curSta:null, curSpi:null, // set after derived calc
+      equip:{arma:null, arma2:null, armadura:null, amuleto:null, casco:null, botas:null, guantes:null},
+      inventory:[], // {kind:'equip', uid, slot, name, bonus} or {kind:'potion', potionId, qty} or {kind:'soulstone', uid, stoneId, ...}
+      itemCounter:0,
+      maxLevelUnlocked:1, // highest labyrinth level (1-10) unlocked so far
+      record:{level:1, floorIdx:0}, // deepest point ever reached (updates on every floor entered, not just guardian kills)
+      stash:{gold:0, items:[]}, // Hogar: safe storage, never touched by death penalties
+      soulSlots:[] // piedras de alma engarzadas; se desbloquea 1 espacio cada 10 niveles
+    },
+    dungeon:null, // {floors, atFloor, atNode, level, done}
+    log:[]
+  };
+}
+
+/* ============================================================
+   UTIL
+   ============================================================ */
+function rnd(min,max){ return Math.floor(Math.random()*(max-min+1))+min; }
+function chance(p){ return Math.random() < p; }
+function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+function pick(arr){ return arr[rnd(0,arr.length-1)]; }
+
+function log(msg){
+  state.log.push(msg);
+  if(state.log.length > 60) state.log.shift();
+  renderLog();
+  save();
+}
+
+/* ============================================================
+   DERIVED CHARACTER STATS
+   ============================================================ */
+function race(){ return RACES[state.char.race]; }
+function style(){ return STYLES[state.char.style]; }
+const EQUIP_SLOTS = ['arma','arma2','armadura','amuleto','casco','botas','guantes'];
+function slotLabel(slot){
+  if(slot==='arma2') return OFFHAND_LABELS[state.char.style] || 'Arma 2';
+  return {arma:'Arma', armadura:'Armadura', amuleto:'Amuleto', casco:'Casco', botas:'Botas', guantes:'Guantes'}[slot] || slot;
+}
+
+function baseStat(key){
+  const r = race();
+  let v = r.stats[key] + Math.floor((state.char.level-1) * 1); // +1 all stats per level
+  const eq = state.char.equip;
+  EQUIP_SLOTS.forEach(slot=>{
+    const it = eq[slot];
+    if(it && it.bonus && it.bonus.stat === key) v += it.bonus.value;
+  });
+  socketedStones().forEach(s=>{ if(s.bonus && s.bonus.stat === key) v += s.bonus.value; });
+  return v;
+}
+
+function totalRes(key){
+  const r = race();
+  let v = r.res[key] || 0;
+  const eq = state.char.equip;
+  EQUIP_SLOTS.forEach(slot=>{
+    const it = eq[slot];
+    if(it && it.bonus && it.bonus.res === key) v += it.bonus.value;
+  });
+  socketedStones().forEach(s=>{ if(s.bonus && s.bonus.res === key) v += s.bonus.value; });
+  if(state.char.race === 'enano' && key==='fisico'){ /* flat handled in damage calc */ }
+  return clamp(v, -60, 80);
+}
+
+function derived(){
+  const fis = baseStat('fis'), esp = baseStat('esp'), hab = baseStat('hab');
+  let maxHP = Math.round(40 + fis*8 + state.char.level*5);
+  let maxSta = Math.round(20 + fis*3 + hab*2);
+  let maxSpi = Math.round(20 + esp*4);
+  const eq = state.char.equip;
+  EQUIP_SLOTS.forEach(slot=>{
+    const it = eq[slot];
+    if(it && it.bonus && it.bonus.stat === 'maxhp') maxHP += it.bonus.value*8;
+  });
+  socketedStones().forEach(s=>{
+    if(s.bonus && s.bonus.stat === 'maxhp') maxHP += s.bonus.value*8;
+    if(s.bonus && s.bonus.stat === 'maxsta') maxSta += s.bonus.value; // Sabiduría: valor directo, sin escalar
+  });
+  const critChance = clamp(0.05 + hab*0.006 + (race().id==='bestia'?0.15:0), 0, 0.6);
+  const evasionBase = 0.04 + hab*0.005 + (race().id==='hada'?0.15:0);
+  return {fis,esp,hab,maxHP,maxSta,maxSpi,critChance,evasionBase};
+}
+
+function scaleStatValue(){
+  const d = derived();
+  const sc = style().scaleStat;
+  if(sc==='fis') return d.fis;
+  if(sc==='esp') return d.esp;
+  if(sc==='hab') return d.hab;
+  if(sc==='fishab') return (d.fis+d.hab)/2;
+  return d.fis;
+}
+
+function skillBaseDamage(){
+  return 8 + scaleStatValue()*2.2 + state.char.level*1.5;
+}
+
+/* ============================================================
+   PERSISTENCE — up to 3 independent save slots
+   ============================================================ */
+function migrateState(){
+  // brings an older save shape up to date with the current fields
+  if(!state || !state.char) return;
+  if(!state.char.inventory) state.char.inventory = [];
+  if(state.char.itemCounter===undefined) state.char.itemCounter = 0;
+  if(state.char.maxLevelUnlocked===undefined){
+    state.char.maxLevelUnlocked = Math.max(1, Math.min(LEVEL_CAP, (state.char.dungeonsCleared||0) + 1));
+  }
+  if(!state.char.stash) state.char.stash = {gold:0, items:[]};
+  if(!state.char.equip.hasOwnProperty('arma2')) state.char.equip.arma2 = null;
+  ['casco','botas','guantes'].forEach(s=>{ if(!state.char.equip.hasOwnProperty(s)) state.char.equip[s] = null; });
+  if(!state.char.soulSlots) state.char.soulSlots = [];
+  if(!state.char.record) state.char.record = {level: state.char.maxLevelUnlocked||1, floorIdx:0};
+  if(state.dungeon && state.dungeon.level===undefined){
+    state.dungeon.level = state.dungeon.tier || state.char.maxLevelUnlocked || 1;
+  }
+}
+
+// El personaje vive en la tabla `characters` de Supabase (1 fila por cuenta).
+// La Crónica (log) es solo sabor narrativo, no progreso: se queda en
+// localStorage por dispositivo para no generar escrituras de red por cada línea.
+function logStorageKey(){ return currentUser ? 'dns_log_'+currentUser.id : null; }
+function loadLocalLog(){
+  const key = logStorageKey();
+  if(!key) return [];
+  try{
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : [];
+  }catch(e){ return []; }
+}
+function saveLocalLog(){
+  const key = logStorageKey();
+  if(!key || !state) return;
+  try{ localStorage.setItem(key, JSON.stringify(state.log||[])); }catch(e){ /* best effort */ }
+}
+
+function characterToRow(){
+  return {
+    level: state.char.level,
+    xp: state.char.xp,
+    gold: state.char.gold,
+    cur_hp: state.char.curHP,
+    cur_sta: state.char.curSta,
+    cur_spi: state.char.curSpi,
+    equip: state.char.equip,
+    inventory: state.char.inventory,
+    item_counter: state.char.itemCounter,
+    max_level_unlocked: state.char.maxLevelUnlocked,
+    record_level: state.char.record.level,
+    record_floor_idx: state.char.record.floorIdx,
+    stash: state.char.stash,
+    soul_slots: state.char.soulSlots,
+    dungeon: state.dungeon
+  };
+}
+
+function rowToState(row){
+  return {
+    char:{
+      race: row.race, style: row.style,
+      level: row.level, xp: row.xp, gold: row.gold,
+      curHP: row.cur_hp, curSta: row.cur_sta, curSpi: row.cur_spi,
+      equip: row.equip || {arma:null, arma2:null, armadura:null, amuleto:null, casco:null, botas:null, guantes:null},
+      inventory: row.inventory || [],
+      itemCounter: row.item_counter || 0,
+      maxLevelUnlocked: row.max_level_unlocked || 1,
+      record: {level: row.record_level || 1, floorIdx: row.record_floor_idx || 0},
+      stash: row.stash || {gold:0, items:[]},
+      soulSlots: row.soul_slots || []
+    },
+    dungeon: row.dungeon || null,
+    log: loadLocalLog()
+  };
+}
+
+let saveTimer = null;
+let pendingSave = false;
+const SAVE_DEBOUNCE_MS = 1500;
+
+async function flushSave(){
+  if(!state || !currentUser) return;
+  pendingSave = false;
+  const { error } = await supabase.from('characters').update(characterToRow()).eq('user_id', currentUser.id);
+  if(error) console.error('No se pudo guardar la partida:', error.message);
+}
+
+async function save(){
+  saveLocalLog();
+  if(!state || !currentUser) return;
+  pendingSave = true;
+  if(saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(()=>{ if(pendingSave) flushSave(); }, SAVE_DEBOUNCE_MS);
+}
+
+// intenta no perder el último tramo de progreso si se cierra/oculta la pestaña
+window.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='hidden' && pendingSave) flushSave(); });
+window.addEventListener('beforeunload', ()=>{ if(pendingSave) flushSave(); });
+
+async function loadCharacterRow(){
+  const { data, error } = await supabase.from('characters').select('*').eq('user_id', currentUser.id).maybeSingle();
+  if(error){ console.error('No se pudo cargar el personaje:', error.message); return null; }
+  return data;
+}
+
+async function createCharacterOnServer(raceId, styleId){
+  const { data, error } = await supabase.rpc('create_character', {p_race: raceId, p_style: styleId});
+  if(error) throw error;
+  return data;
+}
+
+async function deleteCharacterOnServer(){
+  if(!currentUser) return;
+  const { error } = await supabase.from('characters').delete().eq('user_id', currentUser.id);
+  if(error) console.error('No se pudo borrar el personaje:', error.message);
+}
+
+async function fetchProfile(userId){
+  const { data, error } = await supabase.from('profiles').select('id, username, username_set, role, is_banned').eq('id', userId).maybeSingle();
+  if(error){ console.error('No se pudo cargar el perfil:', error.message); return null; }
+  return data;
+}
+
+/* ============================================================
+   DUNGEON LEVELS (1-10)
+   ============================================================ */
+const LEVEL_CAP = 10;
+const CHAR_LEVEL_CAP = 60; // tope de nivel de personaje pedido
+function mobXP(level){ return level; }        // mobs normales: 1 en piso 1, 2 en piso 2...
+function eliteXP(level){ return level+1; }    // élites: siempre mob+1
+function guardianXP(level){ return 2*level+2; } // guardianes: 2×mob+2
+function xpNeededForLevel(level){
+  // Se duplica tal cual pediste (5,10,20,40,80,160,320) hasta el nivel 7→8.
+  // A partir de ahí, duplicar cada nivel hasta el 60 pedía cantidades imposibles de
+  // conseguir (nivel 20→21 exigiría más de 2 millones de exp, con guardianes que dan
+  // como máximo 22 por combate), así que después del corte crece de forma más suave
+  // y constante en vez de seguir duplicando.
+  if(level >= CHAR_LEVEL_CAP) return Infinity;
+  const DOUBLE_UNTIL = 7;
+  if(level <= DOUBLE_UNTIL) return Math.round(5 * Math.pow(2, level-1));
+  const cutoffValue = 5 * Math.pow(2, DOUBLE_UNTIL-1); // 320, el valor justo en el corte
+  return Math.round(cutoffValue * (1 + (level-DOUBLE_UNTIL)*0.15));
+}
+const BASE_FLOORS = 5; // floors on level 1, last floor = guardian
+const MAX_FLOORS = 9; // cap so high levels don't become endless
+
+function maxLevelUnlocked(){ return state.char.maxLevelUnlocked || 1; }
+
+function updateRecord(level, floorIdx){
+  if(!state.char.record) state.char.record = {level:1, floorIdx:0};
+  const r = state.char.record;
+  if(level > r.level || (level===r.level && floorIdx > r.floorIdx)){
+    state.char.record = {level, floorIdx};
+  }
+}
+function describeRecord(){
+  const r = state.char.record || {level:1, floorIdx:0};
+  const total = numFloorsForLevel(r.level);
+  if(r.floorIdx <= 0) return `Nivel ${r.level} · Entrada`;
+  if(r.floorIdx >= total-1) return `Nivel ${r.level} · Guardián`;
+  return `Nivel ${r.level} · Piso ${r.floorIdx}`;
+}
+
+// real (mechanical) difficulty multiplier: compounds ~14% per level, as requested
+function levelMult(level){ return Math.pow(1.14, Math.max(0,level-1)); }
+
+function numFloorsForLevel(level){
+  return Math.min(MAX_FLOORS, BASE_FLOORS + Math.floor((level-1)/2)); // +1 floor every 2 levels
+}
+
+// visual-only threat rating shown to the player, decoupled from the real stat math above
+function baseThreatForLevel(level){ return 5 + (level-1)*2; } // lvl1:5, lvl2:7, lvl3:9...
+function expectedCharLevelFor(level){ return level*2; } // the char level this dungeon level is "built for"
+function visualThreat(level, charLevel){
+  const base = baseThreatForLevel(level);
+  const ratio = expectedCharLevelFor(level) / Math.max(1, charLevel||1);
+  // if you're heavily overleveled the shown threat drops a lot; underleveled, it climbs
+  return Math.max(1, Math.round(base * clamp(ratio, 0.35, 1.4)));
+}
+
+function generateDungeon(level){
+  const numFloors = numFloorsForLevel(level);
+  const floors = [];
+  for(let f=0; f<numFloors; f++){
+    if(f === numFloors-1){
+      floors.push([{type:'jefe', done:false}]);
+      continue;
+    }
+    const count = f===0 ? 1 : rnd(2,3);
+    const nodes = [];
+    for(let i=0;i<count;i++){
+      let type;
+      if(f===0) type='entrada';
+      else{
+        const roll = Math.random();
+        if(roll < 0.48) type='combate';
+        else if(roll < 0.68) type='tesoro';
+        else if(roll < 0.85) type='descanso';
+        else type='elite';
+      }
+      nodes.push({type, done:false});
+    }
+    floors.push(nodes);
+  }
+  return {floors, atFloor:0, atNode:0, visited:{'0-0':true}, level};
+}
+
+function nodeIcon(type){
+  return {entrada:'🚪', combate:'⚔️', tesoro:'💰', descanso:'🔥', elite:'☠️', jefe:'🛡️'}[type] || '?';
+}
+function nodeLabel(type){
+  return {entrada:'Entrada', combate:'Combate', tesoro:'Tesoro', descanso:'Descanso', elite:'Élite', jefe:'Jefe del laberinto'}[type] || type;
+}
+
+/* ============================================================
+   RENDER: SHELL
+   ============================================================ */
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function renderAll(){
+  ensureSoulSlots();
+  document.getElementById('gold-badge').style.display = 'flex';
+  document.getElementById('gold-amount').textContent = state.char.gold;
+  const tierBadge = document.getElementById('tier-badge');
+  if(state.dungeon){
+    tierBadge.style.display = 'flex';
+    document.getElementById('tier-amount').textContent = `Nivel ${state.dungeon.level} · ⚠ ${visualThreat(state.dungeon.level, state.char.level)}`;
+  } else {
+    tierBadge.style.display = 'none';
+  }
+  document.getElementById('header-sub').textContent = race().name + ' · ' + style().name + ' · Nivel ' + state.char.level;
+
+  const invBtn = document.getElementById('btn-inventory');
+  invBtn.style.display = 'inline-block';
+  invBtn.classList.toggle('active', invOpen);
+  invBtn.disabled = !!(combat && combat.active);
+  document.getElementById('btn-slots').style.display = 'inline-block';
+  document.getElementById('btn-reset').style.display = 'inline-block';
+
+  renderSheet();
+  renderLog();
+  if(combat && combat.active){
+    invOpen = false;
+    homeOpen = false;
+    shopOpen = false;
+    rankingOpen = false;
+    renderCombat();
+  } else if(invOpen){
+    renderInventory();
+  } else if(homeOpen){
+    renderHome();
+  } else if(shopOpen){
+    renderShop();
+  } else if(rankingOpen){
+    renderRanking();
+  } else if(state.dungeon && !state.dungeon.floors[state.dungeon.floors.length-1][0].done){
+    renderMap();
+  } else {
+    renderCity();
+  }
+}
+
+function renderLog(){
+  const box = document.getElementById('log-box');
+  if(!box) return;
+  box.innerHTML = state.log.slice(-40).map(m=>`<div>${m}</div>`).join('');
+  box.scrollTop = box.scrollHeight;
+}
+
+/* ============================================================
+   RENDER: CHARACTER SHEET
+   ============================================================ */
+function renderSheet(){
+  const d = derived();
+  const r = race(), s = style();
+  const xpNeeded = xpNeededForLevel(state.char.level);
+  const hpPct = clamp(state.char.curHP/d.maxHP*100,0,100);
+  const stPct = clamp(state.char.curSta/d.maxSta*100,0,100);
+  const spPct = clamp(state.char.curSpi/d.maxSpi*100,0,100);
+  const xpPct = clamp(state.char.xp/xpNeeded*100,0,100);
+
+  const resKeys = [['fisico','Físico'],['fuego','Fuego'],['hielo','Hielo'],['veneno','Veneno'],['aturdimiento','Aturd.']];
+  const resHTML = resKeys.map(([k,label])=>{
+    const v = totalRes(k);
+    const cls = v>0?'pos':(v<0?'neg':'');
+    return `<span class="res-chip ${cls}">${label} ${v>=0?'+':''}${v}%</span>`;
+  }).join('');
+
+  const equipHTML = EQUIP_SLOTS.map(slot=>{
+    const it = state.char.equip[slot];
+    const label = slotLabel(slot);
+    if(!it) return `<div class="equip-row"><span>${label}</span><b>— vacío —</b></div>`;
+    const color = RARITIES[it.rarity||'comun'].color;
+    return `<div class="equip-row"><span>${label}</span><b style="color:${color};">${it.name}</b></div>`;
+  }).join('');
+
+  const potionCount = (state.char.inventory||[]).filter(i=>i.kind==='potion').reduce((a,i)=>a+i.qty,0);
+  const gearCount = (state.char.inventory||[]).filter(i=>i.kind==='equip').length;
+
+  document.getElementById('sheet').innerHTML = `
+    <div class="sheet-title">
+      <div class="sheet-emblem">${r.icon}</div>
+      <div>
+        <div class="name">${r.name} · ${s.icon} ${s.name}</div>
+        <div class="tag">Nivel ${state.char.level}</div>
+      </div>
+    </div>
+
+    <div class="bar-row">
+      <div class="bar-label"><span>Vida</span><span>${state.char.curHP} / ${d.maxHP}</span></div>
+      <div class="bar-track"><div class="bar-fill hp" style="width:${hpPct}%"></div></div>
+    </div>
+    <div class="bar-row">
+      <div class="bar-label"><span>MP</span><span>${state.char.curSta} / ${d.maxSta}</span></div>
+      <div class="bar-track"><div class="bar-fill st" style="width:${stPct}%"></div></div>
+    </div>
+    <div class="bar-row">
+      <div class="bar-label"><span>Espíritu</span><span>${state.char.curSpi} / ${d.maxSpi}</span></div>
+      <div class="bar-track"><div class="bar-fill sp" style="width:${spPct}%"></div></div>
+    </div>
+    <div class="bar-row">
+      <div class="bar-label"><span>Experiencia</span><span>${state.char.xp} / ${xpNeeded}</span></div>
+      <div class="bar-track"><div class="bar-fill xp" style="width:${xpPct}%"></div></div>
+    </div>
+
+    <div class="stat-grid">
+      <div class="stat-box"><div class="v">${d.fis}</div><div class="k">Físico</div></div>
+      <div class="stat-box"><div class="v">${d.esp}</div><div class="k">Espíritu</div></div>
+      <div class="stat-box"><div class="v">${d.hab}</div><div class="k">Habilidad</div></div>
+    </div>
+
+    <div class="section-label">Resistencias</div>
+    <div class="res-list">${resHTML}</div>
+
+    <div class="section-label">Equipo</div>
+    ${equipHTML}
+    <div class="sheet-hint">${gearCount} objeto(s) y ${potionCount} poción(es) en la mochila. <button id="sheet-inv-link">Abrir inventario</button></div>
+    <div class="sheet-hint">Espacios de alma: ${socketedStones().length}/${maxSoulSlots(state.char.level)}${maxSoulSlots(state.char.level)===0 ? ' (el primero se desbloquea en nivel 10)' : ''}.</div>
+
+    <div class="section-label">Rasgo pasivo — ${r.passive}</div>
+    <div style="font-size:0.78em; color:var(--text-dim);">${r.passiveDesc}</div>
+  `;
+
+  const link = document.getElementById('sheet-inv-link');
+  if(link){
+    link.onclick = ()=>{
+      if(combat && combat.active){ log('No puedes abrir el inventario en combate. Usa tus pociones desde el panel de combate.'); return; }
+      invOpen = true;
+      renderAll();
+    };
+  }
+}
+
+/* ============================================================
+   RENDER: INVENTORY & EQUIPMENT
+   ============================================================ */
+const STAT_LABELS = {fis:'Físico', esp:'Espíritu', hab:'Habilidad', maxhp:'Vida máxima'};
+const RES_LABELS = {fisico:'Físico', fuego:'Fuego', hielo:'Hielo', veneno:'Veneno', aturdimiento:'Aturdimiento'};
+const COST_LABELS = {estamina:'MP', espiritu:'Espíritu'};
+
+function itemBonusText(item){
+  let txt = item.bonus.stat
+    ? `+${item.bonus.value} ${STAT_LABELS[item.bonus.stat] || item.bonus.stat}`
+    : `+${item.bonus.value}% Resistencia a ${RES_LABELS[item.bonus.res] || item.bonus.res}`;
+  if(item.special){
+    if(item.special.type==='aturdir') txt += ` · ${Math.round(item.special.chance*100)}% ${item.special.label}`;
+    else if(item.special.type==='robovida') txt += ` · ${Math.round(item.special.percent*100)}% ${item.special.label}`;
+  }
+  return txt;
+}
+function itemNameHTML(it){
+  const r = RARITIES[it.rarity||'comun'];
+  return `<b style="color:${r.color};">${it.name}</b> <span class="slot-tag" style="border-color:${r.color}; color:${r.color};">${r.name}</span>`;
+}
+
+function renderInventory(){
+  const equippedHTML = EQUIP_SLOTS.map(slot=>{
+    const it = state.char.equip[slot];
+    const label = slotLabel(slot);
+    if(!it){
+      return `<div class="inv-slot">
+        <div class="inv-slot-label">${label}</div>
+        <div class="inv-empty">— vacío —</div>
+      </div>`;
+    }
+    return `<div class="inv-slot">
+      <div class="inv-slot-label">${label}</div>
+      <div class="inv-item-row" style="margin-bottom:0;">
+        <div>
+          ${itemNameHTML(it)}
+          <div class="inv-item-bonus">${itemBonusText(it)}</div>
+        </div>
+        <button class="inv-btn danger" data-unequip="${slot}">Quitar</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  const gearItems = state.char.inventory.filter(i=>i.kind==='equip');
+  const potionItems = state.char.inventory.filter(i=>i.kind==='potion');
+
+  const gearHTML = gearItems.length ? gearItems.map(it=>`
+    <div class="inv-item-row">
+      <div>
+        ${itemNameHTML(it)} <span class="slot-tag">${slotLabel(it.slot)}</span>
+        <div class="inv-item-bonus">${itemBonusText(it)}</div>
+      </div>
+      <button class="inv-btn" data-equip="${it.uid}">Equipar</button>
+    </div>
+  `).join('') : `<p class="inv-empty-msg">No llevas equipo suelto en la mochila.</p>`;
+
+  const potionHTML = potionItems.length ? potionItems.map(it=>{
+    const tpl = POTION_TEMPLATES[it.potionId];
+    return `<div class="inv-item-row">
+      <div>
+        <b>${tpl.icon} ${tpl.name}</b> <span class="slot-tag">x${it.qty}</span>
+        <div class="inv-item-bonus neutral">${tpl.desc}</div>
+      </div>
+      <button class="inv-btn" data-usepotion="${it.potionId}">Usar</button>
+    </div>`;
+  }).join('') : `<p class="inv-empty-msg">No tienes pociones. Búscalas en cofres del laberinto.</p>`;
+
+  ensureSoulSlots();
+  const soulSlotsHTML = state.char.soulSlots.length ? state.char.soulSlots.map((stone, idx)=>{
+    if(!stone){
+      return `<div class="inv-slot">
+        <div class="inv-slot-label">Espacio de alma ${idx+1}</div>
+        <div class="inv-empty">— vacío —</div>
+      </div>`;
+    }
+    const c = SOUL_TIER_COLORS[stone.tier] || 'var(--text)';
+    return `<div class="inv-slot">
+      <div class="inv-slot-label">Espacio de alma ${idx+1}</div>
+      <div class="inv-item-row" style="margin-bottom:0;">
+        <div>
+          <b style="color:${c};">${stone.name}</b> <span class="slot-tag" style="border-color:${c}; color:${c};">${stone.tier}</span>
+          <div class="inv-item-bonus">${stone.desc}</div>
+        </div>
+        <button class="inv-btn danger" data-unsocket="${idx}">Retirar</button>
+      </div>
+    </div>`;
+  }).join('') : `<p class="inv-empty-msg">Alcanza el nivel 10 para desbloquear tu primer espacio de alma.</p>`;
+
+  const stoneItems = state.char.inventory.filter(i=>i.kind==='soulstone');
+  const stoneBagHTML = stoneItems.length ? stoneItems.map(it=>{
+    const c = SOUL_TIER_COLORS[it.tier] || 'var(--text)';
+    const sameFamily = state.char.soulSlots.find(s=>s && s.family===it.family);
+    const noRoom = state.char.soulSlots.length===0 || state.char.soulSlots.every(s=>s);
+    const blocked = sameFamily ? soulTierIdx(it.tier) < soulTierIdx(sameFamily.tier) : noRoom;
+    const btnLabel = sameFamily ? 'Reemplazar' : 'Engarzar';
+    return `<div class="inv-item-row">
+      <div>
+        <b style="color:${c};">${it.name}</b> <span class="slot-tag" style="border-color:${c}; color:${c};">${it.tier}</span>
+        <div class="inv-item-bonus">${it.desc}</div>
+        ${it.preview ? `<div class="inv-item-bonus neutral" style="font-style:italic;">${it.preview}</div>` : ''}
+      </div>
+      <button class="inv-btn" data-socket="${it.uid}" ${blocked?'disabled':''}>${btnLabel}</button>
+    </div>`;
+  }).join('') : `<p class="inv-empty-msg">No tienes piedras de alma. Las dejan caer los guardianes de nivel 4 en adelante.</p>`;
+
+  document.getElementById('main-panel').innerHTML = `
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:4px;">
+      <h3 style="color:var(--bronze-light);">Inventario y equipamiento</h3>
+      <button class="reset-btn" id="btn-close-inv">Cerrar</button>
+    </div>
+    <p style="color:var(--text-dim); font-size:0.85em; margin-top:0;">Equipa y desequipa a tu gusto entre combates para ajustar tu estrategia.</p>
+
+    <div class="section-label" style="margin-top:6px;">Equipado</div>
+    ${equippedHTML}
+
+    <div class="section-label">Equipo en la mochila</div>
+    ${gearHTML}
+
+    <div class="section-label">Pociones</div>
+    ${potionHTML}
+
+    <div class="section-label">Piedras de alma</div>
+    ${soulSlotsHTML}
+    ${stoneBagHTML}
+  `;
+
+  document.getElementById('btn-close-inv').onclick = ()=>{ invOpen=false; renderAll(); };
+  document.querySelectorAll('[data-equip]').forEach(btn=>{
+    btn.onclick = ()=> equipItem(btn.dataset.equip);
+  });
+  document.querySelectorAll('[data-unequip]').forEach(btn=>{
+    btn.onclick = ()=> unequipItem(btn.dataset.unequip);
+  });
+  document.querySelectorAll('[data-usepotion]').forEach(btn=>{
+    btn.onclick = ()=> usePotionOutOfCombat(btn.dataset.usepotion);
+  });
+  document.querySelectorAll('[data-socket]').forEach(btn=>{
+    btn.onclick = ()=> socketStone(btn.dataset.socket);
+  });
+  document.querySelectorAll('[data-unsocket]').forEach(btn=>{
+    btn.onclick = ()=> unsocketStone(parseInt(btn.dataset.unsocket));
+  });
+}
+
+function addToInventory(item){
+  if(item.kind==='potion'){
+    const existing = state.char.inventory.find(i=>i.kind==='potion' && i.potionId===item.potionId);
+    if(existing) existing.qty += 1;
+    else state.char.inventory.push({kind:'potion', potionId:item.potionId, qty:1});
+  } else if(item.kind==='soulstone'){
+    state.char.itemCounter = (state.char.itemCounter||0) + 1;
+    item.uid = 'it'+state.char.itemCounter;
+    state.char.inventory.push(item);
+  } else {
+    state.char.itemCounter = (state.char.itemCounter||0) + 1;
+    item.uid = 'it'+state.char.itemCounter;
+    item.kind = 'equip';
+    state.char.inventory.push(item);
+  }
+}
+
+function equipItem(uid){
+  const idx = state.char.inventory.findIndex(i=>i.kind==='equip' && i.uid===uid);
+  if(idx<0) return;
+  const item = state.char.inventory[idx];
+  const prior = state.char.equip[item.slot];
+  state.char.equip[item.slot] = item;
+  state.char.inventory.splice(idx,1);
+  if(prior) state.char.inventory.push(prior);
+  log(`Equipas <b>${item.name}</b>${prior ? ` (guardas ${prior.name} en la mochila)` : ''}.`);
+  renderSheet();
+  if(invOpen) renderInventory();
+  save();
+}
+
+function unequipItem(slot){
+  const item = state.char.equip[slot];
+  if(!item) return;
+  state.char.equip[slot] = null;
+  state.char.inventory.push(item);
+  log(`Desequipas <b>${item.name}</b>.`);
+  renderSheet();
+  if(invOpen) renderInventory();
+  save();
+}
+
+function applyPotionEffect(potionId){
+  const item = state.char.inventory.find(i=>i.kind==='potion' && i.potionId===potionId);
+  if(!item || item.qty<=0){ log('No tienes esa poción.'); return false; }
+  const tpl = POTION_TEMPLATES[potionId];
+  const d = derived();
+  if(tpl.effect.heal==='hp'){
+    const amt = Math.round(d.maxHP*tpl.effect.amount);
+    const before = state.char.curHP;
+    state.char.curHP = Math.min(d.maxHP, state.char.curHP+amt);
+    log(`Bebes <b>${tpl.name}</b>. Recuperas ${state.char.curHP-before} de vida.`);
+  } else if(tpl.effect.heal==='sta'){
+    const amt = Math.round(d.maxSta*tpl.effect.amount);
+    const before = state.char.curSta;
+    state.char.curSta = Math.min(d.maxSta, state.char.curSta+amt);
+    log(`Bebes <b>${tpl.name}</b>. Recuperas ${state.char.curSta-before} de MP.`);
+  } else if(tpl.effect.heal==='spi'){
+    const amt = Math.round(d.maxSpi*tpl.effect.amount);
+    const before = state.char.curSpi;
+    state.char.curSpi = Math.min(d.maxSpi, state.char.curSpi+amt);
+    log(`Bebes <b>${tpl.name}</b>. Recuperas ${state.char.curSpi-before} de espíritu.`);
+  } else if(tpl.effect.cure){
+    if(combat && combat.active) combat.playerStatuses.length = 0;
+    log(`Bebes <b>${tpl.name}</b>. Tus efectos negativos desaparecen.`);
+  }
+  item.qty -= 1;
+  if(item.qty<=0) state.char.inventory = state.char.inventory.filter(i=>i!==item);
+  return true;
+}
+
+function usePotionOutOfCombat(potionId){
+  if(applyPotionEffect(potionId)){
+    renderSheet();
+    if(invOpen) renderInventory();
+    save();
+  }
+}
+
+function usePotionInCombat(potionId){
+  if(!combat || combat.over) return;
+  if(applyPotionEffect(potionId)){
+    endPlayerTurn();
+  }
+}
+
+/* ============================================================
+   RENDER: CITY
+   ============================================================ */
+function renderCity(){
+  document.getElementById('main-panel').innerHTML = `
+    <div class="city-art">
+      <div class="icon">🏙️</div>
+      <h2>La última ciudad</h2>
+      <p>Solo queda una ciudad en pie en todo Dungeon &amp; Stone. El laberinto tiene 10 niveles conocidos; cada uno esconde su propio guardián.</p>
+      <p style="color:var(--bronze-light); font-size:0.85em; margin-top:8px;">Nivel de récord: ${describeRecord()}.</p>
+    </div>
+    <div class="city-actions">
+      <div class="action-card">
+        <h3>Descansar</h3>
+        <p>Recupera toda tu vida, MP y espíritu antes de partir.</p>
+        <button id="btn-rest-city">Descansar</button>
+      </div>
+      <div class="action-card">
+        <h3>Entrar al laberinto</h3>
+        <p>Siempre se entra desde el nivel 1, piso 1.</p>
+        <button id="btn-enter-dungeon">Entrar (Nivel 1)</button>
+      </div>
+      <div class="action-card">
+        <h3>Hogar</h3>
+        <p>Guarda equipo, pociones y oro a salvo. Nada de lo guardado aquí se pierde si mueres en el laberinto.</p>
+        <button id="btn-open-home">Entrar al Hogar</button>
+      </div>
+      <div class="action-card">
+        <h3>Tienda</h3>
+        <p>Compra pociones y armas básicas acordes a tu senda de combate.</p>
+        <button id="btn-open-shop">Entrar a la tienda</button>
+      </div>
+      <div class="action-card">
+        <h3>Ranking</h3>
+        <p>Tu récord personal y los 10 mejores pisos alcanzados entre todos los jugadores.</p>
+        <button id="btn-open-ranking">Ver ranking</button>
+      </div>
+      <div class="action-card">
+        <h3>Taberna</h3>
+        <p>Recluta aliados para acompañarte en el laberinto (equipo de hasta 5, contándote a ti).</p>
+        <button disabled>Próximamente</button>
+      </div>
+      <div class="action-card">
+        <h3>Gremio</h3>
+        <p>Acepta misiones de exploradores a cambio de recompensas adicionales.</p>
+        <button disabled>Próximamente</button>
+      </div>
+    </div>
+    <div class="section-label">Antes de partir</div>
+    <p style="color:var(--text-dim); font-size:0.85em; margin-top:0;">Revisa tu 🎒 Inventario (arriba) para equipar mejor equipo o comprobar cuántas pociones llevas antes de entrar al laberinto. Si mueres dentro perderás el equipo suelto de tu mochila y la mitad de tu oro; si te retiras tras vencer a un guardián, conservas todo.</p>
+  `;
+  document.getElementById('btn-rest-city').onclick = ()=>{
+    const d = derived();
+    state.char.curHP = d.maxHP; state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi;
+    log('Descansas en la ciudad. Vida, MP y espíritu restaurados.');
+    renderSheet(); save();
+  };
+  document.getElementById('btn-enter-dungeon').onclick = ()=>{
+    const d = derived();
+    state.char.curHP = d.maxHP; state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi;
+    state.dungeon = generateDungeon(1);
+    log('Entras al laberinto desde el nivel 1. El aire cambia; algo respira ahí dentro.');
+    renderAll(); save();
+  };
+  document.getElementById('btn-open-home').onclick = ()=>{
+    invOpen = false; homeOpen = true; shopOpen = false; rankingOpen = false;
+    renderAll();
+  };
+  document.getElementById('btn-open-shop').onclick = ()=>{
+    invOpen = false; homeOpen = false; shopOpen = true; rankingOpen = false;
+    renderAll();
+  };
+  document.getElementById('btn-open-ranking').onclick = ()=>{
+    invOpen = false; homeOpen = false; shopOpen = false; rankingOpen = true;
+    renderAll();
+  };
+}
+
+/* ============================================================
+   RENDER: RANKING
+   ============================================================ */
+async function renderRanking(){
+  const panel = document.getElementById('main-panel');
+  panel.innerHTML = `
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:4px;">
+      <h3 style="color:var(--bronze-light);">Ranking</h3>
+      <button class="reset-btn" id="btn-close-ranking">Cerrar</button>
+    </div>
+    <div class="section-label" style="margin-top:6px;">Tu récord personal</div>
+    <p style="color:var(--text-dim); font-size:0.9em;">${describeRecord()}</p>
+    <div class="section-label">Top 10 global</div>
+    <div id="ranking-list"><p class="inv-empty-msg">Cargando ranking…</p></div>
+  `;
+  document.getElementById('btn-close-ranking').onclick = ()=>{ rankingOpen=false; renderAll(); };
+
+  const { data, error } = await supabase.from('leaderboard_top10').select('*');
+  const list = document.getElementById('ranking-list');
+  if(!list) return; // el jugador salió de la pantalla antes de que llegara la respuesta
+  if(error){
+    list.innerHTML = `<p class="inv-empty-msg">No se pudo cargar el ranking global.</p>`;
+    return;
+  }
+  if(!data || !data.length){
+    list.innerHTML = `<p class="inv-empty-msg">Nadie ha registrado un récord todavía. ¡Sé el primero!</p>`;
+    return;
+  }
+  list.innerHTML = data.map((row,i)=>{
+    const mine = currentProfile && row.username.toLowerCase() === currentProfile.username.toLowerCase();
+    return `<div class="equip-row" style="${mine?'color:var(--bronze-light);':''}">
+      <span>#${i+1} ${row.username}${mine ? ' (tú)' : ''}</span>
+      <b>Nivel ${row.record_level} · Piso ${row.record_floor_idx}</b>
+    </div>`;
+  }).join('');
+}
+
+/* ============================================================
+   RENDER: TIENDA (SHOP)
+   ============================================================ */
+function renderShop(){
+  const styleId = state.char.style;
+  const opts = WEAPON_OPTIONS[styleId] || {};
+  const armaPrice = shopWeaponPrice(false);
+  const arma2Price = shopWeaponPrice(true);
+  const armaLabel = slotLabel('arma');
+  const arma2Label = slotLabel('arma2');
+
+  const weaponRowHTML = (slot, label, price) => `
+    <div class="inv-item-row">
+      <div>
+        <b>${label}</b> <span class="slot-tag">${state.char.style ? style().name : ''}</span>
+        <div class="inv-item-bonus">+${shopWeaponValue()} ${STAT_LABELS[SHOP_WEAPON_STAT[styleId]] || ''} · daño puro, sin otras características</div>
+      </div>
+      <button class="inv-btn" data-buy-weapon="${slot}" ${state.char.gold<price?'disabled':''}>Comprar (${price} oro)</button>
+    </div>`;
+
+  const weaponHTML = (opts.arma ? weaponRowHTML('arma', armaLabel, armaPrice) : '')
+    + (opts.arma2 ? weaponRowHTML('arma2', arma2Label, arma2Price) : '');
+
+  const potionHTML = Object.values(POTION_TEMPLATES).filter(t=>SHOP_POTION_PRICES[t.id]).map(t=>{
+    const price = SHOP_POTION_PRICES[t.id];
+    return `<div class="inv-item-row">
+      <div><b>${t.icon} ${t.name}</b>
+        <div class="inv-item-bonus neutral">${t.desc}</div>
+      </div>
+      <button class="inv-btn" data-buy-potion="${t.id}" ${state.char.gold<price?'disabled':''}>Comprar (${price} oro)</button>
+    </div>`;
+  }).join('');
+
+  const sellGear = state.char.inventory.filter(i=>i.kind==='equip');
+  const sellPotions = state.char.inventory.filter(i=>i.kind==='potion');
+  const sellStones = state.char.inventory.filter(i=>i.kind==='soulstone');
+  const sellRows = [
+    ...sellGear.map(it=>`<div class="inv-item-row">
+      <div><b>${it.name}</b> <span class="slot-tag">${slotLabel(it.slot)}</span>
+        <div class="inv-item-bonus">${itemBonusText(it)}</div>
+      </div>
+      <button class="inv-btn" data-sell="${it.uid}">Vender (${itemSellValue(it)} oro)</button>
+    </div>`),
+    ...sellPotions.map(it=>`<div class="inv-item-row">
+      <div><b>${POTION_TEMPLATES[it.potionId].icon} ${POTION_TEMPLATES[it.potionId].name}</b> <span class="slot-tag">x${it.qty}</span></div>
+      <button class="inv-btn" data-sell-potion="${it.potionId}">Vender 1 (${itemSellValue(it)} oro)</button>
+    </div>`),
+    ...sellStones.map(it=>{
+      const c = SOUL_TIER_COLORS[it.tier] || 'var(--text)';
+      return `<div class="inv-item-row">
+        <div><b style="color:${c};">${it.name}</b> <span class="slot-tag" style="border-color:${c}; color:${c};">${it.tier}</span></div>
+        <button class="inv-btn" data-sell="${it.uid}">Vender (${itemSellValue(it)} oro)</button>
+      </div>`;
+    })
+  ].join('');
+
+  document.getElementById('main-panel').innerHTML = `
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:4px;">
+      <h3 style="color:var(--bronze-light);">Tienda</h3>
+      <button class="reset-btn" id="btn-close-shop">Cerrar</button>
+    </div>
+    <p style="color:var(--text-dim); font-size:0.85em; margin-top:0;">Oro disponible: <b>${state.char.gold}</b>. Las armas que vendemos aquí son de rareza común: solo dan daño, sin ventajas adicionales. Solo se ofrecen las que calzan con tu senda de combate (${style().name}).</p>
+
+    <div class="section-label">Armas y equipo de tu senda</div>
+    ${weaponHTML || '<p class="inv-empty-msg">No hay equipo disponible para tu senda de combate.</p>'}
+
+    <div class="section-label">Pociones</div>
+    ${potionHTML}
+
+    <div class="section-label">Vender objetos (50% de su valor)</div>
+    ${sellRows || '<p class="inv-empty-msg">No tienes nada que vender por ahora.</p>'}
+  `;
+
+  document.getElementById('btn-close-shop').onclick = ()=>{ shopOpen=false; renderAll(); };
+  document.querySelectorAll('[data-buy-weapon]').forEach(btn=>{
+    btn.onclick = ()=> buyWeapon(btn.dataset.buyWeapon);
+  });
+  document.querySelectorAll('[data-buy-potion]').forEach(btn=>{
+    btn.onclick = ()=> buyPotion(btn.dataset.buyPotion);
+  });
+  document.querySelectorAll('[data-sell]').forEach(btn=>{
+    btn.onclick = ()=> sellEquipOrStone(btn.dataset.sell);
+  });
+  document.querySelectorAll('[data-sell-potion]').forEach(btn=>{
+    btn.onclick = ()=> sellPotionStack(btn.dataset.sellPotion);
+  });
+}
+
+/* ============================================================
+   RENDER: HOGAR (HOME STASH)
+   ============================================================ */
+function renderHome(){
+  const stash = state.char.stash || (state.char.stash = {gold:0, items:[]});
+  const gearItems = state.char.inventory.filter(i=>i.kind==='equip');
+  const potionItems = state.char.inventory.filter(i=>i.kind==='potion');
+  const stashGear = stash.items.filter(i=>i.kind==='equip');
+  const stashPotions = stash.items.filter(i=>i.kind==='potion');
+
+  const bagGearHTML = gearItems.length ? gearItems.map(it=>`
+    <div class="inv-item-row">
+      <div>${itemNameHTML(it)} <span class="slot-tag">${slotLabel(it.slot)}</span>
+        <div class="inv-item-bonus">${itemBonusText(it)}</div>
+      </div>
+      <button class="inv-btn" data-stash-gear="${it.uid}">Guardar en Hogar</button>
+    </div>`).join('') : `<p class="inv-empty-msg">No llevas equipo suelto contigo.</p>`;
+
+  const bagPotionHTML = potionItems.length ? potionItems.map(it=>{
+    const tpl = POTION_TEMPLATES[it.potionId];
+    return `<div class="inv-item-row">
+      <div><b>${tpl.icon} ${tpl.name}</b> <span class="slot-tag">x${it.qty}</span></div>
+      <button class="inv-btn" data-stash-potion="${it.potionId}">Guardar 1</button>
+    </div>`;
+  }).join('') : `<p class="inv-empty-msg">No llevas pociones contigo.</p>`;
+
+  const stashGearHTML = stashGear.length ? stashGear.map(it=>`
+    <div class="inv-item-row">
+      <div>${itemNameHTML(it)} <span class="slot-tag">${slotLabel(it.slot)}</span>
+        <div class="inv-item-bonus">${itemBonusText(it)}</div>
+      </div>
+      <button class="inv-btn" data-retrieve-gear="${it.uid}">Retirar</button>
+    </div>`).join('') : `<p class="inv-empty-msg">El Hogar no guarda equipo todavía.</p>`;
+
+  const stashPotionHTML = stashPotions.length ? stashPotions.map(it=>{
+    const tpl = POTION_TEMPLATES[it.potionId];
+    return `<div class="inv-item-row">
+      <div><b>${tpl.icon} ${tpl.name}</b> <span class="slot-tag">x${it.qty}</span></div>
+      <button class="inv-btn" data-retrieve-potion="${it.potionId}">Retirar 1</button>
+    </div>`;
+  }).join('') : `<p class="inv-empty-msg">El Hogar no guarda pociones todavía.</p>`;
+
+  document.getElementById('main-panel').innerHTML = `
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:4px;">
+      <h3 style="color:var(--bronze-light);">Hogar</h3>
+      <button class="reset-btn" id="btn-close-home">Cerrar</button>
+    </div>
+    <p style="color:var(--text-dim); font-size:0.85em; margin-top:0;">Guarda equipo, pociones y oro a salvo. Nada de lo guardado aquí se pierde si mueres en el laberinto. Guardar habilidades llegará en una futura actualización.</p>
+
+    <div class="section-label" style="margin-top:6px;">Oro</div>
+    <div class="equip-row"><span>Contigo</span><b>${state.char.gold}</b></div>
+    <div class="equip-row"><span>En el Hogar</span><b>${stash.gold}</b></div>
+    <div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;">
+      <button class="inv-btn" id="btn-stash-gold-all" ${state.char.gold<=0?'disabled':''}>Guardar todo mi oro</button>
+      <button class="inv-btn" id="btn-retrieve-gold-all" ${stash.gold<=0?'disabled':''}>Retirar todo el oro del Hogar</button>
+    </div>
+
+    <div class="section-label">Tu mochila</div>
+    ${bagGearHTML}
+    ${bagPotionHTML}
+
+    <div class="section-label">Guardado en el Hogar</div>
+    ${stashGearHTML}
+    ${stashPotionHTML}
+  `;
+
+  document.getElementById('btn-close-home').onclick = ()=>{ homeOpen=false; renderAll(); };
+  const stashAllBtn = document.getElementById('btn-stash-gold-all');
+  if(stashAllBtn) stashAllBtn.onclick = ()=>{
+    stash.gold += state.char.gold; state.char.gold = 0;
+    log('Depositas todo tu oro en el Hogar.');
+    renderAll(); save();
+  };
+  const retrieveAllBtn = document.getElementById('btn-retrieve-gold-all');
+  if(retrieveAllBtn) retrieveAllBtn.onclick = ()=>{
+    state.char.gold += stash.gold; stash.gold = 0;
+    log('Retiras todo el oro guardado en el Hogar.');
+    renderAll(); save();
+  };
+  document.querySelectorAll('[data-stash-gear]').forEach(btn=>{
+    btn.onclick = ()=>{
+      const idx = state.char.inventory.findIndex(i=>i.kind==='equip' && i.uid===btn.dataset.stashGear);
+      if(idx<0) return;
+      const it = state.char.inventory.splice(idx,1)[0];
+      stash.items.push(it);
+      log(`Guardas <b>${it.name}</b> en el Hogar.`);
+      renderAll(); save();
+    };
+  });
+  document.querySelectorAll('[data-retrieve-gear]').forEach(btn=>{
+    btn.onclick = ()=>{
+      const idx = stash.items.findIndex(i=>i.kind==='equip' && i.uid===btn.dataset.retrieveGear);
+      if(idx<0) return;
+      const it = stash.items.splice(idx,1)[0];
+      state.char.inventory.push(it);
+      log(`Retiras <b>${it.name}</b> del Hogar.`);
+      renderAll(); save();
+    };
+  });
+  document.querySelectorAll('[data-stash-potion]').forEach(btn=>{
+    btn.onclick = ()=>{
+      const pid = btn.dataset.stashPotion;
+      const it = state.char.inventory.find(i=>i.kind==='potion' && i.potionId===pid);
+      if(!it) return;
+      it.qty -= 1;
+      if(it.qty<=0) state.char.inventory = state.char.inventory.filter(i=>i!==it);
+      const stashIt = stash.items.find(i=>i.kind==='potion' && i.potionId===pid);
+      if(stashIt) stashIt.qty += 1; else stash.items.push({kind:'potion', potionId:pid, qty:1});
+      log('Guardas una poción en el Hogar.');
+      renderAll(); save();
+    };
+  });
+  document.querySelectorAll('[data-retrieve-potion]').forEach(btn=>{
+    btn.onclick = ()=>{
+      const pid = btn.dataset.retrievePotion;
+      const it = stash.items.find(i=>i.kind==='potion' && i.potionId===pid);
+      if(!it) return;
+      it.qty -= 1;
+      if(it.qty<=0) stash.items = stash.items.filter(i=>i!==it);
+      const bagIt = state.char.inventory.find(i=>i.kind==='potion' && i.potionId===pid);
+      if(bagIt) bagIt.qty += 1; else state.char.inventory.push({kind:'potion', potionId:pid, qty:1});
+      log('Retiras una poción del Hogar.');
+      renderAll(); save();
+    };
+  });
+}
+
+/* ============================================================
+   RENDER: DUNGEON MAP
+   ============================================================ */
+function renderMap(){
+  const dg = state.dungeon;
+  const th = visualThreat(dg.level, state.char.level);
+  let html = `<h3 style="color:var(--bronze-light); margin-bottom:6px;">El laberinto — Nivel ${dg.level}</h3>
+  <p style="color:var(--text-dim); font-size:0.85em; margin-top:0;">Avanza piso a piso hasta el guardián. Elige tu ruta con cuidado. Amenaza: ⚠ ${th} · ${dg.floors.length} pisos.</p>
+  <div class="map-wrap"><div class="map-track">`;
+
+  dg.floors.forEach((nodes, fi)=>{
+    html += `<div class="floor-col">`;
+    if(fi===0) html += `<div class="floor-idx">Entrada</div>`;
+    else if(fi===dg.floors.length-1) html += `<div class="floor-idx">Guardián</div>`;
+    else html += `<div class="floor-idx">Piso ${fi}</div>`;
+
+    nodes.forEach((node, ni)=>{
+      const key = fi+'-'+ni;
+      const isCurrent = (fi===dg.atFloor && ni===dg.atNode);
+      const isVisited = !!dg.visited[key] && !isCurrent;
+      const isReachable = (fi === dg.atFloor+1) && !dg.floors[dg.floors.length-1][0].done;
+      let cls = 'node';
+      if(isCurrent) cls += ' current';
+      else if(isVisited) cls += ' visited';
+      else if(isReachable) cls += ' reachable';
+      else cls += ' locked';
+      html += `<div class="${cls}" data-f="${fi}" data-n="${ni}" title="${nodeLabel(node.type)}">${nodeIcon(node.type)}${fi>0?`<div class="connector"></div>`:''}</div>`;
+    });
+    html += `</div>`;
+  });
+
+  html += `</div></div>
+  <div class="map-legend">
+    <span>🚪 Entrada</span><span>⚔️ Combate</span><span>💰 Tesoro</span><span>🔥 Descanso</span><span>☠️ Élite</span><span>🛡️ Jefe</span>
+  </div>`;
+
+  document.getElementById('main-panel').innerHTML = html;
+
+  document.querySelectorAll('.node.reachable').forEach(el=>{
+    el.onclick = ()=>{
+      const f = parseInt(el.dataset.f), n = parseInt(el.dataset.n);
+      enterNode(f,n);
+    };
+  });
+}
+
+function enterNode(f,n){
+  const dg = state.dungeon;
+  dg.atFloor = f; dg.atNode = n;
+  updateRecord(dg.level, f);
+  dg.visited[f+'-'+n] = true;
+  const node = dg.floors[f][n];
+  save();
+
+  if(node.type==='combate' || node.type==='elite' || node.type==='jefe'){
+    const templates = node.type==='jefe' ? [ENEMY_TEMPLATES.find(t=>t.boss)] :
+                       node.type==='elite' ? ENEMY_TEMPLATES.filter(t=>t.elite) :
+                       ENEMY_TEMPLATES.filter(t=>!t.elite && !t.boss);
+    const count = node.type==='jefe' ? 1 : (node.type==='elite' ? 1 : rnd(1,2));
+    const group = [];
+    for(let i=0;i<count;i++) group.push(makeEnemy(pick(templates), f, dg.level));
+    startCombat(group, node);
+  } else if(node.type==='tesoro'){
+    const gold = rnd(8,18) + f*3;
+    state.char.gold += gold;
+    let msg = `Encuentras un cofre. +${gold} de oro.`;
+    if(chance(0.6)){
+      const item = generateLoot(f);
+      addToInventory(item);
+      msg += item.kind==='potion'
+        ? ` También hallas: <b>${POTION_TEMPLATES[item.potionId].name}</b> (guardada en la mochila).`
+        : ` También hallas: <b>${item.name}</b> (guardado en la mochila).`;
+    }
+    log(msg);
+    node.done = true;
+    renderAll();
+  } else if(node.type==='descanso'){
+    const d = derived();
+    state.char.curHP = d.maxHP;
+    state.char.curSta = Math.min(d.maxSta, state.char.curSta + Math.round(d.maxSta*0.5));
+    state.char.curSpi = Math.min(d.maxSpi, state.char.curSpi + Math.round(d.maxSpi*0.5));
+    log('Una hoguera olvidada. Vida restaurada, MP y espíritu recuperados a medias.');
+    node.done = true;
+    renderAll();
+  }
+}
+
+/* ============================================================
+   LOOT
+   ============================================================ */
+function generateLoot(floorIdx){
+  if(chance(0.4)){
+    return {kind:'potion', potionId: pick(Object.keys(POTION_TEMPLATES))};
+  }
+  const slot = pick(['arma','armadura','amuleto','casco','botas','guantes']);
+  const statPool = ['fis','esp','hab','maxhp'];
+  const kind = chance(0.65) ? {stat: pick(statPool)} : {res: pick(['fisico','fuego','hielo','veneno','aturdimiento'])};
+  const value = rnd(1,2) + Math.floor(floorIdx/2);
+  const names = {
+    arma:['Filo desgastado','Hoja del laberinto','Astilla de hueso','Punta templada'],
+    armadura:['Cota remendada','Placa de piedra','Manto raído','Escamas frías'],
+    amuleto:['Amuleto de sangre','Talismán roto','Anillo apagado','Cuenta tallada'],
+    casco:['Yelmo mellado','Capucha andrajosa','Máscara resquebrajada','Cráneo pulido'],
+    botas:['Botas de cuero curtido','Sandalias del errante','Grebas oxidadas','Zapatillas silenciosas'],
+    guantes:['Guanteletes de hierro','Manoplas raídas','Guantes de esgrima','Zarpas envueltas']
+  };
+  const name = pick(names[slot]);
+  return {kind:'equip', slot, name, bonus: kind.stat ? {stat:kind.stat, value} : {res:kind.res, value: value*4}, rarity:'comun'};
+}
+
+/* ============================================================
+   ENEMY FACTORY
+   ============================================================ */
+function makeEnemy(tpl, floorIdx, level){
+  const lvlMult = levelMult(level||1);
+  const floorMult = 1 + floorIdx*0.05; // gentle increase floor by floor within the same level
+  let hp, atk;
+  if(tpl.boss){
+    // guardian: level 1 baseline ~300 HP, then +14% compounding per level.
+    // El guardián de nivel 1 se pidió más accesible: 200 HP fijos y menor defensa física.
+    if(level===1){
+      hp = 200;
+      atk = Math.round(26 * lvlMult);
+    } else {
+      hp = Math.round(300 * lvlMult);
+      atk = Math.round(26 * lvlMult);
+    }
+  } else if(tpl.elite){
+    // elite: level 1 baseline ~100-110 HP
+    hp = Math.round(rnd(100,110) * floorMult * lvlMult);
+    atk = Math.round(16 * floorMult * lvlMult);
+  } else {
+    // regular mob: level 1 baseline ~40-50 HP, tpl.hp/tpl.atk give per-species variance
+    hp = Math.round(rnd(40,50) * tpl.hp * floorMult * lvlMult);
+    atk = Math.round(9 * tpl.atk * floorMult * lvlMult);
+  }
+  const res = Object.assign({}, tpl.res);
+  if(tpl.boss && level===1) res.fisico = 5; // defensa física reducida solo para el guardián de nivel 1
+  return {
+    tpl, name:tpl.name, icon:tpl.icon,
+    maxHP:hp, hp:hp, atk:atk, res,
+    statuses:[], defending:false
+  };
+}
+
+/* ============================================================
+   COMBAT
+   ============================================================ */
+function startCombat(enemyGroup, node){
+  combat = {
+    active:true,
+    node,
+    enemies:enemyGroup, // slot 0 = front
+    playerPos:'frente',
+    playerStatuses:[],
+    playerDefending:false,
+    turnLog:[],
+    over:false
+  };
+  invOpen = false;
+  log(`¡Emboscada! Te enfrentas a: ${enemyGroup.map(e=>e.name).join(', ')}.`);
+  renderAll();
+}
+
+function hasStatus(list, name){ return list.find(s=>s.name===name); }
+function removeStatus(list, name){
+  const idx = list.findIndex(s=>s.name===name);
+  if(idx>=0) list.splice(idx,1);
+}
+
+function frontEnemyIndex(){
+  for(let i=0;i<combat.enemies.length;i++) if(combat.enemies[i].hp>0) return i;
+  return -1;
+}
+function livingEnemies(){ return combat.enemies.filter(e=>e.hp>0); }
+
+function computeCritEvasion(){
+  const d = derived();
+  let ev = d.evasionBase + (combat.playerPos==='retaguardia'?0.08:0);
+  const furioso = hasStatus(combat.playerStatuses,'Furioso');
+  if(furioso) ev += furioso.evasionDelta/100;
+  return {crit:d.critChance, evasion:clamp(ev,0,0.6)};
+}
+
+function applyStatus(target, statusDef, isPlayer){
+  if(!statusDef) return;
+  if(statusDef.chance!==undefined && !chance(statusDef.chance)) return;
+  const list = isPlayer ? combat.playerStatuses : target.statuses;
+  const existing = list.find(s=>s.name===statusDef.name);
+  if(existing && statusDef.stack){
+    existing.stacks = Math.min(statusDef.maxStack||3, (existing.stacks||1)+1);
+    existing.duration = statusDef.duration;
+  } else if(existing){
+    existing.duration = statusDef.duration;
+  } else {
+    list.push({name:statusDef.name, duration:statusDef.duration, stacks: statusDef.stack?1:undefined});
+  }
+}
+
+function applyEquippedSpecials(target, dmgDealt, skill){
+  const sources = ['arma','arma2'].map(slot=>state.char.equip[slot]).filter(it=>it && it.special)
+    .concat(socketedStones().filter(s=>s.special));
+  sources.forEach(it=>{
+    const sp = it.special;
+    if(sp.type==='aturdir'){
+      if(chance(sp.chance)){
+        applyStatus(target, {name:'Aturdido', duration:1}, false);
+        log(`<b>${it.name}</b> aturde a ${target.name}.`);
+      }
+    } else if(sp.type==='robovida'){
+      const heal = Math.max(1, Math.round(dmgDealt*sp.percent));
+      const d = derived();
+      const before = state.char.curHP;
+      state.char.curHP = Math.min(d.maxHP, state.char.curHP+heal);
+      if(state.char.curHP>before) log(`<b>${it.name}</b> te devuelve ${state.char.curHP-before} de vida.`);
+    } else if(sp.type==='elemental_proc' && skill){
+      if(skill.dmgType==='fuego' && chance(sp.chance)){
+        applyStatus(target, {name:'Quemadura', duration:3}, false);
+        log(`<b>${it.name}</b> prende fuego a ${target.name}.`);
+      } else if(skill.dmgType==='hielo' && chance(sp.chance)){
+        applyStatus(target, {name:'Ralentizado', duration:2}, false);
+        log(`<b>${it.name}</b> congela a ${target.name}.`);
+      }
+    }
+  });
+}
+
+function playerUseSkill(skillId, targetIdx){
+  if(combat.over) return;
+  const skill = SKILLS[skillId];
+  const d = derived();
+
+  // resource check
+  if(skill.cost){
+    const pool = skill.cost.tipo==='estamina' ? state.char.curSta : state.char.curSpi;
+    if(pool < skill.cost.valor){ log('No tienes recursos suficientes para eso.'); return; }
+  }
+  if(skill.requiresPos && combat.playerPos !== skill.requiresPos && !skill.penaltyIfFrente){
+    log(`Necesitas estar en ${skill.requiresPos==='frente'?'el Frente':'la Retaguardia'} para usar ${skill.name}.`);
+    return;
+  }
+
+  // utility skills
+  if(skill.utility==='defend'){
+    combat.playerDefending = true;
+    log('Te preparas para recibir el próximo golpe.');
+    endPlayerTurn(); return;
+  }
+  if(skill.utility==='reposition'){
+    combat.playerPos = combat.playerPos==='frente' ? 'retaguardia' : 'frente';
+    log(`Te mueves a ${combat.playerPos==='frente'?'el Frente':'la Retaguardia'}.`);
+    endPlayerTurn(); return;
+  }
+
+  // spend cost
+  if(skill.cost){
+    if(skill.cost.tipo==='estamina') state.char.curSta -= skill.cost.valor;
+    else state.char.curSpi -= skill.cost.valor;
+    // Sabiduría/Voluntad: probabilidad de recuperar parte de lo gastado
+    socketedStones().forEach(s=>{
+      if(!s.special) return;
+      if(s.special.type==='mp_refund' && skill.cost.tipo==='estamina' && chance(s.special.chance)){
+        const d0 = derived();
+        const refund = Math.max(1, Math.round(skill.cost.valor*s.special.amount));
+        state.char.curSta = Math.min(d0.maxSta, state.char.curSta+refund);
+        log(`<b>${s.name}</b> te devuelve ${refund} de MP.`);
+      }
+      if(s.special.type==='esp_refund' && skill.cost.tipo==='espiritu' && chance(s.special.chance)){
+        const d0 = derived();
+        const refund = Math.max(1, Math.round(skill.cost.valor*s.special.amount));
+        state.char.curSpi = Math.min(d0.maxSpi, state.char.curSpi+refund);
+        log(`<b>${s.name}</b> te devuelve ${refund} de espíritu.`);
+      }
+    });
+  }
+
+  // resolve target(s)
+  let targets = [];
+  if(skill.targetMode==='front'){
+    const fi = frontEnemyIndex();
+    if(fi<0){ log('No hay ningún enemigo al frente.'); return; }
+    targets = [combat.enemies[fi]];
+  } else if(skill.targetMode==='any'){
+    const t = combat.enemies[targetIdx];
+    if(!t || t.hp<=0){ log('Objetivo inválido.'); return; }
+    targets = [t];
+  } else if(skill.targetMode==='all'){
+    targets = livingEnemies();
+  } else if(skill.targetMode==='self'){
+    targets = [];
+  }
+
+  if(skill.utility==='mark'){
+    targets.forEach(t=> applyStatus(t, skill.applies, false));
+    log(`Marcas a ${targets.map(t=>t.name).join(', ')}.`);
+    endPlayerTurn(); return;
+  }
+  if(skill.utility==='buff_self'){
+    // refresh the existing buff instead of stacking a duplicate entry (duplicates used to
+    // pile up if you recast before the first one expired, showing two chips and quietly
+    // extending the effect since only the first match is ever read)
+    const existingBuff = hasStatus(combat.playerStatuses, skill.applySelf.name);
+    if(existingBuff) existingBuff.duration = skill.applySelf.duration;
+    else combat.playerStatuses.push(Object.assign({}, skill.applySelf));
+    log(`Usas ${skill.name}. Te sientes más fuerte.`);
+    endPlayerTurn(); return;
+  }
+
+  const {crit} = computeCritEvasion();
+  const furioso = hasStatus(combat.playerStatuses,'Furioso');
+  const raceObj = race();
+
+  targets.forEach(target=>{
+    // evasion of enemy (simple: small base)
+    let base = skillBaseDamage() * skill.mult * (skill.hits||1);
+
+    // race passives affecting outgoing
+    if(raceObj.id==='draconido' && skill.dmgType==='fuego') base *= 1.15;
+    if(raceObj.id==='barbaro' && state.char.curHP/d.maxHP < 0.3) base *= 1.2;
+    if(furioso) base *= (furioso.dmgMult||1);
+    if(hasStatus(combat.playerStatuses,'Debilitado')) base *= 0.85; // te drenaron la fuerza: -15% de daño mientras dure
+    socketedStones().forEach(s=>{
+      if(s.special && s.special.type==='lowhp_dmg_v2' && state.char.curHP/d.maxHP < s.special.threshold){
+        const missingPct = (1 - state.char.curHP/d.maxHP) * 100; // puntos de vida faltantes
+        base *= 1 + s.special.base + missingPct*s.special.missingScale;
+      }
+    });
+
+    // combo: consumes specific status for bonus (machacar)
+    let comboText = '';
+    if(skill.consumes){
+      const st = hasStatus(target.statuses, skill.consumes.name);
+      if(st){
+        base *= skill.consumes.bonusMult;
+        removeStatus(target.statuses, skill.consumes.name);
+        applyStatus(target, skill.consumes.applies, false);
+        comboText = ` ¡Combo! ${skill.consumes.name} consumido: ${target.name} queda Aturdido.`;
+      }
+    }
+    if(skill.scalesWithStack){
+      const st = hasStatus(target.statuses, skill.scalesWithStack.name);
+      if(st) base *= (1 + (st.stacks||1)*skill.scalesWithStack.perStackMult);
+    }
+    if(skill.consumesStackBonus){
+      const st = hasStatus(target.statuses, skill.consumesStackBonus.name);
+      if(st){
+        base *= (1 + (st.stacks||1)*skill.consumesStackBonus.perStackMult);
+        comboText = ` ¡Ejecución! Consumes ${st.stacks} carga(s) de ${st.name}.`;
+        removeStatus(target.statuses, skill.consumesStackBonus.name);
+      }
+    }
+    if(skill.bonusVsMarked && hasStatus(target.statuses,'Marcado')){
+      base *= (1+skill.bonusVsMarked);
+    }
+    if(skill.consumesEither){
+      let used = false;
+      for(const opt of skill.consumesEither){
+        const st = hasStatus(target.statuses, opt.name);
+        if(st && !used){
+          base *= (1+opt.bonusMult);
+          removeStatus(target.statuses, opt.name);
+          comboText = ` ¡Combo elemental! ${opt.name} detonado.`;
+          used = true;
+        }
+      }
+      if(!used) base *= (1-(skill.penaltyIfNone||0));
+    }
+    // marked passive (all incoming dmg +20%)
+    if(hasStatus(target.statuses,'Marcado')) base *= 1.2;
+
+    let isCrit = chance(crit);
+    if(isCrit) base *= 1.5;
+
+    let ignore = skill.ignoreResist||0;
+    let resKey = skill.dmgType==='arcano'? null : skill.dmgType;
+    let resVal = resKey ? (target.res[resKey]||0)*(1-ignore) : 0;
+    let dmg = base*(1-resVal/100);
+    if(skill.penaltyIfFrente && combat.playerPos==='frente') dmg *= (1-skill.penaltyIfFrente);
+    dmg = Math.max(1, Math.round(dmg));
+    if(target.defending) dmg = Math.round(dmg*0.5);
+    target.hp = Math.max(0, target.hp - dmg);
+
+    log(`Usas <b>${skill.name}</b> sobre ${target.name}: ${dmg} de daño${isCrit?' (¡crítico!)':''}.${comboText}`);
+
+    if(skill.applies) applyStatus(target, skill.applies, false);
+    applyEquippedSpecials(target, dmg, skill);
+  });
+
+  endPlayerTurn();
+}
+
+function endPlayerTurn(){
+  checkCombatEnd();
+  if(combat.over) return;
+  processEnemyTurns();
+}
+
+function tickStatuses(list, ownerName, target){
+  // target = the enemy object being ticked, or null/undefined for the player.
+  // Applies damage-over-time and reports whether the owner is stunned this turn.
+  // Does NOT decrement durations — that happens exactly once, centrally, at the
+  // end of processEnemyTurns (previously this also decremented AND a second
+  // block decremented again, so every status lost 2 turns of duration per cycle).
+  let skip = false;
+  list.forEach(st=>{
+    if(st.name==='Sangrado'){
+      const dmg = Math.max(1, Math.round(skillBaseDamage()*0.08*(st.stacks||1)));
+      if(target){ target.hp = Math.max(0, target.hp-dmg); log(`${ownerName} sangra por ${dmg}.`); }
+      else { state.char.curHP = Math.max(0,state.char.curHP-dmg); log(`Sangras por ${dmg}.`); }
+    }
+    if(st.name==='Quemadura'){
+      const dmg = Math.max(1, Math.round(skillBaseDamage()*0.22));
+      if(target){ target.hp = Math.max(0, target.hp-dmg); log(`${ownerName} arde por ${dmg}.`); }
+      else { state.char.curHP = Math.max(0,state.char.curHP-dmg); log(`Ardes por ${dmg}.`); }
+    }
+    if(st.name==='Aturdido') skip = true;
+  });
+  return skip;
+}
+
+function decrementStatuses(list){
+  for(let i=list.length-1;i>=0;i--){
+    list[i].duration -= 1;
+    if(list[i].duration<=0) list.splice(i,1);
+  }
+}
+
+function processEnemyTurns(){
+  combat.playerDefending = false;
+
+  // apply DOT and determine stun per enemy (does not decrement durations yet)
+  const stunFlags = new Map();
+  combat.enemies.forEach(enemy=>{
+    if(enemy.hp<=0) return;
+    stunFlags.set(enemy, tickStatuses(enemy.statuses, enemy.name, enemy));
+  });
+
+  checkCombatEnd();
+  if(combat.over) return;
+
+  livingEnemies().forEach(enemy=>{
+    if(enemy.hp<=0) return;
+    if(stunFlags.get(enemy)){ log(`${enemy.name} está aturdido y pierde su turno.`); return; }
+    enemyAct(enemy);
+  });
+
+  // decrement every status exactly once per turn cycle (enemies + player)
+  // (player DOT — Sangrado/Quemadura — needs to actually tick before we decrement it away;
+  // this call was missing entirely before, so a player bitten by a spider never actually bled)
+  tickStatuses(combat.playerStatuses, null, null);
+  combat.enemies.forEach(enemy=> decrementStatuses(enemy.statuses));
+  decrementStatuses(combat.playerStatuses);
+
+  // player regen
+  const d = derived();
+  state.char.curSta = Math.min(d.maxSta, state.char.curSta+5);
+  state.char.curSpi = Math.min(d.maxSpi, state.char.curSpi+5);
+
+  checkCombatEnd();
+  renderAll();
+  save();
+}
+
+function enemyAct(enemy){
+  const {evasion} = computeCritEvasion();
+  if(chance(evasion)){
+    log(`${enemy.name} ataca, ¡pero esquivas!`);
+    return;
+  }
+  const move = pick(enemy.tpl.moves);
+  const d = derived();
+  let dmg = enemy.atk;
+  let text = 'ataca';
+  if(move==='robar'){ text='intenta robar tu oro'; dmg = Math.round(dmg*0.6); }
+  if(move==='morder'){ text='muerde, veneno en los colmillos'; applyStatus(null, {name:'Sangrado', duration:2, stack:true, maxStack:3}, true); }
+  if(move==='debilitar'){ text='drena tu fuerza'; applyStatus(null, {name:'Debilitado', duration:2}, true); dmg = Math.round(dmg*0.6); }
+  if(move==='aplastar'){ text='golpea con fuerza brutal'; dmg = Math.round(dmg*1.4); }
+
+  // resistance vs player
+  let resVal = totalRes('fisico');
+  let finalDmg = dmg*(1-resVal/100);
+  if(state.char.race==='enano') finalDmg -= 2;
+  if(combat.playerDefending) finalDmg *= 0.5;
+  finalDmg = Math.max(1, Math.round(finalDmg));
+
+  state.char.curHP = Math.max(0, state.char.curHP - finalDmg);
+  log(`${enemy.name} ${text}: ${finalDmg} de daño.`);
+
+  // Vitalidad: devuelve un % del daño físico recibido a quien lo infligió
+  socketedStones().forEach(s=>{
+    if(s.special && s.special.type==='reflect'){
+      const reflected = Math.max(1, Math.round(finalDmg*s.special.pct));
+      enemy.hp = Math.max(0, enemy.hp-reflected);
+      log(`<b>${s.name}</b> devuelve ${reflected} de daño a ${enemy.name}.`);
+    }
+  });
+}
+
+function checkCombatEnd(){
+  if(!combat || combat.over) return;
+  if(state.char.curHP<=0){
+    combat.over = true;
+    log('Caes al suelo. La oscuridad del laberinto te envuelve...');
+    handleDefeat();
+    return;
+  }
+  if(livingEnemies().length===0){
+    combat.over = true;
+    handleVictory();
+  }
+}
+
+function handleVictory(){
+  const isBoss = combat.node.type==='jefe';
+  const isElite = combat.node.type==='elite';
+  const level = state.dungeon.level || 1;
+  const rewardMult = 1 + (level-1)*0.08; // los niveles más duros pagan algo mejor (solo aplica al oro)
+  const perKillXP = isBoss ? guardianXP(level) : isElite ? eliteXP(level) : mobXP(level);
+  const xpGain = Math.round(perKillXP * combat.enemies.length * (race().id==='humano'?1.1:1));
+  const goldGain = Math.round((rnd(6,14)*combat.enemies.length + (isBoss?60:isElite?20:0)) * rewardMult);
+  state.char.xp += xpGain;
+  state.char.gold += goldGain;
+  log(`Victoria. +${xpGain} experiencia, +${goldGain} de oro.`);
+  combat.node.done = true;
+
+  if(isElite || isBoss){
+    if(chance(0.8)){
+      const item = generateLoot(state.dungeon.atFloor);
+      addToInventory(item);
+      log(item.kind==='potion'
+        ? `También obtienes: <b>${POTION_TEMPLATES[item.potionId].name}</b> (guardada en la mochila).`
+        : `También obtienes: <b>${item.name}</b> (guardado en la mochila).`);
+    }
+  }
+
+  let leveled = false;
+  // curva pedida: nivel 1→2 necesita 5 exp, 2→3 necesita 10, 3→4 necesita 20 (se duplica cada nivel).
+  // Tope de nivel de personaje: 60.
+  let xpNeeded = xpNeededForLevel(state.char.level);
+  while(state.char.level < CHAR_LEVEL_CAP && state.char.xp >= xpNeeded){
+    state.char.xp -= xpNeeded;
+    state.char.level += 1;
+    leveled = true;
+    xpNeeded = xpNeededForLevel(state.char.level);
+  }
+  if(state.char.level >= CHAR_LEVEL_CAP) state.char.xp = 0;
+  if(leveled){
+    const d = derived();
+    state.char.curHP = d.maxHP; state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi;
+    log(`¡Subes a nivel ${state.char.level}! Tus estadísticas aumentan y te recuperas por completo.`);
+  }
+
+  if(isBoss){
+    const clearedLevel = level;
+    const wasFrontier = clearedLevel === maxLevelUnlocked();
+    if(wasFrontier) state.char.maxLevelUnlocked = Math.min(LEVEL_CAP, clearedLevel+1);
+    log(`Derrotas al guardián del nivel ${clearedLevel}.`);
+
+    const reward = generateGuardianReward(clearedLevel);
+    let rewardText = '';
+    if(reward){
+      addToInventory(reward);
+      log(`El guardián te concede: ${itemNameHTML(reward)} (${itemBonusText(reward)}), guardado en tu mochila.`);
+      rewardText = ` El guardián deja tras de sí <b style="color:${RARITIES[reward.rarity].color};">${reward.name}</b>, que recoges de inmediato.`;
+    }
+
+    // guardianes de nivel 4 en adelante: 20% (temporal) de soltar una piedra de alma (solo rango E o F por ahora)
+    if(clearedLevel >= 4 && chance(0.20)){
+      const pool = Object.values(SOUL_STONES).filter(s=>AVAILABLE_SOUL_TIERS.includes(s.tier));
+      const tpl = pick(pool);
+      addToInventory({kind:'soulstone', stoneId:tpl.id, family:tpl.family, name:tpl.name, tier:tpl.tier, icon:tpl.icon, desc:tpl.desc, preview:tpl.preview, bonus:tpl.bonus, special:tpl.special});
+      log(`El guardián también deja caer una <b style="color:${SOUL_TIER_COLORS[tpl.tier]};">${tpl.name}</b> — una piedra de alma de rango ${tpl.tier}.`);
+      rewardText += ` También encuentras una piedra de alma: <b style="color:${SOUL_TIER_COLORS[tpl.tier]};">${tpl.name}</b>.`;
+    }
+
+    const canContinue = clearedLevel < LEVEL_CAP;
+    const bodyText = (canContinue
+      ? `Has vencido al guardián del nivel ${clearedLevel}. Puedes seguir adentrándote al nivel ${clearedLevel+1}, o retirarte a la ciudad conservando todo tu botín.`
+      : `Has vencido al guardián del nivel ${clearedLevel}, el último conocido del laberinto. Retírate a la ciudad conservando todo tu botín.`) + rewardText;
+    const buttons = [];
+    if(canContinue){
+      buttons.push({label:`Continuar al nivel ${clearedLevel+1}`, primary:true, onClick:()=>{
+        combat = null;
+        state.dungeon = generateDungeon(clearedLevel+1);
+        updateRecord(clearedLevel+1, 0);
+        const d = derived();
+        state.char.curHP = d.maxHP; state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi;
+        log(`Avanzas al nivel ${clearedLevel+1} del laberinto.`);
+        renderAll(); save();
+      }});
+    }
+    buttons.push({label:'Retirarse a la ciudad', primary:!canContinue, onClick:()=>{
+      const tax = Math.round(state.char.gold*0.1);
+      state.char.gold -= tax;
+      log(`Regresas a la ciudad conservando tu botín. Se te cobran ${tax} de oro en impuestos.`);
+      combat = null;
+      state.dungeon = null;
+      renderAll(); save();
+    }});
+    showChoiceOverlay('Guardián derrotado', bodyText, buttons);
+    save();
+    return;
+  }
+
+  combat = null;
+  renderAll();
+  save();
+}
+
+function handleDefeat(){
+  showOverlay('Caído en el laberinto', `Tu cuerpo cede y el laberinto te expulsa antes del final. Pierdes el equipo suelto que llevabas en la mochila y la mitad de tu oro. Lo que hayas guardado en el Hogar sigue a salvo.`, ()=>{
+    const lostItems = state.char.inventory.filter(i=>i.kind==='equip').length;
+    state.char.inventory = state.char.inventory.filter(i=>i.kind!=='equip');
+    state.char.gold = Math.round(state.char.gold*0.5);
+    const d = derived();
+    state.char.curHP = Math.round(d.maxHP*0.5);
+    state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi;
+    combat = null;
+    state.dungeon = null;
+    if(lostItems>0) log(`Pierdes ${lostItems} objeto(s) de equipo que llevabas en la mochila.`);
+    renderAll();
+    save();
+  });
+}
+
+function showOverlay(title, text, onClose){
+  const div = document.createElement('div');
+  div.className = 'overlay-msg';
+  div.innerHTML = `<div class="overlay-card"><h2>${title}</h2><p>${text}</p><button class="btn-main" id="ov-close">Continuar</button></div>`;
+  document.body.appendChild(div);
+  document.getElementById('ov-close').onclick = ()=>{
+    document.body.removeChild(div);
+    onClose();
+  };
+}
+
+function showChoiceOverlay(title, text, buttons){
+  const div = document.createElement('div');
+  div.className = 'overlay-msg';
+  const btnHTML = buttons.map((b,i)=>`<button class="btn-main${b.primary?'':' secondary-choice'}" data-ov-btn="${i}">${b.label}</button>`).join('');
+  div.innerHTML = `<div class="overlay-card"><h2>${title}</h2><p>${text}</p><div style="display:flex; flex-wrap:wrap; gap:10px; justify-content:center;">${btnHTML}</div></div>`;
+  document.body.appendChild(div);
+  buttons.forEach((b,i)=>{
+    div.querySelector(`[data-ov-btn="${i}"]`).onclick = ()=>{
+      document.body.removeChild(div);
+      b.onClick();
+    };
+  });
+}
+
+/* ============================================================
+   RENDER: COMBAT
+   ============================================================ */
+function renderCombat(){
+  const d = derived();
+  const s = style();
+  const skillIds = s.skills;
+
+  const enemyHTML = combat.enemies.map((e,i)=>{
+    const dead = e.hp<=0;
+    const slotTag = i===0 ? 'Frente' : (i===1?'Medio':'Fondo');
+    const statusChips = e.statuses.map(st=>`<span class="status-chip">${st.name}${st.stacks?(' x'+st.stacks):''} (${st.duration})</span>`).join('');
+    const hpPct = clamp(e.hp/e.maxHP*100,0,100);
+    const canTargetAny = livingEnemies().length>0;
+    return `<div class="enemy-card ${dead?'dead':''} ${!dead && canTargetAny?'targetable':''}" data-idx="${i}">
+      <div class="ei">${e.icon}</div>
+      <div class="einfo">
+        <div class="ename"><span>${e.name}</span><span class="slot-tag">${slotTag}</span></div>
+        <div class="bar-track" style="margin-top:4px;"><div class="bar-fill hp" style="width:${hpPct}%"></div></div>
+        <div style="font-size:0.7em; color:var(--text-dim); margin-top:2px;">${e.hp}/${e.maxHP} HP</div>
+        <div>${statusChips}</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  const playerStatusChips = combat.playerStatuses.map(st=>`<span class="status-chip">${st.name} (${st.duration})</span>`).join('');
+
+  const skillButtons = skillIds.map(sid=>{
+    const sk = SKILLS[sid];
+    let disabled = false;
+    if(sk.cost){
+      const pool = sk.cost.tipo==='estamina'?state.char.curSta:state.char.curSpi;
+      if(pool < sk.cost.valor) disabled = true;
+    }
+    if(sk.requiresPos && combat.playerPos!==sk.requiresPos && !sk.penaltyIfFrente) disabled = true;
+    const costText = sk.cost ? `${sk.cost.valor} ${COST_LABELS[sk.cost.tipo] || sk.cost.tipo}` : 'Gratis';
+    return `<button class="skill-btn" data-skill="${sid}" ${disabled?'disabled':''}>
+      <span class="sname">${sk.name}</span>
+      <span class="scost">${costText}${sk.requiresPos?(' · requiere '+ (sk.requiresPos==='frente'?'Frente':'Retaguardia')):''}</span>
+      <span class="sdesc">${sk.desc}</span>
+    </button>`;
+  }).join('');
+
+  const utilButtons = ['ataque_basico','defender','reposicionar'].map(sid=>{
+    const sk = SKILLS[sid];
+    return `<button class="skill-btn" data-skill="${sid}">
+      <span class="sname">${sk.name}</span>
+      <span class="scost">Gratis</span>
+      <span class="sdesc">${sk.desc}</span>
+    </button>`;
+  }).join('');
+
+  const potionItems = state.char.inventory.filter(i=>i.kind==='potion');
+  const potionButtons = potionItems.length ? potionItems.map(it=>{
+    const tpl = POTION_TEMPLATES[it.potionId];
+    return `<button class="skill-btn potion-btn" data-potion="${it.potionId}">
+      <span class="sname">${tpl.icon} ${tpl.name} <span class="slot-tag">x${it.qty}</span></span>
+      <span class="scost">Gratis · consume tu turno</span>
+      <span class="sdesc">${tpl.desc}</span>
+    </button>`;
+  }).join('') : `<p class="inv-empty-msg">No tienes pociones para usar.</p>`;
+
+  document.getElementById('main-panel').innerHTML = `
+    <h3 style="color:var(--bronze-light); margin-bottom:10px;">Combate</h3>
+    <div class="combat-grid">
+      <div class="combat-side">
+        <h4>Tú</h4>
+        <div class="pos-toggle">
+          <span class="pos-pill ${combat.playerPos==='frente'?'active':''}">Frente</span>
+          <span class="pos-pill ${combat.playerPos==='retaguardia'?'active':''}">Retaguardia</span>
+        </div>
+        <div class="player-card">
+          <div class="pc-icon">${race().icon}</div>
+          <div style="margin-top:6px; font-size:0.85em;">${state.char.curHP} / ${d.maxHP} HP</div>
+          <div style="margin-top:6px;">${playerStatusChips || '<span style="color:var(--text-dim); font-size:0.75em;">Sin efectos activos</span>'}</div>
+        </div>
+      </div>
+      <div class="combat-side">
+        <h4>Enemigos</h4>
+        <div class="enemy-slots">${enemyHTML}</div>
+      </div>
+    </div>
+
+    <div class="section-label" style="margin-top:4px;">Habilidades de ${s.name}</div>
+    <div class="skills-bar">${skillButtons}</div>
+    <div class="section-label">Acciones generales</div>
+    <div class="skills-bar">${utilButtons}</div>
+    <div class="section-label">Pociones</div>
+    <p class="inv-combat-note">Beber una poción ocupa tu turno, igual que una habilidad.</p>
+    <div class="skills-bar">${potionButtons}</div>
+  `;
+
+  let pendingSkill = null;
+  document.querySelectorAll('.skill-btn[data-skill]').forEach(btn=>{
+    btn.onclick = ()=>{
+      const sid = btn.dataset.skill;
+      const sk = SKILLS[sid];
+      if(sk.targetMode==='any'){
+        pendingSkill = sid;
+        log(`Elige un objetivo para ${sk.name}.`);
+        document.querySelectorAll('.enemy-card.targetable').forEach(card=>{
+          card.onclick = ()=>{
+            const idx = parseInt(card.dataset.idx);
+            playerUseSkill(sid, idx);
+          };
+        });
+      } else {
+        playerUseSkill(sid, null);
+      }
+    };
+  });
+  document.querySelectorAll('.skill-btn[data-potion]').forEach(btn=>{
+    btn.onclick = ()=> usePotionInCombat(btn.dataset.potion);
+  });
+}
+
+/* ============================================================
+   CREATION SCREEN
+   ============================================================ */
+let selRace = null, selStyle = null;
+
+function renderCreation(){
+  const raceGrid = document.getElementById('race-grid');
+  raceGrid.innerHTML = Object.values(RACES).map(r=>`
+    <button class="pick-card" data-race="${r.id}">
+      <h3>${r.icon} ${r.name}</h3>
+      <div class="desc">${r.desc}</div>
+      <div class="mini-stats">
+        <span>FIS <b>${r.stats.fis}</b></span>
+        <span>ESP <b>${r.stats.esp}</b></span>
+        <span>HAB <b>${r.stats.hab}</b></span>
+      </div>
+    </button>
+  `).join('');
+
+  const styleGrid = document.getElementById('style-grid');
+  styleGrid.innerHTML = Object.values(STYLES).map(s=>`
+    <button class="pick-card" data-style="${s.id}">
+      <h3>${s.icon} ${s.name}</h3>
+      <div class="desc">${s.desc}</div>
+    </button>
+  `).join('');
+
+  raceGrid.querySelectorAll('.pick-card').forEach(el=>{
+    el.onclick = ()=>{
+      selRace = el.dataset.race;
+      raceGrid.querySelectorAll('.pick-card').forEach(c=>c.classList.remove('selected'));
+      el.classList.add('selected');
+      checkBegin();
+    };
+  });
+  styleGrid.querySelectorAll('.pick-card').forEach(el=>{
+    el.onclick = ()=>{
+      selStyle = el.dataset.style;
+      styleGrid.querySelectorAll('.pick-card').forEach(c=>c.classList.remove('selected'));
+      el.classList.add('selected');
+      checkBegin();
+    };
+  });
+}
+function checkBegin(){
+  document.getElementById('btn-begin').disabled = !(selRace && selStyle);
+}
+
+document.getElementById('btn-begin').onclick = async ()=>{
+  const btn = document.getElementById('btn-begin');
+  btn.disabled = true;
+  try{
+    const row = await createCharacterOnServer(selRace, selStyle);
+    state = rowToState(row);
+    const d = derived();
+    state.char.curHP = d.maxHP; state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi;
+    log(`Despiertas como ${RACES[selRace].name.toLowerCase()}, senda del ${STYLES[selStyle].name.toLowerCase()}. Dungeon & Stone comienza.`);
+    showScreen('screen-game');
+    renderAll();
+    save();
+  }catch(e){
+    alert('No se pudo crear el personaje: ' + (e && e.message ? e.message : e));
+    btn.disabled = false;
+  }
+};
+
+document.getElementById('btn-inventory').onclick = ()=>{
+  if(!state) return;
+  if(combat && combat.active){ log('No puedes abrir el inventario en combate. Usa tus pociones desde el panel de combate.'); return; }
+  homeOpen = false;
+  shopOpen = false;
+  rankingOpen = false;
+  invOpen = !invOpen;
+  renderAll();
+};
+
+document.getElementById('btn-slots').onclick = async ()=>{
+  if(combat && combat.active){ log('No puedes cerrar sesión durante el combate.'); return; }
+  if(pendingSave) await flushSave();
+  await auth.signOut();
+  // showAuthScreen() se dispara solo desde el listener de onAuthStateChange (evento SIGNED_OUT)
+};
+
+document.getElementById('btn-reset').onclick = async ()=>{
+  if(!confirm('¿Borrar tu personaje? Perderás todo el progreso guardado. Tu cuenta seguirá existiendo y podrás crear un personaje nuevo.')) return;
+  await deleteCharacterOnServer();
+  state = null; combat = null; invOpen = false; homeOpen = false; shopOpen = false; rankingOpen = false;
+  selRace = null; selStyle = null;
+  document.querySelectorAll('.pick-card').forEach(c=>c.classList.remove('selected'));
+  document.getElementById('btn-begin').disabled = true;
+  document.getElementById('gold-badge').style.display = 'none';
+  document.getElementById('tier-badge').style.display = 'none';
+  document.getElementById('btn-inventory').style.display = 'none';
+  document.getElementById('btn-reset').style.display = 'none';
+  document.getElementById('header-sub').textContent = 'El juego que nadie ha superado';
+  showScreen('screen-create');
+};
+
+/* ============================================================
+   RENDER: LOGIN / REGISTRO
+   ============================================================ */
+function renderAuthScreen(message){
+  const wrap = document.getElementById('auth-box');
+  let mode = 'login';
+  wrap.innerHTML = `
+    <div class="pick-card" style="max-width:380px; margin:0 auto; text-align:left;">
+      <div style="display:flex; gap:8px; margin-bottom:14px;">
+        <button class="inv-btn" id="auth-tab-login" style="flex:1;">Iniciar sesión</button>
+        <button class="inv-btn" id="auth-tab-register" style="flex:1;">Crear cuenta</button>
+      </div>
+      <div id="auth-form"></div>
+      <div style="margin:14px 0; text-align:center; color:var(--text-dim); font-size:0.8em;">— o —</div>
+      <button class="btn-main secondary-choice" id="auth-google" style="width:100%;">Continuar con Google</button>
+      <p id="auth-msg" style="color:var(--blood-light); font-size:0.85em; min-height:1.2em; margin-top:12px;">${message||''}</p>
+    </div>
+  `;
+  function renderForm(){
+    const form = document.getElementById('auth-form');
+    form.innerHTML = `
+      <input id="auth-email" class="auth-input" type="email" placeholder="Email" autocomplete="email">
+      <input id="auth-password" class="auth-input" type="password" placeholder="${mode==='register' ? 'Contraseña (mínimo 6 caracteres)' : 'Contraseña'}" autocomplete="${mode==='register'?'new-password':'current-password'}">
+      <button class="btn-main" id="auth-submit" style="width:100%; margin-top:6px;">${mode==='register' ? 'Crear cuenta' : 'Entrar'}</button>
+    `;
+    document.getElementById('auth-submit').onclick = handleSubmit;
+  }
+  async function handleSubmit(){
+    const msg = document.getElementById('auth-msg');
+    const submitBtn = document.getElementById('auth-submit');
+    const email = document.getElementById('auth-email').value.trim();
+    const password = document.getElementById('auth-password').value;
+    msg.style.color = 'var(--blood-light)';
+    msg.textContent = '';
+    if(!email || !password){ msg.textContent = 'Completa email y contraseña.'; return; }
+    submitBtn.disabled = true;
+    try{
+      if(mode==='login'){
+        await auth.signInWithEmail(email, password);
+      } else {
+        if(password.length < 6) throw new Error('La contraseña debe tener al menos 6 caracteres.');
+        const result = await auth.signUpWithEmail(email, password);
+        if(!result.session){
+          msg.style.color = 'var(--good)';
+          msg.textContent = 'Cuenta creada. Revisa tu correo para confirmarla y luego inicia sesión.';
+          submitBtn.disabled = false;
+          return;
+        }
+      }
+      // cargar perfil/username/personaje lo dispara el listener de onAuthStateChange
+    }catch(e){
+      msg.textContent = e && e.message ? e.message : 'Ocurrió un error.';
+      submitBtn.disabled = false;
+    }
+  }
+  document.getElementById('auth-tab-login').onclick = ()=>{ mode='login'; renderForm(); };
+  document.getElementById('auth-tab-register').onclick = ()=>{ mode='register'; renderForm(); };
+  document.getElementById('auth-google').onclick = async ()=>{
+    try{ await auth.signInWithGoogle(); }
+    catch(e){ document.getElementById('auth-msg').textContent = e && e.message ? e.message : 'No se pudo continuar con Google.'; }
+  };
+  renderForm();
+}
+
+function renderUsernameScreen(){
+  const wrap = document.getElementById('username-box');
+  wrap.innerHTML = `
+    <div class="pick-card" style="max-width:380px; margin:0 auto; text-align:left;">
+      <p style="color:var(--text-dim); font-size:0.85em; margin-top:0;">Elige el nombre de usuario que verán los demás jugadores en el ranking. Solo letras, números y guion bajo.</p>
+      <input id="username-input" class="auth-input" type="text" placeholder="Nombre de usuario">
+      <button class="btn-main" id="username-submit" style="width:100%; margin-top:6px;">Confirmar</button>
+      <p id="username-msg" style="color:var(--blood-light); font-size:0.85em; min-height:1.2em; margin-top:10px;"></p>
+    </div>
+  `;
+  document.getElementById('username-submit').onclick = async ()=>{
+    const msg = document.getElementById('username-msg');
+    const btn = document.getElementById('username-submit');
+    const username = document.getElementById('username-input').value.trim();
+    msg.textContent = '';
+    btn.disabled = true;
+    try{
+      if(!username) throw new Error('Escribe un nombre de usuario.');
+      const available = await auth.checkUsernameAvailable(username);
+      if(!available) throw new Error('Ese nombre de usuario ya está en uso.');
+      currentProfile = await auth.setUsername(username);
+      await enterGame();
+    }catch(e){
+      msg.textContent = e && e.message ? e.message : 'No se pudo guardar el nombre de usuario.';
+      btn.disabled = false;
+    }
+  };
+}
+
+/* ============================================================
+   BOOT — sesión de Supabase → perfil → personaje
+   ============================================================ */
+function resetHeaderForLoggedOut(){
+  document.getElementById('gold-badge').style.display = 'none';
+  document.getElementById('tier-badge').style.display = 'none';
+  document.getElementById('btn-inventory').style.display = 'none';
+  document.getElementById('btn-slots').style.display = 'none';
+  document.getElementById('btn-reset').style.display = 'none';
+  document.getElementById('header-sub').textContent = 'El juego que nadie ha superado';
+}
+
+function showAuthScreen(message){
+  state = null; combat = null;
+  invOpen = false; homeOpen = false; shopOpen = false; rankingOpen = false;
+  currentUser = null; currentProfile = null;
+  resetHeaderForLoggedOut();
+  renderAuthScreen(message);
+  showScreen('screen-auth');
+}
+
+async function enterGame(){
+  document.getElementById('btn-slots').style.display = 'inline-block';
+  const row = await loadCharacterRow();
+  if(!row){
+    renderCreation();
+    selRace = null; selStyle = null;
+    document.querySelectorAll('.pick-card').forEach(c=>c.classList.remove('selected'));
+    document.getElementById('btn-begin').disabled = true;
+    showScreen('screen-create');
+    return;
+  }
+  state = rowToState(row);
+  migrateState();
+  showScreen('screen-game');
+  renderAll();
+}
+
+async function onAuthed(user){
+  currentUser = user;
+  const profile = await fetchProfile(user.id);
+  if(!profile){
+    await auth.signOut();
+    return;
+  }
+  if(profile.is_banned){
+    await auth.signOut();
+    showAuthScreen('Tu cuenta está suspendida.');
+    return;
+  }
+  if(!profile.username_set){
+    currentProfile = profile;
+    document.getElementById('btn-slots').style.display = 'inline-block';
+    renderUsernameScreen();
+    showScreen('screen-username');
+    return;
+  }
+  currentProfile = profile;
+  await enterGame();
+}
+
+async function boot(){
+  renderCreation();
+  const session = await auth.getSession();
+  if(session && session.user){
+    await onAuthed(session.user);
+  } else {
+    showAuthScreen();
+  }
+  auth.onAuthStateChange((event, session)=>{
+    if(event === 'SIGNED_IN' && session && session.user){
+      if(!currentUser || currentUser.id !== session.user.id) onAuthed(session.user);
+    } else if(event === 'SIGNED_OUT'){
+      showAuthScreen();
+    }
+  });
+}
+boot();

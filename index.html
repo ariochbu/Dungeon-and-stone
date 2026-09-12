@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dungeon &amp; Stone</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./src/styles.css">
+</head>
+<body>
+<div class="app">
+
+  <header class="top">
+    <div>
+      <h1>Dungeon &amp; Stone</h1>
+      <div class="sub" id="header-sub">El juego que nadie ha superado</div>
+    </div>
+    <div class="top-right">
+      <div class="gold-badge" id="gold-badge" style="display:none;">⛁ <span id="gold-amount">0</span></div>
+      <div class="gold-badge" id="tier-badge" style="display:none;" title="Nivel del laberinto actual y su amenaza (ajustada visualmente a tu nivel de personaje)"><span id="tier-amount">1</span></div>
+      <button class="inv-toggle-btn" id="btn-inventory" style="display:none;">🎒 Inventario</button>
+      <button class="reset-btn" id="btn-slots" style="display:none;">Cerrar sesión</button>
+      <button class="reset-btn" id="btn-reset" style="display:none;">Borrar personaje</button>
+    </div>
+  </header>
+
+  <!-- ============ AUTH SCREEN ============ -->
+  <div class="screen active" id="screen-auth">
+    <div class="intro">
+      <h1>Dungeon &amp; Stone</h1>
+      <p>Inicia sesión o crea una cuenta para guardar tu progreso en el servidor. Tu personaje te espera en cualquier dispositivo.</p>
+    </div>
+    <div id="auth-box"></div>
+  </div>
+
+  <!-- ============ CHOOSE USERNAME (first login only) ============ -->
+  <div class="screen" id="screen-username">
+    <div class="intro">
+      <h1>Un último detalle</h1>
+      <p>Antes de entrar al laberinto, necesitas un nombre de usuario.</p>
+    </div>
+    <div id="username-box"></div>
+  </div>
+
+  <!-- ============ CREATION SCREEN ============ -->
+  <div class="screen" id="screen-create">
+    <div class="intro">
+      <h1>Antes de la caída</h1>
+      <p>Elige el cuerpo que habitarás en el mundo de Dungeon &amp; Stone. Tu raza define tus cimientos; tu senda de combate, cómo sobrevives al laberinto.</p>
+    </div>
+
+    <div class="step-title">Raza</div>
+    <div class="card-grid" id="race-grid"></div>
+
+    <div class="step-title">Senda de combate</div>
+    <div class="card-grid" id="style-grid"></div>
+
+    <div class="begin-row">
+      <button class="btn-main" id="btn-begin" disabled>Entrar al mundo</button>
+    </div>
+  </div>
+
+  <!-- ============ MAIN GAME ============ -->
+  <div class="screen" id="screen-game">
+    <div class="layout">
+
+      <!-- sidebar: character sheet -->
+      <div class="sheet panel" id="sheet"></div>
+
+      <!-- main content -->
+      <div>
+        <div class="panel" id="main-panel"></div>
+        <div class="panel">
+          <div class="section-label" style="margin-top:0; border-top:none; padding-top:0;">Crónica</div>
+          <div class="log-box" id="log-box"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="footer-note">Dungeon &amp; Stone — recreación jugable inspirada en el juego descrito en la novela «Sobreviviendo al juego siendo un bárbaro». Tu progreso se guarda automáticamente en tu cuenta.</div>
+</div>
+
+<script type="module" src="./src/game.js"></script>
+</body>
+</html>
