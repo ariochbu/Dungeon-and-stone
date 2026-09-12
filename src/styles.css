@@ -60,8 +60,8 @@
   .inv-toggle-btn:hover:not(:disabled){border-color:var(--bronze); color:var(--bronze-light);}
   .inv-toggle-btn.active{border-color:var(--bronze); color:var(--bronze-light); background:rgba(184,147,74,0.08);}
 
-  .layout{display:grid; grid-template-columns: 290px 1fr; gap:14px; align-items:start;}
-  @media (max-width:840px){ .layout{grid-template-columns:1fr;} }
+  .layout{display:grid; grid-template-columns: 290px minmax(0,1fr); gap:14px; align-items:start;}
+  @media (max-width:840px){ .layout{grid-template-columns:minmax(0,1fr);} }
 
   .panel{
     background:var(--panel); border:1px solid var(--border); border-radius:4px;
