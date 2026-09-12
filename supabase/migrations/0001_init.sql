@@ -61,10 +61,16 @@ as $$
 declare
   acting_role text;
 begin
-  select role into acting_role from public.profiles where id = auth.uid();
-  if acting_role is distinct from 'admin' then
-    new.role := old.role;
-    new.is_banned := old.is_banned;
+  -- auth.uid() es NULL cuando la escritura viene del SQL Editor, la CLI o el
+  -- service role (conexiones ya de por sí fuera de RLS) — en ese caso confiamos
+  -- en la conexión y no revertimos nada. Solo protegemos el camino normal de la
+  -- app, donde auth.uid() sí identifica a un usuario autenticado concreto.
+  if auth.uid() is not null then
+    select role into acting_role from public.profiles where id = auth.uid();
+    if acting_role is distinct from 'admin' then
+      new.role := old.role;
+      new.is_banned := old.is_banned;
+    end if;
   end if;
   return new;
 end;

@@ -462,6 +462,7 @@ let invOpen = false; // whether the inventory/equipment panel is showing
 let homeOpen = false; // whether the Hogar (home stash) panel is showing
 let shopOpen = false; // whether the Tienda (shop) panel is showing
 let rankingOpen = false; // whether the Ranking panel is showing
+let adminOpen = false; // whether the Admin panel is showing
 let currentUser = null; // Supabase auth user
 let currentProfile = null; // {id, username, role, is_banned}
 
@@ -820,6 +821,7 @@ function renderAll(){
     homeOpen = false;
     shopOpen = false;
     rankingOpen = false;
+    adminOpen = false;
     renderCombat();
   } else if(invOpen){
     renderInventory();
@@ -829,6 +831,8 @@ function renderAll(){
     renderShop();
   } else if(rankingOpen){
     renderRanking();
+  } else if(adminOpen){
+    renderAdmin();
   } else if(state.dungeon && !state.dungeon.floors[state.dungeon.floors.length-1][0].done){
     renderMap();
   } else {
@@ -1162,6 +1166,12 @@ function usePotionInCombat(potionId){
    RENDER: CITY
    ============================================================ */
 function renderCity(){
+  const adminCardHTML = (currentProfile && currentProfile.role === 'admin') ? `
+      <div class="action-card">
+        <h3>Panel admin</h3>
+        <p>Gestiona cuentas de jugadores: banear, restaurar y otorgar rol de administrador.</p>
+        <button id="btn-open-admin">Abrir panel admin</button>
+      </div>` : '';
   document.getElementById('main-panel').innerHTML = `
     <div class="city-art">
       <div class="icon">🏙️</div>
@@ -1194,7 +1204,7 @@ function renderCity(){
         <h3>Ranking</h3>
         <p>Tu récord personal y los 10 mejores pisos alcanzados entre todos los jugadores.</p>
         <button id="btn-open-ranking">Ver ranking</button>
-      </div>
+      </div>${adminCardHTML}
       <div class="action-card">
         <h3>Taberna</h3>
         <p>Recluta aliados para acompañarte en el laberinto (equipo de hasta 5, contándote a ti).</p>
@@ -1223,17 +1233,24 @@ function renderCity(){
     renderAll(); save();
   };
   document.getElementById('btn-open-home').onclick = ()=>{
-    invOpen = false; homeOpen = true; shopOpen = false; rankingOpen = false;
+    invOpen = false; homeOpen = true; shopOpen = false; rankingOpen = false; adminOpen = false;
     renderAll();
   };
   document.getElementById('btn-open-shop').onclick = ()=>{
-    invOpen = false; homeOpen = false; shopOpen = true; rankingOpen = false;
+    invOpen = false; homeOpen = false; shopOpen = true; rankingOpen = false; adminOpen = false;
     renderAll();
   };
   document.getElementById('btn-open-ranking').onclick = ()=>{
-    invOpen = false; homeOpen = false; shopOpen = false; rankingOpen = true;
+    invOpen = false; homeOpen = false; shopOpen = false; rankingOpen = true; adminOpen = false;
     renderAll();
   };
+  const adminBtn = document.getElementById('btn-open-admin');
+  if(adminBtn){
+    adminBtn.onclick = ()=>{
+      invOpen = false; homeOpen = false; shopOpen = false; rankingOpen = false; adminOpen = true;
+      renderAll();
+    };
+  }
 }
 
 /* ============================================================
@@ -1271,6 +1288,81 @@ async function renderRanking(){
       <b>Nivel ${row.record_level} · Piso ${row.record_floor_idx}</b>
     </div>`;
   }).join('');
+}
+
+/* ============================================================
+   RENDER: ADMIN
+   Solo visible para cuentas con role='admin' (ver profiles.role en la
+   base de datos). Las políticas RLS del lado del servidor son la
+   protección real; esta pantalla es solo la interfaz para usarlas.
+   ============================================================ */
+async function renderAdmin(){
+  const panel = document.getElementById('main-panel');
+  panel.innerHTML = `
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:4px;">
+      <h3 style="color:var(--bronze-light);">Panel admin</h3>
+      <button class="reset-btn" id="btn-close-admin">Cerrar</button>
+    </div>
+    <p style="color:var(--text-dim); font-size:0.85em; margin-top:0;">Gestiona cuentas de jugadores. Los cambios de rol y de baneo quedan protegidos por la base de datos: solo una cuenta admin puede aplicarlos.</p>
+    <p id="admin-msg" style="color:var(--blood-light); font-size:0.85em; min-height:1.2em;"></p>
+    <div id="admin-list"><p class="inv-empty-msg">Cargando cuentas…</p></div>
+  `;
+  document.getElementById('btn-close-admin').onclick = ()=>{ adminOpen=false; renderAll(); };
+  await loadAdminList();
+}
+
+async function loadAdminList(){
+  const list = document.getElementById('admin-list');
+  const msg = document.getElementById('admin-msg');
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, username, role, is_banned, created_at')
+    .order('created_at', { ascending: false })
+    .limit(100);
+  if(!list) return; // el jugador cerró el panel antes de que llegara la respuesta
+  if(error){
+    list.innerHTML = `<p class="inv-empty-msg">No se pudo cargar la lista de cuentas.</p>`;
+    return;
+  }
+  list.innerHTML = data.map(p=>{
+    const isSelf = p.id === currentUser.id;
+    const bannedLabel = p.is_banned ? 'Suspendida' : 'Activa';
+    const created = new Date(p.created_at).toLocaleDateString();
+    return `<div class="inv-item-row">
+      <div>
+        <b>${p.username}</b> <span class="slot-tag">${p.role}</span> <span class="slot-tag" style="${p.is_banned?'color:var(--blood-light); border-color:rgba(178,68,68,0.4);':'color:var(--good);'}">${bannedLabel}</span>
+        <div class="inv-item-bonus neutral">Creada: ${created}</div>
+      </div>
+      <div style="display:flex; gap:8px; flex-shrink:0; flex-wrap:wrap;">
+        <button class="inv-btn ${p.is_banned?'':'danger'}" data-toggle-ban="${p.id}" ${isSelf?'disabled title="No puedes suspender tu propia cuenta"':''}>${p.is_banned?'Reactivar':'Suspender'}</button>
+        <button class="inv-btn" data-toggle-role="${p.id}" ${isSelf?'disabled title="No puedes quitarte el rol admin a ti mismo"':''}>${p.role==='admin'?'Quitar admin':'Hacer admin'}</button>
+      </div>
+    </div>`;
+  }).join('') || `<p class="inv-empty-msg">No hay cuentas registradas.</p>`;
+
+  list.querySelectorAll('[data-toggle-ban]').forEach(btn=>{
+    btn.onclick = async ()=>{
+      const id = btn.dataset.toggleBan;
+      const target = data.find(p=>p.id===id);
+      btn.disabled = true;
+      const { error } = await supabase.from('profiles').update({ is_banned: !target.is_banned }).eq('id', id);
+      if(error) msg.textContent = 'No se pudo actualizar: ' + error.message;
+      else msg.textContent = '';
+      await loadAdminList();
+    };
+  });
+  list.querySelectorAll('[data-toggle-role]').forEach(btn=>{
+    btn.onclick = async ()=>{
+      const id = btn.dataset.toggleRole;
+      const target = data.find(p=>p.id===id);
+      const newRole = target.role === 'admin' ? 'player' : 'admin';
+      btn.disabled = true;
+      const { error } = await supabase.from('profiles').update({ role: newRole }).eq('id', id);
+      if(error) msg.textContent = 'No se pudo actualizar: ' + error.message;
+      else msg.textContent = '';
+      await loadAdminList();
+    };
+  });
 }
 
 /* ============================================================
@@ -2326,6 +2418,7 @@ document.getElementById('btn-inventory').onclick = ()=>{
   homeOpen = false;
   shopOpen = false;
   rankingOpen = false;
+  adminOpen = false;
   invOpen = !invOpen;
   renderAll();
 };
@@ -2340,7 +2433,7 @@ document.getElementById('btn-slots').onclick = async ()=>{
 document.getElementById('btn-reset').onclick = async ()=>{
   if(!confirm('¿Borrar tu personaje? Perderás todo el progreso guardado. Tu cuenta seguirá existiendo y podrás crear un personaje nuevo.')) return;
   await deleteCharacterOnServer();
-  state = null; combat = null; invOpen = false; homeOpen = false; shopOpen = false; rankingOpen = false;
+  state = null; combat = null; invOpen = false; homeOpen = false; shopOpen = false; rankingOpen = false; adminOpen = false;
   selRace = null; selStyle = null;
   document.querySelectorAll('.pick-card').forEach(c=>c.classList.remove('selected'));
   document.getElementById('btn-begin').disabled = true;
@@ -2459,7 +2552,7 @@ function resetHeaderForLoggedOut(){
 
 function showAuthScreen(message){
   state = null; combat = null;
-  invOpen = false; homeOpen = false; shopOpen = false; rankingOpen = false;
+  invOpen = false; homeOpen = false; shopOpen = false; rankingOpen = false; adminOpen = false;
   currentUser = null; currentProfile = null;
   resetHeaderForLoggedOut();
   renderAuthScreen(message);
