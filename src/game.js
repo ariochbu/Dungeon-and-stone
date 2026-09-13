@@ -230,6 +230,34 @@ function shopWeaponValue(){ return 3 + Math.floor(state.char.level/2); }
 function shopWeaponPrice(isOffhand){ return isOffhand ? 40 + state.char.level*4 : 55 + state.char.level*6; }
 const SHOP_POTION_PRICES = {vida_menor:12, vida_mayor:30, estamina:12, espiritu:12};
 
+// Objeto único (máx. 1 en mochila a la vez) que solo dropean los élites.
+// Bloquea, gratis y sin gastar turno, el golpe que te mataría — pero solo
+// reacciona ante el Ogro, el jefe final de las décadas (10, 20, 30...),
+// nunca ante Hobgoblin/Gilgoblin ni ningún otro jefe intermedio.
+const WARD_ITEM = {
+  name: 'Amuleto de Última Guardia',
+  icon: '🧿',
+  desc: 'Bloquea, una sola vez y sin gastar tu turno, el golpe que te mataría. Solo reacciona ante el jefe final de una década del laberinto (nivel 10, 20, 30...) — contra cualquier otro enemigo se mantiene inerte. Se pierde si mueres antes de usarlo.'
+};
+const WARD_DROP_CHANCE = 0.25;
+function hasWard(){ return state.char.inventory.some(i=>i.kind==='ward'); }
+function consumeWard(){
+  const idx = state.char.inventory.findIndex(i=>i.kind==='ward');
+  if(idx>=0) state.char.inventory.splice(idx,1);
+}
+function fightingDecadeBoss(){
+  return !!(combat && combat.active && combat.enemies.some(e=>e.tpl.id==='ogro'));
+}
+function dealDamageToPlayer(amount){
+  if(amount<=0) return;
+  if(amount>=state.char.curHP && fightingDecadeBoss() && hasWard()){
+    consumeWard();
+    log(`<b>${WARD_ITEM.icon} ${WARD_ITEM.name}</b> bloquea el golpe que iba a matarte, y se desvanece.`);
+    return;
+  }
+  state.char.curHP = Math.max(0, state.char.curHP - amount);
+}
+
 function buyWeapon(slot){
   const styleId = state.char.style;
   const opts = WEAPON_OPTIONS[styleId];
@@ -791,6 +819,16 @@ function floorDifficultyStep(level){
   return band <= 5 ? 0.05 : 0.08;
 }
 
+// misma lógica de banda por décadas que floorDifficultyStep: los niveles que
+// terminan en 1-4 (1,2,3,4,11,12...) tienen 3 sendas, los que terminan en
+// 5-10 (5,6,7,8,9,10,15,16...) tienen 5. Cada piso intermedio del laberinto
+// genera exactamente ese número de nodos, uno por senda, y solo se puede
+// avanzar a la senda igual o adyacente (arriba/medio/abajo según corresponda).
+function laneCountForLevel(level){
+  const band = level % 10 === 0 ? 10 : level % 10;
+  return band <= 4 ? 3 : 5;
+}
+
 function numFloorsForLevel(level){
   return Math.min(MAX_FLOORS, BASE_FLOORS + Math.floor((level-1)/2)); // +1 floor every 2 levels
 }
@@ -807,24 +845,25 @@ function visualThreat(level, charLevel){
 
 function generateDungeon(level){
   const numFloors = numFloorsForLevel(level);
+  const laneCount = laneCountForLevel(level);
   const floors = [];
   for(let f=0; f<numFloors; f++){
     if(f === numFloors-1){
       floors.push([{type:'jefe', done:false}]);
       continue;
     }
-    const count = f===0 ? 1 : rnd(2,3);
+    if(f === 0){
+      floors.push([{type:'entrada', done:false}]);
+      continue;
+    }
     const nodes = [];
-    for(let i=0;i<count;i++){
+    for(let lane=0; lane<laneCount; lane++){
+      const roll = Math.random();
       let type;
-      if(f===0) type='entrada';
-      else{
-        const roll = Math.random();
-        if(roll < 0.48) type='combate';
-        else if(roll < 0.68) type='tesoro';
-        else if(roll < 0.85) type='descanso';
-        else type='elite';
-      }
+      if(roll < 0.48) type='combate';
+      else if(roll < 0.68) type='tesoro';
+      else if(roll < 0.85) type='descanso';
+      else type='elite';
       nodes.push({type, done:false});
     }
     floors.push(nodes);
@@ -1089,6 +1128,15 @@ function renderInventory(){
     </div>`;
   }).join('') : `<p class="inv-empty-msg">No tienes piedras de alma. Las dejan caer los guardianes de nivel 4 en adelante.</p>`;
 
+  const wardHTML = hasWard()
+    ? `<div class="inv-item-row">
+        <div>
+          <b>${WARD_ITEM.icon} ${WARD_ITEM.name}</b>
+          <div class="inv-item-bonus neutral">${WARD_ITEM.desc}</div>
+        </div>
+      </div>`
+    : `<p class="inv-empty-msg">No llevas ningún amuleto protector. Los élites pueden dejarlo caer.</p>`;
+
   document.getElementById('main-panel').innerHTML = `
     <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:4px;">
       <h3 style="color:var(--bronze-light);">Inventario y equipamiento</h3>
@@ -1108,6 +1156,9 @@ function renderInventory(){
     <div class="section-label">Piedras de alma</div>
     ${soulSlotsHTML}
     ${stoneBagHTML}
+
+    <div class="section-label">Reliquias</div>
+    ${wardHTML}
   `;
 
   document.getElementById('btn-close-inv').onclick = ()=>{ invOpen=false; renderAll(); };
@@ -1137,6 +1188,8 @@ function addToInventory(item){
     state.char.itemCounter = (state.char.itemCounter||0) + 1;
     item.uid = 'it'+state.char.itemCounter;
     state.char.inventory.push(item);
+  } else if(item.kind==='ward'){
+    if(!hasWard()) state.char.inventory.push({kind:'ward'});
   } else {
     state.char.itemCounter = (state.char.itemCounter||0) + 1;
     item.uid = 'it'+state.char.itemCounter;
@@ -1706,6 +1759,20 @@ function renderHome(){
 /* ============================================================
    RENDER: DUNGEON MAP
    ============================================================ */
+// La entrada y el piso del guardián tienen un solo nodo (todas las sendas
+// convergen ahí), así que se puede llegar a ellos desde cualquier senda. Entre
+// pisos con varias sendas, solo se puede avanzar a la misma senda o a una
+// adyacente (senda superior -> superior o media, nunca a la inferior, y
+// simétrico desde la inferior).
+function isNodeReachable(dg, fi, ni){
+  if(fi !== dg.atFloor+1) return false;
+  if(dg.floors[dg.floors.length-1][0].done) return false;
+  const fromNodes = dg.floors[dg.atFloor];
+  const toNodes = dg.floors[fi];
+  if(fromNodes.length === 1 || toNodes.length === 1) return true;
+  return Math.abs(ni - dg.atNode) <= 1;
+}
+
 function renderMap(){
   const dg = state.dungeon;
   const th = visualThreat(dg.level, state.char.level);
@@ -1723,7 +1790,7 @@ function renderMap(){
       const key = fi+'-'+ni;
       const isCurrent = (fi===dg.atFloor && ni===dg.atNode);
       const isVisited = !!dg.visited[key] && !isCurrent;
-      const isReachable = (fi === dg.atFloor+1) && !dg.floors[dg.floors.length-1][0].done;
+      const isReachable = isNodeReachable(dg, fi, ni);
       let cls = 'node';
       if(isCurrent) cls += ' current';
       else if(isVisited) cls += ' visited';
@@ -1759,7 +1826,7 @@ function enterNode(f,n){
 
   if(node.type==='combate' || node.type==='elite' || node.type==='jefe'){
     const templates = node.type==='jefe'
-                       ? (dg.level >= 10 ? [ENEMY_TEMPLATES.find(t=>t.id==='ogro')] : ENEMY_TEMPLATES.filter(t=>t.boss && t.id!=='ogro'))
+                       ? (dg.level % 10 === 0 ? [ENEMY_TEMPLATES.find(t=>t.id==='ogro')] : ENEMY_TEMPLATES.filter(t=>t.boss && t.id!=='ogro'))
                        : node.type==='elite' ? ENEMY_TEMPLATES.filter(t=>t.elite) :
                        ENEMY_TEMPLATES.filter(t=>!t.elite && !t.boss);
     const count = node.type==='jefe' ? 1 : (node.type==='elite' ? 1 : rnd(1,2));
@@ -2117,12 +2184,12 @@ function tickStatuses(list, ownerName, target){
     if(st.name==='Sangrado'){
       const dmg = Math.max(1, Math.round(skillBaseDamage()*0.08*(st.stacks||1)));
       if(target){ target.hp = Math.max(0, target.hp-dmg); log(`${ownerName} sangra por ${dmg}.`); }
-      else { state.char.curHP = Math.max(0,state.char.curHP-dmg); log(`Sangras por ${dmg}.`); }
+      else { dealDamageToPlayer(dmg); log(`Sangras por ${dmg}.`); }
     }
     if(st.name==='Quemadura'){
       const dmg = Math.max(1, Math.round(skillBaseDamage()*0.22));
       if(target){ target.hp = Math.max(0, target.hp-dmg); log(`${ownerName} arde por ${dmg}.`); }
-      else { state.char.curHP = Math.max(0,state.char.curHP-dmg); log(`Ardes por ${dmg}.`); }
+      else { dealDamageToPlayer(dmg); log(`Ardes por ${dmg}.`); }
     }
     if(st.name==='Aturdido') skip = true;
   });
@@ -2196,7 +2263,7 @@ function enemyAct(enemy){
   if(furiosoBuff && furiosoBuff.incomingDmgReduction) finalDmg *= (1 - furiosoBuff.incomingDmgReduction);
   finalDmg = Math.max(1, Math.round(finalDmg));
 
-  state.char.curHP = Math.max(0, state.char.curHP - finalDmg);
+  dealDamageToPlayer(finalDmg);
   log(`${enemy.name} ${text}: ${finalDmg} de daño.`);
 
   // Vitalidad: devuelve un % del daño físico recibido a quien lo infligió
@@ -2244,6 +2311,11 @@ function handleVictory(){
         ? `También obtienes: <b>${POTION_TEMPLATES[item.potionId].name}</b> (guardada en la mochila).`
         : `También obtienes: <b>${item.name}</b> (guardado en la mochila).`);
     }
+  }
+
+  if(isElite && !hasWard() && chance(WARD_DROP_CHANCE)){
+    addToInventory({kind:'ward'});
+    log(`También obtienes: <b>${WARD_ITEM.icon} ${WARD_ITEM.name}</b> (guardado en la mochila).`);
   }
 
   let leveled = false;
@@ -2323,7 +2395,8 @@ function handleVictory(){
 function handleDefeat(){
   showOverlay('Caído en el laberinto', `Tu cuerpo cede y el laberinto te expulsa antes del final. Pierdes el equipo suelto que llevabas en la mochila y la mitad de tu oro. Lo que hayas guardado en el Hogar sigue a salvo.`, ()=>{
     const lostItems = state.char.inventory.filter(i=>i.kind==='equip').length;
-    state.char.inventory = state.char.inventory.filter(i=>i.kind!=='equip');
+    const hadWard = hasWard();
+    state.char.inventory = state.char.inventory.filter(i=>i.kind!=='equip' && i.kind!=='ward');
     state.char.gold = Math.round(state.char.gold*0.5);
     const d = derived();
     state.char.curHP = Math.round(d.maxHP*0.5);
@@ -2331,6 +2404,7 @@ function handleDefeat(){
     combat = null;
     state.dungeon = null;
     if(lostItems>0) log(`Pierdes ${lostItems} objeto(s) de equipo que llevabas en la mochila.`);
+    if(hadWard) log(`Tu <b>${WARD_ITEM.icon} ${WARD_ITEM.name}</b> se pierde junto con el resto de tu equipo suelto.`);
     renderAll();
     save();
   });
