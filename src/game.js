@@ -298,6 +298,47 @@ function buyGear(slot){
   renderAll(); save();
 }
 
+// Tienda del Gremio: se paga con Sellos del Laberinto (misiones), no con oro.
+// Vende equipo de rango Único (B) y Épico (A) — Legendario (S) todavía no está
+// definido, así que no se vende aquí.
+const SELLO_SHOP_SLOTS = ['arma','armadura','casco','botas','guantes','amuleto'];
+function selloShopPrice(rarity){ return rarity==='rango_a' ? 700 : 350; }
+function makeSelloShopItem(slot, rarity){
+  const resPct = rarity==='rango_a' ? RANGO_A_RES_PCT : RANGO_B_RES_PCT;
+  const weaponBonus = rarity==='rango_a' ? RANGO_A_WEAPON_BONUS : RANGO_B_WEAPON_BONUS;
+  const tag = rarity==='rango_a' ? 'épico' : 'único';
+  const styleId = state.char.style;
+  const opts = WEAPON_OPTIONS[styleId] || WEAPON_OPTIONS.pesada;
+  let name, bonus, special = null;
+  if(slot==='arma'){
+    name = pick(opts.arma) + ` ${tag} del Gremio`;
+    const statKey = SHOP_WEAPON_STAT[styleId] || 'fis';
+    bonus = {stat:statKey, value: weaponBonus};
+    special = SPECIALS_BY_STYLE[styleId] || null;
+  } else if(slot==='armadura'){
+    name = `Placa ${tag} del Gremio`;
+    bonus = {stat:'maxhp', value: (rarity==='rango_a' ? 10 : 6) + Math.floor(state.char.level/2)};
+  } else if(slot==='amuleto'){
+    name = `Reliquia ${tag} del Gremio`;
+    bonus = {res: pick(['fisico','fuego','hielo','veneno','aturdimiento']), value: resPct};
+  } else {
+    name = `${slotLabel(slot)} ${tag} del Gremio`;
+    bonus = {stat: GUARDIAN_SLOT_STAT[slot], value: (rarity==='rango_a' ? 8 : 5) + Math.floor(state.char.level/3)};
+  }
+  const item = {slot, name, bonus, rarity};
+  if(special) item.special = special;
+  return item;
+}
+function buySelloGear(slot, rarity){
+  const price = selloShopPrice(rarity);
+  if((state.char.missionCurrency||0) < price){ log('No tienes suficientes Sellos del Laberinto.'); return; }
+  state.char.missionCurrency -= price;
+  const item = makeSelloShopItem(slot, rarity);
+  addToInventory(item);
+  log(`Compras <b>${item.name}</b> por ${price} Sellos del Laberinto.`);
+  renderAll(); save();
+}
+
 function buyPotion(potionId){
   const price = SHOP_POTION_PRICES[potionId] || 15;
   if(state.char.gold < price){ log('No tienes suficiente oro para eso.'); return; }
@@ -1733,6 +1774,21 @@ function renderShop(){
     </div>`;
   }).join('');
 
+  const selloHTML = SELLO_SHOP_SLOTS.map(slot=>{
+    return ['rango_b','rango_a'].map(rarity=>{
+      const price = selloShopPrice(rarity);
+      const r = RARITIES[rarity];
+      const disabled = (state.char.missionCurrency||0) < price;
+      return `<div class="inv-item-row">
+        <div>
+          <b>${slotLabel(slot)}</b> <span class="slot-tag" style="border-color:${r.color}; color:${r.color};">${r.name}</span>
+          <div class="inv-item-bonus" style="color:${r.color};">Equipo de rango ${r.name} para tu senda</div>
+        </div>
+        <button class="inv-btn" data-buy-sello="${slot}|${rarity}" ${disabled?'disabled':''}>Comprar (${price} Sellos)</button>
+      </div>`;
+    }).join('');
+  }).join('');
+
   const potionHTML = Object.values(POTION_TEMPLATES).filter(t=>SHOP_POTION_PRICES[t.id]).map(t=>{
     const price = SHOP_POTION_PRICES[t.id];
     return `<div class="inv-item-row">
@@ -1779,6 +1835,9 @@ function renderShop(){
     <div class="section-label">Equipo común</div>
     ${gearHTML}
 
+    <div class="section-label">Tienda del Gremio (Sellos del Laberinto: ${state.char.missionCurrency||0})</div>
+    ${selloHTML}
+
     <div class="section-label">Pociones</div>
     ${potionHTML}
 
@@ -1792,6 +1851,12 @@ function renderShop(){
   });
   document.querySelectorAll('[data-buy-gear]').forEach(btn=>{
     btn.onclick = ()=> buyGear(btn.dataset.buyGear);
+  });
+  document.querySelectorAll('[data-buy-sello]').forEach(btn=>{
+    btn.onclick = ()=>{
+      const [slot, rarity] = btn.dataset.buySello.split('|');
+      buySelloGear(slot, rarity);
+    };
   });
   document.querySelectorAll('[data-buy-potion]').forEach(btn=>{
     btn.onclick = ()=> buyPotion(btn.dataset.buyPotion);
