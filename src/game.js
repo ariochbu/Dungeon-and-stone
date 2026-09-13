@@ -3285,7 +3285,7 @@ function enemyAct(enemy){
     return;
   }
   if(move==='invocar'){
-    enemy.cooldowns.invocar = 5;
+    enemy.cooldowns.invocar = 4;
     if(combat.enemies.length < 6){
       const minion = makeEnemy(SUMMON_TEMPLATE, state.dungeon.atFloor, state.dungeon.level);
       combat.enemies.push(minion);
