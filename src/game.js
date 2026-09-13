@@ -750,6 +750,7 @@ function rowToState(row){
       role: row.role, hiddenFromLeaderboard: row.hidden_from_leaderboard,
       race: row.race, style: row.style,
       level: row.level, xp: row.xp, gold: row.gold, missionCurrency: row.mission_currency || 0,
+      missionRerollCycle: row.mission_reroll_cycle || null, missionRerollCount: row.mission_reroll_count || 0,
       curHP: row.cur_hp, curSta: row.cur_sta, curSpi: row.cur_spi,
       equip: row.equip || {arma:null, arma2:null, armadura:null, amuleto:null, casco:null, botas:null, guantes:null},
       inventory: row.inventory || [],
@@ -1502,6 +1503,52 @@ function generateMissionBatch(maxFloor){
   });
 }
 
+// Genera UNA misión candidata para un refresco individual — usa la misma
+// distribución de bandas que el tablón completo (20% fácil, 60% núcleo, 20%
+// reto), pero nunca trae objeto/piedra fija: el "1 de 10 con recompensa fija"
+// se decide solo al armar el tablón completo, no en cada refresco suelto.
+function generateSingleMission(maxFloor){
+  const frontier = missionBandForFloor(maxFloor);
+  const roll = Math.random();
+  const band = roll < 0.2 ? Math.max(0, frontier-2) : roll < 0.8 ? Math.max(0, frontier-1) : frontier;
+  const rank = pick(MISSION_BAND_RANKS[band]);
+  const objectiveType = pick(MISSION_OBJECTIVE_TYPES);
+  const reward = MISSION_RANK_REWARD[rank];
+  return {
+    rank,
+    objective_type: objectiveType,
+    objective_target: MISSION_OBJECTIVE_TARGET[objectiveType][rank],
+    reward_gold: reward.gold,
+    reward_xp: reward.xp,
+    reward_currency: reward.currency,
+    reward_item: null
+  };
+}
+
+function currentMissionCycleId(){
+  const now = new Date();
+  const y = now.getUTCFullYear();
+  const m = String(now.getUTCMonth()+1).padStart(2,'0');
+  const d = String(now.getUTCDate()).padStart(2,'0');
+  return `${y}${m}${d}${now.getUTCHours()<12 ? 'A' : 'B'}`;
+}
+function missionRerollsRemaining(){
+  if(!state.char.missionRerollCycle || state.char.missionRerollCycle !== currentMissionCycleId()) return 3;
+  return Math.max(0, 3 - (state.char.missionRerollCount||0));
+}
+
+async function rerollMission(missionId){
+  const candidate = generateSingleMission(state.char.maxLevelUnlocked);
+  const { data, error } = await supabase.rpc('reroll_mission', {p_mission_id: missionId, p_new_mission: candidate});
+  if(error){ log('No se pudo refrescar la misión: '+error.message); renderAll(); return; }
+  const idx = (state.missions||[]).findIndex(x=>x.id===missionId);
+  if(idx>=0) state.missions[idx] = data.mission;
+  state.char.missionRerollCycle = currentMissionCycleId();
+  state.char.missionRerollCount = 3 - data.remaining;
+  log(`Refrescas una misión del Gremio. Te quedan ${data.remaining} refresco(s) en este tablón.`);
+  renderAll();
+}
+
 async function loadMissions(){
   if(!state || !state.char) return [];
   const batch = generateMissionBatch(state.char.maxLevelUnlocked);
@@ -1543,19 +1590,24 @@ async function claimMissionReward(missionId){
 
 function renderMissions(){
   const rows = state.missions || [];
+  const rerollsLeft = missionRerollsRemaining();
   const rowsHTML = rows.length ? rows.map(m=>{
     const c = SOUL_TIER_COLORS[m.rank] || 'var(--text)';
     const pct = clamp(m.progress/m.objective_target*100, 0, 100);
     const itemText = m.reward_item ? ` · + ${m.reward_item.name}` : '';
     const canClaim = m.status==='completed';
     const claimed = m.status==='claimed';
+    const canReroll = m.status==='active' && rerollsLeft>0;
     return `<div class="inv-item-row">
       <div>
         <b style="color:${c};">Misión ${m.rank}</b> <span class="slot-tag">${MISSION_OBJECTIVE_LABEL[m.objective_type]}</span>
         <div class="inv-item-bonus neutral">${m.progress}/${m.objective_target} · ${m.reward_gold} oro, ${m.reward_xp} xp, ${m.reward_currency} Sellos${itemText}</div>
         <div class="bar-track" style="margin-top:6px;"><div class="bar-fill xp" style="width:${pct}%"></div></div>
       </div>
-      <button class="inv-btn" data-claim="${m.id}" ${canClaim?'':'disabled'}>${claimed?'Reclamada':'Reclamar'}</button>
+      <div style="display:flex; flex-direction:column; gap:6px; flex-shrink:0;">
+        <button class="inv-btn" data-claim="${m.id}" ${canClaim?'':'disabled'}>${claimed?'Reclamada':'Reclamar'}</button>
+        ${m.status==='active' ? `<button class="inv-btn" data-reroll="${m.id}" ${canReroll?'':'disabled'}>Refrescar</button>` : ''}
+      </div>
     </div>`;
   }).join('') : `<p class="inv-empty-msg">Cargando el tablón de misiones…</p>`;
 
@@ -1564,12 +1616,15 @@ function renderMissions(){
       <h3 style="color:var(--bronze-light);">Gremio — Tablón de misiones</h3>
       <button class="reset-btn" id="btn-close-missions">Cerrar</button>
     </div>
-    <p style="color:var(--text-dim); font-size:0.85em; margin-top:0;">Sellos del Laberinto: <b style="color:var(--bronze-light);">${state.char.missionCurrency||0}</b>. El tablón entero se refresca cada 12 horas.</p>
+    <p style="color:var(--text-dim); font-size:0.85em; margin-top:0;">Sellos del Laberinto: <b style="color:var(--bronze-light);">${state.char.missionCurrency||0}</b>. El tablón entero se refresca cada 12 horas. Refrescos individuales disponibles: <b>${rerollsLeft}/3</b>.</p>
     ${rowsHTML}
   `;
   document.getElementById('btn-close-missions').onclick = ()=>{ missionsOpen=false; renderAll(); };
   document.querySelectorAll('[data-claim]').forEach(btn=>{
     btn.onclick = ()=> claimMissionReward(btn.dataset.claim);
+  });
+  document.querySelectorAll('[data-reroll]').forEach(btn=>{
+    btn.onclick = ()=> rerollMission(btn.dataset.reroll);
   });
   if(!rows.length) refreshMissionsState().then(()=>{ if(missionsOpen) renderMissions(); });
 }
