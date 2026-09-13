@@ -2635,12 +2635,16 @@ function makeEnemy(tpl, floorIdx, level){
   if(tpl.boss){
     // guardian: level 1 baseline ~300 HP, then +14% compounding per level.
     // El guardián de nivel 1 se pidió más accesible: 200 HP fijos y menor defensa física.
+    // A partir del nivel 11 cada jefe de década usa su propio tpl.hp/tpl.atk
+    // (antes se ignoraban y todo jefe caía en el mismo 300*lvlMult/26*lvlMult
+    // plano, sin importar su diseño — el Tótem y el resto del sistema de
+    // jefes de década llevaban ese bug desde que se agregó el bestiario).
     if(level===1){
       hp = 200;
       atk = Math.round(26 * lvlMult);
     } else {
-      hp = Math.round(300 * lvlMult);
-      atk = Math.round(26 * lvlMult);
+      hp = Math.round(300 * tpl.hp * lvlMult);
+      atk = Math.round(26 * tpl.atk * lvlMult);
     }
   } else if(tpl.elite){
     // elite: level 1 baseline ~100-110 HP
