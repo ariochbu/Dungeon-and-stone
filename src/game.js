@@ -968,6 +968,7 @@ function renderSheet(){
 
   const potionCount = (state.char.inventory||[]).filter(i=>i.kind==='potion').reduce((a,i)=>a+i.qty,0);
   const gearCount = (state.char.inventory||[]).filter(i=>i.kind==='equip').length;
+  const stunChance = totalStunChance();
 
   document.getElementById('sheet').innerHTML = `
     <div class="sheet-title">
@@ -1001,6 +1002,14 @@ function renderSheet(){
       <div class="stat-box"><div class="v">${d.hab}</div><div class="k">Habilidad</div></div>
     </div>
 
+    <div class="section-label">Estadísticas de combate</div>
+    <div class="res-list">
+      <span class="res-chip pos">Crítico +${Math.round(d.critChance*100)}%</span>
+      <span class="res-chip pos">Evasión ${Math.round(d.evasionBase*100)}%</span>
+      <span class="res-chip ${stunChance>0?'pos':''}">Aturdir al golpear ${Math.round(stunChance*100)}%</span>
+    </div>
+    <div class="sheet-hint">Evasión mostrada fuera de combate; en combate sube +8% en Retaguardia. Aturdir al golpear depende del arma y las piedras de alma que lleves equipadas.</div>
+
     <div class="section-label">Resistencias</div>
     <div class="res-list">${resHTML}</div>
 
@@ -1011,6 +1020,13 @@ function renderSheet(){
 
     <div class="section-label">Rasgo pasivo — ${r.passive}</div>
     <div style="font-size:0.78em; color:var(--text-dim);">${r.passiveDesc}</div>
+
+    <div class="section-label">Guía rápida</div>
+    <div style="font-size:0.78em; color:var(--text-dim); line-height:1.6;">
+      <b>MP</b> paga las habilidades físicas; <b>Espíritu</b> paga las habilidades mágicas y de utilidad (también aumenta tu daño mágico y tu Espíritu máximo).<br>
+      <b>Habilidad</b> sube tu Crítico, tu Evasión y tu MP máximo.<br>
+      <b>Reposicionarse</b> (en combate) alterna entre Frente y Retaguardia: el Frente habilita la mayoría de golpes físicos fuertes; la Retaguardia da +8% de Evasión y favorece las habilidades a distancia.
+    </div>
   `;
 
   const link = document.getElementById('sheet-inv-link');
@@ -1956,6 +1972,18 @@ function computeCritEvasion(){
   return {crit:d.critChance, evasion:clamp(ev,0,0.6)};
 }
 
+// probabilidad combinada de aturdir al golpear, sumando todas las fuentes
+// equipadas (arma(s) + piedras de alma engarzadas) que tengan ese proc.
+function totalStunChance(){
+  const sources = ['arma','arma2'].map(slot=>state.char.equip[slot])
+    .filter(it=>it && it.special && it.special.type==='aturdir')
+    .concat(socketedStones().filter(s=>s.special && s.special.type==='aturdir'));
+  if(!sources.length) return 0;
+  let noStun = 1;
+  sources.forEach(s=> noStun *= (1-s.special.chance));
+  return 1-noStun;
+}
+
 function applyStatus(target, statusDef, isPlayer){
   if(!statusDef) return;
   if(statusDef.chance!==undefined && !chance(statusDef.chance)) return;
@@ -2506,6 +2534,7 @@ function renderCombat(){
           <span class="pos-pill ${combat.playerPos==='frente'?'active':''}">Frente</span>
           <span class="pos-pill ${combat.playerPos==='retaguardia'?'active':''}">Retaguardia</span>
         </div>
+        <div style="font-size:0.7em; color:var(--text-dim); margin:2px 0 6px;">Frente: exige la mayoría de habilidades físicas de golpe. Retaguardia: +8% evasión y mejor para habilidades a distancia.</div>
         <div class="player-card">
           <div class="pc-icon">${race().icon}</div>
           <div style="margin-top:6px; font-size:0.85em;">${state.char.curHP} / ${d.maxHP} HP</div>
