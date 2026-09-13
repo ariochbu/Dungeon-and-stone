@@ -2651,9 +2651,12 @@ function makeEnemy(tpl, floorIdx, level){
       atk = Math.round(26 * tpl.atk * lvlMult);
     }
   } else if(tpl.elite){
-    // elite: level 1 baseline ~100-110 HP
-    hp = Math.round(rnd(100,110) * floorMult * lvlMult);
-    atk = Math.round(16 * floorMult * lvlMult);
+    // elite: level 1 baseline ~100-110 HP, tpl.hp/tpl.atk dan la variante por
+    // especie (antes se ignoraban aquí igual que en los jefes — todo élite
+    // de cualquier década caía en el mismo valor plano sin importar su
+    // propio hp/atk de diseño).
+    hp = Math.round(rnd(100,110) * tpl.hp * floorMult * lvlMult);
+    atk = Math.round(16 * tpl.atk * floorMult * lvlMult);
   } else {
     // regular mob: level 1 baseline ~40-50 HP, tpl.hp/tpl.atk give per-species variance
     hp = Math.round(rnd(40,50) * tpl.hp * floorMult * lvlMult);
