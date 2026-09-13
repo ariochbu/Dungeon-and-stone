@@ -2801,6 +2801,10 @@ const LOOT_STAT_MULT = {comun:1, poco_comun:1.6, raro:2.0, rango_b:2.5, rango_a:
 // nada esta vez (grind real: la mayoría de combates no sueltan equipo).
 // Letra -> rango de equipo. El equipo no tiene un escalón para F: pasa
 // directo de Común (E) a Poco Común (D), a pedido explícito.
+// Legendario/SS (equipo y piedras) todavía no están habilitados para caer —
+// el contenido, las fórmulas y los niveles mínimos ya existen, listos para
+// cuando se activen. Cambiar a true los habilita sin tocar nada más.
+const LEGENDARY_TIERS_ENABLED = false;
 const FLAT_GEAR_TABLE = [
   {rarity:'ss',         chance:0.00001},  // SS  0.001%
   {rarity:'legendario', chance:0.00005},  // S   0.005%
@@ -2809,7 +2813,7 @@ const FLAT_GEAR_TABLE = [
   {rarity:'raro',       chance:0.03},     // C   3%
   {rarity:'poco_comun', chance:0.10},     // F   10% (fusionado en Común, ver E)
   {rarity:'comun',      chance:0.20}      // E   20%
-];
+].filter(e => LEGENDARY_TIERS_ENABLED || !['ss','legendario'].includes(e.rarity));
 const FLAT_STONE_TABLE = [
   {tier:'SS', chance:0.00001},
   {tier:'S',  chance:0.00005},
@@ -2819,7 +2823,7 @@ const FLAT_STONE_TABLE = [
   {tier:'D',  chance:0.05},
   {tier:'F',  chance:0.10},
   {tier:'E',  chance:0.20}
-];
+].filter(e => LEGENDARY_TIERS_ENABLED || !['S','SS'].includes(e.tier));
 // Nivel mínimo de personaje para que un rango pueda caer — Épico y superior
 // necesitan haber avanzado de verdad; todo lo demás (E-B) no tiene tope.
 const GEAR_TIER_MIN_LEVEL = {rango_a:30, legendario:40, ss:50};
@@ -3115,7 +3119,7 @@ function applyEquippedSpecials(target, dmgDealt, skill){
 }
 
 function playerUseSkill(skillId, targetIdx){
-  if(combat.over) return;
+  if(!combat || combat.over) return;
   const skill = SKILLS[skillId];
   const d = derived();
 
@@ -3649,11 +3653,14 @@ function handleVictory(){
 
   // Botín: tabla plana de drop (FLAT_GEAR_TABLE/FLAT_STONE_TABLE), la misma
   // para cualquier enemigo — el juego es de grindeo, así que cada enemigo
-  // derrotado tira su propia chance de soltar equipo y, aparte, una piedra de
-  // alma. Un jefe de década (nivel múltiplo de 10) tira el doble de veces.
+  // derrotado tira su propia chance de soltar equipo. Un jefe de década
+  // (nivel múltiplo de 10) tira el doble de veces. Las piedras de alma están
+  // limitadas a una sola por batalla (sin importar cuántos enemigos o tiradas
+  // haya) para que no caigan dos de golpe en un mismo combate.
   const isDecadeFinal = isBoss && level % 10 === 0;
   const rollCount = combat.enemies.length * (isDecadeFinal ? 2 : 1);
   let lootText = '';
+  let stoneDropped = false;
   for(let i=0;i<rollCount;i++){
     const gearDrop = rollGearDropForLevel(state.char.level, state.dungeon.atFloor);
     if(gearDrop){
@@ -3662,12 +3669,15 @@ function handleVictory(){
       log(line);
       lootText += ' ' + line;
     }
-    const stoneDrop = rollStoneDropForLevel(state.char.level);
-    if(stoneDrop){
-      addToInventory(stoneDrop);
-      const line = `También encuentras una piedra de alma: <b style="color:${SOUL_TIER_COLORS[stoneDrop.tier]};">${stoneDrop.name}</b>.`;
-      log(line);
-      lootText += ' ' + line;
+    if(!stoneDropped){
+      const stoneDrop = rollStoneDropForLevel(state.char.level);
+      if(stoneDrop){
+        addToInventory(stoneDrop);
+        const line = `También encuentras una piedra de alma: <b style="color:${SOUL_TIER_COLORS[stoneDrop.tier]};">${stoneDrop.name}</b>.`;
+        log(line);
+        lootText += ' ' + line;
+        stoneDropped = true;
+      }
     }
   }
 
