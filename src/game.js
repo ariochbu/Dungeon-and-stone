@@ -297,13 +297,16 @@ const RARITIES = {
   poco_comun: {id:'poco_comun', name:'Poco común', color:'#3ecf6e'},
   raro: {id:'raro', name:'Raro', color:'#8a7fd1'}, // mismo color que SOUL_TIER_COLORS.C — mismo escalón en la misma escala de letras
   rango_b: {id:'rango_b', name:'Rango B', color:'#c17fd1'},
-  rango_a: {id:'rango_a', name:'Rango A', color:'#d1a84f'}
-  // futuras rarezas (pendientes de implementar): S, SS (SS será numerado/único mundial)
+  rango_a: {id:'rango_a', name:'Rango A', color:'#d1a84f'},
+  legendario: {id:'legendario', name:'Legendario', color:'#d1594f'}, // mismo color que SOUL_TIER_COLORS.S
+  ss: {id:'ss', name:'SS', color:'#e23c6b'} // mismo color que SOUL_TIER_COLORS.SS
 };
 const RANGO_B_RES_PCT = 20;
 const RANGO_A_RES_PCT = 28;
 const RANGO_B_WEAPON_BONUS = 14;
 const RANGO_A_WEAPON_BONUS = 20;
+const LEGENDARIO_RES_PCT = 34;
+const SS_RES_PCT = 40;
 
 // Valores planos por rareza: todo objeto de una misma rareza da el mismo
 // bono de resistencia, y toda arma poco común da el mismo bono de daño,
@@ -562,58 +565,11 @@ function sellPotionStack(potionId){
   renderAll(); save();
 }
 
-// every guardian from level 2 onward hands out a fixed, subclass-appropriate poco-común item
-const GUARDIAN_REWARD_SLOTS = {2:'arma', 3:'casco', 4:'arma2', 5:'guantes', 6:'armadura', 7:'botas', 8:'amuleto', 9:'arma', 10:'armadura'};
 const GUARDIAN_SLOT_STAT = {casco:'hab', guantes:'fis', botas:'hab'}; // themed stat for the new slots
-const GUARDIAN_SLOT_NAMES = {
-  casco:['Yelmo del guardián','Corona vigilante','Máscara custodia'],
-  botas:['Botas del guardián','Grebas vigilantes','Sandalias del custodio'],
-  guantes:['Guanteletes del guardián','Manoplas vigilantes','Garras del custodio']
-};
-// Rareza garantizada del guardián según la década — sube con la profundidad.
-// La década 1 (pisos 1-10) ya no da recompensa asegurada: con el sistema de
-// rangos activo, ese hueco ahora lo cubre el loot normal + la tienda de Sellos.
-function guardianRewardRarity(decade){
-  if(decade<=1) return 'poco_comun';
-  if(decade===2) return 'raro';
-  if(decade===3) return 'rango_b';
-  return 'rango_a';
-}
-function generateGuardianReward(level){
-  const decade = decadeIndexForLevel(level);
-  if(decade===0) return null;
-  const slot = GUARDIAN_REWARD_SLOTS[((level-1)%10)+1];
-  if(!slot) return null;
-  const rarity = guardianRewardRarity(decade);
-  const weaponBonus = {rango_a:RANGO_A_WEAPON_BONUS, rango_b:RANGO_B_WEAPON_BONUS, raro:RARO_WEAPON_BONUS}[rarity] || POCO_COMUN_WEAPON_BONUS;
-  const resPct = {rango_a:RANGO_A_RES_PCT, rango_b:RANGO_B_RES_PCT, raro:RARO_RES_PCT}[rarity] || POCO_COMUN_RES_PCT;
-  // Ya no se restringe a tu propio estilo: el objeto va a la mochila
-  // compartida y decides tú después a quién equipárselo, así que el
-  // guardián puede soltar el arma de cualquiera de los 5 roles.
-  const styleId = slot==='arma' || slot==='arma2' ? pick(Object.keys(WEAPON_OPTIONS)) : state.char.style;
-  const opts = WEAPON_OPTIONS[styleId] || WEAPON_OPTIONS.pesada;
-  let name, bonus, special = null;
-  if(slot==='arma' || slot==='arma2'){
-    name = pick(opts[slot]) + ' del guardián';
-    const statKey = SHOP_WEAPON_STAT[styleId] || 'fis';
-    bonus = {stat:statKey, value: weaponBonus};
-    special = SPECIALS_BY_STYLE[styleId] || null;
-  } else if(slot==='armadura'){
-    name = pick(['Coraza del guardián','Placa ancestral','Manto del vigía']);
-    bonus = {stat:'maxhp', value: 3 + Math.floor(state.char.level/2) + decade*2};
-  } else if(slot==='amuleto'){
-    name = pick(['Sello del guardián','Reliquia custodiada','Talismán antiguo']);
-    const resKeys = ['fisico','fuego','hielo','veneno','aturdimiento'];
-    bonus = {res: pick(resKeys), value: resPct};
-  } else {
-    // casco, botas, guantes
-    name = pick(GUARDIAN_SLOT_NAMES[slot]);
-    bonus = {stat: GUARDIAN_SLOT_STAT[slot], value: 3 + Math.floor(state.char.level/3) + decade*2};
-  }
-  const item = {slot, name, bonus, rarity};
-  if(special) item.special = special;
-  return item;
-}
+// Los guardianes (incluidos los jefes de década) ya no dan una recompensa
+// garantizada — sueltan botín igual que cualquier otro enemigo, tirando
+// contra la tabla plana de rareza (ver FLAT_GEAR_TABLE/FLAT_STONE_TABLE más
+// abajo), solo que un jefe de década tira dos veces en vez de una.
 
 /* ============================================================
    PIEDRAS DE ALMA (SOUL STONES) — v2, familias con fórmulas por rango
@@ -622,28 +578,16 @@ function generateGuardianReward(level){
    rango numérico 9 (débil) a 1 (fuerte), no piedras con letras. Este sistema
    sigue siendo una capa propia de nuestro juego, con el ranking pedido:
    E (más bajo) < F < D < C < B < A < S < SS (más alto).
-   E-A ya son obtenibles (S/SS siguen reservados: numerados/únicos mundiales,
-   pendientes de su propio sistema). Los efectos "avanzados" de A prometidos
-   en el preview de cada familia (escudo de maná, mitad de costo, doble
-   lanzamiento, autocuración, revivir, invocar sombra) todavía no tienen
-   código de combate propio — solo Vigor cambia de verdad en A (roba vida,
-   que ya es un special genérico existente); el resto se queda con su efecto
-   de F escalado hasta que esa mecánica nueva se construya. */
+   Todos los rangos ya existen como objetos — lo que controla cuándo se
+   consiguen de verdad es la tabla plana de drop (FLAT_STONE_TABLE) y el nivel
+   mínimo de personaje para A/S/SS (ver GEAR_STONE_MIN_LEVEL más abajo), no una
+   banda por década. Los efectos "avanzados" prometidos en el preview de cada
+   familia a partir de A (escudo de maná, mitad de costo, doble lanzamiento,
+   autocuración, revivir, invocar sombra) siguen sin código de combate propio
+   — quedan pendientes a propósito; solo Vigor cambia de verdad en A/S/SS
+   (roba vida, que ya es un special genérico existente). */
 const SOUL_STONE_TIERS = ['E','F','D','C','B','A','S','SS']; // ascendente: E la más baja, SS la más alta
-const AVAILABLE_SOUL_TIERS = ['E','F','D','C','B','A']; // rangos obtenibles hoy (S/SS reservados)
 const SOUL_TIER_COLORS = {E:'#9a9a9a', F:'#6fae6f', D:'#4f9bd1', C:'#8a7fd1', B:'#c17fd1', A:'#d1a84f', S:'#d1594f', SS:'#e23c6b'};
-// Qué rangos puede soltar un guardián/misión según la década del piso — igual
-// que lootRarityForLevel() hace con el equipo, para que una piedra A no caiga
-// ya en el piso 4 solo porque el rango existe en el sistema.
-const SOUL_TIER_BAND_BY_DECADE = [
-  ['E','F'], ['F','D'], ['D','C'], ['C','B'], ['B','A'], ['B','A']
-];
-function soulTierPoolForLevel(level){
-  const decade = decadeIndexForLevel(level||1);
-  const band = SOUL_TIER_BAND_BY_DECADE[Math.min(SOUL_TIER_BAND_BY_DECADE.length-1, decade)];
-  const allowed = band.filter(t=>AVAILABLE_SOUL_TIERS.includes(t));
-  return allowed.length ? allowed : AVAILABLE_SOUL_TIERS;
-}
 function soulTierIdx(tier){ return SOUL_STONE_TIERS.indexOf(tier); }
 
 // Fórmulas de escalado por familia (documentadas para cuando D-SS estén disponibles).
@@ -817,7 +761,59 @@ const SOUL_STONES = {
     desc:'+16% de probabilidad de esquivar cualquier ataque.', preview:'Desde A: invocar una sombra que atrae el agro (pendiente de implementar).'},
   sombra_a:    {id:'sombra_a',    family:'sombra',    name:'Piedra del Alma: Sombra Cazadora (A)',  tier:'A', icon:'🌑',
     special:{type:'evasion_flat', value:0.20},
-    desc:'+20% de probabilidad de esquivar cualquier ataque. (Invocar una sombra, prometido en este rango, todavía no está implementado.)'}
+    desc:'+20% de probabilidad de esquivar cualquier ataque. (Invocar una sombra, prometido en este rango, todavía no está implementado.)'},
+
+  // Rangos S y SS: mismas fórmulas, continuadas un escalón más. SS es el tope
+  // absoluto del sistema — numerado/único mundial en espíritu, aunque todavía
+  // sin ese control de unicidad real implementado.
+  vigor_s:     {id:'vigor_s',     family:'vigor',     name:'Piedra del Alma: Vigor (S)',            tier:'S', icon:'🟤', bonus:{stat:'fis', value:256},
+    special:{type:'robovida', percent:0.20},
+    desc:'+256 Físico. Robas el 20% del daño físico que causas como vida.'},
+  vigor_ss:    {id:'vigor_ss',    family:'vigor',     name:'Piedra del Alma: Vigor (SS)',           tier:'SS', icon:'🟤', bonus:{stat:'fis', value:512},
+    special:{type:'robovida', percent:0.30},
+    desc:'+512 Físico. Robas el 30% del daño físico que causas como vida.'},
+
+  sabiduria_s: {id:'sabiduria_s', family:'sabiduria', name:'Piedra del Alma: Sabiduría (S)',        tier:'S', icon:'📘', bonus:{stat:'maxsta', value:1024},
+    special:{type:'mp_refund', chance:1, amount:0.05},
+    desc:'+1024 MP máximo. Recuperas siempre el 5% del MP gastado.'},
+  sabiduria_ss:{id:'sabiduria_ss',family:'sabiduria', name:'Piedra del Alma: Sabiduría (SS)',       tier:'SS', icon:'📘', bonus:{stat:'maxsta', value:2048},
+    special:{type:'mp_refund', chance:1, amount:0.05},
+    desc:'+2048 MP máximo. Recuperas siempre el 5% del MP gastado.'},
+
+  voluntad_s:  {id:'voluntad_s',  family:'voluntad',  name:'Piedra del Alma: Voluntad (S)',         tier:'S', icon:'🔷', bonus:{stat:'esp', value:256},
+    special:{type:'esp_refund', chance:1, amount:0.05},
+    desc:'+256 Espíritu. Recuperas siempre el 5% del espíritu gastado.'},
+  voluntad_ss: {id:'voluntad_ss', family:'voluntad',  name:'Piedra del Alma: Voluntad (SS)',        tier:'SS', icon:'🔷', bonus:{stat:'esp', value:512},
+    special:{type:'esp_refund', chance:1, amount:0.05},
+    desc:'+512 Espíritu. Recuperas siempre el 5% del espíritu gastado.'},
+
+  instinto_s:  {id:'instinto_s',  family:'instinto',  name:'Piedra del Alma: Instinto (S)',         tier:'S', icon:'🟢', bonus:{stat:'hab', value:256},
+    special:{type:'elemental_proc', chance:0.64},
+    desc:'+256 Habilidad. 64% de probabilidad de quemar o congelar/ralentizar al enemigo, según la habilidad usada.'},
+  instinto_ss: {id:'instinto_ss', family:'instinto',  name:'Piedra del Alma: Instinto (SS)',        tier:'SS', icon:'🟢', bonus:{stat:'hab', value:512},
+    special:{type:'elemental_proc', chance:1},
+    desc:'+512 Habilidad. Siempre quemas o congelas/ralentizas al enemigo, según la habilidad usada.'},
+
+  vitalidad_s: {id:'vitalidad_s', family:'vitalidad', name:'Piedra del Alma: Vitalidad (S)',        tier:'S', icon:'❤️', bonus:{stat:'maxhp', value:128},
+    special:{type:'reflect', pct:0.64},
+    desc:'+1024 Vida máxima aprox. Devuelves el 64% del daño físico que recibes a tu atacante.'},
+  vitalidad_ss:{id:'vitalidad_ss',family:'vitalidad', name:'Piedra del Alma: Vitalidad (SS)',       tier:'SS', icon:'❤️', bonus:{stat:'maxhp', value:256},
+    special:{type:'reflect', pct:1},
+    desc:'+2048 Vida máxima aprox. Devuelves el 100% del daño físico que recibes a tu atacante.'},
+
+  furia_s:     {id:'furia_s',     family:'furia',     name:'Piedra del Alma: Furia Contenida (S)',  tier:'S', icon:'🔥',
+    special:{type:'lowhp_dmg_v2', threshold:0.3, base:soulFuriaBase('S'), missingScale:soulFuriaMissingScale('S')},
+    desc:'Por debajo del 30% de vida: +18.5% de daño, y +1.1% adicional por cada 1% de vida que te falte.'},
+  furia_ss:    {id:'furia_ss',    family:'furia',     name:'Piedra del Alma: Furia Contenida (SS)', tier:'SS', icon:'🔥',
+    special:{type:'lowhp_dmg_v2', threshold:0.3, base:soulFuriaBase('SS'), missingScale:soulFuriaMissingScale('SS')},
+    desc:'Por debajo del 30% de vida: +18.6% de daño, y +1.2% adicional por cada 1% de vida que te falte.'},
+
+  sombra_s:    {id:'sombra_s',    family:'sombra',    name:'Piedra del Alma: Sombra Cazadora (S)',  tier:'S', icon:'🌑',
+    special:{type:'evasion_flat', value:0.24},
+    desc:'+24% de probabilidad de esquivar cualquier ataque.'},
+  sombra_ss:   {id:'sombra_ss',   family:'sombra',    name:'Piedra del Alma: Sombra Cazadora (SS)', tier:'SS', icon:'🌑',
+    special:{type:'evasion_flat', value:0.28},
+    desc:'+28% de probabilidad de esquivar cualquier ataque.'}
 };
 
 function maxSoulSlots(level){ return Math.floor((level||1)/10); } // 1 espacio cada 10 niveles
@@ -1482,15 +1478,23 @@ function renderInventory(){
   const gearItems = state.char.inventory.filter(i=>i.kind==='equip');
   const potionItems = state.char.inventory.filter(i=>i.kind==='potion');
 
-  const gearHTML = gearItems.length ? gearItems.map(it=>`
-    <div class="inv-item-row">
-      <div>
-        ${itemNameHTML(it)} <span class="slot-tag">${slotLabel(it.slot)}</span>
-        <div class="inv-item-bonus">${itemBonusText(it)}</div>
+  // Filtros por slot: una subsección por tipo de equipo (Arma, Arma 2,
+  // Armadura, Amuleto, Casco, Botas, Guantes) en vez de una sola lista plana
+  // mezclando todo — más fácil de escanear cuando la mochila crece.
+  const gearHTML = gearItems.length ? EQUIP_SLOTS.map(slot=>{
+    const items = gearItems.filter(it=>it.slot===slot);
+    if(!items.length) return '';
+    const rows = items.map(it=>`
+      <div class="inv-item-row">
+        <div>
+          ${itemNameHTML(it)}
+          <div class="inv-item-bonus">${itemBonusText(it)}</div>
+        </div>
+        <button class="inv-btn" data-equip="${it.uid}">Equipar en ${targetName}</button>
       </div>
-      <button class="inv-btn" data-equip="${it.uid}">Equipar en ${targetName}</button>
-    </div>
-  `).join('') : `<p class="inv-empty-msg">No llevas equipo suelto en la mochila.</p>`;
+    `).join('');
+    return `<div class="section-label" style="margin-top:6px; font-size:0.85em;">${slotLabel(slot)}</div>${rows}`;
+  }).join('') : `<p class="inv-empty-msg">No llevas equipo suelto en la mochila.</p>`;
 
   const potionHTML = potionItems.length ? potionItems.map(it=>{
     const tpl = POTION_TEMPLATES[it.potionId];
@@ -1858,18 +1862,15 @@ const MISSION_RANK_REWARD = {
 // élites ya definida. Y, por ahora, solo la banda 0 (piso 1-20) tiene
 // objetos/piedras reales implementados; en bandas más altas (inalcanzables
 // hasta liberar los 100 niveles) la misión da Sellos de más en su lugar.
-// Nivel de referencia por banda de misión, solo para que generateLoot() elija
-// una rareza acorde (E/F->común/poco_común, ... hasta D/C-B/A->rango_a como
-// techo real — no hace falta un tope aparte, es el rango más alto que existe).
-const MISSION_BAND_REFERENCE_LEVEL = [5, 25, 45, 55, 55];
+// La rareza que puede tocar ahora depende de tu nivel de personaje real (los
+// rangos altos siguen gateados por GEAR_TIER_MIN_LEVEL/STONE_TIER_MIN_LEVEL),
+// no de un nivel de referencia por banda.
 function makeMissionItemReward(band){
   if(band === 0 && chance(0.5)){
-    const allowedTiers = soulTierPoolForLevel(MISSION_BAND_REFERENCE_LEVEL[band] || 5);
-    const pool = Object.values(SOUL_STONES).filter(s=>allowedTiers.includes(s.tier));
-    const tpl = pick(pool);
-    return {kind:'soulstone', stoneId:tpl.id, family:tpl.family, name:tpl.name, tier:tpl.tier, icon:tpl.icon, desc:tpl.desc, bonus:tpl.bonus, special:tpl.special};
+    const reward = rollStoneDropForLevel(state.char.level);
+    if(reward) return reward;
   }
-  return generateLoot(rnd(1,4), MISSION_BAND_REFERENCE_LEVEL[band] || 5);
+  return generateLoot(rnd(1,4), state.char.level);
 }
 
 function generateMissionBatch(maxFloor){
@@ -2756,11 +2757,13 @@ function enterNode(f,n){
     state.char.gold += gold;
     let msg = `Encuentras un cofre. +${gold} de oro.`;
     if(chance(0.6)){
-      const item = generateLoot(f, dg.level);
-      addToInventory(item);
-      msg += item.kind==='potion'
-        ? ` También hallas: <b>${POTION_TEMPLATES[item.potionId].name}</b> (guardada en la mochila).`
-        : ` También hallas: <b>${item.name}</b> (guardado en la mochila).`;
+      const item = generateLoot(f, state.char.level);
+      if(item){
+        addToInventory(item);
+        msg += item.kind==='potion'
+          ? ` También hallas: <b>${POTION_TEMPLATES[item.potionId].name}</b> (guardada en la mochila).`
+          : ` También hallas: <b>${item.name}</b> (guardado en la mochila).`;
+      }
     }
     log(msg);
     node.done = true;
@@ -2788,32 +2791,76 @@ const COMUN_GEAR_NAMES = {
   botas:['Botas de cuero curtido','Sandalias del errante','Grebas oxidadas','Zapatillas silenciosas'],
   guantes:['Guanteletes de hierro','Manoplas raídas','Guantes de esgrima','Zarpas envueltas']
 };
-// A partir de qué década empieza a caer cada rareza, y con qué peso — el
-// equipo suelto del laberinto ahora sube de rango con la profundidad, no
-// solo la tienda de Sellos.
-const LOOT_RES_PCT = {comun:COMUN_RES_PCT, poco_comun:POCO_COMUN_RES_PCT, raro:RARO_RES_PCT, rango_b:RANGO_B_RES_PCT, rango_a:RANGO_A_RES_PCT};
-const LOOT_STAT_MULT = {comun:1, poco_comun:1.6, raro:2.0, rango_b:2.5, rango_a:3.5};
-function lootRarityForLevel(level){
-  const decade = decadeIndexForLevel(level||1);
-  const roll = Math.random();
-  if(decade<=0) return 'comun';
-  if(decade===1) return roll<0.75 ? 'comun' : 'poco_comun';
-  if(decade===2) return roll<0.5 ? 'comun' : (roll<0.7 ? 'poco_comun' : (roll<0.9 ? 'raro' : 'rango_b'));
-  if(decade===3) return roll<0.35 ? 'comun' : (roll<0.55 ? 'poco_comun' : (roll<0.75 ? 'raro' : (roll<0.95 ? 'rango_b' : 'rango_a')));
-  if(decade===4) return roll<0.15 ? 'poco_comun' : (roll<0.35 ? 'raro' : (roll<0.75 ? 'rango_b' : 'rango_a'));
-  return roll<0.5 ? 'rango_b' : 'rango_a'; // década 5
+const LOOT_RES_PCT = {comun:COMUN_RES_PCT, poco_comun:POCO_COMUN_RES_PCT, raro:RARO_RES_PCT, rango_b:RANGO_B_RES_PCT, rango_a:RANGO_A_RES_PCT, legendario:LEGENDARIO_RES_PCT, ss:SS_RES_PCT};
+const LOOT_STAT_MULT = {comun:1, poco_comun:1.6, raro:2.0, rango_b:2.5, rango_a:3.5, legendario:4.5, ss:6.0};
+
+// Tabla plana de drop: el juego es de grindeo — cada rango tiene su propia
+// probabilidad fija, independiente del piso/década (reemplaza la vieja tabla
+// por banda). Se revisa de más raro a más común, cada uno un chance()
+// independiente; el primero que acierte gana. Si ninguno acierta, no cae
+// nada esta vez (grind real: la mayoría de combates no sueltan equipo).
+// Letra -> rango de equipo. El equipo no tiene un escalón para F: pasa
+// directo de Común (E) a Poco Común (D), a pedido explícito.
+const FLAT_GEAR_TABLE = [
+  {rarity:'ss',         chance:0.00001},  // SS  0.001%
+  {rarity:'legendario', chance:0.00005},  // S   0.005%
+  {rarity:'rango_a',    chance:0.01},     // A   1%
+  {rarity:'rango_b',    chance:0.02},     // B   2%
+  {rarity:'raro',       chance:0.03},     // C   3%
+  {rarity:'poco_comun', chance:0.10},     // F   10% (fusionado en Común, ver E)
+  {rarity:'comun',      chance:0.20}      // E   20%
+];
+const FLAT_STONE_TABLE = [
+  {tier:'SS', chance:0.00001},
+  {tier:'S',  chance:0.00005},
+  {tier:'A',  chance:0.01},
+  {tier:'B',  chance:0.02},
+  {tier:'C',  chance:0.03},
+  {tier:'D',  chance:0.05},
+  {tier:'F',  chance:0.10},
+  {tier:'E',  chance:0.20}
+];
+// Nivel mínimo de personaje para que un rango pueda caer — Épico y superior
+// necesitan haber avanzado de verdad; todo lo demás (E-B) no tiene tope.
+const GEAR_TIER_MIN_LEVEL = {rango_a:30, legendario:40, ss:50};
+const STONE_TIER_MIN_LEVEL = {A:30, S:40, SS:50};
+function rollFlatRarity(table, minLevelMap, level){
+  for(const entry of table){
+    const key = entry.rarity || entry.tier;
+    const minLvl = minLevelMap[key];
+    if(minLvl && (level||1) < minLvl) continue; // todavía no calificas para este rango, prueba el siguiente (más común)
+    if(chance(entry.chance)) return key;
+  }
+  return null;
+}
+function generateEquipOfRarity(rarity, floorIdx){
+  const slot = pick(['arma','armadura','amuleto','casco','botas','guantes']);
+  const statPool = ['fis','esp','hab','maxhp'];
+  const kind = chance(0.65) ? {stat: pick(statPool)} : {res: pick(['fisico','fuego','hielo','veneno','aturdimiento'])};
+  const value = Math.round((rnd(1,2) + Math.floor((floorIdx||0)/2)) * LOOT_STAT_MULT[rarity]);
+  const name = pick(COMUN_GEAR_NAMES[slot]);
+  return {kind:'equip', slot, name, bonus: kind.stat ? {stat:kind.stat, value} : {res:kind.res, value: LOOT_RES_PCT[rarity]}, rarity};
+}
+// Tira contra la tabla plana de equipo para el nivel de personaje dado — usada
+// tanto por cofres/misiones (generateLoot) como por cada victoria en combate.
+// Puede devolver null: no todo combate suelta algo, así es el grindeo.
+function rollGearDropForLevel(level, floorIdx){
+  const rarity = rollFlatRarity(FLAT_GEAR_TABLE, GEAR_TIER_MIN_LEVEL, level);
+  if(!rarity) return null;
+  return generateEquipOfRarity(rarity, floorIdx);
+}
+function rollStoneDropForLevel(level){
+  const tier = rollFlatRarity(FLAT_STONE_TABLE, STONE_TIER_MIN_LEVEL, level);
+  if(!tier) return null;
+  const pool = Object.values(SOUL_STONES).filter(s=>s.tier===tier);
+  const tpl = pick(pool);
+  return {kind:'soulstone', stoneId:tpl.id, family:tpl.family, name:tpl.name, tier:tpl.tier, icon:tpl.icon, desc:tpl.desc, preview:tpl.preview, bonus:tpl.bonus, special:tpl.special};
 }
 function generateLoot(floorIdx, level){
   if(chance(0.4)){
     return {kind:'potion', potionId: pick(Object.keys(POTION_TEMPLATES))};
   }
-  const rarity = lootRarityForLevel(level||1);
-  const slot = pick(['arma','armadura','amuleto','casco','botas','guantes']);
-  const statPool = ['fis','esp','hab','maxhp'];
-  const kind = chance(0.65) ? {stat: pick(statPool)} : {res: pick(['fisico','fuego','hielo','veneno','aturdimiento'])};
-  const value = Math.round((rnd(1,2) + Math.floor(floorIdx/2)) * LOOT_STAT_MULT[rarity]);
-  const name = pick(COMUN_GEAR_NAMES[slot]);
-  return {kind:'equip', slot, name, bonus: kind.stat ? {stat:kind.stat, value} : {res:kind.res, value: LOOT_RES_PCT[rarity]}, rarity};
+  return rollGearDropForLevel(level||1, floorIdx);
 }
 
 /* ============================================================
@@ -3600,13 +3647,27 @@ function handleVictory(){
   if(isElite) advanceMissionsFor('kill_elites', 1);
   if(isBoss) advanceMissionsFor('defeat_guardian', 1);
 
-  if(isElite || isBoss){
-    if(chance(0.8)){
-      const item = generateLoot(state.dungeon.atFloor, state.dungeon.level);
-      addToInventory(item);
-      log(item.kind==='potion'
-        ? `También obtienes: <b>${POTION_TEMPLATES[item.potionId].name}</b> (guardada en la mochila).`
-        : `También obtienes: <b>${item.name}</b> (guardado en la mochila).`);
+  // Botín: tabla plana de drop (FLAT_GEAR_TABLE/FLAT_STONE_TABLE), la misma
+  // para cualquier enemigo — el juego es de grindeo, así que cada enemigo
+  // derrotado tira su propia chance de soltar equipo y, aparte, una piedra de
+  // alma. Un jefe de década (nivel múltiplo de 10) tira el doble de veces.
+  const isDecadeFinal = isBoss && level % 10 === 0;
+  const rollCount = combat.enemies.length * (isDecadeFinal ? 2 : 1);
+  let lootText = '';
+  for(let i=0;i<rollCount;i++){
+    const gearDrop = rollGearDropForLevel(state.char.level, state.dungeon.atFloor);
+    if(gearDrop){
+      addToInventory(gearDrop);
+      const line = `También obtienes: <b>${itemNameHTML(gearDrop)}</b> (guardado en la mochila).`;
+      log(line);
+      lootText += ' ' + line;
+    }
+    const stoneDrop = rollStoneDropForLevel(state.char.level);
+    if(stoneDrop){
+      addToInventory(stoneDrop);
+      const line = `También encuentras una piedra de alma: <b style="color:${SOUL_TIER_COLORS[stoneDrop.tier]};">${stoneDrop.name}</b>.`;
+      log(line);
+      lootText += ' ' + line;
     }
   }
 
@@ -3651,28 +3712,10 @@ function handleVictory(){
     if(wasFrontier) state.char.maxLevelUnlocked = Math.min(LEVEL_CAP, clearedLevel+1);
     log(`Derrotas al guardián del nivel ${clearedLevel}.`);
 
-    const reward = generateGuardianReward(clearedLevel);
-    let rewardText = '';
-    if(reward){
-      addToInventory(reward);
-      log(`El guardián te concede: ${itemNameHTML(reward)} (${itemBonusText(reward)}), guardado en tu mochila.`);
-      rewardText = ` El guardián deja tras de sí <b style="color:${RARITIES[reward.rarity].color};">${reward.name}</b>, que recoges de inmediato.`;
-    }
-
-    // guardianes de nivel 4 en adelante: 20% (temporal) de soltar una piedra de alma (solo rango E o F por ahora)
-    if(clearedLevel >= 4 && chance(0.20)){
-      const allowedTiers = soulTierPoolForLevel(clearedLevel);
-      const pool = Object.values(SOUL_STONES).filter(s=>allowedTiers.includes(s.tier));
-      const tpl = pick(pool);
-      addToInventory({kind:'soulstone', stoneId:tpl.id, family:tpl.family, name:tpl.name, tier:tpl.tier, icon:tpl.icon, desc:tpl.desc, preview:tpl.preview, bonus:tpl.bonus, special:tpl.special});
-      log(`El guardián también deja caer una <b style="color:${SOUL_TIER_COLORS[tpl.tier]};">${tpl.name}</b> — una piedra de alma de rango ${tpl.tier}.`);
-      rewardText += ` También encuentras una piedra de alma: <b style="color:${SOUL_TIER_COLORS[tpl.tier]};">${tpl.name}</b>.`;
-    }
-
     const canContinue = clearedLevel < LEVEL_CAP;
     const bodyText = (canContinue
       ? `Has vencido al guardián del nivel ${clearedLevel}. Puedes seguir adentrándote al nivel ${clearedLevel+1}, o retirarte a la ciudad conservando todo tu botín.`
-      : `Has vencido al guardián del nivel ${clearedLevel}, el último conocido del laberinto. Retírate a la ciudad conservando todo tu botín.`) + rewardText;
+      : `Has vencido al guardián del nivel ${clearedLevel}, el último conocido del laberinto. Retírate a la ciudad conservando todo tu botín.`) + lootText;
     const buttons = [];
     if(canContinue){
       buttons.push({label:`Continuar al nivel ${clearedLevel+1}`, primary:true, onClick:()=>{
