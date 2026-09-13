@@ -80,11 +80,11 @@ const STYLES = {
    mantenimiento recurrente todavía; nivel 10 de personaje requerido)
    ============================================================ */
 const ALLY_ROSTER = [
-  {templateId:'aldric', role:'guerrero', name:'Aldric de la Muralla', icon:'🛡️', bio:'Escudero retirado que aún no aprende a rendirse. Se planta al frente y no se mueve.', baseCost:150, costPerLevel:10, frontline:true},
-  {templateId:'neira', role:'arquero', name:'Neira la Certera', icon:'🏹', bio:'Cazadora de las tierras altas. Nunca falla dos veces al mismo blanco.', baseCost:170, costPerLevel:11, frontline:false},
-  {templateId:'vex', role:'asesino', name:'Vex', icon:'🗡️', bio:'No cuenta su pasado. Solo dice que llegó tarde a la venganza que buscaba.', baseCost:190, costPerLevel:12, frontline:false},
-  {templateId:'fennwick', role:'mago', name:'Fennwick', icon:'🔮', bio:'Aprendiz expulsado del Círculo Roto por "experimentar de más".', baseCost:220, costPerLevel:14, frontline:false},
-  {templateId:'delyth', role:'sacerdote', name:'Hermana Delyth', icon:'✨', bio:'La última de su orden. Cura a cualquiera que se lo pida, sin preguntar por qué pelea.', baseCost:240, costPerLevel:15, frontline:false}
+  {templateId:'aldric', role:'guerrero', name:'Aldric de la Muralla', icon:'🛡️', bio:'Escudero retirado que aún no aprende a rendirse. Se planta al frente y no se mueve.', skillName:'Golpe Pesado', skillDesc:'Cada pocos turnos, un golpe con 60% más de daño.', baseCost:150, costPerLevel:10, frontline:true},
+  {templateId:'neira', role:'arquero', name:'Neira la Certera', icon:'🏹', bio:'Cazadora de las tierras altas. Nunca falla dos veces al mismo blanco.', skillName:'Disparo Certero', skillDesc:'Cada pocos turnos, un disparo que ignora buena parte de la resistencia del objetivo.', baseCost:170, costPerLevel:11, frontline:false},
+  {templateId:'vex', role:'asesino', name:'Vex', icon:'🗡️', bio:'No cuenta su pasado. Solo dice que llegó tarde a la venganza que buscaba.', skillName:'Golpe Sombrío', skillDesc:'Cada pocos turnos, más daño mientras más herido esté el objetivo.', baseCost:190, costPerLevel:12, frontline:false},
+  {templateId:'fennwick', role:'mago', name:'Fennwick', icon:'🔮', bio:'Aprendiz expulsado del Círculo Roto por "experimentar de más".', skillName:'Bola de Fuego', skillDesc:'Cada pocos turnos, daño de fuego en vez de físico — útil contra enemigos resistentes al golpe.', baseCost:220, costPerLevel:14, frontline:false},
+  {templateId:'delyth', role:'sacerdote', name:'Hermana Delyth', icon:'✨', bio:'La última de su orden. Cura a cualquiera que se lo pida, sin preguntar por qué pelea.', skillName:'Bendición Sagrada', skillDesc:'Cuando nadie necesita curación, baja todas las resistencias del enemigo del frente por unos turnos.', baseCost:240, costPerLevel:15, frontline:false}
 ];
 const ALLY_MIN_LEVEL = 10;
 const MAX_ALLIES = 4;
@@ -1880,6 +1880,7 @@ function renderTaberna(){
       <div>
         <b>${tpl.icon||'⚔️'} ${a.name}</b> <span class="slot-tag">${a.role} · nivel ${a.level}</span>
         <div class="inv-item-bonus neutral">${tpl.bio||''}</div>
+        ${tpl.skillName ? `<div class="inv-item-bonus" style="margin-top:2px;"><b>${tpl.skillName}</b> — ${tpl.skillDesc}</div>` : ''}
         <div class="bar-track" style="margin-top:6px;"><div class="bar-fill xp" style="width:${xpPct}%"></div></div>
         <div style="font-size:0.7em; color:var(--text-dim); margin-top:2px;">${xpText}</div>
       </div>
@@ -1896,6 +1897,7 @@ function renderTaberna(){
       <div>
         <b>${tpl.icon} ${tpl.name}</b> <span class="slot-tag">${tpl.role}</span>
         <div class="inv-item-bonus neutral">${tpl.bio}</div>
+        <div class="inv-item-bonus" style="margin-top:2px;"><b>${tpl.skillName}</b> — ${tpl.skillDesc}</div>
       </div>
       <button class="inv-btn" data-hire="${tpl.templateId}" ${disabled?'disabled':''}>${already ? 'Ya reclutado' : `Reclutar (${cost} oro)`}</button>
     </div>`;
@@ -2632,9 +2634,20 @@ function makeCombatAlly(row){
   return {
     id: row.id, templateId: row.template_id, name: row.name, icon: tpl.icon, role: tpl.role,
     frontline: tpl.frontline, level: lvl,
-    maxHP, hp: maxHP, atk, statuses:[],
+    maxHP, hp: maxHP, atk, statuses:[], skillCooldown: 1, // 1: no usan su habilidad en el primer turno
     res:{fisico:0, fuego:0, hielo:0, veneno:0, aturdimiento:0} // sin resistencias propias todavía (v1)
   };
+}
+const ALLY_SKILL_COOLDOWN = 3; // cada cuántos turnos propios repite su habilidad
+
+// Resistencia efectiva de un objetivo contra un elemento dado, tomando en
+// cuenta la Bendición Sagrada de Delyth (baja TODAS sus resistencias
+// mientras dura) — centralizado aquí para que tanto el jugador como los
+// aliados se beneficien de la misma forma al golpear a un enemigo bendecido.
+function effectiveEnemyRes(enemy, resKey){
+  const base = (enemy.res && enemy.res[resKey]) || 0;
+  const blessed = hasStatus(enemy.statuses, 'Bendecido');
+  return blessed ? base - 20 : base;
 }
 
 function hasStatus(list, name){ return list.find(s=>s.name===name); }
@@ -2905,7 +2918,7 @@ function playerUseSkill(skillId, targetIdx){
 
     let ignore = skill.ignoreResist||0;
     let resKey = skill.dmgType==='arcano'? null : skill.dmgType;
-    let resVal = resKey ? (target.res[resKey]||0)*(1-ignore) : 0;
+    let resVal = resKey ? effectiveEnemyRes(target, resKey)*(1-ignore) : 0;
     let dmg = base*(1-resVal/100);
     if(skill.penaltyIfFrente && combat.playerPos==='frente') dmg *= (1-skill.penaltyIfFrente);
     dmg = Math.max(1, Math.round(dmg));
@@ -2936,6 +2949,8 @@ function endPlayerTurn(){
 function resolveAllyTurns(){
   livingAllies().forEach(ally=>{
     if(ally.hp<=0 || combat.over) return;
+    if(ally.skillCooldown===undefined) ally.skillCooldown = 0;
+    ally.skillCooldown = Math.max(0, ally.skillCooldown-1);
 
     const miedo = hasStatus(ally.statuses,'Miedo');
     if(miedo && chance(miedo.procChance||0.4)){
@@ -2982,6 +2997,20 @@ function resolveAllyTurns(){
         log(`<b>${ally.name}</b> cura a <b>${mostInjured.name}</b> ${mostInjured.hp-before} de vida.`);
         return;
       }
+      // Nadie necesita curación: Bendición Sagrada — baja todas las
+      // resistencias del enemigo del frente, para que tanto tus golpes como
+      // los del resto del equipo rindan más contra objetivos muy resistentes
+      // (el hueco que Riakis necesita para poder caer).
+      if(ally.skillCooldown<=0){
+        const fiBless = frontEnemyIndex();
+        if(fiBless>=0){
+          const target = combat.enemies[fiBless];
+          applyStatus(target, {name:'Bendecido', duration:3}, false);
+          ally.skillCooldown = ALLY_SKILL_COOLDOWN;
+          log(`<b>${ally.name}</b> pronuncia una Bendición Sagrada sobre ${target.name}: sus resistencias caen.`);
+          return;
+        }
+      }
     }
     const fi = frontEnemyIndex();
     if(fi<0) return;
@@ -2995,10 +3024,27 @@ function resolveAllyTurns(){
 
     let dmg = ally.atk;
     if(hasStatus(ally.statuses,'Debilitado')) dmg *= 0.85;
-    const resVal = (enemyTarget.res && enemyTarget.res.fisico) || 0;
+    let resKey = 'fisico';
+    let skillText = null;
+
+    if(ally.skillCooldown<=0 && ally.role!=='sacerdote'){
+      ally.skillCooldown = ALLY_SKILL_COOLDOWN;
+      if(ally.role==='guerrero'){ dmg *= 1.6; skillText = 'descarga un Golpe Pesado sobre'; }
+      else if(ally.role==='arquero'){ dmg *= 1.0; skillText = 'clava un Disparo Certero (ignora parte de la resistencia) en'; }
+      else if(ally.role==='asesino'){
+        const missingPct = 1 - (enemyTarget.hp/enemyTarget.maxHP);
+        dmg *= 1 + missingPct*0.6;
+        skillText = 'aprovecha un Golpe Sombrío contra';
+      }
+      else if(ally.role==='mago'){ resKey = 'fuego'; dmg *= 1.15; skillText = 'lanza una Bola de Fuego a'; }
+    }
+
+    const resVal = ally.role==='arquero' && skillText ? effectiveEnemyRes(enemyTarget, resKey)*0.6 : effectiveEnemyRes(enemyTarget, resKey);
     dmg = Math.max(1, Math.round(dmg*(1-resVal/100)));
     enemyTarget.hp = Math.max(0, enemyTarget.hp - dmg);
-    log(`<b>${ally.name}</b> ataca a ${enemyTarget.name}: ${dmg} de daño.`);
+    log(skillText
+      ? `<b>${ally.name}</b> ${skillText} ${enemyTarget.name}: ${dmg} de daño.`
+      : `<b>${ally.name}</b> ataca a ${enemyTarget.name}: ${dmg} de daño.`);
   });
 }
 
