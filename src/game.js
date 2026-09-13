@@ -780,6 +780,18 @@ function describeRecord(){
 // real (mechanical) difficulty multiplier: compounds ~14% per level, as requested
 function levelMult(level){ return Math.pow(1.14, Math.max(0,level-1)); }
 
+// Incremento de dificultad por piso dentro de un mismo nivel. Se repite cada
+// decena para cuando el laberinto crezca a 100 niveles: los que terminan en
+// 1-5 (1,2,3,4,5,11,12,13,14,15,21...) suben +0.5 por piso, los que terminan
+// en 6-10 (6,7,8,9,10,16,17,18,19,20,26...) suben +0.8. Único caso especial:
+// el nivel 1 exacto se queda con la curva suave original (+0.05), porque es
+// la introducción al juego.
+function floorDifficultyStep(level){
+  if(level === 1) return 0.05;
+  const band = level % 10 === 0 ? 10 : level % 10;
+  return band <= 5 ? 0.5 : 0.8;
+}
+
 function numFloorsForLevel(level){
   return Math.min(MAX_FLOORS, BASE_FLOORS + Math.floor((level-1)/2)); // +1 floor every 2 levels
 }
@@ -1809,11 +1821,7 @@ function generateLoot(floorIdx){
    ============================================================ */
 function makeEnemy(tpl, floorIdx, level){
   const lvlMult = levelMult(level||1);
-  // curva por piso dentro del mismo nivel: niveles 1-5 suben +0.5 por piso,
-  // 6-10 suben +0.8 por piso — antes era un +0.05 casi plano en todo el juego,
-  // lo que hacía que un personaje bien equipado no notara diferencia entre
-  // el primer y el último piso de un mismo nivel.
-  const floorMult = 1 + floorIdx * ((level||1) <= 5 ? 0.5 : 0.8);
+  const floorMult = 1 + floorIdx * floorDifficultyStep(level||1);
   let hp, atk;
   if(tpl.boss){
     // guardian: level 1 baseline ~300 HP, then +14% compounding per level.
