@@ -182,6 +182,13 @@ const RARITIES = {
   // futuras rarezas (pendientes de implementar): unico, epico, legendario, mitico, dios
 };
 
+// Valores planos por rareza: todo objeto de una misma rareza da el mismo
+// bono de resistencia, y toda arma poco común da el mismo bono de daño,
+// sin importar en qué piso/nivel se consiguió.
+const COMUN_RES_PCT = 5;
+const POCO_COMUN_RES_PCT = 12;
+const POCO_COMUN_WEAPON_BONUS = 8;
+
 // weapon/offhand options the shop sells, keyed by combat style; each subclass can only
 // buy the gear that fits its playstyle (heavy weapons + shield, dual blades, bow + quiver, staff + focus)
 const WEAPON_OPTIONS = {
@@ -228,6 +235,24 @@ function buyWeapon(slot){
   const name = pick(opts[slot]);
   const statKey = SHOP_WEAPON_STAT[styleId] || 'fis';
   addToInventory({slot, name, bonus:{stat:statKey, value:shopWeaponValue()}, rarity:'comun'});
+  log(`Compras <b>${name}</b> por ${price} de oro.`);
+  renderAll(); save();
+}
+
+// equipo común no ligado a la senda de combate: armadura, casco, botas,
+// guantes y amuleto. Cada uno da un único bono plano, igual que las armas.
+const SHOP_GEAR_SLOTS = ['armadura','casco','botas','guantes','amuleto'];
+function shopGearPrice(slot){ return slot==='armadura' ? 45 + state.char.level*4 : 35 + state.char.level*3; }
+function shopGearValue(slot){ return slot==='armadura' ? 2 + Math.floor(state.char.level/2) : 2 + Math.floor(state.char.level/3); }
+function buyGear(slot){
+  const price = shopGearPrice(slot);
+  if(state.char.gold < price){ log('No tienes suficiente oro para eso.'); return; }
+  state.char.gold -= price;
+  const name = pick(COMUN_GEAR_NAMES[slot]);
+  const bonus = slot==='amuleto'
+    ? {res: pick(['fisico','fuego','hielo','veneno','aturdimiento']), value: COMUN_RES_PCT}
+    : {stat: GUARDIAN_SLOT_STAT[slot] || 'maxhp', value: shopGearValue(slot)};
+  addToInventory({slot, name, bonus, rarity:'comun'});
   log(`Compras <b>${name}</b> por ${price} de oro.`);
   renderAll(); save();
 }
@@ -293,7 +318,7 @@ function generateGuardianReward(level){
   if(slot==='arma' || slot==='arma2'){
     name = pick(opts[slot]) + ' del guardián';
     const statKey = SHOP_WEAPON_STAT[styleId] || 'fis';
-    bonus = {stat:statKey, value: shopWeaponValue()+3};
+    bonus = {stat:statKey, value: POCO_COMUN_WEAPON_BONUS};
     special = SPECIALS_BY_STYLE[styleId] || null;
   } else if(slot==='armadura'){
     name = pick(['Coraza del guardián','Placa ancestral','Manto del vigía']);
@@ -301,7 +326,7 @@ function generateGuardianReward(level){
   } else if(slot==='amuleto'){
     name = pick(['Sello del guardián','Reliquia custodiada','Talismán antiguo']);
     const resKeys = ['fisico','fuego','hielo','veneno','aturdimiento'];
-    bonus = {res: pick(resKeys), value: 10};
+    bonus = {res: pick(resKeys), value: POCO_COMUN_RES_PCT};
   } else {
     // casco, botas, guantes
     name = pick(GUARDIAN_SLOT_NAMES[slot]);
@@ -1031,7 +1056,6 @@ function renderInventory(){
       <div>
         <b style="color:${c};">${it.name}</b> <span class="slot-tag" style="border-color:${c}; color:${c};">${it.tier}</span>
         <div class="inv-item-bonus">${it.desc}</div>
-        ${it.preview ? `<div class="inv-item-bonus neutral" style="font-style:italic;">${it.preview}</div>` : ''}
       </div>
       <button class="inv-btn" data-socket="${it.uid}" ${blocked?'disabled':''}>${btnLabel}</button>
     </div>`;
@@ -1422,6 +1446,20 @@ function renderShop(){
   const weaponHTML = (opts.arma ? weaponRowHTML('arma', armaLabel, armaPrice) : '')
     + (opts.arma2 ? weaponRowHTML('arma2', arma2Label, arma2Price) : '');
 
+  const gearHTML = SHOP_GEAR_SLOTS.map(slot=>{
+    const price = shopGearPrice(slot);
+    const bonusText = slot==='amuleto'
+      ? `+${COMUN_RES_PCT}% a una resistencia al azar`
+      : `+${shopGearValue(slot)} ${STAT_LABELS[GUARDIAN_SLOT_STAT[slot] || 'maxhp'] || ''}`;
+    return `<div class="inv-item-row">
+      <div>
+        <b>${slotLabel(slot)}</b>
+        <div class="inv-item-bonus">${bonusText} · sin otras características</div>
+      </div>
+      <button class="inv-btn" data-buy-gear="${slot}" ${state.char.gold<price?'disabled':''}>Comprar (${price} oro)</button>
+    </div>`;
+  }).join('');
+
   const potionHTML = Object.values(POTION_TEMPLATES).filter(t=>SHOP_POTION_PRICES[t.id]).map(t=>{
     const price = SHOP_POTION_PRICES[t.id];
     return `<div class="inv-item-row">
@@ -1462,8 +1500,11 @@ function renderShop(){
     </div>
     <p style="color:var(--text-dim); font-size:0.85em; margin-top:0;">Oro disponible: <b>${state.char.gold}</b>. Las armas que vendemos aquí son de rareza común: solo dan daño, sin ventajas adicionales. Solo se ofrecen las que calzan con tu senda de combate (${style().name}).</p>
 
-    <div class="section-label">Armas y equipo de tu senda</div>
-    ${weaponHTML || '<p class="inv-empty-msg">No hay equipo disponible para tu senda de combate.</p>'}
+    <div class="section-label">Armas de tu senda</div>
+    ${weaponHTML || '<p class="inv-empty-msg">No hay armas disponibles para tu senda de combate.</p>'}
+
+    <div class="section-label">Equipo común</div>
+    ${gearHTML}
 
     <div class="section-label">Pociones</div>
     ${potionHTML}
@@ -1475,6 +1516,9 @@ function renderShop(){
   document.getElementById('btn-close-shop').onclick = ()=>{ shopOpen=false; renderAll(); };
   document.querySelectorAll('[data-buy-weapon]').forEach(btn=>{
     btn.onclick = ()=> buyWeapon(btn.dataset.buyWeapon);
+  });
+  document.querySelectorAll('[data-buy-gear]').forEach(btn=>{
+    btn.onclick = ()=> buyGear(btn.dataset.buyGear);
   });
   document.querySelectorAll('[data-buy-potion]').forEach(btn=>{
     btn.onclick = ()=> buyPotion(btn.dataset.buyPotion);
@@ -1704,6 +1748,15 @@ function enterNode(f,n){
 /* ============================================================
    LOOT
    ============================================================ */
+// nombres de objeto común compartidos entre el botín del laberinto y la tienda
+const COMUN_GEAR_NAMES = {
+  arma:['Filo desgastado','Hoja del laberinto','Astilla de hueso','Punta templada'],
+  armadura:['Cota remendada','Placa de piedra','Manto raído','Escamas frías'],
+  amuleto:['Amuleto de sangre','Talismán roto','Anillo apagado','Cuenta tallada'],
+  casco:['Yelmo mellado','Capucha andrajosa','Máscara resquebrajada','Cráneo pulido'],
+  botas:['Botas de cuero curtido','Sandalias del errante','Grebas oxidadas','Zapatillas silenciosas'],
+  guantes:['Guanteletes de hierro','Manoplas raídas','Guantes de esgrima','Zarpas envueltas']
+};
 function generateLoot(floorIdx){
   if(chance(0.4)){
     return {kind:'potion', potionId: pick(Object.keys(POTION_TEMPLATES))};
@@ -1712,16 +1765,8 @@ function generateLoot(floorIdx){
   const statPool = ['fis','esp','hab','maxhp'];
   const kind = chance(0.65) ? {stat: pick(statPool)} : {res: pick(['fisico','fuego','hielo','veneno','aturdimiento'])};
   const value = rnd(1,2) + Math.floor(floorIdx/2);
-  const names = {
-    arma:['Filo desgastado','Hoja del laberinto','Astilla de hueso','Punta templada'],
-    armadura:['Cota remendada','Placa de piedra','Manto raído','Escamas frías'],
-    amuleto:['Amuleto de sangre','Talismán roto','Anillo apagado','Cuenta tallada'],
-    casco:['Yelmo mellado','Capucha andrajosa','Máscara resquebrajada','Cráneo pulido'],
-    botas:['Botas de cuero curtido','Sandalias del errante','Grebas oxidadas','Zapatillas silenciosas'],
-    guantes:['Guanteletes de hierro','Manoplas raídas','Guantes de esgrima','Zarpas envueltas']
-  };
-  const name = pick(names[slot]);
-  return {kind:'equip', slot, name, bonus: kind.stat ? {stat:kind.stat, value} : {res:kind.res, value: value*4}, rarity:'comun'};
+  const name = pick(COMUN_GEAR_NAMES[slot]);
+  return {kind:'equip', slot, name, bonus: kind.stat ? {stat:kind.stat, value} : {res:kind.res, value: COMUN_RES_PCT}, rarity:'comun'};
 }
 
 /* ============================================================
