@@ -1495,8 +1495,9 @@ function renderCity(){
     <div class="city-art">
       <div class="icon">🏙️</div>
       <h2>La última ciudad</h2>
-      <p>Solo queda una ciudad en pie en todo Dungeon &amp; Stone. El laberinto tiene 10 niveles conocidos; cada uno esconde su propio guardián.</p>
+      <p>Solo queda una ciudad en pie en todo Dungeon &amp; Stone. El laberinto tiene 60 pisos conocidos, repartidos en décadas con su propia temática; cada uno esconde su propio guardián.</p>
       <p style="color:var(--bronze-light); font-size:0.85em; margin-top:8px;">Nivel de récord: ${describeRecord()}.</p>
+      <button class="reset-btn" id="btn-open-tutorial" style="margin-top:10px;">¿Cómo jugar?</button>
     </div>
     <div class="city-actions">
       <div class="action-card">
@@ -1574,6 +1575,7 @@ function renderCity(){
     invOpen = false; homeOpen = false; shopOpen = false; rankingOpen = false; adminOpen = false; missionsOpen = true;
     renderAll();
   };
+  document.getElementById('btn-open-tutorial').onclick = showTutorial;
 }
 
 /* ============================================================
@@ -3026,6 +3028,68 @@ function showChoiceOverlay(title, text, buttons){
 }
 
 /* ============================================================
+   TUTORIAL — omitible, se puede volver a abrir desde "¿Cómo jugar?"
+   ============================================================ */
+const TUTORIAL_SLIDES = [
+  {title:'Bienvenido a Dungeon & Stone', body:'Un tutorial rápido de las pantallas y mecánicas principales. Puedes saltarlo cuando quieras, y volver a verlo después desde el botón "¿Cómo jugar?" en la ciudad.'},
+  {title:'La ciudad', body:'Tu base entre expediciones. Desde aquí descansas, entras al laberinto, y accedes al Hogar, la Tienda, el Ranking, el Gremio y la Taberna.'},
+  {title:'Descansar', body:'Restaura toda tu vida, MP y espíritu antes de partir. Gratis y sin límite de usos en la ciudad.'},
+  {title:'Entrar al laberinto', body:'Avanzas piso a piso por sendas: solo puedes moverte a la senda igual o adyacente a la tuya, nunca saltar de un extremo al otro. Cada piso tiene combates, cofres, descansos y de vez en cuando un élite.'},
+  {title:'El Hogar', body:'Guarda equipo, pociones y oro. Nada de lo que dejes aquí se pierde si mueres en el laberinto — solo se pierde lo que llevas encima.'},
+  {title:'El Gremio', body:'Un tablón de 10 misiones que se refresca cada 12 horas. Complétalas para ganar oro, experiencia y Sellos del Laberinto, canjeables por equipo Único y Épico. Si una misión no te gusta, puedes refrescarla hasta 3 veces por tablón.'},
+  {title:'La Taberna', body:'Aquí reclutarás aliados — guerreros, arqueros, asesinos, magos y sacerdotes — que pelean a tu lado. Cuestan oro mantener, suben de nivel contigo, y confiar en el aliado equivocado tiene sus riesgos.'},
+  {title:'Ranking', body:'Tu récord personal (el piso más profundo que has alcanzado) y el top 10 de todos los jugadores.'},
+  {title:'Combate por turnos', body:'Cada turno eliges una habilidad o acción. Frente y Retaguardia son tus dos posiciones: la mayoría de golpes físicos fuertes exigen estar en el Frente; la Retaguardia da +8% de evasión y favorece las habilidades a distancia.'},
+  {title:'MP y Espíritu', body:'El MP paga tus habilidades físicas. El Espíritu paga las mágicas y de utilidad, y también aumenta tu daño mágico. Reposicionarte cambia entre Frente y Retaguardia, y ocupa tu turno.'},
+  {title:'Frente y Retaguardia, con aliados', body:'Cuando tengas un aliado tanque en el Frente, los enemigos no podrán llegar hasta tu Retaguardia sin pasar por él primero — igual que tú no puedes golpear al enemigo de atrás sin resolver primero al de adelante. Posicionarte bien pesará tanto como golpear fuerte.'},
+  {title:'Defenderse', body:'Te da al menos 50% de probabilidad de esquivar el próximo golpe, y si aun así te alcanzan, el daño se reduce a la mitad. Es una opción real cuando la pelea se pone difícil, no solo un último recurso.'},
+  {title:'El Tótem', body:'Un objeto raro que sueltan los élites. Bloquea gratis, una sola vez y sin gastar tu turno, el golpe que te mataría — pero solo funciona contra el jefe final de una década del laberinto (piso 10, 20, 30...).'},
+  {title:'El ciclo nocturno', body:'Entre las 04:00 y las 10:00 (hora de servidor), el laberinto cambia: aparecen enemigos distintos y más peligrosos, con sus propios efectos negativos. Vigila el reloj.'},
+  {title:'Buena suerte, viajero', body:'Eso es todo. El laberinto tiene 60 pisos conocidos, y cada década esconde algo distinto. A partir de aquí, el resto lo descubres jugando.'}
+];
+let tutorialStep = 0;
+function showTutorial(){
+  tutorialStep = 0;
+  if(document.getElementById('tutorial-overlay')) return;
+  const div = document.createElement('div');
+  div.className = 'overlay-msg';
+  div.id = 'tutorial-overlay';
+  document.body.appendChild(div);
+  renderTutorialStep();
+}
+function renderTutorialStep(){
+  const div = document.getElementById('tutorial-overlay');
+  if(!div) return;
+  const slide = TUTORIAL_SLIDES[tutorialStep];
+  const isLast = tutorialStep === TUTORIAL_SLIDES.length-1;
+  const dots = TUTORIAL_SLIDES.map((_,i)=>
+    `<span style="width:6px; height:6px; border-radius:50%; display:inline-block; margin:0 3px; background:${i===tutorialStep?'var(--bronze-light)':'var(--border)'};"></span>`
+  ).join('');
+  div.innerHTML = `<div class="overlay-card">
+    <h2>${slide.title}</h2>
+    <p>${slide.body}</p>
+    <div style="margin:12px 0;">${dots}</div>
+    <div style="display:flex; flex-wrap:wrap; gap:10px; justify-content:center;">
+      <button class="btn-main secondary-choice" id="tut-skip">Saltar</button>
+      ${tutorialStep>0 ? `<button class="btn-main secondary-choice" id="tut-prev">Anterior</button>` : ''}
+      <button class="btn-main" id="tut-next">${isLast ? 'Comenzar' : 'Siguiente'}</button>
+    </div>
+  </div>`;
+  document.getElementById('tut-skip').onclick = closeTutorial;
+  const prevBtn = document.getElementById('tut-prev');
+  if(prevBtn) prevBtn.onclick = ()=>{ tutorialStep -= 1; renderTutorialStep(); };
+  document.getElementById('tut-next').onclick = ()=>{
+    if(isLast) closeTutorial();
+    else { tutorialStep += 1; renderTutorialStep(); }
+  };
+}
+function closeTutorial(){
+  const div = document.getElementById('tutorial-overlay');
+  if(div) document.body.removeChild(div);
+  try{ localStorage.setItem('dsTutorialSeen','1'); }catch(e){}
+}
+
+/* ============================================================
    RENDER: COMBAT
    ============================================================ */
 function renderCombat(){
@@ -3399,6 +3463,9 @@ function enterCharacter(row){
   showScreen('screen-game');
   renderAll();
   refreshMissionsState();
+  let tutorialSeen = false;
+  try{ tutorialSeen = localStorage.getItem('dsTutorialSeen')==='1'; }catch(e){}
+  if(!tutorialSeen) showTutorial();
 }
 
 function goToCreation(){
