@@ -2553,9 +2553,12 @@ function enterNode(f,n){
     for(let i=0;i<count;i++) group.push(makeEnemy(pick(templates), f, dg.level));
     if(node.type==='jefe' && isDecadeFinal && paraiso){
       // el jefe de Isla Paraíso llega escoltado por dos élites en el frente
-      // mientras él se queda atrás.
-      group.push(makeEnemy(bestiary.elite[0], f, dg.level));
-      group.push(makeEnemy(bestiary.elite[0], f, dg.level));
+      // mientras él se queda atrás. Un poco más resistentes que un élite
+      // suelto de la década — son su guardia personal, no un encuentro normal.
+      const escort1 = makeEnemy(bestiary.elite[0], f, dg.level);
+      const escort2 = makeEnemy(bestiary.elite[0], f, dg.level);
+      [escort1, escort2].forEach(e=>{ e.maxHP = Math.round(e.maxHP*1.2); e.hp = e.maxHP; });
+      group.push(escort1, escort2);
     }
     // los de línea frontal (tanques/melee) van al slot 0, el que reciben los
     // ataques 'front'; a distancia/soporte se acomodan detrás.
@@ -3286,11 +3289,11 @@ function enemyAct(enemy){
   }
   if(move==='invocar'){
     enemy.cooldowns.invocar = 4;
-    if(combat.enemies.length < 6){
-      const minion = makeEnemy(SUMMON_TEMPLATE, state.dungeon.atFloor, state.dungeon.level);
-      combat.enemies.push(minion);
-      log(`${enemy.name} invoca una criatura menor.`);
+    const toSummon = Math.min(2, 6 - combat.enemies.length);
+    for(let i=0;i<toSummon;i++){
+      combat.enemies.push(makeEnemy(SUMMON_TEMPLATE, state.dungeon.atFloor, state.dungeon.level));
     }
+    if(toSummon>0) log(`${enemy.name} invoca ${toSummon>1?'dos criaturas menores':'una criatura menor'}.`);
     return;
   }
   // El ataque en área de verdad pega a todo el grupo (jugador + cada aliado
