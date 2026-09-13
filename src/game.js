@@ -2586,6 +2586,9 @@ function dealDamageToAlly(ally, amount){
   ally.hp = Math.max(0, ally.hp - amount);
 }
 function isAllyHostile(allyId){ return (combat.hostileAllies||[]).includes(allyId); }
+// Reservado para cuando exista una traición real (el aliado ataca por su
+// propia cuenta) — un golpe causado por un efecto de estado como Confusión
+// es un accidente, no cuenta como hostil, y no llama a esta función.
 function markAllyHostile(allyId){
   if(!combat.hostileAllies) combat.hostileAllies = [];
   if(!combat.hostileAllies.includes(allyId)) combat.hostileAllies.push(allyId);
@@ -2918,9 +2921,11 @@ function resolveAllyTurns(){
       const hitPlayer = chance(1/(otherAllies.length+1));
       const dmg = Math.max(1, Math.round(ally.atk));
       if(hitPlayer){
+        // No cuenta como hostil: fue la Confusión, no el aliado por su
+        // cuenta — un accidente no es traición. "Hostil" queda reservado
+        // para cuando el aliado te ataque sin un efecto de estado de por medio.
         log(`<b>${ally.name}</b> está confundido y te golpea a ti por error.`);
         dealDamageToPlayer(dmg);
-        markAllyHostile(ally.id);
       } else {
         const victim = pick(otherAllies);
         log(`<b>${ally.name}</b> está confundido y golpea a <b>${victim.name}</b> por error.`);
