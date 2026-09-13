@@ -421,9 +421,11 @@ const SOUL_STONES = {
     special:{type:'lowhp_dmg_v2', threshold:0.3, base:0.18, missingScale:0.006},
     desc:'Por debajo del 30% de vida: +18% de daño, y +0.6% adicional por cada 1% de vida que te falte.', preview:'Desde A: probabilidad de revivir una vez por entrada al laberinto (25% en A, 50% en S, 100% en SS).'},
   sombra_e:    {id:'sombra_e',    family:'sombra',    name:'Piedra del Alma: Sombra Cazadora (E)',  tier:'E', icon:'🌑',
-    desc:'Sin efecto todavía en este rango.', preview:'Desde A: probabilidad de invocar una sombra que atrae el agro de los enemigos (1% en A, 5% en S, 10% en SS; máximo una sombra a la vez).'},
+    special:{type:'evasion_flat', value:0.03},
+    desc:'+3% de probabilidad de esquivar cualquier ataque.', preview:'Desde A: probabilidad de invocar una sombra que atrae el agro de los enemigos (1% en A, 5% en S, 10% en SS; máximo una sombra a la vez).'},
   sombra_f:    {id:'sombra_f',    family:'sombra',    name:'Piedra del Alma: Sombra Cazadora (F)',  tier:'F', icon:'🌑',
-    desc:'Sin efecto todavía en este rango.', preview:'Desde A: probabilidad de invocar una sombra que atrae el agro de los enemigos (1% en A, 5% en S, 10% en SS; máximo una sombra a la vez).'}
+    special:{type:'evasion_flat', value:0.06},
+    desc:'+6% de probabilidad de esquivar cualquier ataque.', preview:'Desde A: probabilidad de invocar una sombra que atrae el agro de los enemigos (1% en A, 5% en S, 10% en SS; máximo una sombra a la vez).'}
 };
 
 function maxSoulSlots(level){ return Math.floor((level||1)/10); } // 1 espacio cada 10 niveles
@@ -577,7 +579,10 @@ function derived(){
     if(s.bonus && s.bonus.stat === 'maxsta') maxSta += s.bonus.value; // Sabiduría: valor directo, sin escalar
   });
   const critChance = clamp(0.05 + hab*0.006 + (race().id==='bestia'?0.15:0), 0, 0.6);
-  const evasionBase = 0.04 + hab*0.005 + (race().id==='hada'?0.15:0);
+  let evasionBase = 0.04 + hab*0.005 + (race().id==='hada'?0.15:0);
+  socketedStones().forEach(s=>{
+    if(s.special && s.special.type==='evasion_flat') evasionBase += s.special.value;
+  });
   return {fis,esp,hab,maxHP,maxSta,maxSpi,critChance,evasionBase};
 }
 
