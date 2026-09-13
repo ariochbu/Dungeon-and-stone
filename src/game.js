@@ -59,7 +59,7 @@ const STYLES = {
     skills:['golpe_bruto','machacar','grito_guerra']
   },
   doblefilo: {
-    id:'doblefilo', name:'Doble filo', icon:'🔪', scaleStat:'fishab',
+    id:'doblefilo', name:'Asesino', icon:'🔪', scaleStat:'fishab',
     desc:'Dagas gemelas. Desangra a tu presa y luego termina el trabajo.',
     skills:['corte_rapido','danza_cuchillas','golpe_gracia']
   },
@@ -74,6 +74,21 @@ const STYLES = {
     skills:['bola_fuego','lanza_hielo','explosion_arcana']
   }
 };
+
+/* ============================================================
+   TABERNA — aliados reclutables (v1: solo Gremio, sin traición ni
+   mantenimiento recurrente todavía; nivel 10 de personaje requerido)
+   ============================================================ */
+const ALLY_ROSTER = [
+  {templateId:'aldric', role:'guerrero', name:'Aldric de la Muralla', icon:'🛡️', bio:'Escudero retirado que aún no aprende a rendirse. Se planta al frente y no se mueve.', baseCost:150, costPerLevel:10, frontline:true},
+  {templateId:'neira', role:'arquero', name:'Neira la Certera', icon:'🏹', bio:'Cazadora de las tierras altas. Nunca falla dos veces al mismo blanco.', baseCost:170, costPerLevel:11, frontline:false},
+  {templateId:'vex', role:'asesino', name:'Vex', icon:'🗡️', bio:'No cuenta su pasado. Solo dice que llegó tarde a la venganza que buscaba.', baseCost:190, costPerLevel:12, frontline:false},
+  {templateId:'fennwick', role:'mago', name:'Fennwick', icon:'🔮', bio:'Aprendiz expulsado del Círculo Roto por "experimentar de más".', baseCost:220, costPerLevel:14, frontline:false},
+  {templateId:'delyth', role:'sacerdote', name:'Hermana Delyth', icon:'✨', bio:'La última de su orden. Cura a cualquiera que se lo pida, sin preguntar por qué pelea.', baseCost:240, costPerLevel:15, frontline:false}
+];
+const ALLY_MIN_LEVEL = 10;
+const MAX_ALLIES = 4;
+function allyHireCost(tpl, charLevel){ return tpl.baseCost + charLevel*tpl.costPerLevel; }
 
 // skill definitions
 const SKILLS = {
@@ -697,6 +712,7 @@ let shopOpen = false; // whether the Tienda (shop) panel is showing
 let rankingOpen = false; // whether the Ranking panel is showing
 let adminOpen = false; // whether the Admin panel is showing
 let missionsOpen = false; // whether the Gremio (missions board) panel is showing
+let tabernaOpen = false; // whether the Taberna (allies) panel is showing
 let currentUser = null; // Supabase auth user
 let currentProfile = null; // {id, username, role, is_banned}
 
@@ -1110,6 +1126,7 @@ function renderAll(){
     rankingOpen = false;
     adminOpen = false;
     missionsOpen = false;
+    tabernaOpen = false;
     renderCombat();
   } else if(invOpen){
     renderInventory();
@@ -1123,6 +1140,8 @@ function renderAll(){
     renderAdmin();
   } else if(missionsOpen){
     renderMissions();
+  } else if(tabernaOpen){
+    renderTaberna();
   } else if(state.dungeon && !state.dungeon.floors[state.dungeon.floors.length-1][0].done){
     renderMap();
   } else {
@@ -1172,7 +1191,7 @@ function renderSheet(){
     <div class="sheet-title">
       <div class="sheet-emblem">${r.icon}</div>
       <div>
-        <div class="name">${r.name} · ${s.icon} ${s.name}</div>
+        <div class="name">${state.char.nickname} · ${r.name} · ${s.icon} ${s.name}</div>
         <div class="tag">Nivel ${state.char.level}</div>
       </div>
     </div>
@@ -1218,13 +1237,6 @@ function renderSheet(){
 
     <div class="section-label">Rasgo pasivo — ${r.passive}</div>
     <div style="font-size:0.78em; color:var(--text-dim);">${r.passiveDesc}</div>
-
-    <div class="section-label">Guía rápida</div>
-    <div style="font-size:0.78em; color:var(--text-dim); line-height:1.6;">
-      <b>MP</b> paga las habilidades físicas; <b>Espíritu</b> paga las habilidades mágicas y de utilidad (también aumenta tu daño mágico y tu Espíritu máximo).<br>
-      <b>Habilidad</b> sube tu Crítico, tu Evasión y tu MP máximo.<br>
-      <b>Reposicionarse</b> (en combate) alterna entre Frente y Retaguardia: el Frente habilita la mayoría de golpes físicos fuertes; la Retaguardia da +8% de Evasión y favorece las habilidades a distancia.
-    </div>
   `;
 
   const link = document.getElementById('sheet-inv-link');
@@ -1527,8 +1539,8 @@ function renderCity(){
       </div>${adminCardHTML}
       <div class="action-card">
         <h3>Taberna</h3>
-        <p>Recluta aliados para acompañarte en el laberinto (equipo de hasta 5, contándote a ti).</p>
-        <button disabled>Próximamente</button>
+        <p>Recluta aliados para acompañarte en el laberinto (equipo de hasta 5, contándote a ti). Requiere nivel ${ALLY_MIN_LEVEL}.</p>
+        <button id="btn-open-taberna">Entrar a la Taberna</button>
       </div>
       <div class="action-card">
         <h3>Gremio</h3>
@@ -1576,6 +1588,10 @@ function renderCity(){
     renderAll();
   };
   document.getElementById('btn-open-tutorial').onclick = showTutorial;
+  document.getElementById('btn-open-taberna').onclick = ()=>{
+    invOpen = false; homeOpen = false; shopOpen = false; rankingOpen = false; adminOpen = false; missionsOpen = false; tabernaOpen = true;
+    renderAll();
+  };
 }
 
 /* ============================================================
@@ -1781,6 +1797,102 @@ function renderMissions(){
   const retryBtn = document.getElementById('btn-retry-missions');
   if(retryBtn) retryBtn.onclick = ()=>{ state.missionsError = undefined; renderMissions(); };
   if(!rows.length && state.missionsError===undefined) refreshMissionsState().then(()=>{ if(missionsOpen) renderMissions(); });
+}
+
+/* ============================================================
+   TABERNA
+   ============================================================ */
+async function loadAllies(){
+  if(!state || !state.char) return [];
+  const { data, error } = await supabase.from('character_allies').select('*').eq('character_id', state.char.id).order('created_at');
+  if(error){ console.error('No se pudieron cargar los aliados:', error.message); return []; }
+  return data || [];
+}
+async function refreshAlliesState(){
+  state.char.allies = await loadAllies();
+}
+
+async function hireAlly(templateId){
+  const tpl = ALLY_ROSTER.find(t=>t.templateId===templateId);
+  if(!tpl) return;
+  const cost = allyHireCost(tpl, state.char.level);
+  const { data, error } = await supabase.rpc('hire_ally', {
+    p_character_id: state.char.id, p_template_id: tpl.templateId, p_role: tpl.role, p_name: tpl.name, p_cost: cost
+  });
+  if(error){ log('No se pudo reclutar: '+error.message); renderTaberna(); return; }
+  state.char.gold -= cost;
+  state.char.allies = [...(state.char.allies||[]), data];
+  log(`Reclutas a <b>${tpl.name}</b> por ${cost} de oro.`);
+  renderAll();
+}
+async function dismissAlly(allyId){
+  const { error } = await supabase.rpc('dismiss_ally', {p_ally_id: allyId});
+  if(error){ log('No se pudo despedir al aliado: '+error.message); return; }
+  state.char.allies = (state.char.allies||[]).filter(a=>a.id!==allyId);
+  log('Despides a un aliado.');
+  renderAll();
+}
+
+function renderTaberna(){
+  const panel = document.getElementById('main-panel');
+  if(state.char.level < ALLY_MIN_LEVEL){
+    panel.innerHTML = `
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:4px;">
+        <h3 style="color:var(--bronze-light);">Taberna</h3>
+        <button class="reset-btn" id="btn-close-taberna">Cerrar</button>
+      </div>
+      <p class="inv-empty-msg">La Taberna abre sus puertas a partir del nivel ${ALLY_MIN_LEVEL}. Vuelve cuando tu personaje sea más experimentado.</p>
+    `;
+    document.getElementById('btn-close-taberna').onclick = ()=>{ tabernaOpen=false; renderAll(); };
+    return;
+  }
+
+  const allies = state.char.allies || [];
+  const hiredHTML = allies.length ? allies.map(a=>{
+    const tpl = ALLY_ROSTER.find(t=>t.templateId===a.template_id) || {};
+    return `<div class="inv-item-row">
+      <div>
+        <b>${tpl.icon||'⚔️'} ${a.name}</b> <span class="slot-tag">${a.role} · nivel ${a.level}</span>
+        <div class="inv-item-bonus neutral">${tpl.bio||''}</div>
+      </div>
+      <button class="inv-btn danger" data-dismiss="${a.id}">Despedir</button>
+    </div>`;
+  }).join('') : `<p class="inv-empty-msg">Todavía no has reclutado a nadie.</p>`;
+
+  const rosterHTML = ALLY_ROSTER.map(tpl=>{
+    const already = allies.some(a=>a.template_id===tpl.templateId);
+    const cost = allyHireCost(tpl, state.char.level);
+    const full = allies.length >= MAX_ALLIES;
+    const disabled = already || full || state.char.gold < cost;
+    return `<div class="inv-item-row">
+      <div>
+        <b>${tpl.icon} ${tpl.name}</b> <span class="slot-tag">${tpl.role}</span>
+        <div class="inv-item-bonus neutral">${tpl.bio}</div>
+      </div>
+      <button class="inv-btn" data-hire="${tpl.templateId}" ${disabled?'disabled':''}>${already ? 'Ya reclutado' : `Reclutar (${cost} oro)`}</button>
+    </div>`;
+  }).join('');
+
+  panel.innerHTML = `
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:4px;">
+      <h3 style="color:var(--bronze-light);">Taberna</h3>
+      <button class="reset-btn" id="btn-close-taberna">Cerrar</button>
+    </div>
+    <p style="color:var(--text-dim); font-size:0.85em; margin-top:0;">Hasta ${MAX_ALLIES} aliados a la vez, ${MAX_ALLIES+1} contándote a ti. Pelean junto a ti automáticamente — el que tiene "frontline" ocupa tu lugar en el frente y absorbe los golpes. El mantenimiento diario y el riesgo de traición todavía no están activos.</p>
+
+    <div class="section-label">Tu equipo (${allies.length}/${MAX_ALLIES})</div>
+    ${hiredHTML}
+
+    <div class="section-label">Disponibles para reclutar</div>
+    ${rosterHTML}
+  `;
+  document.getElementById('btn-close-taberna').onclick = ()=>{ tabernaOpen=false; renderAll(); };
+  document.querySelectorAll('[data-hire]').forEach(btn=>{
+    btn.onclick = ()=> hireAlly(btn.dataset.hire);
+  });
+  document.querySelectorAll('[data-dismiss]').forEach(btn=>{
+    btn.onclick = ()=> dismissAlly(btn.dataset.dismiss);
+  });
 }
 
 /* ============================================================
@@ -2437,10 +2549,16 @@ function makeEnemy(tpl, floorIdx, level){
    COMBAT
    ============================================================ */
 function startCombat(enemyGroup, node){
+  // v1: los aliados entran a cada combate con la vida al máximo (todavía no
+  // se persiste el daño entre peleas ni la sátisfacción por ser derribados —
+  // eso es de la siguiente entrega, junto con el mantenimiento recurrente y
+  // la lealtad).
+  const allies = (state.char.allies||[]).map(makeCombatAlly);
   combat = {
     active:true,
     node,
     enemies:enemyGroup, // slot 0 = front
+    allies,
     playerPos:'frente',
     playerStatuses:[],
     playerDefending:false,
@@ -2448,8 +2566,37 @@ function startCombat(enemyGroup, node){
     over:false
   };
   invOpen = false;
-  log(`¡Emboscada! Te enfrentas a: ${enemyGroup.map(e=>e.name).join(', ')}.`);
+  const allyText = allies.length ? ` A tu lado: ${allies.map(a=>a.name).join(', ')}.` : '';
+  log(`¡Emboscada! Te enfrentas a: ${enemyGroup.map(e=>e.name).join(', ')}.${allyText}`);
   renderAll();
+}
+
+function livingAllies(){ return (combat.allies||[]).filter(a=>a.hp>0); }
+// A quién apuntan los enemigos: si hay un aliado en el frente con vida, lo
+// intercepta a él (como un tanque real); si no, va directo al jugador. El
+// jugador nunca se pone "en el frente del grupo" en el sentido de bloquear —
+// su Frente/Retaguardia sigue siendo su propia postura de siempre.
+function frontlineTarget(){
+  const tank = livingAllies().find(a=>a.frontline);
+  if(tank) return {kind:'ally', ally:tank};
+  return {kind:'player'};
+}
+function dealDamageToAlly(ally, amount){
+  ally.hp = Math.max(0, ally.hp - amount);
+}
+
+// Estadísticas de combate del aliado, derivadas de su nivel — v1 no tiene
+// equipo ni piedras de alma propias todavía, solo la curva base por rol.
+function makeCombatAlly(row){
+  const tpl = ALLY_ROSTER.find(t=>t.templateId===row.template_id);
+  const lvl = row.level || 1;
+  const maxHP = Math.round(40 + lvl*7 + (tpl.frontline ? lvl*3 : 0));
+  const atk = Math.round(6 + lvl*1.7);
+  return {
+    id: row.id, templateId: row.template_id, name: row.name, icon: tpl.icon, role: tpl.role,
+    frontline: tpl.frontline, level: lvl,
+    maxHP, hp: maxHP, atk, statuses:[]
+  };
 }
 
 function hasStatus(list, name){ return list.find(s=>s.name===name); }
@@ -2724,7 +2871,47 @@ function playerUseSkill(skillId, targetIdx){
 function endPlayerTurn(){
   checkCombatEnd();
   if(combat.over) return;
+  resolveAllyTurns();
+  checkCombatEnd();
+  if(combat.over) return;
   processEnemyTurns();
+}
+
+// IA de aliados v1: sin habilidades propias todavía, solo un golpe básico al
+// enemigo del frente — salvo el Sacerdote, que prioriza curar a quien esté
+// más bajo de vida (tú o otro aliado) antes de atacar.
+function resolveAllyTurns(){
+  livingAllies().forEach(ally=>{
+    if(ally.hp<=0 || combat.over) return;
+    if(ally.role==='sacerdote'){
+      const d = derived();
+      const playerPct = state.char.curHP / d.maxHP;
+      const others = livingAllies().filter(a=>a!==ally);
+      const mostInjured = others.sort((a,b)=>(a.hp/a.maxHP)-(b.hp/b.maxHP))[0];
+      const allyPct = mostInjured ? mostInjured.hp/mostInjured.maxHP : 1;
+      if(playerPct < 0.5 && playerPct <= allyPct){
+        const heal = Math.round(d.maxHP*0.15);
+        const before = state.char.curHP;
+        state.char.curHP = Math.min(d.maxHP, state.char.curHP+heal);
+        log(`<b>${ally.name}</b> te cura ${state.char.curHP-before} de vida.`);
+        return;
+      }
+      if(mostInjured && allyPct < 0.5){
+        const heal = Math.round(mostInjured.maxHP*0.15);
+        const before = mostInjured.hp;
+        mostInjured.hp = Math.min(mostInjured.maxHP, mostInjured.hp+heal);
+        log(`<b>${ally.name}</b> cura a <b>${mostInjured.name}</b> ${mostInjured.hp-before} de vida.`);
+        return;
+      }
+    }
+    const fi = frontEnemyIndex();
+    if(fi<0) return;
+    const enemyTarget = combat.enemies[fi];
+    const resVal = (enemyTarget.res && enemyTarget.res.fisico) || 0;
+    const dmg = Math.max(1, Math.round(ally.atk*(1-resVal/100)));
+    enemyTarget.hp = Math.max(0, enemyTarget.hp - dmg);
+    log(`<b>${ally.name}</b> ataca a ${enemyTarget.name}: ${dmg} de daño.`);
+  });
 }
 
 function tickStatuses(list, ownerName, target){
@@ -2799,9 +2986,10 @@ function enemyAct(enemy){
   if(!enemy.cooldowns) enemy.cooldowns = {};
   Object.keys(enemy.cooldowns).forEach(k=> enemy.cooldowns[k] = Math.max(0, enemy.cooldowns[k]-1));
 
-  const {evasion} = computeCritEvasion();
+  const target = frontlineTarget();
+  const evasion = target.kind==='ally' ? 0.06 : computeCritEvasion().evasion; // v1: los aliados no tienen su propia fórmula de evasión todavía, solo una base plana
   if(chance(evasion)){
-    log(`${enemy.name} ataca, ¡pero esquivas!`);
+    log(`${enemy.name} ataca a ${target.kind==='ally' ? target.ally.name : 'ti'}, ¡pero esquiva!`);
     return;
   }
 
@@ -2838,37 +3026,54 @@ function enemyAct(enemy){
   const fortalecido = hasStatus(enemy.statuses,'Fortalecido');
   if(fortalecido) dmg = Math.round(dmg * (1 + (fortalecido.stacks||1)*0.04));
   let text = 'ataca';
+  // Los efectos negativos (Sangrado, Debilitado, Parálisis, Ceguera, Miedo,
+  // Confusión) solo tienen mecánica implementada sobre el jugador por ahora
+  // — apuntarle a un aliado con estos movimientos aún no aplica el estado,
+  // solo el daño del golpe. Los aliados con su propio set de debuffs quedan
+  // para la siguiente entrega de la Taberna.
+  const onPlayer = target.kind==='player';
   if(move==='robar'){ text='intenta robar tu oro'; dmg = Math.round(dmg*0.6); }
-  if(move==='morder'){ text='muerde, veneno en los colmillos'; applyStatus(null, {name:'Sangrado', duration:2, stack:true, maxStack:3}, true); }
-  if(move==='debilitar'){ text='drena tu fuerza'; applyStatus(null, {name:'Debilitado', duration:2}, true); dmg = Math.round(dmg*0.6); }
+  if(move==='morder'){ text='muerde, veneno en los colmillos'; if(onPlayer) applyStatus(null, {name:'Sangrado', duration:2, stack:true, maxStack:3}, true); }
+  if(move==='debilitar'){ text='drena tu fuerza'; if(onPlayer) applyStatus(null, {name:'Debilitado', duration:2}, true); dmg = Math.round(dmg*0.6); }
   if(move==='aplastar'){ text='golpea con fuerza brutal'; dmg = Math.round(dmg*1.4); }
-  if(move==='paralizar'){ text='muerde y paraliza'; applyStatus(null, {name:'Paralisis', duration:2, chance:0.5}, true); }
-  if(move==='cegar'){ text='arroja algo a tus ojos'; applyStatus(null, {name:'Ceguera', duration:2, chance:0.5, procChance:0.32}, true); }
-  if(move==='atemorizar'){ text='ruge y siembra el terror'; applyStatus(null, {name:'Miedo', duration:2, chance:0.5, procChance:0.4}, true); dmg = Math.round(dmg*0.7); }
-  if(move==='confundir'){ text='distorsiona tu percepción'; applyStatus(null, {name:'Confusion', duration:2, chance:0.5, procChance:0.35}, true); dmg = Math.round(dmg*0.7); }
+  if(move==='paralizar'){ text='muerde y paraliza'; if(onPlayer) applyStatus(null, {name:'Paralisis', duration:2, chance:0.5}, true); }
+  if(move==='cegar'){ text='arroja algo a tus ojos'; if(onPlayer) applyStatus(null, {name:'Ceguera', duration:2, chance:0.5, procChance:0.32}, true); }
+  if(move==='atemorizar'){ text='ruge y siembra el terror'; if(onPlayer) applyStatus(null, {name:'Miedo', duration:2, chance:0.5, procChance:0.4}, true); dmg = Math.round(dmg*0.7); }
+  if(move==='confundir'){ text='distorsiona tu percepción'; if(onPlayer) applyStatus(null, {name:'Confusion', duration:2, chance:0.5, procChance:0.35}, true); dmg = Math.round(dmg*0.7); }
   if(move==='area_debil'){ text='golpea a todo tu grupo por igual'; dmg = Math.round(dmg*0.5); }
 
-  // resistance vs player
-  let resVal = totalRes('fisico');
-  let finalDmg = dmg*(1-resVal/100);
-  if(state.char.race==='enano') finalDmg -= 2;
-  if(combat.playerDefending) finalDmg *= 0.5;
-  const furiosoBuff = hasStatus(combat.playerStatuses,'Furioso');
-  if(furiosoBuff && furiosoBuff.incomingDmgReduction) finalDmg *= (1 - furiosoBuff.incomingDmgReduction);
-  if(hasStatus(combat.playerStatuses,'Paralisis')) finalDmg *= 1.25; // indefenso: sin evasión y más daño recibido
-  finalDmg = Math.max(1, Math.round(finalDmg));
-
-  dealDamageToPlayer(finalDmg);
-  log(`${enemy.name} ${text}: ${finalDmg} de daño.`);
+  let finalDmg;
+  if(onPlayer){
+    // resistance vs player
+    let resVal = totalRes('fisico');
+    finalDmg = dmg*(1-resVal/100);
+    if(state.char.race==='enano') finalDmg -= 2;
+    if(combat.playerDefending) finalDmg *= 0.5;
+    const furiosoBuff = hasStatus(combat.playerStatuses,'Furioso');
+    if(furiosoBuff && furiosoBuff.incomingDmgReduction) finalDmg *= (1 - furiosoBuff.incomingDmgReduction);
+    if(hasStatus(combat.playerStatuses,'Paralisis')) finalDmg *= 1.25; // indefenso: sin evasión y más daño recibido
+    finalDmg = Math.max(1, Math.round(finalDmg));
+    dealDamageToPlayer(finalDmg);
+    log(`${enemy.name} ${text}: ${finalDmg} de daño.`);
+  } else {
+    finalDmg = Math.max(1, Math.round(dmg));
+    dealDamageToAlly(target.ally, finalDmg);
+    log(`${enemy.name} ${text} a ${target.ally.name}: ${finalDmg} de daño.`);
+    if(target.ally.hp<=0) log(`<b>${target.ally.name}</b> cae en combate — se recuperará al terminar la pelea.`);
+  }
 
   // Vitalidad: devuelve un % del daño físico recibido a quien lo infligió
-  socketedStones().forEach(s=>{
-    if(s.special && s.special.type==='reflect'){
-      const reflected = Math.max(1, Math.round(finalDmg*s.special.pct));
-      enemy.hp = Math.max(0, enemy.hp-reflected);
-      log(`<b>${s.name}</b> devuelve ${reflected} de daño a ${enemy.name}.`);
-    }
-  });
+  // (piedra engarzada del jugador, así que solo aplica cuando el golpe fue
+  // contra el propio jugador).
+  if(onPlayer){
+    socketedStones().forEach(s=>{
+      if(s.special && s.special.type==='reflect'){
+        const reflected = Math.max(1, Math.round(finalDmg*s.special.pct));
+        enemy.hp = Math.max(0, enemy.hp-reflected);
+        log(`<b>${s.name}</b> devuelve ${reflected} de daño a ${enemy.name}.`);
+      }
+    });
+  }
 }
 
 function checkCombatEnd(){
@@ -3043,7 +3248,7 @@ const TUTORIAL_SLIDES = [
   {title:'Entrar al laberinto', body:'Avanzas piso a piso por sendas: solo puedes moverte a la senda igual o adyacente a la tuya, nunca saltar de un extremo al otro. Cada piso tiene combates, cofres, descansos y de vez en cuando un élite.'},
   {title:'El Hogar', body:'Guarda equipo, pociones y oro. Nada de lo que dejes aquí se pierde si mueres en el laberinto — solo se pierde lo que llevas encima.'},
   {title:'El Gremio', body:'Un tablón de 10 misiones que se refresca cada 12 horas. Complétalas para ganar oro, experiencia y Sellos del Laberinto, canjeables por equipo Único y Épico. Si una misión no te gusta, puedes refrescarla hasta 3 veces por tablón.'},
-  {title:'La Taberna', body:'Aquí reclutarás aliados — guerreros, arqueros, asesinos, magos y sacerdotes — que pelean a tu lado. Cuestan oro mantener, suben de nivel contigo, y confiar en el aliado equivocado tiene sus riesgos.'},
+  {title:'La Taberna', body:'Desde nivel 10, recluta aliados — guerrero, arquero, asesino, mago o sacerdote — pagando oro una sola vez. Pelean junto a ti de forma automática: el que tiene rol de tanque ocupa el Frente y absorbe los golpes por ti.'},
   {title:'Ranking', body:'Tu récord personal (el piso más profundo que has alcanzado) y el top 10 de todos los jugadores.'},
   {title:'Combate por turnos', body:'Cada turno eliges una habilidad o acción. Frente y Retaguardia son tus dos posiciones: la mayoría de golpes físicos fuertes exigen estar en el Frente; la Retaguardia da +8% de evasión y favorece las habilidades a distancia.'},
   {title:'MP y Espíritu', body:'El MP paga tus habilidades físicas. El Espíritu paga las mágicas y de utilidad, y también aumenta tu daño mágico. Reposicionarte cambia entre Frente y Retaguardia, y ocupa tu turno.'},
@@ -3122,6 +3327,21 @@ function renderCombat(){
 
   const playerStatusChips = combat.playerStatuses.map(st=>`<span class="status-chip">${st.name} (${st.duration})</span>`).join('');
 
+  const allyHTML = (combat.allies||[]).map(a=>{
+    const dead = a.hp<=0;
+    const hpPct = clamp(a.hp/a.maxHP*100, 0, 100);
+    const statusChips = (a.statuses||[]).map(st=>`<span class="status-chip">${st.name}${st.stacks?(' x'+st.stacks):''} (${st.duration})</span>`).join('');
+    return `<div class="enemy-card ${dead?'dead':''}">
+      <div class="ei">${a.icon}</div>
+      <div class="einfo">
+        <div class="ename"><span>${a.name}</span>${a.frontline ? '<span class="slot-tag">Frente</span>' : ''}</div>
+        <div class="bar-track" style="margin-top:4px;"><div class="bar-fill hp" style="width:${hpPct}%"></div></div>
+        <div style="font-size:0.7em; color:var(--text-dim); margin-top:2px;">${a.hp}/${a.maxHP} HP</div>
+        <div>${statusChips}</div>
+      </div>
+    </div>`;
+  }).join('');
+
   const skillButtons = skillIds.map(sid=>{
     const sk = SKILLS[sid];
     let disabled = false;
@@ -3172,6 +3392,7 @@ function renderCombat(){
           <div style="margin-top:6px; font-size:0.85em;">${state.char.curHP} / ${d.maxHP} HP</div>
           <div style="margin-top:6px;">${playerStatusChips || '<span style="color:var(--text-dim); font-size:0.75em;">Sin efectos activos</span>'}</div>
         </div>
+        ${allyHTML ? `<h4 style="margin-top:10px;">Tu equipo</h4><div class="enemy-slots">${allyHTML}</div>` : ''}
       </div>
       <div class="combat-side">
         <h4>Enemigos</h4>
@@ -3469,6 +3690,7 @@ function enterCharacter(row){
   showScreen('screen-game');
   renderAll();
   refreshMissionsState();
+  refreshAlliesState();
   let tutorialSeen = false;
   try{ tutorialSeen = localStorage.getItem('dsTutorialSeen')==='1'; }catch(e){}
   if(!tutorialSeen) showTutorial();
