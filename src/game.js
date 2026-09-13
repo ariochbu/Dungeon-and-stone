@@ -485,30 +485,43 @@ const GUARDIAN_SLOT_NAMES = {
   botas:['Botas del guardián','Grebas vigilantes','Sandalias del custodio'],
   guantes:['Guanteletes del guardián','Manoplas vigilantes','Garras del custodio']
 };
+// Rareza garantizada del guardián según la década — sube con la profundidad.
+// La década 1 (pisos 1-10) ya no da recompensa asegurada: con el sistema de
+// rangos activo, ese hueco ahora lo cubre el loot normal + la tienda de Sellos.
+function guardianRewardRarity(decade){
+  if(decade<=1) return 'poco_comun';
+  if(decade<=3) return 'rango_b';
+  return 'rango_a';
+}
 function generateGuardianReward(level){
-  const slot = GUARDIAN_REWARD_SLOTS[level];
+  const decade = decadeIndexForLevel(level);
+  if(decade===0) return null;
+  const slot = GUARDIAN_REWARD_SLOTS[((level-1)%10)+1];
   if(!slot) return null;
+  const rarity = guardianRewardRarity(decade);
+  const weaponBonus = rarity==='rango_a' ? RANGO_A_WEAPON_BONUS : rarity==='rango_b' ? RANGO_B_WEAPON_BONUS : POCO_COMUN_WEAPON_BONUS;
+  const resPct = rarity==='rango_a' ? RANGO_A_RES_PCT : rarity==='rango_b' ? RANGO_B_RES_PCT : POCO_COMUN_RES_PCT;
   const styleId = state.char.style;
   const opts = WEAPON_OPTIONS[styleId] || WEAPON_OPTIONS.pesada;
   let name, bonus, special = null;
   if(slot==='arma' || slot==='arma2'){
     name = pick(opts[slot]) + ' del guardián';
     const statKey = SHOP_WEAPON_STAT[styleId] || 'fis';
-    bonus = {stat:statKey, value: POCO_COMUN_WEAPON_BONUS};
+    bonus = {stat:statKey, value: weaponBonus};
     special = SPECIALS_BY_STYLE[styleId] || null;
   } else if(slot==='armadura'){
     name = pick(['Coraza del guardián','Placa ancestral','Manto del vigía']);
-    bonus = {stat:'maxhp', value: 3 + Math.floor(state.char.level/2)};
+    bonus = {stat:'maxhp', value: 3 + Math.floor(state.char.level/2) + decade*2};
   } else if(slot==='amuleto'){
     name = pick(['Sello del guardián','Reliquia custodiada','Talismán antiguo']);
     const resKeys = ['fisico','fuego','hielo','veneno','aturdimiento'];
-    bonus = {res: pick(resKeys), value: POCO_COMUN_RES_PCT};
+    bonus = {res: pick(resKeys), value: resPct};
   } else {
     // casco, botas, guantes
     name = pick(GUARDIAN_SLOT_NAMES[slot]);
-    bonus = {stat: GUARDIAN_SLOT_STAT[slot], value: 3 + Math.floor(state.char.level/3)};
+    bonus = {stat: GUARDIAN_SLOT_STAT[slot], value: 3 + Math.floor(state.char.level/3) + decade*2};
   }
-  const item = {slot, name, bonus, rarity:'poco_comun'};
+  const item = {slot, name, bonus, rarity};
   if(special) item.special = special;
   return item;
 }
@@ -2277,7 +2290,7 @@ function enterNode(f,n){
     state.char.gold += gold;
     let msg = `Encuentras un cofre. +${gold} de oro.`;
     if(chance(0.6)){
-      const item = generateLoot(f);
+      const item = generateLoot(f, dg.level);
       addToInventory(item);
       msg += item.kind==='potion'
         ? ` También hallas: <b>${POTION_TEMPLATES[item.potionId].name}</b> (guardada en la mochila).`
@@ -2309,16 +2322,32 @@ const COMUN_GEAR_NAMES = {
   botas:['Botas de cuero curtido','Sandalias del errante','Grebas oxidadas','Zapatillas silenciosas'],
   guantes:['Guanteletes de hierro','Manoplas raídas','Guantes de esgrima','Zarpas envueltas']
 };
-function generateLoot(floorIdx){
+// A partir de qué década empieza a caer cada rareza, y con qué peso — el
+// equipo suelto del laberinto ahora sube de rango con la profundidad, no
+// solo la tienda de Sellos.
+const LOOT_RES_PCT = {comun:COMUN_RES_PCT, poco_comun:POCO_COMUN_RES_PCT, rango_b:RANGO_B_RES_PCT, rango_a:RANGO_A_RES_PCT};
+const LOOT_STAT_MULT = {comun:1, poco_comun:1.6, rango_b:2.5, rango_a:3.5};
+function lootRarityForLevel(level){
+  const decade = decadeIndexForLevel(level||1);
+  const roll = Math.random();
+  if(decade<=0) return 'comun';
+  if(decade===1) return roll<0.75 ? 'comun' : 'poco_comun';
+  if(decade===2) return roll<0.55 ? 'comun' : (roll<0.9 ? 'poco_comun' : 'rango_b');
+  if(decade===3) return roll<0.4 ? 'comun' : (roll<0.75 ? 'poco_comun' : (roll<0.95 ? 'rango_b' : 'rango_a'));
+  if(decade===4) return roll<0.25 ? 'poco_comun' : (roll<0.7 ? 'rango_b' : 'rango_a');
+  return roll<0.5 ? 'rango_b' : 'rango_a'; // década 5
+}
+function generateLoot(floorIdx, level){
   if(chance(0.4)){
     return {kind:'potion', potionId: pick(Object.keys(POTION_TEMPLATES))};
   }
+  const rarity = lootRarityForLevel(level||1);
   const slot = pick(['arma','armadura','amuleto','casco','botas','guantes']);
   const statPool = ['fis','esp','hab','maxhp'];
   const kind = chance(0.65) ? {stat: pick(statPool)} : {res: pick(['fisico','fuego','hielo','veneno','aturdimiento'])};
-  const value = rnd(1,2) + Math.floor(floorIdx/2);
+  const value = Math.round((rnd(1,2) + Math.floor(floorIdx/2)) * LOOT_STAT_MULT[rarity]);
   const name = pick(COMUN_GEAR_NAMES[slot]);
-  return {kind:'equip', slot, name, bonus: kind.stat ? {stat:kind.stat, value} : {res:kind.res, value: COMUN_RES_PCT}, rarity:'comun'};
+  return {kind:'equip', slot, name, bonus: kind.stat ? {stat:kind.stat, value} : {res:kind.res, value: LOOT_RES_PCT[rarity]}, rarity};
 }
 
 /* ============================================================
@@ -2826,7 +2855,7 @@ function handleVictory(){
 
   if(isElite || isBoss){
     if(chance(0.8)){
-      const item = generateLoot(state.dungeon.atFloor);
+      const item = generateLoot(state.dungeon.atFloor, state.dungeon.level);
       addToInventory(item);
       log(item.kind==='potion'
         ? `También obtienes: <b>${POTION_TEMPLATES[item.potionId].name}</b> (guardada en la mochila).`
