@@ -1812,6 +1812,29 @@ async function refreshAlliesState(){
   state.char.allies = await loadAllies();
 }
 
+// Cada aliado sube de nivel igual que el personaje (misma curva de
+// xpNeededForLevel), pero por su cuenta: recibe el xpGain COMPLETO de cada
+// victoria, sin dividirlo entre el equipo.
+async function advanceAllyXp(xpGain){
+  const allies = state.char.allies;
+  if(!allies || !allies.length) return;
+  for(const row of allies){
+    row.xp = (row.xp||0) + xpGain;
+    let needed = xpNeededForLevel(row.level);
+    let leveled = false;
+    while(row.level < CHAR_LEVEL_CAP && row.xp >= needed){
+      row.xp -= needed;
+      row.level += 1;
+      leveled = true;
+      needed = xpNeededForLevel(row.level);
+    }
+    if(row.level >= CHAR_LEVEL_CAP) row.xp = 0;
+    if(leveled) log(`<b>${row.name}</b> sube a nivel ${row.level}.`);
+    const { error } = await supabase.from('character_allies').update({level: row.level, xp: row.xp}).eq('id', row.id);
+    if(error) console.error('No se pudo guardar el progreso del aliado:', error.message);
+  }
+}
+
 async function hireAlly(templateId){
   const tpl = ALLY_ROSTER.find(t=>t.templateId===templateId);
   if(!tpl) return;
@@ -1850,10 +1873,15 @@ function renderTaberna(){
   const allies = state.char.allies || [];
   const hiredHTML = allies.length ? allies.map(a=>{
     const tpl = ALLY_ROSTER.find(t=>t.templateId===a.template_id) || {};
+    const needed = xpNeededForLevel(a.level);
+    const xpPct = a.level>=CHAR_LEVEL_CAP ? 100 : clamp((a.xp||0)/needed*100, 0, 100);
+    const xpText = a.level>=CHAR_LEVEL_CAP ? 'Nivel máximo' : `${a.xp||0} / ${needed} exp`;
     return `<div class="inv-item-row">
       <div>
         <b>${tpl.icon||'⚔️'} ${a.name}</b> <span class="slot-tag">${a.role} · nivel ${a.level}</span>
         <div class="inv-item-bonus neutral">${tpl.bio||''}</div>
+        <div class="bar-track" style="margin-top:6px;"><div class="bar-fill xp" style="width:${xpPct}%"></div></div>
+        <div style="font-size:0.7em; color:var(--text-dim); margin-top:2px;">${xpText}</div>
       </div>
       <button class="inv-btn danger" data-dismiss="${a.id}">Despedir</button>
     </div>`;
@@ -3165,6 +3193,10 @@ function handleVictory(){
   state.char.gold += goldGain;
   log(`Victoria. +${xpGain} experiencia, +${goldGain} de oro.`);
   combat.node.done = true;
+
+  // La experiencia no se reparte: cada aliado recibe el mismo xpGain completo
+  // que tú, no una fracción — así todos evolucionan al mismo ritmo que el equipo.
+  advanceAllyXp(xpGain);
 
   if(isElite) advanceMissionsFor('kill_elites', 1);
   if(isBoss) advanceMissionsFor('defeat_guardian', 1);
