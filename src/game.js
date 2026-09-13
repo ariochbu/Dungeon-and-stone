@@ -295,6 +295,7 @@ const POTION_TEMPLATES = {
 const RARITIES = {
   comun: {id:'comun', name:'Común', color:'#a3a3a3'},
   poco_comun: {id:'poco_comun', name:'Poco común', color:'#3ecf6e'},
+  raro: {id:'raro', name:'Raro', color:'#8a7fd1'}, // mismo color que SOUL_TIER_COLORS.C — mismo escalón en la misma escala de letras
   rango_b: {id:'rango_b', name:'Rango B', color:'#c17fd1'},
   rango_a: {id:'rango_a', name:'Rango A', color:'#d1a84f'}
   // futuras rarezas (pendientes de implementar): S, SS (SS será numerado/único mundial)
@@ -310,6 +311,10 @@ const RANGO_A_WEAPON_BONUS = 20;
 const COMUN_RES_PCT = 5;
 const POCO_COMUN_RES_PCT = 12;
 const POCO_COMUN_WEAPON_BONUS = 8;
+// Raro (C): un escalón entre Poco Común y Único (B) — levemente por encima
+// del primero, levemente por debajo del segundo, como se pidió.
+const RARO_RES_PCT = 16;
+const RARO_WEAPON_BONUS = 11;
 
 // weapon/offhand options the shop sells, keyed by combat style; each subclass can only
 // buy the gear that fits its playstyle (heavy weapons + shield, dual blades, bow + quiver, staff + focus)
@@ -440,6 +445,38 @@ function buyGearPocoComun(slot){
   renderAll(); save();
 }
 
+// Raro (C): un escalón por encima de Poco Común, todavía con oro — el techo
+// del oro antes de tener que pasar a Sellos del Gremio por Único/Épico.
+function shopGearPriceRaro(slot){ return Math.round(shopGearPrice(slot) * 3.4); }
+function shopGearValueRaro(slot){ return slot==='armadura' ? 6 + Math.floor(state.char.level/2) : 6 + Math.floor(state.char.level/3); }
+function buyGearRaro(slot){
+  const price = shopGearPriceRaro(slot);
+  if(state.char.gold < price){ log('No tienes suficiente oro para eso.'); return; }
+  state.char.gold -= price;
+  const name = pick(COMUN_GEAR_NAMES[slot]);
+  const bonus = slot==='amuleto'
+    ? {res: pick(['fisico','fuego','hielo','veneno','aturdimiento']), value: RARO_RES_PCT}
+    : {stat: GUARDIAN_SLOT_STAT[slot] || 'maxhp', value: shopGearValueRaro(slot)};
+  addToInventory({slot, name, bonus, rarity:'raro'});
+  log(`Compras <b>${name}</b> por ${price} de oro.`);
+  renderAll(); save();
+}
+// Arma Raro (C): mismo trato que la de senda común, pero con más bono de daño.
+function shopWeaponPriceRaro(isOffhand){ return Math.round(shopWeaponPrice(isOffhand) * 2.6); }
+function buyWeaponRaro(slot, styleId){
+  styleId = styleId || state.char.style;
+  const opts = WEAPON_OPTIONS[styleId];
+  if(!opts || !opts[slot]) return;
+  const price = shopWeaponPriceRaro(slot==='arma2');
+  if(state.char.gold < price){ log('No tienes suficiente oro para eso.'); return; }
+  state.char.gold -= price;
+  const name = pick(opts[slot]);
+  const statKey = SHOP_WEAPON_STAT[styleId] || 'fis';
+  addToInventory({slot, name, bonus:{stat:statKey, value:RARO_WEAPON_BONUS}, rarity:'raro'});
+  log(`Compras <b>${name}</b> por ${price} de oro (guardada en la mochila).`);
+  renderAll(); save();
+}
+
 // Tienda del Gremio: se paga con Sellos del Laberinto (misiones), no con oro.
 // Vende equipo de rango Único (B) y Épico (A) — Legendario (S) todavía no está
 // definido, así que no se vende aquí.
@@ -538,7 +575,8 @@ const GUARDIAN_SLOT_NAMES = {
 // rangos activo, ese hueco ahora lo cubre el loot normal + la tienda de Sellos.
 function guardianRewardRarity(decade){
   if(decade<=1) return 'poco_comun';
-  if(decade<=3) return 'rango_b';
+  if(decade===2) return 'raro';
+  if(decade===3) return 'rango_b';
   return 'rango_a';
 }
 function generateGuardianReward(level){
@@ -547,8 +585,8 @@ function generateGuardianReward(level){
   const slot = GUARDIAN_REWARD_SLOTS[((level-1)%10)+1];
   if(!slot) return null;
   const rarity = guardianRewardRarity(decade);
-  const weaponBonus = rarity==='rango_a' ? RANGO_A_WEAPON_BONUS : rarity==='rango_b' ? RANGO_B_WEAPON_BONUS : POCO_COMUN_WEAPON_BONUS;
-  const resPct = rarity==='rango_a' ? RANGO_A_RES_PCT : rarity==='rango_b' ? RANGO_B_RES_PCT : POCO_COMUN_RES_PCT;
+  const weaponBonus = {rango_a:RANGO_A_WEAPON_BONUS, rango_b:RANGO_B_WEAPON_BONUS, raro:RARO_WEAPON_BONUS}[rarity] || POCO_COMUN_WEAPON_BONUS;
+  const resPct = {rango_a:RANGO_A_RES_PCT, rango_b:RANGO_B_RES_PCT, raro:RARO_RES_PCT}[rarity] || POCO_COMUN_RES_PCT;
   // Ya no se restringe a tu propio estilo: el objeto va a la mochila
   // compartida y decides tú después a quién equipárselo, así que el
   // guardián puede soltar el arma de cualquiera de los 5 roles.
@@ -584,13 +622,28 @@ function generateGuardianReward(level){
    rango numérico 9 (débil) a 1 (fuerte), no piedras con letras. Este sistema
    sigue siendo una capa propia de nuestro juego, con el ranking pedido:
    E (más bajo) < F < D < C < B < A < S < SS (más alto).
-   Solo caen piedras de rango E y F por ahora. Las fórmulas de D/C/B ya están
-   listas (se duplican por rango, igual que E→F), y las de A/S/SS también
-   (efectos "avanzados" que empiezan en A y suben +10 puntos porcentuales por
-   rango) — simplemente no hay forma de conseguir esos rangos todavía. */
+   E-A ya son obtenibles (S/SS siguen reservados: numerados/únicos mundiales,
+   pendientes de su propio sistema). Los efectos "avanzados" de A prometidos
+   en el preview de cada familia (escudo de maná, mitad de costo, doble
+   lanzamiento, autocuración, revivir, invocar sombra) todavía no tienen
+   código de combate propio — solo Vigor cambia de verdad en A (roba vida,
+   que ya es un special genérico existente); el resto se queda con su efecto
+   de F escalado hasta que esa mecánica nueva se construya. */
 const SOUL_STONE_TIERS = ['E','F','D','C','B','A','S','SS']; // ascendente: E la más baja, SS la más alta
-const AVAILABLE_SOUL_TIERS = ['E','F']; // únicos rangos obtenibles por ahora
+const AVAILABLE_SOUL_TIERS = ['E','F','D','C','B','A']; // rangos obtenibles hoy (S/SS reservados)
 const SOUL_TIER_COLORS = {E:'#9a9a9a', F:'#6fae6f', D:'#4f9bd1', C:'#8a7fd1', B:'#c17fd1', A:'#d1a84f', S:'#d1594f', SS:'#e23c6b'};
+// Qué rangos puede soltar un guardián/misión según la década del piso — igual
+// que lootRarityForLevel() hace con el equipo, para que una piedra A no caiga
+// ya en el piso 4 solo porque el rango existe en el sistema.
+const SOUL_TIER_BAND_BY_DECADE = [
+  ['E','F'], ['F','D'], ['D','C'], ['C','B'], ['B','A'], ['B','A']
+];
+function soulTierPoolForLevel(level){
+  const decade = decadeIndexForLevel(level||1);
+  const band = SOUL_TIER_BAND_BY_DECADE[Math.min(SOUL_TIER_BAND_BY_DECADE.length-1, decade)];
+  const allowed = band.filter(t=>AVAILABLE_SOUL_TIERS.includes(t));
+  return allowed.length ? allowed : AVAILABLE_SOUL_TIERS;
+}
 function soulTierIdx(tier){ return SOUL_STONE_TIERS.indexOf(tier); }
 
 // Fórmulas de escalado por familia (documentadas para cuando D-SS estén disponibles).
@@ -665,7 +718,106 @@ const SOUL_STONES = {
     desc:'+3% de probabilidad de esquivar cualquier ataque.', preview:'Desde A: probabilidad de invocar una sombra que atrae el agro de los enemigos (1% en A, 5% en S, 10% en SS; máximo una sombra a la vez).'},
   sombra_f:    {id:'sombra_f',    family:'sombra',    name:'Piedra del Alma: Sombra Cazadora (F)',  tier:'F', icon:'🌑',
     special:{type:'evasion_flat', value:0.06},
-    desc:'+6% de probabilidad de esquivar cualquier ataque.', preview:'Desde A: probabilidad de invocar una sombra que atrae el agro de los enemigos (1% en A, 5% en S, 10% en SS; máximo una sombra a la vez).'}
+    desc:'+6% de probabilidad de esquivar cualquier ataque.', preview:'Desde A: probabilidad de invocar una sombra que atrae el agro de los enemigos (1% en A, 5% en S, 10% en SS; máximo una sombra a la vez).'},
+
+  // Rangos D-A: mismas fórmulas de escalado documentadas arriba (se duplican
+  // por rango), ya activas. El "efecto avanzado" prometido en A para
+  // Sabiduría/Voluntad/Instinto/Vitalidad/Furia/Sombra (escudo de maná, mitad
+  // de costo, doble lanzamiento, autocuración, revivir, invocar sombra) no
+  // tiene código de combate propio todavía — esas piedras se quedan con el
+  // efecto de F escalado hasta que se implemente esa mecánica nueva. Vigor sí
+  // cambia en A porque el robo de vida ya es un special genérico existente
+  // (aplica igual desde un arma o desde una piedra).
+  vigor_d:     {id:'vigor_d',     family:'vigor',     name:'Piedra del Alma: Vigor (D)',            tier:'D', icon:'🟤', bonus:{stat:'fis', value:16},
+    special:{type:'aturdir', chance:0.04},
+    desc:'+16 Físico. 4% de probabilidad de aturdir al enemigo al golpear.', preview:'Desde A: roba vida (% del daño causado).'},
+  vigor_c:     {id:'vigor_c',     family:'vigor',     name:'Piedra del Alma: Vigor (C)',            tier:'C', icon:'🟤', bonus:{stat:'fis', value:32},
+    special:{type:'aturdir', chance:0.08},
+    desc:'+32 Físico. 8% de probabilidad de aturdir al enemigo al golpear.', preview:'Desde A: roba vida (% del daño causado).'},
+  vigor_b:     {id:'vigor_b',     family:'vigor',     name:'Piedra del Alma: Vigor (B)',            tier:'B', icon:'🟤', bonus:{stat:'fis', value:64},
+    special:{type:'aturdir', chance:0.16},
+    desc:'+64 Físico. 16% de probabilidad de aturdir al enemigo al golpear.', preview:'Desde A: roba vida (% del daño causado).'},
+  vigor_a:     {id:'vigor_a',     family:'vigor',     name:'Piedra del Alma: Vigor (A)',            tier:'A', icon:'🟤', bonus:{stat:'fis', value:128},
+    special:{type:'robovida', percent:0.10},
+    desc:'+128 Físico. Robas el 10% del daño físico que causas como vida.'},
+
+  sabiduria_d: {id:'sabiduria_d', family:'sabiduria', name:'Piedra del Alma: Sabiduría (D)',        tier:'D', icon:'📘', bonus:{stat:'maxsta', value:64},
+    special:{type:'mp_refund', chance:0.10, amount:0.05},
+    desc:'+64 MP máximo. 10% de probabilidad de recuperar el 5% del MP gastado.', preview:'Desde A: probabilidad de escudo de maná (pendiente de implementar).'},
+  sabiduria_c: {id:'sabiduria_c', family:'sabiduria', name:'Piedra del Alma: Sabiduría (C)',        tier:'C', icon:'📘', bonus:{stat:'maxsta', value:128},
+    special:{type:'mp_refund', chance:0.20, amount:0.05},
+    desc:'+128 MP máximo. 20% de probabilidad de recuperar el 5% del MP gastado.', preview:'Desde A: probabilidad de escudo de maná (pendiente de implementar).'},
+  sabiduria_b: {id:'sabiduria_b', family:'sabiduria', name:'Piedra del Alma: Sabiduría (B)',        tier:'B', icon:'📘', bonus:{stat:'maxsta', value:256},
+    special:{type:'mp_refund', chance:0.40, amount:0.05},
+    desc:'+256 MP máximo. 40% de probabilidad de recuperar el 5% del MP gastado.', preview:'Desde A: probabilidad de escudo de maná (pendiente de implementar).'},
+  sabiduria_a: {id:'sabiduria_a', family:'sabiduria', name:'Piedra del Alma: Sabiduría (A)',        tier:'A', icon:'📘', bonus:{stat:'maxsta', value:512},
+    special:{type:'mp_refund', chance:0.80, amount:0.05},
+    desc:'+512 MP máximo. 80% de probabilidad de recuperar el 5% del MP gastado. (El escudo de maná prometido en este rango todavía no está implementado.)'},
+
+  voluntad_d:  {id:'voluntad_d',  family:'voluntad',  name:'Piedra del Alma: Voluntad (D)',         tier:'D', icon:'🔷', bonus:{stat:'esp', value:16},
+    special:{type:'esp_refund', chance:0.10, amount:0.05},
+    desc:'+16 Espíritu. 10% de probabilidad de recuperar el 5% del espíritu gastado.', preview:'Desde A: próxima habilidad a mitad de costo (pendiente de implementar).'},
+  voluntad_c:  {id:'voluntad_c',  family:'voluntad',  name:'Piedra del Alma: Voluntad (C)',         tier:'C', icon:'🔷', bonus:{stat:'esp', value:32},
+    special:{type:'esp_refund', chance:0.20, amount:0.05},
+    desc:'+32 Espíritu. 20% de probabilidad de recuperar el 5% del espíritu gastado.', preview:'Desde A: próxima habilidad a mitad de costo (pendiente de implementar).'},
+  voluntad_b:  {id:'voluntad_b',  family:'voluntad',  name:'Piedra del Alma: Voluntad (B)',         tier:'B', icon:'🔷', bonus:{stat:'esp', value:64},
+    special:{type:'esp_refund', chance:0.40, amount:0.05},
+    desc:'+64 Espíritu. 40% de probabilidad de recuperar el 5% del espíritu gastado.', preview:'Desde A: próxima habilidad a mitad de costo (pendiente de implementar).'},
+  voluntad_a:  {id:'voluntad_a',  family:'voluntad',  name:'Piedra del Alma: Voluntad (A)',         tier:'A', icon:'🔷', bonus:{stat:'esp', value:128},
+    special:{type:'esp_refund', chance:0.80, amount:0.05},
+    desc:'+128 Espíritu. 80% de probabilidad de recuperar el 5% del espíritu gastado. (La mitad de costo prometida en este rango todavía no está implementada.)'},
+
+  instinto_d:  {id:'instinto_d',  family:'instinto',  name:'Piedra del Alma: Instinto (D)',         tier:'D', icon:'🟢', bonus:{stat:'hab', value:16},
+    special:{type:'elemental_proc', chance:0.04},
+    desc:'+16 Habilidad. 4% de probabilidad de quemar o congelar/ralentizar al enemigo, según la habilidad usada.', preview:'Desde A: doble lanzamiento (pendiente de implementar).'},
+  instinto_c:  {id:'instinto_c',  family:'instinto',  name:'Piedra del Alma: Instinto (C)',         tier:'C', icon:'🟢', bonus:{stat:'hab', value:32},
+    special:{type:'elemental_proc', chance:0.08},
+    desc:'+32 Habilidad. 8% de probabilidad de quemar o congelar/ralentizar al enemigo, según la habilidad usada.', preview:'Desde A: doble lanzamiento (pendiente de implementar).'},
+  instinto_b:  {id:'instinto_b',  family:'instinto',  name:'Piedra del Alma: Instinto (B)',         tier:'B', icon:'🟢', bonus:{stat:'hab', value:64},
+    special:{type:'elemental_proc', chance:0.16},
+    desc:'+64 Habilidad. 16% de probabilidad de quemar o congelar/ralentizar al enemigo, según la habilidad usada.', preview:'Desde A: doble lanzamiento (pendiente de implementar).'},
+  instinto_a:  {id:'instinto_a',  family:'instinto',  name:'Piedra del Alma: Instinto (A)',         tier:'A', icon:'🟢', bonus:{stat:'hab', value:128},
+    special:{type:'elemental_proc', chance:0.32},
+    desc:'+128 Habilidad. 32% de probabilidad de quemar o congelar/ralentizar al enemigo, según la habilidad usada. (El doble lanzamiento prometido en este rango todavía no está implementado.)'},
+
+  vitalidad_d: {id:'vitalidad_d', family:'vitalidad', name:'Piedra del Alma: Vitalidad (D)',        tier:'D', icon:'❤️', bonus:{stat:'maxhp', value:8},
+    special:{type:'reflect', pct:0.04},
+    desc:'+64 Vida máxima aprox. Devuelves el 4% del daño físico que recibes a tu atacante.', preview:'Desde A: probabilidad de autocurarte (pendiente de implementar).'},
+  vitalidad_c: {id:'vitalidad_c', family:'vitalidad', name:'Piedra del Alma: Vitalidad (C)',        tier:'C', icon:'❤️', bonus:{stat:'maxhp', value:16},
+    special:{type:'reflect', pct:0.08},
+    desc:'+128 Vida máxima aprox. Devuelves el 8% del daño físico que recibes a tu atacante.', preview:'Desde A: probabilidad de autocurarte (pendiente de implementar).'},
+  vitalidad_b: {id:'vitalidad_b', family:'vitalidad', name:'Piedra del Alma: Vitalidad (B)',        tier:'B', icon:'❤️', bonus:{stat:'maxhp', value:32},
+    special:{type:'reflect', pct:0.16},
+    desc:'+256 Vida máxima aprox. Devuelves el 16% del daño físico que recibes a tu atacante.', preview:'Desde A: probabilidad de autocurarte (pendiente de implementar).'},
+  vitalidad_a: {id:'vitalidad_a', family:'vitalidad', name:'Piedra del Alma: Vitalidad (A)',        tier:'A', icon:'❤️', bonus:{stat:'maxhp', value:64},
+    special:{type:'reflect', pct:0.32},
+    desc:'+512 Vida máxima aprox. Devuelves el 32% del daño físico que recibes a tu atacante. (La autocuración prometida en este rango todavía no está implementada.)'},
+
+  furia_d:     {id:'furia_d',     family:'furia',     name:'Piedra del Alma: Furia Contenida (D)',  tier:'D', icon:'🔥',
+    special:{type:'lowhp_dmg_v2', threshold:0.3, base:soulFuriaBase('D'), missingScale:soulFuriaMissingScale('D')},
+    desc:'Por debajo del 30% de vida: +18.1% de daño, y +0.7% adicional por cada 1% de vida que te falte.', preview:'Desde A: probabilidad de revivir una vez por entrada al laberinto (pendiente de implementar).'},
+  furia_c:     {id:'furia_c',     family:'furia',     name:'Piedra del Alma: Furia Contenida (C)',  tier:'C', icon:'🔥',
+    special:{type:'lowhp_dmg_v2', threshold:0.3, base:soulFuriaBase('C'), missingScale:soulFuriaMissingScale('C')},
+    desc:'Por debajo del 30% de vida: +18.2% de daño, y +0.8% adicional por cada 1% de vida que te falte.', preview:'Desde A: probabilidad de revivir una vez por entrada al laberinto (pendiente de implementar).'},
+  furia_b:     {id:'furia_b',     family:'furia',     name:'Piedra del Alma: Furia Contenida (B)',  tier:'B', icon:'🔥',
+    special:{type:'lowhp_dmg_v2', threshold:0.3, base:soulFuriaBase('B'), missingScale:soulFuriaMissingScale('B')},
+    desc:'Por debajo del 30% de vida: +18.3% de daño, y +0.9% adicional por cada 1% de vida que te falte.', preview:'Desde A: probabilidad de revivir una vez por entrada al laberinto (pendiente de implementar).'},
+  furia_a:     {id:'furia_a',     family:'furia',     name:'Piedra del Alma: Furia Contenida (A)',  tier:'A', icon:'🔥',
+    special:{type:'lowhp_dmg_v2', threshold:0.3, base:soulFuriaBase('A'), missingScale:soulFuriaMissingScale('A')},
+    desc:'Por debajo del 30% de vida: +18.4% de daño, y +1.0% adicional por cada 1% de vida que te falte. (Revivir una vez, prometido en este rango, todavía no está implementado.)'},
+
+  sombra_d:    {id:'sombra_d',    family:'sombra',    name:'Piedra del Alma: Sombra Cazadora (D)',  tier:'D', icon:'🌑',
+    special:{type:'evasion_flat', value:0.09},
+    desc:'+9% de probabilidad de esquivar cualquier ataque.', preview:'Desde A: invocar una sombra que atrae el agro (pendiente de implementar).'},
+  sombra_c:    {id:'sombra_c',    family:'sombra',    name:'Piedra del Alma: Sombra Cazadora (C)',  tier:'C', icon:'🌑',
+    special:{type:'evasion_flat', value:0.12},
+    desc:'+12% de probabilidad de esquivar cualquier ataque.', preview:'Desde A: invocar una sombra que atrae el agro (pendiente de implementar).'},
+  sombra_b:    {id:'sombra_b',    family:'sombra',    name:'Piedra del Alma: Sombra Cazadora (B)',  tier:'B', icon:'🌑',
+    special:{type:'evasion_flat', value:0.16},
+    desc:'+16% de probabilidad de esquivar cualquier ataque.', preview:'Desde A: invocar una sombra que atrae el agro (pendiente de implementar).'},
+  sombra_a:    {id:'sombra_a',    family:'sombra',    name:'Piedra del Alma: Sombra Cazadora (A)',  tier:'A', icon:'🌑',
+    special:{type:'evasion_flat', value:0.20},
+    desc:'+20% de probabilidad de esquivar cualquier ataque. (Invocar una sombra, prometido en este rango, todavía no está implementado.)'}
 };
 
 function maxSoulSlots(level){ return Math.floor((level||1)/10); } // 1 espacio cada 10 niveles
@@ -1712,7 +1864,8 @@ const MISSION_RANK_REWARD = {
 const MISSION_BAND_REFERENCE_LEVEL = [5, 25, 45, 55, 55];
 function makeMissionItemReward(band){
   if(band === 0 && chance(0.5)){
-    const pool = Object.values(SOUL_STONES).filter(s=>AVAILABLE_SOUL_TIERS.includes(s.tier));
+    const allowedTiers = soulTierPoolForLevel(MISSION_BAND_REFERENCE_LEVEL[band] || 5);
+    const pool = Object.values(SOUL_STONES).filter(s=>allowedTiers.includes(s.tier));
     const tpl = pick(pool);
     return {kind:'soulstone', stoneId:tpl.id, family:tpl.family, name:tpl.name, tier:tpl.tier, icon:tpl.icon, desc:tpl.desc, bonus:tpl.bonus, special:tpl.special};
   }
@@ -2194,6 +2347,17 @@ function renderShop(){
   const weaponHTML = roleSelectorHTML + (opts.arma ? weaponRowHTML('arma', armaLabel, armaPrice) : '')
     + (opts.arma2 ? weaponRowHTML('arma2', arma2Label, arma2Price) : '');
 
+  const weaponRowRaroHTML = (slot, label, price) => `
+    <div class="inv-item-row">
+      <div>
+        <b>${label}</b> <span class="slot-tag" style="border-color:${RARITIES.raro.color}; color:${RARITIES.raro.color};">Raro</span>
+        <div class="inv-item-bonus">+${RARO_WEAPON_BONUS} ${STAT_LABELS[SHOP_WEAPON_STAT[styleId]] || ''} · daño puro, sin otras características</div>
+      </div>
+      <button class="inv-btn" data-buy-weapon-raro="${slot}" ${state.char.gold<price?'disabled':''}>Comprar (${price} oro)</button>
+    </div>`;
+  const weaponRaroHTML = (opts.arma ? weaponRowRaroHTML('arma', armaLabel, shopWeaponPriceRaro(false)) : '')
+    + (opts.arma2 ? weaponRowRaroHTML('arma2', arma2Label, shopWeaponPriceRaro(true)) : '');
+
   const gearHTML = SHOP_GEAR_SLOTS.map(slot=>{
     const price = shopGearPrice(slot);
     const bonusText = slot==='amuleto'
@@ -2219,6 +2383,20 @@ function renderShop(){
         <div class="inv-item-bonus">${bonusText}</div>
       </div>
       <button class="inv-btn" data-buy-gear-poco="${slot}" ${state.char.gold<price?'disabled':''}>Comprar (${price} oro)</button>
+    </div>`;
+  }).join('');
+
+  const raroHTML = SHOP_GEAR_SLOTS.map(slot=>{
+    const price = shopGearPriceRaro(slot);
+    const bonusText = slot==='amuleto'
+      ? `+${RARO_RES_PCT}% a una resistencia al azar`
+      : `+${shopGearValueRaro(slot)} ${STAT_LABELS[GUARDIAN_SLOT_STAT[slot] || 'maxhp'] || ''}`;
+    return `<div class="inv-item-row">
+      <div>
+        <b>${slotLabel(slot)}</b> <span class="slot-tag" style="border-color:${RARITIES.raro.color}; color:${RARITIES.raro.color};">Raro</span>
+        <div class="inv-item-bonus">${bonusText}</div>
+      </div>
+      <button class="inv-btn" data-buy-gear-raro="${slot}" ${state.char.gold<price?'disabled':''}>Comprar (${price} oro)</button>
     </div>`;
   }).join('');
 
@@ -2287,6 +2465,12 @@ function renderShop(){
     <div class="section-label">Equipo poco común</div>
     ${pocoComunHTML}
 
+    <div class="section-label">Armas de tu senda — Raro</div>
+    ${weaponRaroHTML || '<p class="inv-empty-msg">No hay armas disponibles para tu senda de combate.</p>'}
+
+    <div class="section-label">Equipo raro</div>
+    ${raroHTML}
+
     <div class="section-label">Tienda del Gremio (Sellos del Laberinto: ${state.char.missionCurrency||0})</div>
     ${selloHTML}
 
@@ -2308,6 +2492,12 @@ function renderShop(){
   });
   document.querySelectorAll('[data-buy-gear-poco]').forEach(btn=>{
     btn.onclick = ()=> buyGearPocoComun(btn.dataset.buyGearPoco);
+  });
+  document.querySelectorAll('[data-buy-weapon-raro]').forEach(btn=>{
+    btn.onclick = ()=> buyWeaponRaro(btn.dataset.buyWeaponRaro, shopWeaponRole);
+  });
+  document.querySelectorAll('[data-buy-gear-raro]').forEach(btn=>{
+    btn.onclick = ()=> buyGearRaro(btn.dataset.buyGearRaro);
   });
   document.querySelectorAll('[data-buy-sello]').forEach(btn=>{
     btn.onclick = ()=>{
@@ -2601,16 +2791,16 @@ const COMUN_GEAR_NAMES = {
 // A partir de qué década empieza a caer cada rareza, y con qué peso — el
 // equipo suelto del laberinto ahora sube de rango con la profundidad, no
 // solo la tienda de Sellos.
-const LOOT_RES_PCT = {comun:COMUN_RES_PCT, poco_comun:POCO_COMUN_RES_PCT, rango_b:RANGO_B_RES_PCT, rango_a:RANGO_A_RES_PCT};
-const LOOT_STAT_MULT = {comun:1, poco_comun:1.6, rango_b:2.5, rango_a:3.5};
+const LOOT_RES_PCT = {comun:COMUN_RES_PCT, poco_comun:POCO_COMUN_RES_PCT, raro:RARO_RES_PCT, rango_b:RANGO_B_RES_PCT, rango_a:RANGO_A_RES_PCT};
+const LOOT_STAT_MULT = {comun:1, poco_comun:1.6, raro:2.0, rango_b:2.5, rango_a:3.5};
 function lootRarityForLevel(level){
   const decade = decadeIndexForLevel(level||1);
   const roll = Math.random();
   if(decade<=0) return 'comun';
   if(decade===1) return roll<0.75 ? 'comun' : 'poco_comun';
-  if(decade===2) return roll<0.55 ? 'comun' : (roll<0.9 ? 'poco_comun' : 'rango_b');
-  if(decade===3) return roll<0.4 ? 'comun' : (roll<0.75 ? 'poco_comun' : (roll<0.95 ? 'rango_b' : 'rango_a'));
-  if(decade===4) return roll<0.25 ? 'poco_comun' : (roll<0.7 ? 'rango_b' : 'rango_a');
+  if(decade===2) return roll<0.5 ? 'comun' : (roll<0.7 ? 'poco_comun' : (roll<0.9 ? 'raro' : 'rango_b'));
+  if(decade===3) return roll<0.35 ? 'comun' : (roll<0.55 ? 'poco_comun' : (roll<0.75 ? 'raro' : (roll<0.95 ? 'rango_b' : 'rango_a')));
+  if(decade===4) return roll<0.15 ? 'poco_comun' : (roll<0.35 ? 'raro' : (roll<0.75 ? 'rango_b' : 'rango_a'));
   return roll<0.5 ? 'rango_b' : 'rango_a'; // década 5
 }
 function generateLoot(floorIdx, level){
@@ -3471,7 +3661,8 @@ function handleVictory(){
 
     // guardianes de nivel 4 en adelante: 20% (temporal) de soltar una piedra de alma (solo rango E o F por ahora)
     if(clearedLevel >= 4 && chance(0.20)){
-      const pool = Object.values(SOUL_STONES).filter(s=>AVAILABLE_SOUL_TIERS.includes(s.tier));
+      const allowedTiers = soulTierPoolForLevel(clearedLevel);
+      const pool = Object.values(SOUL_STONES).filter(s=>allowedTiers.includes(s.tier));
       const tpl = pick(pool);
       addToInventory({kind:'soulstone', stoneId:tpl.id, family:tpl.family, name:tpl.name, tier:tpl.tier, icon:tpl.icon, desc:tpl.desc, preview:tpl.preview, bonus:tpl.bonus, special:tpl.special});
       log(`El guardián también deja caer una <b style="color:${SOUL_TIER_COLORS[tpl.tier]};">${tpl.name}</b> — una piedra de alma de rango ${tpl.tier}.`);
