@@ -161,15 +161,109 @@ const SKILLS = {
 // (ver la selección de plantilla en enterNode()).
 // frontline:true = ocupa el puesto de tanque (slot 0, el único que reciben los
 // ataques 'front'); los demás (a distancia/soporte) se acomodan detrás.
-const ENEMY_TEMPLATES = [
-  {id:'goblin_arquero', name:'Goblin arquero', icon:'🏹', hp:0.85, atk:1.1, res:{fisico:-5,fuego:0,hielo:0,veneno:5,aturdimiento:0}, moves:['pegar','robar']},
-  {id:'goblin_guerrero', name:'Goblin guerrero', icon:'🗡️', hp:1.15, atk:1.05, res:{fisico:10,fuego:-5,hielo:0,veneno:0,aturdimiento:5}, moves:['pegar'], frontline:true},
-  {id:'goblin_saqueador', name:'Goblin saqueador', icon:'🪓', hp:1.0, atk:1.0, res:{fisico:0,fuego:0,hielo:-10,veneno:10,aturdimiento:10}, moves:['pegar','robar'], frontline:true},
-  {id:'goblin_chaman', name:'Chamán goblin', icon:'💀', hp:0.85, atk:0.95, res:{fisico:-10,fuego:15,hielo:15,veneno:25,aturdimiento:-10}, moves:['pegar','debilitar']},
-  {id:'jefe_goblin', name:'Jefe goblin', icon:'👹', hp:1.9, atk:1.4, res:{fisico:20,fuego:-10,hielo:5,veneno:15,aturdimiento:25}, moves:['pegar','aplastar'], elite:true, frontline:true},
-  {id:'hobgoblin', name:'Hobgoblin', icon:'🛡️', hp:3.2, atk:1.6, res:{fisico:15,fuego:5,hielo:5,veneno:15,aturdimiento:30}, moves:['pegar','aplastar','debilitar'], boss:true, frontline:true},
-  {id:'gilgoblin', name:'Gilgoblin', icon:'🔱', hp:3.0, atk:1.7, res:{fisico:10,fuego:10,hielo:10,veneno:20,aturdimiento:20}, moves:['pegar','aplastar','debilitar'], boss:true, frontline:true},
-  {id:'ogro', name:'Ogro', icon:'👺', hp:4.2, atk:1.9, res:{fisico:25,fuego:0,hielo:0,veneno:10,aturdimiento:35}, moves:['pegar','aplastar','debilitar'], boss:true, frontline:true}
+// Bestiario por década (pisos 1-10, 11-20, ..., 51-60). Cada década define:
+// regular (mobs comunes), elite (élite de esa década), guardians (jefes de
+// nivel normales, todo nivel que NO cierra la década) y decadeBoss (el jefe
+// del nivel que cierra la década: 10, 20, 30...).
+function decadeIndexForLevel(level){ return Math.min(DECADE_BESTIARY.length-1, Math.floor((level-1)/10)); }
+
+const DECADE_BESTIARY = [
+  // Década 0 — pisos 1-10 — Bosque Goblin
+  {
+    regular: [
+      {id:'goblin_arquero', name:'Goblin arquero', icon:'🏹', hp:0.85, atk:1.1, res:{fisico:-5,fuego:0,hielo:0,veneno:5,aturdimiento:0}, moves:['pegar','robar']},
+      {id:'goblin_guerrero', name:'Goblin guerrero', icon:'🗡️', hp:1.15, atk:1.05, res:{fisico:10,fuego:-5,hielo:0,veneno:0,aturdimiento:5}, moves:['pegar'], frontline:true},
+      {id:'goblin_saqueador', name:'Goblin saqueador', icon:'🪓', hp:1.0, atk:1.0, res:{fisico:0,fuego:0,hielo:-10,veneno:10,aturdimiento:10}, moves:['pegar','robar'], frontline:true},
+      {id:'goblin_chaman', name:'Chamán goblin', icon:'💀', hp:0.85, atk:0.95, res:{fisico:-10,fuego:15,hielo:15,veneno:25,aturdimiento:-10}, moves:['pegar','debilitar']}
+    ],
+    elite: [{id:'jefe_goblin', name:'Jefe goblin', icon:'👹', hp:1.9, atk:1.4, res:{fisico:20,fuego:-10,hielo:5,veneno:15,aturdimiento:25}, moves:['pegar','aplastar'], elite:true, frontline:true}],
+    guardians: [
+      {id:'hobgoblin', name:'Hobgoblin', icon:'🛡️', hp:3.2, atk:1.6, res:{fisico:15,fuego:5,hielo:5,veneno:15,aturdimiento:30}, moves:['pegar','aplastar','debilitar'], boss:true, frontline:true},
+      {id:'gilgoblin', name:'Gilgoblin', icon:'🔱', hp:3.0, atk:1.7, res:{fisico:10,fuego:10,hielo:10,veneno:20,aturdimiento:20}, moves:['pegar','aplastar','debilitar'], boss:true, frontline:true}
+    ],
+    decadeBoss: {id:'ogro', name:'Ogro', icon:'👺', hp:4.2, atk:1.9, res:{fisico:25,fuego:0,hielo:0,veneno:10,aturdimiento:35}, moves:['pegar','aplastar','debilitar'], boss:true, frontline:true}
+  },
+  // Década 1 — pisos 11-20 — Arañas del bosque profundo (familia tarántula, veneno/Parálisis)
+  {
+    regular: [
+      {id:'tarantula_cazadora', name:'Tarántula cazadora', icon:'🕷️', hp:1.1, atk:1.05, res:{fisico:5,fuego:-5,hielo:0,veneno:20,aturdimiento:0}, moves:['pegar'], frontline:true},
+      {id:'tarantula_saltarina', name:'Tarántula saltarina', icon:'🕷️', hp:0.9, atk:1.15, res:{fisico:0,fuego:-10,hielo:0,veneno:20,aturdimiento:0}, moves:['pegar','paralizar'], frontline:true},
+      {id:'tarantula_tejedora', name:'Tarántula tejedora', icon:'🕸️', hp:0.8, atk:0.95, res:{fisico:-5,fuego:-10,hielo:10,veneno:25,aturdimiento:0}, moves:['pegar','paralizar']},
+      {id:'viuda_venenosa', name:'Viuda venenosa', icon:'🕸️', hp:0.75, atk:1.0, res:{fisico:-10,fuego:-10,hielo:5,veneno:30,aturdimiento:0}, moves:['paralizar','pegar']}
+    ],
+    elite: [{id:'matriarca_telaranha', name:'Matriarca telaraña', icon:'🕷️', hp:2.0, atk:1.35, res:{fisico:10,fuego:-15,hielo:5,veneno:35,aturdimiento:0}, moves:['pegar','paralizar'], elite:true, frontline:true}],
+    guardians: [
+      {id:'reina_telaranha', name:'Reina telaraña', icon:'👑', hp:3.4, atk:1.55, res:{fisico:15,fuego:-15,hielo:10,veneno:40,aturdimiento:5}, moves:['pegar','paralizar','aplastar'], boss:true, frontline:true},
+      {id:'devoradora_nido', name:'Devoradora de nido', icon:'🕷️', hp:3.6, atk:1.5, res:{fisico:20,fuego:-10,hielo:5,veneno:35,aturdimiento:10}, moves:['pegar','paralizar','aplastar'], boss:true, frontline:true}
+    ],
+    decadeBoss: {id:'matriarca_escarlata', name:'Matriarca escarlata', icon:'🕷️', hp:4.6, atk:1.75, res:{fisico:20,fuego:-15,hielo:10,veneno:45,aturdimiento:10}, moves:['pegar','paralizar','aplastar'], boss:true, frontline:true}
+  },
+  // Década 2 — pisos 21-30 — Guaridas de bestias, con Riakis
+  {
+    regular: [
+      {id:'loba_acantilado', name:'Loba de acantilado', icon:'🐺', hp:1.1, atk:1.1, res:{fisico:10,fuego:0,hielo:5,veneno:0,aturdimiento:0}, moves:['pegar'], frontline:true},
+      {id:'oso_cuevas', name:'Oso de las cuevas', icon:'🐻', hp:1.3, atk:1.15, res:{fisico:15,fuego:0,hielo:5,veneno:0,aturdimiento:5}, moves:['pegar','aplastar'], frontline:true},
+      {id:'buitre_corrupto', name:'Buitre corrupto', icon:'🦅', hp:0.8, atk:1.0, res:{fisico:-5,fuego:0,hielo:0,veneno:10,aturdimiento:0}, moves:['pegar','cegar']},
+      {id:'lince_sombrio', name:'Lince sombrío', icon:'🐈‍⬛', hp:0.9, atk:1.1, res:{fisico:5,fuego:0,hielo:0,veneno:0,aturdimiento:0}, moves:['pegar','atemorizar']}
+    ],
+    elite: [{id:'alfa_manada', name:'Alfa de la manada', icon:'🐺', hp:2.1, atk:1.4, res:{fisico:15,fuego:0,hielo:5,veneno:0,aturdimiento:5}, moves:['pegar','atemorizar'], elite:true, frontline:true}],
+    guardians: [
+      {id:'behemoth_piedra', name:'Behemoth de piedra', icon:'🗿', hp:3.8, atk:1.5, res:{fisico:30,fuego:0,hielo:0,veneno:0,aturdimiento:20}, moves:['pegar','aplastar'], boss:true, frontline:true},
+      {id:'guardian_corrupto', name:'Guardián corrupto', icon:'🐗', hp:3.5, atk:1.6, res:{fisico:15,fuego:0,hielo:0,veneno:10,aturdimiento:10}, moves:['pegar','aplastar','atemorizar'], boss:true, frontline:true}
+    ],
+    // Riakis: su "escudo de corrupción" resiste casi todo el daño mundano
+    // (físico/veneno/aturdimiento) pero es vulnerable a fuego/hielo — el hueco
+    // que un Canalizador puede explotar hoy. Cuando exista el Sacerdote
+    // (Taberna), su efecto sagrado deberá abrir ese mismo hueco sin necesitar
+    // magia elemental — queda como gancho pendiente, no implementado todavía.
+    decadeBoss: {id:'riakis', name:'Señor del Caos Riakis', icon:'👁️', hp:5.0, atk:1.6, res:{fisico:55,fuego:-25,hielo:-25,veneno:40,aturdimiento:30}, moves:['pegar','cegar','atemorizar'], boss:true, frontline:true}
+  },
+  // Década 3 — pisos 31-40 — El Usurpador Sin Nombre (mimetismo, Confusión)
+  {
+    regular: [
+      {id:'sombra_mimetica', name:'Sombra mimética', icon:'🫥', hp:0.9, atk:1.05, res:{fisico:0,fuego:0,hielo:0,veneno:0,aturdimiento:10}, moves:['pegar','confundir']},
+      {id:'espejo_viviente', name:'Espejo viviente', icon:'🪞', hp:1.0, atk:1.0, res:{fisico:5,fuego:5,hielo:5,veneno:5,aturdimiento:5}, moves:['pegar','confundir'], frontline:true},
+      {id:'doble_corrupto', name:'Doble corrupto', icon:'👥', hp:1.1, atk:1.1, res:{fisico:10,fuego:0,hielo:0,veneno:0,aturdimiento:0}, moves:['pegar'], frontline:true},
+      {id:'farsante_menor', name:'Farsante menor', icon:'🎭', hp:0.85, atk:1.0, res:{fisico:0,fuego:0,hielo:0,veneno:0,aturdimiento:0}, moves:['pegar','robar','confundir']}
+    ],
+    elite: [{id:'impostor_mayor', name:'Impostor mayor', icon:'🎭', hp:2.2, atk:1.4, res:{fisico:10,fuego:5,hielo:5,veneno:5,aturdimiento:15}, moves:['pegar','confundir'], elite:true, frontline:true}],
+    guardians: [
+      {id:'reflejo_perfecto', name:'Reflejo perfecto', icon:'🪞', hp:3.7, atk:1.55, res:{fisico:15,fuego:10,hielo:10,veneno:10,aturdimiento:15}, moves:['pegar','confundir','aplastar'], boss:true, frontline:true},
+      {id:'mascara_viviente', name:'Máscara viviente', icon:'🎭', hp:3.6, atk:1.6, res:{fisico:10,fuego:10,hielo:10,veneno:10,aturdimiento:20}, moves:['pegar','confundir','aplastar'], boss:true, frontline:true}
+    ],
+    decadeBoss: {id:'usurpador', name:'El Usurpador Sin Nombre', icon:'🎭', hp:4.8, atk:1.8, res:{fisico:20,fuego:10,hielo:10,veneno:10,aturdimiento:20}, moves:['pegar','confundir','aplastar'], boss:true, frontline:true}
+  },
+  // Década 4 — pisos 41-50 — Isla Paraíso (supervivencia; ver reglas de
+  // generación especiales en generateDungeon() y enterNode())
+  {
+    regular: [
+      {id:'explorador_rival', name:'Explorador rival', icon:'🗡️', hp:1.0, atk:1.1, res:{fisico:5,fuego:0,hielo:0,veneno:0,aturdimiento:0}, moves:['pegar','robar'], frontline:true},
+      {id:'mercenario_desertor', name:'Mercenario desertor', icon:'🪓', hp:1.1, atk:1.15, res:{fisico:10,fuego:0,hielo:0,veneno:0,aturdimiento:0}, moves:['pegar','aplastar'], frontline:true},
+      {id:'cazarrecompensas', name:'Cazarrecompensas', icon:'🏹', hp:0.85, atk:1.1, res:{fisico:-5,fuego:0,hielo:0,veneno:0,aturdimiento:0}, moves:['pegar','robar']},
+      {id:'superviviente_curtido', name:'Superviviente curtido', icon:'🔪', hp:0.95, atk:1.15, res:{fisico:5,fuego:0,hielo:0,veneno:5,aturdimiento:0}, moves:['pegar','atemorizar']}
+    ],
+    elite: [{id:'superviviente_despiadado', name:'Superviviente despiadado', icon:'⚔️', hp:2.0, atk:1.45, res:{fisico:10,fuego:0,hielo:0,veneno:5,aturdimiento:5}, moves:['pegar','aplastar','atemorizar'], elite:true, frontline:true}],
+    guardians: [], // esta década no tiene guardianes de nivel intermedios (ver enterNode)
+    // El jefe de década llega escoltado (ver enterNode) y no busca hacer daño
+    // directo: cura, se bufa solo y llama refuerzos. Débil en poder bruto
+    // frente al Usurpador, pero nunca solo.
+    decadeBoss: {id:'custodio_isla', name:'Custodio de la Isla', icon:'🏝️', hp:3.2, atk:0.7, res:{fisico:15,fuego:10,hielo:10,veneno:10,aturdimiento:15}, moves:['curar','buff_pasivo','invocar','area_debil'], boss:true, frontline:false}
+  },
+  // Década 5 — pisos 51-60 — El Mar (Storm Gush / Tetrasea)
+  {
+    regular: [
+      {id:'triton_guerrero', name:'Tritón guerrero', icon:'🔱', hp:1.15, atk:1.15, res:{fisico:10,fuego:5,hielo:-10,veneno:0,aturdimiento:0}, moves:['pegar','aplastar'], frontline:true},
+      {id:'triton_hechicero', name:'Tritón hechicero', icon:'🌊', hp:0.85, atk:1.05, res:{fisico:-5,fuego:10,hielo:-10,veneno:5,aturdimiento:0}, moves:['pegar','debilitar']},
+      {id:'cangrejo_gigante', name:'Cangrejo gigante', icon:'🦀', hp:1.3, atk:1.05, res:{fisico:20,fuego:0,hielo:-5,veneno:0,aturdimiento:10}, moves:['pegar'], frontline:true},
+      {id:'sirena_corrupta', name:'Sirena corrupta', icon:'🧜', hp:0.8, atk:1.0, res:{fisico:-5,fuego:5,hielo:-5,veneno:5,aturdimiento:0}, moves:['pegar','confundir']}
+    ],
+    elite: [{id:'guardia_profundidades', name:'Guardia de las profundidades', icon:'🔱', hp:2.3, atk:1.45, res:{fisico:15,fuego:5,hielo:-10,veneno:5,aturdimiento:10}, moves:['pegar','aplastar'], elite:true, frontline:true}],
+    guardians: [
+      {id:'leviatan_menor', name:'Leviatán menor', icon:'🐋', hp:3.9, atk:1.6, res:{fisico:20,fuego:5,hielo:-10,veneno:10,aturdimiento:15}, moves:['pegar','aplastar'], boss:true, frontline:true},
+      {id:'centinela_coral', name:'Centinela de coral', icon:'🪸', hp:3.7, atk:1.55, res:{fisico:25,fuego:5,hielo:-15,veneno:15,aturdimiento:15}, moves:['pegar','aplastar','debilitar'], boss:true, frontline:true}
+    ],
+    decadeBoss: {id:'storm_gush', name:'Storm Gush, Tetrasea el Señor de las Lágrimas', icon:'🔱', hp:5.4, atk:1.85, res:{fisico:25,fuego:5,hielo:-15,veneno:10,aturdimiento:20}, moves:['pegar','aplastar','debilitar'], boss:true, frontline:true}
+  }
 ];
 
 const POTION_TEMPLATES = {
@@ -818,9 +912,9 @@ async function fetchProfile(userId){
 }
 
 /* ============================================================
-   DUNGEON LEVELS (1-10)
+   DUNGEON LEVELS (1-60)
    ============================================================ */
-const LEVEL_CAP = 10;
+const LEVEL_CAP = 60;
 const CHAR_LEVEL_CAP = 60; // tope de nivel de personaje pedido
 function mobXP(level){ return level; }        // mobs normales: 1 en piso 1, 2 en piso 2...
 function eliteXP(level){ return level+1; }    // élites: siempre mob+1
@@ -858,7 +952,16 @@ function describeRecord(){
 }
 
 // real (mechanical) difficulty multiplier: compounds ~14% per level, as requested
-function levelMult(level){ return Math.pow(1.14, Math.max(0,level-1)); }
+// La curva original (1.14 compuesto) se pensó para 10 pisos; compuesta hasta
+// el piso 60 daría un multiplicador de más de 2000x, una pared numérica
+// imposible. Se preserva tal cual para los pisos 1-10 (ya jugado y afinado) y
+// desde el 11 en adelante crece de forma mucho más suave — primer valor
+// razonado, a ajustar con partidas reales igual que el resto de esta curva.
+function levelMult(level){
+  const base = Math.pow(1.14, Math.max(0, Math.min(level,10)-1));
+  if(level<=10) return base;
+  return base * (1 + (level-10)*0.06);
+}
 
 // Incremento de dificultad por piso dentro de un mismo nivel. Se repite cada
 // decena para cuando el laberinto crezca a 100 niveles: los que terminan en
@@ -887,7 +990,7 @@ function numFloorsForLevel(level){
 
 // visual-only threat rating shown to the player, decoupled from the real stat math above
 function baseThreatForLevel(level){ return 5 + (level-1)*2; } // lvl1:5, lvl2:7, lvl3:9...
-function expectedCharLevelFor(level){ return level*2; } // the char level this dungeon level is "built for"
+function expectedCharLevelFor(level){ return Math.round(level * (CHAR_LEVEL_CAP/LEVEL_CAP)); } // the char level this dungeon level is "built for"
 function visualThreat(level, charLevel){
   const base = baseThreatForLevel(level);
   const ratio = expectedCharLevelFor(level) / Math.max(1, charLevel||1);
@@ -895,9 +998,15 @@ function visualThreat(level, charLevel){
   return Math.max(1, Math.round(base * clamp(ratio, 0.35, 1.4)));
 }
 
+// Isla Paraíso (década 4, pisos 41-50): supervivencia pura — sin cofres ni
+// descansos, más élites que combates normales, y la travesía es 3 pisos más
+// larga que lo que le tocaría por fórmula normal.
+function isParaisoDecade(level){ return decadeIndexForLevel(level)===4; }
+
 function generateDungeon(level){
-  const numFloors = numFloorsForLevel(level);
+  const numFloors = numFloorsForLevel(level) + (isParaisoDecade(level) ? 3 : 0);
   const laneCount = laneCountForLevel(level);
+  const paraiso = isParaisoDecade(level);
   const floors = [];
   for(let f=0; f<numFloors; f++){
     if(f === numFloors-1){
@@ -910,12 +1019,16 @@ function generateDungeon(level){
     }
     const nodes = [];
     for(let lane=0; lane<laneCount; lane++){
-      const roll = Math.random();
       let type;
-      if(roll < 0.48) type='combate';
-      else if(roll < 0.68) type='tesoro';
-      else if(roll < 0.85) type='descanso';
-      else type='elite';
+      if(paraiso){
+        type = chance(0.55) ? 'elite' : 'combate'; // sin cofres ni descansos, más élites que mobs normales
+      } else {
+        const roll = Math.random();
+        if(roll < 0.48) type='combate';
+        else if(roll < 0.68) type='tesoro';
+        else if(roll < 0.85) type='descanso';
+        else type='elite';
+      }
       nodes.push({type, done:false});
     }
     floors.push(nodes);
@@ -2122,13 +2235,39 @@ function enterNode(f,n){
   if(advancedFloor) advanceMissionsFor('clear_floors', 1);
 
   if(node.type==='combate' || node.type==='elite' || node.type==='jefe'){
-    const templates = node.type==='jefe'
-                       ? (dg.level % 10 === 0 ? [ENEMY_TEMPLATES.find(t=>t.id==='ogro')] : ENEMY_TEMPLATES.filter(t=>t.boss && t.id!=='ogro'))
-                       : node.type==='elite' ? ENEMY_TEMPLATES.filter(t=>t.elite) :
-                       ENEMY_TEMPLATES.filter(t=>!t.elite && !t.boss);
-    const count = node.type==='jefe' ? 1 : (node.type==='elite' ? 1 : rnd(1,2));
+    const bestiary = DECADE_BESTIARY[decadeIndexForLevel(dg.level)];
+    const isDecadeFinal = dg.level % 10 === 0;
+    const paraiso = isParaisoDecade(dg.level);
+    let templates, count;
+    if(node.type==='jefe'){
+      if(isDecadeFinal){
+        templates = [bestiary.decadeBoss];
+        count = 1;
+      } else if(paraiso){
+        // Isla Paraíso: sin guardianes intermedios — el "jefe" de los niveles
+        // que no cierran la década es solo un combate más duro, no un
+        // encuentro único.
+        templates = bestiary.regular.concat(bestiary.elite);
+        count = rnd(2,3);
+      } else {
+        templates = bestiary.guardians;
+        count = 1;
+      }
+    } else if(node.type==='elite'){
+      templates = bestiary.elite;
+      count = 1;
+    } else {
+      templates = bestiary.regular;
+      count = rnd(1,2);
+    }
     const group = [];
     for(let i=0;i<count;i++) group.push(makeEnemy(pick(templates), f, dg.level));
+    if(node.type==='jefe' && isDecadeFinal && paraiso){
+      // el jefe de Isla Paraíso llega escoltado por dos élites en el frente
+      // mientras él se queda atrás.
+      group.push(makeEnemy(bestiary.elite[0], f, dg.level));
+      group.push(makeEnemy(bestiary.elite[0], f, dg.level));
+    }
     // los de línea frontal (tanques/melee) van al slot 0, el que reciben los
     // ataques 'front'; a distancia/soporte se acomodan detrás.
     group.sort((a,b)=> (b.tpl.frontline?1:0) - (a.tpl.frontline?1:0));
@@ -2213,7 +2352,7 @@ function makeEnemy(tpl, floorIdx, level){
   return {
     tpl, name:tpl.name, icon:tpl.icon,
     maxHP:hp, hp:hp, atk:atk, res,
-    statuses:[], defending:false
+    statuses:[], defending:false, cooldowns:{}
   };
 }
 
@@ -2254,6 +2393,7 @@ function computeCritEvasion(){
   const furioso = hasStatus(combat.playerStatuses,'Furioso');
   if(furioso) ev += furioso.evasionDelta/100;
   if(combat.playerDefending) ev = Math.max(ev, 0.5);
+  if(hasStatus(combat.playerStatuses,'Paralisis')) ev = 0; // indefenso: la Parálisis anula toda evasión, incluso defendiendo
   return {crit:d.critChance, evasion:clamp(ev,0,0.6)};
 }
 
@@ -2280,7 +2420,10 @@ function applyStatus(target, statusDef, isPlayer){
   } else if(existing){
     existing.duration = statusDef.duration;
   } else {
-    list.push({name:statusDef.name, duration:statusDef.duration, stacks: statusDef.stack?1:undefined});
+    // Object.assign conserva campos extra del statusDef (ej. procChance de
+    // Ceguera/Miedo/Confusión) — antes se perdían porque solo se guardaban
+    // name/duration/stacks.
+    list.push(Object.assign({}, statusDef, {stacks: statusDef.stack?1:undefined}));
   }
 }
 
@@ -2316,6 +2459,13 @@ function playerUseSkill(skillId, targetIdx){
   if(combat.over) return;
   const skill = SKILLS[skillId];
   const d = derived();
+
+  const miedo = hasStatus(combat.playerStatuses,'Miedo');
+  if(miedo && chance(miedo.procChance||0.4)){
+    log('El Miedo te paraliza. Pierdes el turno.');
+    endPlayerTurn();
+    return;
+  }
 
   // resource check
   if(skill.cost){
@@ -2397,11 +2547,25 @@ function playerUseSkill(skillId, targetIdx){
     endPlayerTurn(); return;
   }
 
+  const confusion = hasStatus(combat.playerStatuses,'Confusion');
+  if(confusion && chance(confusion.procChance||0.35)){
+    const selfDmg = Math.max(1, Math.round(skillBaseDamage() * skill.mult));
+    log(`La Confusión te hace atacar a ciegas... ¡y te golpeas a ti mismo!`);
+    dealDamageToPlayer(selfDmg);
+    endPlayerTurn();
+    return;
+  }
+
   const {crit} = computeCritEvasion();
   const furioso = hasStatus(combat.playerStatuses,'Furioso');
   const raceObj = race();
+  const ceguera = hasStatus(combat.playerStatuses,'Ceguera');
 
   targets.forEach(target=>{
+    if(ceguera && chance(ceguera.procChance||0.32)){
+      log(`La Ceguera hace que tu golpe hacia ${target.name} no encuentre nada.`);
+      return;
+    }
     // evasion of enemy (simple: small base)
     let base = skillBaseDamage() * skill.mult * (skill.hits||1);
 
@@ -2552,20 +2716,60 @@ function processEnemyTurns(){
   save();
 }
 
+const SUMMON_TEMPLATE = {id:'criatura_menor', name:'Criatura menor invocada', icon:'👾', hp:0.3, atk:0.5, res:{fisico:0,fuego:0,hielo:0,veneno:0,aturdimiento:0}, moves:['pegar']};
+
 function enemyAct(enemy){
+  if(!enemy.cooldowns) enemy.cooldowns = {};
+  Object.keys(enemy.cooldowns).forEach(k=> enemy.cooldowns[k] = Math.max(0, enemy.cooldowns[k]-1));
+
   const {evasion} = computeCritEvasion();
   if(chance(evasion)){
     log(`${enemy.name} ataca, ¡pero esquivas!`);
     return;
   }
-  const move = pick(enemy.tpl.moves);
+
+  const available = enemy.tpl.moves.filter(m=> !(m==='invocar' && enemy.cooldowns.invocar>0));
+  const move = pick(available.length ? available : enemy.tpl.moves);
+
+  // movimientos de soporte: no hacen daño directo, resuelven su efecto y terminan el turno del enemigo ahí.
+  if(move==='curar'){
+    const heal = Math.max(1, Math.round(enemy.maxHP*0.12));
+    const before = enemy.hp;
+    enemy.hp = Math.min(enemy.maxHP, enemy.hp+heal);
+    log(`${enemy.name} se cura ${enemy.hp-before} de vida.`);
+    return;
+  }
+  if(move==='buff_pasivo'){
+    const buff = hasStatus(enemy.statuses,'Fortalecido');
+    if(buff) buff.stacks = (buff.stacks||1)+1;
+    else enemy.statuses.push({name:'Fortalecido', duration:99, stacks:1, stack:true});
+    log(`${enemy.name} se fortalece con cada turno que pasa.`);
+    return;
+  }
+  if(move==='invocar'){
+    enemy.cooldowns.invocar = 5;
+    if(combat.enemies.length < 6){
+      const minion = makeEnemy(SUMMON_TEMPLATE, state.dungeon.atFloor, state.dungeon.level);
+      combat.enemies.push(minion);
+      log(`${enemy.name} invoca una criatura menor.`);
+    }
+    return;
+  }
+
   const d = derived();
   let dmg = enemy.atk;
+  const fortalecido = hasStatus(enemy.statuses,'Fortalecido');
+  if(fortalecido) dmg = Math.round(dmg * (1 + (fortalecido.stacks||1)*0.04));
   let text = 'ataca';
   if(move==='robar'){ text='intenta robar tu oro'; dmg = Math.round(dmg*0.6); }
   if(move==='morder'){ text='muerde, veneno en los colmillos'; applyStatus(null, {name:'Sangrado', duration:2, stack:true, maxStack:3}, true); }
   if(move==='debilitar'){ text='drena tu fuerza'; applyStatus(null, {name:'Debilitado', duration:2}, true); dmg = Math.round(dmg*0.6); }
   if(move==='aplastar'){ text='golpea con fuerza brutal'; dmg = Math.round(dmg*1.4); }
+  if(move==='paralizar'){ text='muerde y paraliza'; applyStatus(null, {name:'Paralisis', duration:2, chance:0.5}, true); }
+  if(move==='cegar'){ text='arroja algo a tus ojos'; applyStatus(null, {name:'Ceguera', duration:2, chance:0.5, procChance:0.32}, true); }
+  if(move==='atemorizar'){ text='ruge y siembra el terror'; applyStatus(null, {name:'Miedo', duration:2, chance:0.5, procChance:0.4}, true); dmg = Math.round(dmg*0.7); }
+  if(move==='confundir'){ text='distorsiona tu percepción'; applyStatus(null, {name:'Confusion', duration:2, chance:0.5, procChance:0.35}, true); dmg = Math.round(dmg*0.7); }
+  if(move==='area_debil'){ text='golpea a todo tu grupo por igual'; dmg = Math.round(dmg*0.5); }
 
   // resistance vs player
   let resVal = totalRes('fisico');
@@ -2574,6 +2778,7 @@ function enemyAct(enemy){
   if(combat.playerDefending) finalDmg *= 0.5;
   const furiosoBuff = hasStatus(combat.playerStatuses,'Furioso');
   if(furiosoBuff && furiosoBuff.incomingDmgReduction) finalDmg *= (1 - furiosoBuff.incomingDmgReduction);
+  if(hasStatus(combat.playerStatuses,'Paralisis')) finalDmg *= 1.25; // indefenso: sin evasión y más daño recibido
   finalDmg = Math.max(1, Math.round(finalDmg));
 
   dealDamageToPlayer(finalDmg);
