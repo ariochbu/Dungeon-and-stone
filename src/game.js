@@ -2553,12 +2553,9 @@ function enterNode(f,n){
     for(let i=0;i<count;i++) group.push(makeEnemy(pick(templates), f, dg.level));
     if(node.type==='jefe' && isDecadeFinal && paraiso){
       // el jefe de Isla Paraíso llega escoltado por dos élites en el frente
-      // mientras él se queda atrás. Un poco más resistentes que un élite
-      // suelto de la década — son su guardia personal, no un encuentro normal.
-      const escort1 = makeEnemy(bestiary.elite[0], f, dg.level);
-      const escort2 = makeEnemy(bestiary.elite[0], f, dg.level);
-      [escort1, escort2].forEach(e=>{ e.maxHP = Math.round(e.maxHP*1.2); e.hp = e.maxHP; });
-      group.push(escort1, escort2);
+      // mientras él se queda atrás.
+      group.push(makeEnemy(bestiary.elite[0], f, dg.level));
+      group.push(makeEnemy(bestiary.elite[0], f, dg.level));
     }
     // los de línea frontal (tanques/melee) van al slot 0, el que reciben los
     // ataques 'front'; a distancia/soporte se acomodan detrás.
