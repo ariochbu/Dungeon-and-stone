@@ -262,7 +262,7 @@ const DECADE_BESTIARY = [
     // El jefe de década llega escoltado (ver enterNode) y no busca hacer daño
     // directo: cura, se bufa solo y llama refuerzos. Débil en poder bruto
     // frente al Usurpador, pero nunca solo.
-    decadeBoss: {id:'custodio_isla', name:'Custodio de la Isla', icon:'🏝️', hp:3.2, atk:0.7, res:{fisico:15,fuego:10,hielo:10,veneno:10,aturdimiento:15}, moves:['curar','buff_pasivo','invocar','area_debil'], boss:true, frontline:false}
+    decadeBoss: {id:'custodio_isla', name:'Custodio de la Isla', icon:'🏝️', hp:3.2, atk:1.2, res:{fisico:15,fuego:10,hielo:10,veneno:10,aturdimiento:15}, moves:['curar','buff_pasivo','invocar','area_debil'], boss:true, frontline:false}
   },
   // Década 5 — pisos 51-60 — El Mar (Storm Gush / Tetrasea)
   {
