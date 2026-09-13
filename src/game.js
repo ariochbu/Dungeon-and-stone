@@ -185,9 +185,15 @@ const POTION_TEMPLATES = {
    ============================================================ */
 const RARITIES = {
   comun: {id:'comun', name:'Común', color:'#a3a3a3'},
-  poco_comun: {id:'poco_comun', name:'Poco común', color:'#3ecf6e'}
-  // futuras rarezas (pendientes de implementar): unico, epico, legendario, mitico, dios
+  poco_comun: {id:'poco_comun', name:'Poco común', color:'#3ecf6e'},
+  rango_b: {id:'rango_b', name:'Rango B', color:'#c17fd1'},
+  rango_a: {id:'rango_a', name:'Rango A', color:'#d1a84f'}
+  // futuras rarezas (pendientes de implementar): S, SS (SS será numerado/único mundial)
 };
+const RANGO_B_RES_PCT = 20;
+const RANGO_A_RES_PCT = 28;
+const RANGO_B_WEAPON_BONUS = 14;
+const RANGO_A_WEAPON_BONUS = 20;
 
 // Valores planos por rareza: todo objeto de una misma rareza da el mismo
 // bono de resistencia, y toda arma poco común da el mismo bono de daño,
@@ -525,6 +531,7 @@ let homeOpen = false; // whether the Hogar (home stash) panel is showing
 let shopOpen = false; // whether the Tienda (shop) panel is showing
 let rankingOpen = false; // whether the Ranking panel is showing
 let adminOpen = false; // whether the Admin panel is showing
+let missionsOpen = false; // whether the Gremio (missions board) panel is showing
 let currentUser = null; // Supabase auth user
 let currentProfile = null; // {id, username, role, is_banned}
 
@@ -679,6 +686,7 @@ function characterToRow(){
     level: state.char.level,
     xp: state.char.xp,
     gold: state.char.gold,
+    mission_currency: state.char.missionCurrency,
     cur_hp: state.char.curHP,
     cur_sta: state.char.curSta,
     cur_spi: state.char.curSpi,
@@ -700,7 +708,7 @@ function rowToState(row){
       id: row.id, slotNumber: row.slot_number, nickname: row.nickname,
       role: row.role, hiddenFromLeaderboard: row.hidden_from_leaderboard,
       race: row.race, style: row.style,
-      level: row.level, xp: row.xp, gold: row.gold,
+      level: row.level, xp: row.xp, gold: row.gold, missionCurrency: row.mission_currency || 0,
       curHP: row.cur_hp, curSta: row.cur_sta, curSpi: row.cur_spi,
       equip: row.equip || {arma:null, arma2:null, armadura:null, amuleto:null, casco:null, botas:null, guantes:null},
       inventory: row.inventory || [],
@@ -916,6 +924,7 @@ function renderAll(){
     shopOpen = false;
     rankingOpen = false;
     adminOpen = false;
+    missionsOpen = false;
     renderCombat();
   } else if(invOpen){
     renderInventory();
@@ -927,6 +936,8 @@ function renderAll(){
     renderRanking();
   } else if(adminOpen){
     renderAdmin();
+  } else if(missionsOpen){
+    renderMissions();
   } else if(state.dungeon && !state.dungeon.floors[state.dungeon.floors.length-1][0].done){
     renderMap();
   } else {
@@ -1335,8 +1346,8 @@ function renderCity(){
       </div>
       <div class="action-card">
         <h3>Gremio</h3>
-        <p>Acepta misiones de exploradores a cambio de recompensas adicionales.</p>
-        <button disabled>Próximamente</button>
+        <p>Acepta misiones de exploradores a cambio de oro, experiencia y Sellos del Laberinto.</p>
+        <button id="btn-open-missions">Ver misiones</button>
       </div>
     </div>
     <div class="section-label">Antes de partir</div>
@@ -1374,6 +1385,152 @@ function renderCity(){
       renderAll();
     };
   }
+  document.getElementById('btn-open-missions').onclick = ()=>{
+    invOpen = false; homeOpen = false; shopOpen = false; rankingOpen = false; adminOpen = false; missionsOpen = true;
+    renderAll();
+  };
+}
+
+/* ============================================================
+   MISIONES — Gremio
+   ============================================================ */
+// Banda de rango por piso más profundo desbloqueado (max_level_unlocked),
+// NO por nivel de personaje — igual patrón de década que dificultad/sendas.
+// Hoy el laberinto topa en piso 10, así que en la práctica todos caen en la
+// banda 0 (E/F) hasta que se liberen los 100 niveles.
+function missionBandForFloor(floor){
+  if(floor<=20) return 0;
+  if(floor<=40) return 1;
+  if(floor<=60) return 2;
+  if(floor<=80) return 3;
+  return 4;
+}
+const MISSION_BAND_RANKS = [['E','F'],['D','C'],['B','A'],['S'],['SS']];
+const MISSION_OBJECTIVE_TYPES = ['kill_elites','clear_floors','defeat_guardian'];
+const MISSION_OBJECTIVE_LABEL = {
+  kill_elites:'élite(s) derrotado(s)',
+  clear_floors:'piso(s) del laberinto avanzado(s)',
+  defeat_guardian:'guardián(es) de nivel derrotado(s)'
+};
+const MISSION_OBJECTIVE_TARGET = {
+  kill_elites:     {E:1, F:1, D:2, C:2, B:2, A:3, S:3, SS:4},
+  clear_floors:    {E:3, F:3, D:4, C:4, B:5, A:5, S:6, SS:8},
+  defeat_guardian: {E:1, F:1, D:1, C:1, B:1, A:1, S:1, SS:1}
+};
+const MISSION_RANK_REWARD = {
+  E:{gold:20, xp:15, currency:3},   F:{gold:35, xp:25, currency:3},
+  D:{gold:60, xp:45, currency:6},   C:{gold:90, xp:65, currency:6},
+  B:{gold:140,xp:100,currency:12},  A:{gold:200,xp:150,currency:12},
+  S:{gold:320,xp:240,currency:24},  SS:{gold:480,xp:360,currency:48}
+};
+
+// Las misiones nunca entregan objeto/piedra de rango S o SS de forma
+// garantizada — esos rangos se quedan solo en la probabilidad de drop de
+// élites ya definida. Y, por ahora, solo la banda 0 (piso 1-20) tiene
+// objetos/piedras reales implementados; en bandas más altas (inalcanzables
+// hasta liberar los 100 niveles) la misión da Sellos de más en su lugar.
+function makeMissionItemReward(band){
+  if(band > 0) return null;
+  if(chance(0.5)){
+    const pool = Object.values(SOUL_STONES).filter(s=>AVAILABLE_SOUL_TIERS.includes(s.tier));
+    const tpl = pick(pool);
+    return {kind:'soulstone', stoneId:tpl.id, family:tpl.family, name:tpl.name, tier:tpl.tier, icon:tpl.icon, desc:tpl.desc, bonus:tpl.bonus, special:tpl.special};
+  }
+  return generateLoot(rnd(1,4));
+}
+
+function generateMissionBatch(maxFloor){
+  const frontier = missionBandForFloor(maxFloor);
+  const bands = [];
+  for(let i=0;i<2;i++) bands.push(Math.max(0, frontier-2)); // fácil
+  for(let i=0;i<6;i++) bands.push(Math.max(0, frontier-1)); // núcleo
+  for(let i=0;i<2;i++) bands.push(frontier);                // reto
+  return bands.map((band, idx)=>{
+    const rank = pick(MISSION_BAND_RANKS[band]);
+    const objectiveType = pick(MISSION_OBJECTIVE_TYPES);
+    const reward = MISSION_RANK_REWARD[rank];
+    return {
+      rank,
+      objective_type: objectiveType,
+      objective_target: MISSION_OBJECTIVE_TARGET[objectiveType][rank],
+      reward_gold: reward.gold,
+      reward_xp: reward.xp,
+      reward_currency: reward.currency,
+      reward_item: idx===9 ? makeMissionItemReward(band) : null // solo 1 de las 10 trae objeto/piedra fija
+    };
+  });
+}
+
+async function loadMissions(){
+  if(!state || !state.char) return [];
+  const batch = generateMissionBatch(state.char.maxLevelUnlocked);
+  const { data, error } = await supabase.rpc('refresh_and_insert_missions', {p_character_id: state.char.id, p_missions: batch});
+  if(error){ console.error('No se pudo cargar el tablón de misiones:', error.message); return []; }
+  return data || [];
+}
+
+async function refreshMissionsState(){
+  state.missions = await loadMissions();
+}
+
+async function advanceMissionsFor(objectiveType, amount){
+  if(!state || !state.missions) return;
+  const targets = state.missions.filter(m=>m.status==='active' && m.objective_type===objectiveType);
+  for(const m of targets){
+    const { data, error } = await supabase.rpc('advance_mission', {p_mission_id: m.id, p_amount: amount});
+    if(error){ console.error('No se pudo avanzar la misión:', error.message); continue; }
+    const idx = state.missions.findIndex(x=>x.id===m.id);
+    if(idx>=0) state.missions[idx] = data;
+    if(data.status==='completed') log(`Una misión del Gremio está lista para reclamar: ${MISSION_OBJECTIVE_LABEL[data.objective_type]}.`);
+  }
+}
+
+async function claimMissionReward(missionId){
+  const { data, error } = await supabase.rpc('claim_mission', {p_mission_id: missionId});
+  if(error){ log('No se pudo reclamar la misión: '+error.message); return; }
+  const m = (state.missions||[]).find(x=>x.id===missionId);
+  state.char.gold = data.gold;
+  state.char.xp = data.xp; // si esto ya alcanza para subir de nivel, el próximo combate lo aplica (mismo bucle de handleVictory)
+  state.char.missionCurrency = data.mission_currency;
+  if(m){
+    m.status = 'claimed';
+    if(m.reward_item) addToInventory(m.reward_item);
+  }
+  log('Reclamas la recompensa de una misión del Gremio.');
+  renderAll();
+}
+
+function renderMissions(){
+  const rows = state.missions || [];
+  const rowsHTML = rows.length ? rows.map(m=>{
+    const c = SOUL_TIER_COLORS[m.rank] || 'var(--text)';
+    const pct = clamp(m.progress/m.objective_target*100, 0, 100);
+    const itemText = m.reward_item ? ` · + ${m.reward_item.name}` : '';
+    const canClaim = m.status==='completed';
+    const claimed = m.status==='claimed';
+    return `<div class="inv-item-row">
+      <div>
+        <b style="color:${c};">Misión ${m.rank}</b> <span class="slot-tag">${MISSION_OBJECTIVE_LABEL[m.objective_type]}</span>
+        <div class="inv-item-bonus neutral">${m.progress}/${m.objective_target} · ${m.reward_gold} oro, ${m.reward_xp} xp, ${m.reward_currency} Sellos${itemText}</div>
+        <div class="bar-track" style="margin-top:6px;"><div class="bar-fill xp" style="width:${pct}%"></div></div>
+      </div>
+      <button class="inv-btn" data-claim="${m.id}" ${canClaim?'':'disabled'}>${claimed?'Reclamada':'Reclamar'}</button>
+    </div>`;
+  }).join('') : `<p class="inv-empty-msg">Cargando el tablón de misiones…</p>`;
+
+  document.getElementById('main-panel').innerHTML = `
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:4px;">
+      <h3 style="color:var(--bronze-light);">Gremio — Tablón de misiones</h3>
+      <button class="reset-btn" id="btn-close-missions">Cerrar</button>
+    </div>
+    <p style="color:var(--text-dim); font-size:0.85em; margin-top:0;">Sellos del Laberinto: <b style="color:var(--bronze-light);">${state.char.missionCurrency||0}</b>. El tablón entero se refresca cada 12 horas.</p>
+    ${rowsHTML}
+  `;
+  document.getElementById('btn-close-missions').onclick = ()=>{ missionsOpen=false; renderAll(); };
+  document.querySelectorAll('[data-claim]').forEach(btn=>{
+    btn.onclick = ()=> claimMissionReward(btn.dataset.claim);
+  });
+  if(!rows.length) refreshMissionsState().then(()=>{ if(missionsOpen) renderMissions(); });
 }
 
 /* ============================================================
@@ -1836,11 +1993,13 @@ function renderMap(){
 
 function enterNode(f,n){
   const dg = state.dungeon;
+  const advancedFloor = f > dg.atFloor;
   dg.atFloor = f; dg.atNode = n;
   updateRecord(dg.level, f);
   dg.visited[f+'-'+n] = true;
   const node = dg.floors[f][n];
   save();
+  if(advancedFloor) advanceMissionsFor('clear_floors', 1);
 
   if(node.type==='combate' || node.type==='elite' || node.type==='jefe'){
     const templates = node.type==='jefe'
@@ -2336,6 +2495,9 @@ function handleVictory(){
   state.char.gold += goldGain;
   log(`Victoria. +${xpGain} experiencia, +${goldGain} de oro.`);
   combat.node.done = true;
+
+  if(isElite) advanceMissionsFor('kill_elites', 1);
+  if(isBoss) advanceMissionsFor('defeat_guardian', 1);
 
   if(isElite || isBoss){
     if(chance(0.8)){
@@ -2842,6 +3004,7 @@ function enterCharacter(row){
   document.getElementById('btn-switch-char').style.display = 'inline-block';
   showScreen('screen-game');
   renderAll();
+  refreshMissionsState();
 }
 
 function goToCreation(){
