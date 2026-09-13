@@ -782,14 +782,13 @@ function levelMult(level){ return Math.pow(1.14, Math.max(0,level-1)); }
 
 // Incremento de dificultad por piso dentro de un mismo nivel. Se repite cada
 // decena para cuando el laberinto crezca a 100 niveles: los que terminan en
-// 1-5 (1,2,3,4,5,11,12,13,14,15,21...) suben +0.5 por piso, los que terminan
-// en 6-10 (6,7,8,9,10,16,17,18,19,20,26...) suben +0.8. Único caso especial:
-// el nivel 1 exacto se queda con la curva suave original (+0.05), porque es
-// la introducción al juego.
+// 1-5 (1,2,3,4,5,11,12,13,14,15,21...) suben +0.05 por piso, los que terminan
+// en 6-10 (6,7,8,9,10,16,17,18,19,20,26...) suben +0.08. El nivel 1 exacto
+// cae en la banda 1-5, así que ya queda con la curva suave sin necesitar un
+// caso aparte — sigue siendo la introducción al juego.
 function floorDifficultyStep(level){
-  if(level === 1) return 0.05;
   const band = level % 10 === 0 ? 10 : level % 10;
-  return band <= 5 ? 0.5 : 0.8;
+  return band <= 5 ? 0.05 : 0.08;
 }
 
 function numFloorsForLevel(level){
