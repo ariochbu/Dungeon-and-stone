@@ -83,7 +83,7 @@ const SKILLS = {
   },
   defender: {
     id:'defender', name:'Defenderse', cost:null, utility:'defend',
-    desc:'Reduces el daño recibido a la mitad hasta tu próximo turno.', targetMode:'self'
+    desc:'Hasta tu próximo turno: al menos 50% de probabilidad de esquivar cualquier ataque, y si te golpean igual, el daño recibido se reduce a la mitad.', targetMode:'self'
   },
   reposicionar: {
     id:'reposicionar', name:'Reposicionarse', cost:null, utility:'reposition',
@@ -159,15 +159,17 @@ const SKILLS = {
 // como tropa regular, un Jefe goblin como élite, y Hobgoblin/Gilgoblin como
 // guardianes normales — salvo el nivel 10, cuyo guardián es siempre el Ogro
 // (ver la selección de plantilla en enterNode()).
+// frontline:true = ocupa el puesto de tanque (slot 0, el único que reciben los
+// ataques 'front'); los demás (a distancia/soporte) se acomodan detrás.
 const ENEMY_TEMPLATES = [
   {id:'goblin_arquero', name:'Goblin arquero', icon:'🏹', hp:0.85, atk:1.1, res:{fisico:-5,fuego:0,hielo:0,veneno:5,aturdimiento:0}, moves:['pegar','robar']},
-  {id:'goblin_guerrero', name:'Goblin guerrero', icon:'🗡️', hp:1.15, atk:1.05, res:{fisico:10,fuego:-5,hielo:0,veneno:0,aturdimiento:5}, moves:['pegar']},
-  {id:'goblin_saqueador', name:'Goblin saqueador', icon:'🪓', hp:1.0, atk:1.0, res:{fisico:0,fuego:0,hielo:-10,veneno:10,aturdimiento:10}, moves:['pegar','robar']},
+  {id:'goblin_guerrero', name:'Goblin guerrero', icon:'🗡️', hp:1.15, atk:1.05, res:{fisico:10,fuego:-5,hielo:0,veneno:0,aturdimiento:5}, moves:['pegar'], frontline:true},
+  {id:'goblin_saqueador', name:'Goblin saqueador', icon:'🪓', hp:1.0, atk:1.0, res:{fisico:0,fuego:0,hielo:-10,veneno:10,aturdimiento:10}, moves:['pegar','robar'], frontline:true},
   {id:'goblin_chaman', name:'Chamán goblin', icon:'💀', hp:0.85, atk:0.95, res:{fisico:-10,fuego:15,hielo:15,veneno:25,aturdimiento:-10}, moves:['pegar','debilitar']},
-  {id:'jefe_goblin', name:'Jefe goblin', icon:'👹', hp:1.9, atk:1.4, res:{fisico:20,fuego:-10,hielo:5,veneno:15,aturdimiento:25}, moves:['pegar','aplastar'], elite:true},
-  {id:'hobgoblin', name:'Hobgoblin', icon:'🛡️', hp:3.2, atk:1.6, res:{fisico:15,fuego:5,hielo:5,veneno:15,aturdimiento:30}, moves:['pegar','aplastar','debilitar'], boss:true},
-  {id:'gilgoblin', name:'Gilgoblin', icon:'🔱', hp:3.0, atk:1.7, res:{fisico:10,fuego:10,hielo:10,veneno:20,aturdimiento:20}, moves:['pegar','aplastar','debilitar'], boss:true},
-  {id:'ogro', name:'Ogro', icon:'👺', hp:4.2, atk:1.9, res:{fisico:25,fuego:0,hielo:0,veneno:10,aturdimiento:35}, moves:['pegar','aplastar','debilitar'], boss:true}
+  {id:'jefe_goblin', name:'Jefe goblin', icon:'👹', hp:1.9, atk:1.4, res:{fisico:20,fuego:-10,hielo:5,veneno:15,aturdimiento:25}, moves:['pegar','aplastar'], elite:true, frontline:true},
+  {id:'hobgoblin', name:'Hobgoblin', icon:'🛡️', hp:3.2, atk:1.6, res:{fisico:15,fuego:5,hielo:5,veneno:15,aturdimiento:30}, moves:['pegar','aplastar','debilitar'], boss:true, frontline:true},
+  {id:'gilgoblin', name:'Gilgoblin', icon:'🔱', hp:3.0, atk:1.7, res:{fisico:10,fuego:10,hielo:10,veneno:20,aturdimiento:20}, moves:['pegar','aplastar','debilitar'], boss:true, frontline:true},
+  {id:'ogro', name:'Ogro', icon:'👺', hp:4.2, atk:1.9, res:{fisico:25,fuego:0,hielo:0,veneno:10,aturdimiento:35}, moves:['pegar','aplastar','debilitar'], boss:true, frontline:true}
 ];
 
 const POTION_TEMPLATES = {
@@ -1848,6 +1850,9 @@ function enterNode(f,n){
     const count = node.type==='jefe' ? 1 : (node.type==='elite' ? 1 : rnd(1,2));
     const group = [];
     for(let i=0;i<count;i++) group.push(makeEnemy(pick(templates), f, dg.level));
+    // los de línea frontal (tanques/melee) van al slot 0, el que reciben los
+    // ataques 'front'; a distancia/soporte se acomodan detrás.
+    group.sort((a,b)=> (b.tpl.frontline?1:0) - (a.tpl.frontline?1:0));
     startCombat(group, node);
   } else if(node.type==='tesoro'){
     const gold = rnd(8,18) + f*3;
@@ -1969,6 +1974,7 @@ function computeCritEvasion(){
   let ev = d.evasionBase + (combat.playerPos==='retaguardia'?0.08:0);
   const furioso = hasStatus(combat.playerStatuses,'Furioso');
   if(furioso) ev += furioso.evasionDelta/100;
+  if(combat.playerDefending) ev = Math.max(ev, 0.5);
   return {crit:d.critChance, evasion:clamp(ev,0,0.6)};
 }
 
