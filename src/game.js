@@ -211,7 +211,7 @@ const DECADE_BESTIARY = [
       {id:'reina_telaranha', name:'Reina telaraña', icon:'👑', hp:3.4, atk:1.55, res:{fisico:15,fuego:-15,hielo:10,veneno:40,aturdimiento:5}, moves:['pegar','paralizar','aplastar'], boss:true, frontline:true},
       {id:'devoradora_nido', name:'Devoradora de nido', icon:'🕷️', hp:3.6, atk:1.5, res:{fisico:20,fuego:-10,hielo:5,veneno:35,aturdimiento:10}, moves:['pegar','paralizar','aplastar'], boss:true, frontline:true}
     ],
-    decadeBoss: {id:'matriarca_escarlata', name:'Matriarca escarlata', icon:'🕷️', hp:4.6, atk:1.75, res:{fisico:20,fuego:-15,hielo:10,veneno:45,aturdimiento:10}, moves:['pegar','paralizar','aplastar'], boss:true, frontline:true}
+    decadeBoss: {id:'matriarca_escarlata', name:'Matriarca escarlata', icon:'🕷️', hp:4.6, atk:1.6, res:{fisico:20,fuego:-15,hielo:10,veneno:45,aturdimiento:10}, moves:['pegar','paralizar','aplastar'], boss:true, frontline:true}
   },
   // Década 2 — pisos 21-30 — Guaridas de bestias, con Riakis
   {
@@ -1528,7 +1528,8 @@ function applyPotionEffect(potionId){
   const tpl = POTION_TEMPLATES[potionId];
   const d = derived();
   if(tpl.effect.heal==='hp'){
-    const amt = Math.round(d.maxHP*tpl.effect.amount);
+    const healMult = (combat && combat.active) ? healMultiplierFor(combat.playerStatuses) : 1;
+    const amt = Math.round(d.maxHP*tpl.effect.amount*healMult);
     const before = state.char.curHP;
     state.char.curHP = Math.min(d.maxHP, state.char.curHP+amt);
     log(`Bebes <b>${tpl.name}</b>. Recuperas ${state.char.curHP-before} de vida.`);
@@ -2773,6 +2774,19 @@ function effectiveEnemyRes(enemy, resKey){
   return blessed ? base - 20 : base;
 }
 
+// Corrosión (ataque en área de Custodio de la Isla): baja la resistencia
+// física de quien la carga y reduce a la mitad la curación que reciba,
+// durante 2 turnos. corrosionResPenalty() es la contraparte "defensiva" de
+// effectiveEnemyRes() de arriba — ahí bajamos la resistencia del enemigo
+// cuando lo golpeamos, aquí bajamos la del jugador/aliado cuando lo golpean.
+const CORROSION_RES_PENALTY = 15;
+const CORROSION_HEAL_MULT = 0.5;
+function corrosionResPenalty(statuses){ return hasStatus(statuses, 'Corrosion') ? CORROSION_RES_PENALTY : 0; }
+function healMultiplierFor(statuses){
+  const c = hasStatus(statuses, 'Corrosion');
+  return c ? c.healMult : 1;
+}
+
 function hasStatus(list, name){ return list.find(s=>s.name===name); }
 function removeStatus(list, name){
   const idx = list.findIndex(s=>s.name===name);
@@ -3107,14 +3121,14 @@ function resolveAllyTurns(){
       const mostInjured = others.sort((a,b)=>(a.hp/a.maxHP)-(b.hp/b.maxHP))[0];
       const allyPct = mostInjured ? mostInjured.hp/mostInjured.maxHP : 1;
       if(playerPct < 0.5 && playerPct <= allyPct){
-        const heal = Math.round(d.maxHP*0.15);
+        const heal = Math.round(d.maxHP*0.15*healMultiplierFor(combat.playerStatuses));
         const before = state.char.curHP;
         state.char.curHP = Math.min(d.maxHP, state.char.curHP+heal);
         log(`<b>${ally.name}</b> te cura ${state.char.curHP-before} de vida.`);
         return;
       }
       if(mostInjured && allyPct < 0.5){
-        const heal = Math.round(mostInjured.maxHP*0.15);
+        const heal = Math.round(mostInjured.maxHP*0.15*healMultiplierFor(mostInjured.statuses));
         const before = mostInjured.hp;
         mostInjured.hp = Math.min(mostInjured.maxHP, mostInjured.hp+heal);
         log(`<b>${ally.name}</b> cura a <b>${mostInjured.name}</b> ${mostInjured.hp-before} de vida.`);
@@ -3279,6 +3293,30 @@ function enemyAct(enemy){
     }
     return;
   }
+  // El ataque en área de verdad pega a todo el grupo (jugador + cada aliado
+  // vivo), no solo a quien esté al frente — antes el texto lo decía pero el
+  // código igual apuntaba a un solo objetivo. Además contagia Corrosión:
+  // baja la resistencia física y reduce a la mitad la curación que reciban
+  // durante 2 turnos.
+  if(move==='area_debil'){
+    const dmg = Math.max(1, Math.round(enemy.atk*0.5));
+    const corrosion = {name:'Corrosion', duration:2, resPenalty:CORROSION_RES_PENALTY, healMult:CORROSION_HEAL_MULT};
+    const pResVal = totalRes('fisico') - corrosionResPenalty(combat.playerStatuses);
+    const pDmg = Math.max(1, Math.round(dmg*(1-pResVal/100)));
+    dealDamageToPlayer(pDmg);
+    applyStatus(null, corrosion, true);
+    log(`${enemy.name} golpea a todo tu grupo por igual: ${pDmg} de daño a ti.`);
+    livingAllies().forEach(ally=>{
+      const aResVal = ((ally.res && ally.res.fisico)||0) - corrosionResPenalty(ally.statuses);
+      const aDmg = Math.max(1, Math.round(dmg*(1-aResVal/100)));
+      dealDamageToAlly(ally, aDmg);
+      applyStatus(ally, corrosion, false);
+      log(`${enemy.name} golpea a todo tu grupo por igual: ${aDmg} de daño a ${ally.name}.`);
+      if(ally.hp<=0) log(`<b>${ally.name}</b> cae en combate — se recuperará al terminar la pelea.`);
+    });
+    log(`Una <b>Corrosión</b> se extiende sobre el grupo: -${CORROSION_RES_PENALTY} de resistencia física y curación reducida a la mitad durante 2 turnos.`);
+    return;
+  }
 
   const d = derived();
   let dmg = enemy.atk;
@@ -3297,12 +3335,11 @@ function enemyAct(enemy){
   if(move==='cegar'){ text='arroja algo a tus ojos'; applyToTarget({name:'Ceguera', duration:2, chance:0.5, procChance:0.32}); }
   if(move==='atemorizar'){ text='ruge y siembra el terror'; applyToTarget({name:'Miedo', duration:2, chance:0.5, procChance:0.4}); dmg = Math.round(dmg*0.7); }
   if(move==='confundir'){ text='distorsiona tu percepción'; applyToTarget({name:'Confusion', duration:2, chance:0.5, procChance:0.35}); dmg = Math.round(dmg*0.7); }
-  if(move==='area_debil'){ text='golpea a todo tu grupo por igual'; dmg = Math.round(dmg*0.5); }
 
   let finalDmg;
   if(onPlayer){
     // resistance vs player
-    let resVal = totalRes('fisico');
+    let resVal = totalRes('fisico') - corrosionResPenalty(combat.playerStatuses);
     finalDmg = dmg*(1-resVal/100);
     if(state.char.race==='enano') finalDmg -= 2;
     if(combat.playerDefending) finalDmg *= 0.5;
@@ -3314,7 +3351,7 @@ function enemyAct(enemy){
     log(`${enemy.name} ${text}: ${finalDmg} de daño.`);
   } else {
     const ally = target.ally;
-    let allyDmg = dmg*(1-((ally.res && ally.res.fisico)||0)/100);
+    let allyDmg = dmg*(1-(((ally.res && ally.res.fisico)||0) - corrosionResPenalty(ally.statuses))/100);
     if(hasStatus(ally.statuses,'Paralisis')) allyDmg *= 1.25; // indefenso: igual que al jugador
     finalDmg = Math.max(1, Math.round(allyDmg));
     dealDamageToAlly(ally, finalDmg);
