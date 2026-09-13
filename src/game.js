@@ -330,7 +330,7 @@ const SPECIALS_BY_STYLE = {
 
 function shopWeaponValue(){ return 3 + Math.floor(state.char.level/2); }
 function shopWeaponPrice(isOffhand){ return isOffhand ? 40 + state.char.level*4 : 55 + state.char.level*6; }
-const SHOP_POTION_PRICES = {vida_menor:12, vida_mayor:30, estamina:12, espiritu:12};
+const SHOP_POTION_PRICES = {vida_menor:12, vida_mayor:30, estamina:12, espiritu:12, antidoto:22};
 
 // Objeto único (máx. 1 en mochila a la vez) que solo dropean los élites.
 // Bloquea, gratis y sin gastar turno, el golpe que te mataría — pero solo
@@ -388,6 +388,23 @@ function buyGear(slot){
     ? {res: pick(['fisico','fuego','hielo','veneno','aturdimiento']), value: COMUN_RES_PCT}
     : {stat: GUARDIAN_SLOT_STAT[slot] || 'maxhp', value: shopGearValue(slot)};
   addToInventory({slot, name, bonus, rarity:'comun'});
+  log(`Compras <b>${name}</b> por ${price} de oro.`);
+  renderAll(); save();
+}
+
+// Equipo poco común, también con oro (no Sellos) — un escalón intermedio
+// entre lo común de siempre y la tienda de Sellos del Gremio.
+function shopGearPricePocoComun(slot){ return Math.round(shopGearPrice(slot) * 2.2); }
+function shopGearValuePocoComun(slot){ return slot==='armadura' ? 4 + Math.floor(state.char.level/2) : 4 + Math.floor(state.char.level/3); }
+function buyGearPocoComun(slot){
+  const price = shopGearPricePocoComun(slot);
+  if(state.char.gold < price){ log('No tienes suficiente oro para eso.'); return; }
+  state.char.gold -= price;
+  const name = pick(COMUN_GEAR_NAMES[slot]);
+  const bonus = slot==='amuleto'
+    ? {res: pick(['fisico','fuego','hielo','veneno','aturdimiento']), value: POCO_COMUN_RES_PCT}
+    : {stat: GUARDIAN_SLOT_STAT[slot] || 'maxhp', value: shopGearValuePocoComun(slot)};
+  addToInventory({slot, name, bonus, rarity:'poco_comun'});
   log(`Compras <b>${name}</b> por ${price} de oro.`);
   renderAll(); save();
 }
@@ -1597,14 +1614,17 @@ const MISSION_RANK_REWARD = {
 // élites ya definida. Y, por ahora, solo la banda 0 (piso 1-20) tiene
 // objetos/piedras reales implementados; en bandas más altas (inalcanzables
 // hasta liberar los 100 niveles) la misión da Sellos de más en su lugar.
+// Nivel de referencia por banda de misión, solo para que generateLoot() elija
+// una rareza acorde (E/F->común/poco_común, ... hasta D/C-B/A->rango_a como
+// techo real — no hace falta un tope aparte, es el rango más alto que existe).
+const MISSION_BAND_REFERENCE_LEVEL = [5, 25, 45, 55, 55];
 function makeMissionItemReward(band){
-  if(band > 0) return null;
-  if(chance(0.5)){
+  if(band === 0 && chance(0.5)){
     const pool = Object.values(SOUL_STONES).filter(s=>AVAILABLE_SOUL_TIERS.includes(s.tier));
     const tpl = pick(pool);
     return {kind:'soulstone', stoneId:tpl.id, family:tpl.family, name:tpl.name, tier:tpl.tier, icon:tpl.icon, desc:tpl.desc, bonus:tpl.bonus, special:tpl.special};
   }
-  return generateLoot(rnd(1,4));
+  return generateLoot(rnd(1,4), MISSION_BAND_REFERENCE_LEVEL[band] || 5);
 }
 
 function generateMissionBatch(maxFloor){
@@ -1955,6 +1975,20 @@ function renderShop(){
     </div>`;
   }).join('');
 
+  const pocoComunHTML = SHOP_GEAR_SLOTS.map(slot=>{
+    const price = shopGearPricePocoComun(slot);
+    const bonusText = slot==='amuleto'
+      ? `+${POCO_COMUN_RES_PCT}% a una resistencia al azar`
+      : `+${shopGearValuePocoComun(slot)} ${STAT_LABELS[GUARDIAN_SLOT_STAT[slot] || 'maxhp'] || ''}`;
+    return `<div class="inv-item-row">
+      <div>
+        <b>${slotLabel(slot)}</b> <span class="slot-tag" style="border-color:${RARITIES.poco_comun.color}; color:${RARITIES.poco_comun.color};">Poco común</span>
+        <div class="inv-item-bonus">${bonusText}</div>
+      </div>
+      <button class="inv-btn" data-buy-gear-poco="${slot}" ${state.char.gold<price?'disabled':''}>Comprar (${price} oro)</button>
+    </div>`;
+  }).join('');
+
   const selloHTML = SELLO_SHOP_SLOTS.map(slot=>{
     return ['rango_b','rango_a'].map(rarity=>{
       const price = selloShopPrice(rarity);
@@ -2016,6 +2050,9 @@ function renderShop(){
     <div class="section-label">Equipo común</div>
     ${gearHTML}
 
+    <div class="section-label">Equipo poco común</div>
+    ${pocoComunHTML}
+
     <div class="section-label">Tienda del Gremio (Sellos del Laberinto: ${state.char.missionCurrency||0})</div>
     ${selloHTML}
 
@@ -2032,6 +2069,9 @@ function renderShop(){
   });
   document.querySelectorAll('[data-buy-gear]').forEach(btn=>{
     btn.onclick = ()=> buyGear(btn.dataset.buyGear);
+  });
+  document.querySelectorAll('[data-buy-gear-poco]').forEach(btn=>{
+    btn.onclick = ()=> buyGearPocoComun(btn.dataset.buyGearPoco);
   });
   document.querySelectorAll('[data-buy-sello]').forEach(btn=>{
     btn.onclick = ()=>{
