@@ -1698,15 +1698,17 @@ async function rerollMission(missionId){
 }
 
 async function loadMissions(){
-  if(!state || !state.char) return [];
+  if(!state || !state.char) return {rows:[], error:null};
   const batch = generateMissionBatch(state.char.maxLevelUnlocked);
   const { data, error } = await supabase.rpc('refresh_and_insert_missions', {p_character_id: state.char.id, p_missions: batch});
-  if(error){ console.error('No se pudo cargar el tablón de misiones:', error.message); return []; }
-  return data || [];
+  if(error){ console.error('No se pudo cargar el tablón de misiones:', error.message); return {rows:[], error: error.message}; }
+  return {rows: data || [], error: null};
 }
 
 async function refreshMissionsState(){
-  state.missions = await loadMissions();
+  const result = await loadMissions();
+  state.missions = result.rows;
+  state.missionsError = result.error;
 }
 
 async function advanceMissionsFor(objectiveType, amount){
@@ -1757,7 +1759,9 @@ function renderMissions(){
         ${m.status==='active' ? `<button class="inv-btn" data-reroll="${m.id}" ${canReroll?'':'disabled'}>Refrescar</button>` : ''}
       </div>
     </div>`;
-  }).join('') : `<p class="inv-empty-msg">Cargando el tablón de misiones…</p>`;
+  }).join('') : (state.missionsError
+    ? `<p class="inv-empty-msg">No se pudo cargar el tablón: ${state.missionsError}</p><button class="inv-btn" id="btn-retry-missions">Reintentar</button>`
+    : `<p class="inv-empty-msg">Cargando el tablón de misiones…</p>`);
 
   document.getElementById('main-panel').innerHTML = `
     <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:4px;">
@@ -1774,7 +1778,9 @@ function renderMissions(){
   document.querySelectorAll('[data-reroll]').forEach(btn=>{
     btn.onclick = ()=> rerollMission(btn.dataset.reroll);
   });
-  if(!rows.length) refreshMissionsState().then(()=>{ if(missionsOpen) renderMissions(); });
+  const retryBtn = document.getElementById('btn-retry-missions');
+  if(retryBtn) retryBtn.onclick = ()=>{ state.missionsError = undefined; renderMissions(); };
+  if(!rows.length && state.missionsError===undefined) refreshMissionsState().then(()=>{ if(missionsOpen) renderMissions(); });
 }
 
 /* ============================================================
