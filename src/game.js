@@ -1803,7 +1803,11 @@ function generateLoot(floorIdx){
    ============================================================ */
 function makeEnemy(tpl, floorIdx, level){
   const lvlMult = levelMult(level||1);
-  const floorMult = 1 + floorIdx*0.05; // gentle increase floor by floor within the same level
+  // curva por piso dentro del mismo nivel: niveles 1-5 suben +0.5 por piso,
+  // 6-10 suben +0.8 por piso — antes era un +0.05 casi plano en todo el juego,
+  // lo que hacía que un personaje bien equipado no notara diferencia entre
+  // el primer y el último piso de un mismo nivel.
+  const floorMult = 1 + floorIdx * ((level||1) <= 5 ? 0.5 : 0.8);
   let hp, atk;
   if(tpl.boss){
     // guardian: level 1 baseline ~300 HP, then +14% compounding per level.
