@@ -2559,6 +2559,7 @@ function startCombat(enemyGroup, node){
     node,
     enemies:enemyGroup, // slot 0 = front
     allies,
+    hostileAllies:[], // ids de aliados que te han atacado esta pelea — solo esos se pueden golpear de vuelta
     playerPos:'frente',
     playerStatuses:[],
     playerDefending:false,
@@ -2584,6 +2585,11 @@ function frontlineTarget(){
 function dealDamageToAlly(ally, amount){
   ally.hp = Math.max(0, ally.hp - amount);
 }
+function isAllyHostile(allyId){ return (combat.hostileAllies||[]).includes(allyId); }
+function markAllyHostile(allyId){
+  if(!combat.hostileAllies) combat.hostileAllies = [];
+  if(!combat.hostileAllies.includes(allyId)) combat.hostileAllies.push(allyId);
+}
 
 // Estadísticas de combate del aliado, derivadas de su nivel — v1 no tiene
 // equipo ni piedras de alma propias todavía, solo la curva base por rol.
@@ -2595,7 +2601,8 @@ function makeCombatAlly(row){
   return {
     id: row.id, templateId: row.template_id, name: row.name, icon: tpl.icon, role: tpl.role,
     frontline: tpl.frontline, level: lvl,
-    maxHP, hp: maxHP, atk, statuses:[]
+    maxHP, hp: maxHP, atk, statuses:[],
+    res:{fisico:0, fuego:0, hielo:0, veneno:0, aturdimiento:0} // sin resistencias propias todavía (v1)
   };
 }
 
@@ -2619,6 +2626,13 @@ function computeCritEvasion(){
   if(combat.playerDefending) ev = Math.max(ev, 0.5);
   if(hasStatus(combat.playerStatuses,'Paralisis')) ev = 0; // indefenso: la Parálisis anula toda evasión, incluso defendiendo
   return {crit:d.critChance, evasion:clamp(ev,0,0.6)};
+}
+
+// v1: los aliados no tienen Habilidad ni equipo propio todavía, solo una
+// base plana — la Parálisis igual los anula por completo, como al jugador.
+function computeAllyEvasion(ally){
+  if(hasStatus(ally.statuses,'Paralisis')) return 0;
+  return 0.06;
 }
 
 // probabilidad combinada de aturdir al golpear, sumando todas las fuentes
@@ -2742,8 +2756,16 @@ function playerUseSkill(skillId, targetIdx){
     if(fi<0){ log('No hay ningún enemigo al frente.'); return; }
     targets = [combat.enemies[fi]];
   } else if(skill.targetMode==='any'){
-    const t = combat.enemies[targetIdx];
-    if(!t || t.hp<=0){ log('Objetivo inválido.'); return; }
+    let t;
+    if(typeof targetIdx==='string' && targetIdx.startsWith('ally:')){
+      const allyIdx = parseInt(targetIdx.slice(5));
+      const allyTarget = (combat.allies||[])[allyIdx];
+      if(!allyTarget || allyTarget.hp<=0 || !isAllyHostile(allyTarget.id)){ log('Objetivo inválido.'); return; }
+      t = allyTarget;
+    } else {
+      t = combat.enemies[targetIdx];
+      if(!t || t.hp<=0){ log('Objetivo inválido.'); return; }
+    }
     targets = [t];
   } else if(skill.targetMode==='all'){
     targets = livingEnemies();
@@ -2883,6 +2905,30 @@ function endPlayerTurn(){
 function resolveAllyTurns(){
   livingAllies().forEach(ally=>{
     if(ally.hp<=0 || combat.over) return;
+
+    const miedo = hasStatus(ally.statuses,'Miedo');
+    if(miedo && chance(miedo.procChance||0.4)){
+      log(`<b>${ally.name}</b> está paralizado de miedo y pierde su turno.`);
+      return;
+    }
+
+    const confusion = hasStatus(ally.statuses,'Confusion');
+    if(confusion && chance(confusion.procChance||0.35)){
+      const otherAllies = livingAllies().filter(a=>a!==ally);
+      const hitPlayer = chance(1/(otherAllies.length+1));
+      const dmg = Math.max(1, Math.round(ally.atk));
+      if(hitPlayer){
+        log(`<b>${ally.name}</b> está confundido y te golpea a ti por error.`);
+        dealDamageToPlayer(dmg);
+        markAllyHostile(ally.id);
+      } else {
+        const victim = pick(otherAllies);
+        log(`<b>${ally.name}</b> está confundido y golpea a <b>${victim.name}</b> por error.`);
+        dealDamageToAlly(victim, dmg);
+      }
+      return;
+    }
+
     if(ally.role==='sacerdote'){
       const d = derived();
       const playerPct = state.char.curHP / d.maxHP;
@@ -2907,8 +2953,17 @@ function resolveAllyTurns(){
     const fi = frontEnemyIndex();
     if(fi<0) return;
     const enemyTarget = combat.enemies[fi];
+
+    const ceguera = hasStatus(ally.statuses,'Ceguera');
+    if(ceguera && chance(ceguera.procChance||0.32)){
+      log(`<b>${ally.name}</b> falla su golpe por la Ceguera.`);
+      return;
+    }
+
+    let dmg = ally.atk;
+    if(hasStatus(ally.statuses,'Debilitado')) dmg *= 0.85;
     const resVal = (enemyTarget.res && enemyTarget.res.fisico) || 0;
-    const dmg = Math.max(1, Math.round(ally.atk*(1-resVal/100)));
+    dmg = Math.max(1, Math.round(dmg*(1-resVal/100)));
     enemyTarget.hp = Math.max(0, enemyTarget.hp - dmg);
     log(`<b>${ally.name}</b> ataca a ${enemyTarget.name}: ${dmg} de daño.`);
   });
@@ -2963,12 +3018,14 @@ function processEnemyTurns(){
     enemyAct(enemy);
   });
 
-  // decrement every status exactly once per turn cycle (enemies + player)
+  // decrement every status exactly once per turn cycle (enemies + player + aliados)
   // (player DOT — Sangrado/Quemadura — needs to actually tick before we decrement it away;
   // this call was missing entirely before, so a player bitten by a spider never actually bled)
   tickStatuses(combat.playerStatuses, null, null);
+  livingAllies().forEach(ally=> tickStatuses(ally.statuses, ally.name, ally));
   combat.enemies.forEach(enemy=> decrementStatuses(enemy.statuses));
   decrementStatuses(combat.playerStatuses);
+  (combat.allies||[]).forEach(ally=> decrementStatuses(ally.statuses));
 
   // player regen
   const d = derived();
@@ -2987,7 +3044,7 @@ function enemyAct(enemy){
   Object.keys(enemy.cooldowns).forEach(k=> enemy.cooldowns[k] = Math.max(0, enemy.cooldowns[k]-1));
 
   const target = frontlineTarget();
-  const evasion = target.kind==='ally' ? 0.06 : computeCritEvasion().evasion; // v1: los aliados no tienen su propia fórmula de evasión todavía, solo una base plana
+  const evasion = target.kind==='ally' ? computeAllyEvasion(target.ally) : computeCritEvasion().evasion;
   if(chance(evasion)){
     log(`${enemy.name} ataca a ${target.kind==='ally' ? target.ally.name : 'ti'}, ¡pero esquiva!`);
     return;
@@ -3026,20 +3083,18 @@ function enemyAct(enemy){
   const fortalecido = hasStatus(enemy.statuses,'Fortalecido');
   if(fortalecido) dmg = Math.round(dmg * (1 + (fortalecido.stacks||1)*0.04));
   let text = 'ataca';
-  // Los efectos negativos (Sangrado, Debilitado, Parálisis, Ceguera, Miedo,
-  // Confusión) solo tienen mecánica implementada sobre el jugador por ahora
-  // — apuntarle a un aliado con estos movimientos aún no aplica el estado,
-  // solo el daño del golpe. Los aliados con su propio set de debuffs quedan
-  // para la siguiente entrega de la Taberna.
+  // Los aliados ahora son "un personaje más": los mismos movimientos que
+  // afligen al jugador afligen a quien esté en el frente, sea quien sea.
   const onPlayer = target.kind==='player';
+  const applyToTarget = (statusDef)=> onPlayer ? applyStatus(null, statusDef, true) : applyStatus(target.ally, statusDef, false);
   if(move==='robar'){ text='intenta robar tu oro'; dmg = Math.round(dmg*0.6); }
-  if(move==='morder'){ text='muerde, veneno en los colmillos'; if(onPlayer) applyStatus(null, {name:'Sangrado', duration:2, stack:true, maxStack:3}, true); }
-  if(move==='debilitar'){ text='drena tu fuerza'; if(onPlayer) applyStatus(null, {name:'Debilitado', duration:2}, true); dmg = Math.round(dmg*0.6); }
+  if(move==='morder'){ text='muerde, veneno en los colmillos'; applyToTarget({name:'Sangrado', duration:2, stack:true, maxStack:3}); }
+  if(move==='debilitar'){ text='drena tu fuerza'; applyToTarget({name:'Debilitado', duration:2}); dmg = Math.round(dmg*0.6); }
   if(move==='aplastar'){ text='golpea con fuerza brutal'; dmg = Math.round(dmg*1.4); }
-  if(move==='paralizar'){ text='muerde y paraliza'; if(onPlayer) applyStatus(null, {name:'Paralisis', duration:2, chance:0.5}, true); }
-  if(move==='cegar'){ text='arroja algo a tus ojos'; if(onPlayer) applyStatus(null, {name:'Ceguera', duration:2, chance:0.5, procChance:0.32}, true); }
-  if(move==='atemorizar'){ text='ruge y siembra el terror'; if(onPlayer) applyStatus(null, {name:'Miedo', duration:2, chance:0.5, procChance:0.4}, true); dmg = Math.round(dmg*0.7); }
-  if(move==='confundir'){ text='distorsiona tu percepción'; if(onPlayer) applyStatus(null, {name:'Confusion', duration:2, chance:0.5, procChance:0.35}, true); dmg = Math.round(dmg*0.7); }
+  if(move==='paralizar'){ text='muerde y paraliza'; applyToTarget({name:'Paralisis', duration:2, chance:0.5}); }
+  if(move==='cegar'){ text='arroja algo a tus ojos'; applyToTarget({name:'Ceguera', duration:2, chance:0.5, procChance:0.32}); }
+  if(move==='atemorizar'){ text='ruge y siembra el terror'; applyToTarget({name:'Miedo', duration:2, chance:0.5, procChance:0.4}); dmg = Math.round(dmg*0.7); }
+  if(move==='confundir'){ text='distorsiona tu percepción'; applyToTarget({name:'Confusion', duration:2, chance:0.5, procChance:0.35}); dmg = Math.round(dmg*0.7); }
   if(move==='area_debil'){ text='golpea a todo tu grupo por igual'; dmg = Math.round(dmg*0.5); }
 
   let finalDmg;
@@ -3056,10 +3111,13 @@ function enemyAct(enemy){
     dealDamageToPlayer(finalDmg);
     log(`${enemy.name} ${text}: ${finalDmg} de daño.`);
   } else {
-    finalDmg = Math.max(1, Math.round(dmg));
-    dealDamageToAlly(target.ally, finalDmg);
-    log(`${enemy.name} ${text} a ${target.ally.name}: ${finalDmg} de daño.`);
-    if(target.ally.hp<=0) log(`<b>${target.ally.name}</b> cae en combate — se recuperará al terminar la pelea.`);
+    const ally = target.ally;
+    let allyDmg = dmg*(1-((ally.res && ally.res.fisico)||0)/100);
+    if(hasStatus(ally.statuses,'Paralisis')) allyDmg *= 1.25; // indefenso: igual que al jugador
+    finalDmg = Math.max(1, Math.round(allyDmg));
+    dealDamageToAlly(ally, finalDmg);
+    log(`${enemy.name} ${text} a ${ally.name}: ${finalDmg} de daño.`);
+    if(ally.hp<=0) log(`<b>${ally.name}</b> cae en combate — se recuperará al terminar la pelea.`);
   }
 
   // Vitalidad: devuelve un % del daño físico recibido a quien lo infligió
@@ -3327,14 +3385,15 @@ function renderCombat(){
 
   const playerStatusChips = combat.playerStatuses.map(st=>`<span class="status-chip">${st.name} (${st.duration})</span>`).join('');
 
-  const allyHTML = (combat.allies||[]).map(a=>{
+  const allyHTML = (combat.allies||[]).map((a,i)=>{
     const dead = a.hp<=0;
+    const hostile = isAllyHostile(a.id);
     const hpPct = clamp(a.hp/a.maxHP*100, 0, 100);
     const statusChips = (a.statuses||[]).map(st=>`<span class="status-chip">${st.name}${st.stacks?(' x'+st.stacks):''} (${st.duration})</span>`).join('');
-    return `<div class="enemy-card ${dead?'dead':''}">
+    return `<div class="enemy-card ${dead?'dead':''} ${!dead && hostile?'targetable':''}" ${!dead && hostile ? `data-ally-idx="${i}"` : ''}>
       <div class="ei">${a.icon}</div>
       <div class="einfo">
-        <div class="ename"><span>${a.name}</span>${a.frontline ? '<span class="slot-tag">Frente</span>' : ''}</div>
+        <div class="ename"><span>${a.name}</span>${a.frontline ? '<span class="slot-tag">Frente</span>' : ''}${hostile ? '<span class="slot-tag" style="border-color:var(--blood-light); color:var(--blood-light);">¡Traidor!</span>' : ''}</div>
         <div class="bar-track" style="margin-top:4px;"><div class="bar-fill hp" style="width:${hpPct}%"></div></div>
         <div style="font-size:0.7em; color:var(--text-dim); margin-top:2px;">${a.hp}/${a.maxHP} HP</div>
         <div>${statusChips}</div>
@@ -3419,8 +3478,12 @@ function renderCombat(){
         log(`Elige un objetivo para ${sk.name}.`);
         document.querySelectorAll('.enemy-card.targetable').forEach(card=>{
           card.onclick = ()=>{
-            const idx = parseInt(card.dataset.idx);
-            playerUseSkill(sid, idx);
+            if(card.dataset.allyIdx !== undefined){
+              playerUseSkill(sid, 'ally:'+card.dataset.allyIdx);
+            } else {
+              const idx = parseInt(card.dataset.idx);
+              playerUseSkill(sid, idx);
+            }
           };
         });
       } else {
