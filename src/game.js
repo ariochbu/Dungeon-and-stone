@@ -211,7 +211,7 @@ const DECADE_BESTIARY = [
       {id:'reina_telaranha', name:'Reina telaraña', icon:'👑', hp:3.4, atk:1.55, res:{fisico:15,fuego:-15,hielo:10,veneno:40,aturdimiento:5}, moves:['pegar','paralizar','aplastar'], boss:true, frontline:true},
       {id:'devoradora_nido', name:'Devoradora de nido', icon:'🕷️', hp:3.6, atk:1.5, res:{fisico:20,fuego:-10,hielo:5,veneno:35,aturdimiento:10}, moves:['pegar','paralizar','aplastar'], boss:true, frontline:true}
     ],
-    decadeBoss: {id:'matriarca_escarlata', name:'Matriarca escarlata', icon:'🕷️', hp:4.6, atk:1.6, res:{fisico:20,fuego:-15,hielo:10,veneno:45,aturdimiento:10}, moves:['pegar','paralizar','aplastar'], boss:true, frontline:true}
+    decadeBoss: {id:'matriarca_escarlata', name:'Matriarca escarlata', icon:'🕷️', hp:4.2, atk:1.5, res:{fisico:20,fuego:-15,hielo:10,veneno:45,aturdimiento:10}, moves:['pegar','paralizar','aplastar'], boss:true, frontline:true}
   },
   // Década 2 — pisos 21-30 — Guaridas de bestias, con Riakis
   {
