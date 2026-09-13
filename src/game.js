@@ -155,14 +155,19 @@ const SKILLS = {
   }
 };
 
+// Tema goblin para los niveles 1-10: arqueros/guerreros/saqueadores/chamanes
+// como tropa regular, un Jefe goblin como élite, y Hobgoblin/Gilgoblin como
+// guardianes normales — salvo el nivel 10, cuyo guardián es siempre el Ogro
+// (ver la selección de plantilla en enterNode()).
 const ENEMY_TEMPLATES = [
-  {id:'rata', name:'Rata colosal', icon:'🐀', hp:1.0, atk:0.9, res:{fisico:0,fuego:-10,hielo:0,veneno:20,aturdimiento:0}, moves:['pegar']},
-  {id:'bandido', name:'Bandido del laberinto', icon:'🗡️', hp:1.1, atk:1.1, res:{fisico:5,fuego:0,hielo:0,veneno:0,aturdimiento:0}, moves:['pegar','robar']},
-  {id:'esqueleto', name:'Esqueleto óseo', icon:'💀', hp:1.2, atk:1.0, res:{fisico:25,fuego:-15,hielo:10,veneno:40,aturdimiento:-10}, moves:['pegar']},
-  {id:'arana', name:'Araña venenosa', icon:'🕷️', hp:0.9, atk:0.85, res:{fisico:0,fuego:0,hielo:-10,veneno:30,aturdimiento:10}, moves:['pegar','morder']},
-  {id:'espectro', name:'Espectro errante', icon:'👻', hp:1.0, atk:1.05, res:{fisico:30,fuego:0,hielo:0,veneno:0,aturdimiento:-15}, moves:['pegar','debilitar']},
-  {id:'trol', name:'Trol de piedra', icon:'🗿', hp:1.9, atk:1.4, res:{fisico:20,fuego:-10,hielo:5,veneno:10,aturdimiento:25}, moves:['pegar','aplastar'], elite:true},
-  {id:'guardian', name:'Guardián del laberinto', icon:'🛡️', hp:3.2, atk:1.6, res:{fisico:15,fuego:5,hielo:5,veneno:15,aturdimiento:30}, moves:['pegar','aplastar','debilitar'], boss:true}
+  {id:'goblin_arquero', name:'Goblin arquero', icon:'🏹', hp:0.85, atk:1.1, res:{fisico:-5,fuego:0,hielo:0,veneno:5,aturdimiento:0}, moves:['pegar','robar']},
+  {id:'goblin_guerrero', name:'Goblin guerrero', icon:'🗡️', hp:1.15, atk:1.05, res:{fisico:10,fuego:-5,hielo:0,veneno:0,aturdimiento:5}, moves:['pegar']},
+  {id:'goblin_saqueador', name:'Goblin saqueador', icon:'🪓', hp:1.0, atk:1.0, res:{fisico:0,fuego:0,hielo:-10,veneno:10,aturdimiento:10}, moves:['pegar','robar']},
+  {id:'goblin_chaman', name:'Chamán goblin', icon:'💀', hp:0.85, atk:0.95, res:{fisico:-10,fuego:15,hielo:15,veneno:25,aturdimiento:-10}, moves:['pegar','debilitar']},
+  {id:'jefe_goblin', name:'Jefe goblin', icon:'👹', hp:1.9, atk:1.4, res:{fisico:20,fuego:-10,hielo:5,veneno:15,aturdimiento:25}, moves:['pegar','aplastar'], elite:true},
+  {id:'hobgoblin', name:'Hobgoblin', icon:'🛡️', hp:3.2, atk:1.6, res:{fisico:15,fuego:5,hielo:5,veneno:15,aturdimiento:30}, moves:['pegar','aplastar','debilitar'], boss:true},
+  {id:'gilgoblin', name:'Gilgoblin', icon:'🔱', hp:3.0, atk:1.7, res:{fisico:10,fuego:10,hielo:10,veneno:20,aturdimiento:20}, moves:['pegar','aplastar','debilitar'], boss:true},
+  {id:'ogro', name:'Ogro', icon:'👺', hp:4.2, atk:1.9, res:{fisico:25,fuego:0,hielo:0,veneno:10,aturdimiento:35}, moves:['pegar','aplastar','debilitar'], boss:true}
 ];
 
 const POTION_TEMPLATES = {
@@ -1742,8 +1747,9 @@ function enterNode(f,n){
   save();
 
   if(node.type==='combate' || node.type==='elite' || node.type==='jefe'){
-    const templates = node.type==='jefe' ? [ENEMY_TEMPLATES.find(t=>t.boss)] :
-                       node.type==='elite' ? ENEMY_TEMPLATES.filter(t=>t.elite) :
+    const templates = node.type==='jefe'
+                       ? (dg.level >= 10 ? [ENEMY_TEMPLATES.find(t=>t.id==='ogro')] : ENEMY_TEMPLATES.filter(t=>t.boss && t.id!=='ogro'))
+                       : node.type==='elite' ? ENEMY_TEMPLATES.filter(t=>t.elite) :
                        ENEMY_TEMPLATES.filter(t=>!t.elite && !t.boss);
     const count = node.type==='jefe' ? 1 : (node.type==='elite' ? 1 : rnd(1,2));
     const group = [];
