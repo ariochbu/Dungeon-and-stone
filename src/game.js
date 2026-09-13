@@ -235,7 +235,7 @@ const SHOP_POTION_PRICES = {vida_menor:12, vida_mayor:30, estamina:12, espiritu:
 // reacciona ante el Ogro, el jefe final de las décadas (10, 20, 30...),
 // nunca ante Hobgoblin/Gilgoblin ni ningún otro jefe intermedio.
 const WARD_ITEM = {
-  name: 'Amuleto de Última Guardia',
+  name: 'Tótem de Última Guardia',
   icon: '🧿',
   desc: 'Bloquea, una sola vez y sin gastar tu turno, el golpe que te mataría. Solo reacciona ante el jefe final de una década del laberinto (nivel 10, 20, 30...) — contra cualquier otro enemigo se mantiene inerte. Se pierde si mueres antes de usarlo.'
 };
@@ -1135,7 +1135,7 @@ function renderInventory(){
           <div class="inv-item-bonus neutral">${WARD_ITEM.desc}</div>
         </div>
       </div>`
-    : `<p class="inv-empty-msg">No llevas ningún amuleto protector. Los élites pueden dejarlo caer.</p>`;
+    : `<p class="inv-empty-msg">No llevas ningún tótem protector. Los élites pueden dejarlo caer.</p>`;
 
   document.getElementById('main-panel').innerHTML = `
     <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:4px;">
