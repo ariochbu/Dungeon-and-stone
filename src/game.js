@@ -102,8 +102,8 @@ const SKILLS = {
   },
   grito_guerra: {
     id:'grito_guerra', name:'Grito de guerra', cost:{tipo:'espiritu', valor:10}, utility:'buff_self',
-    applySelf:{name:'Furioso', duration:2, dmgMult:1.3, evasionDelta:-10},
-    desc:'+30% daño físico, -10% evasión durante 2 turnos.', targetMode:'self'
+    applySelf:{name:'Furioso', duration:2, dmgMult:1.3, evasionDelta:-10, incomingDmgReduction:0.2},
+    desc:'+30% daño físico y -20% daño recibido durante 2 turnos, a cambio de -10% evasión.', targetMode:'self'
   },
 
   corte_rapido: {
@@ -1960,9 +1960,13 @@ function playerUseSkill(skillId, targetIdx){
     // refresh the existing buff instead of stacking a duplicate entry (duplicates used to
     // pile up if you recast before the first one expired, showing two chips and quietly
     // extending the effect since only the first match is ever read)
+    // +1 de duración: el turno en que se lanza termina con el descuento normal de
+    // processEnemyTurns antes de que el jugador llegue a usarlo, así que sin este ajuste
+    // un buff de "2 turnos" solo alcanzaba para un ataque bufado en vez de dos.
+    const effectiveDuration = skill.applySelf.duration + 1;
     const existingBuff = hasStatus(combat.playerStatuses, skill.applySelf.name);
-    if(existingBuff) existingBuff.duration = skill.applySelf.duration;
-    else combat.playerStatuses.push(Object.assign({}, skill.applySelf));
+    if(existingBuff) existingBuff.duration = effectiveDuration;
+    else combat.playerStatuses.push(Object.assign({}, skill.applySelf, {duration: effectiveDuration}));
     log(`Usas ${skill.name}. Te sientes más fuerte.`);
     endPlayerTurn(); return;
   }
@@ -2142,6 +2146,8 @@ function enemyAct(enemy){
   let finalDmg = dmg*(1-resVal/100);
   if(state.char.race==='enano') finalDmg -= 2;
   if(combat.playerDefending) finalDmg *= 0.5;
+  const furiosoBuff = hasStatus(combat.playerStatuses,'Furioso');
+  if(furiosoBuff && furiosoBuff.incomingDmgReduction) finalDmg *= (1 - furiosoBuff.incomingDmgReduction);
   finalDmg = Math.max(1, Math.round(finalDmg));
 
   state.char.curHP = Math.max(0, state.char.curHP - finalDmg);
