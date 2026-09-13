@@ -20,6 +20,7 @@
       <div class="gold-badge" id="gold-badge" style="display:none;">⛁ <span id="gold-amount">0</span></div>
       <div class="gold-badge" id="tier-badge" style="display:none;" title="Nivel del laberinto actual y su amenaza (ajustada visualmente a tu nivel de personaje)"><span id="tier-amount">1</span></div>
       <button class="inv-toggle-btn" id="btn-inventory" style="display:none;">🎒 Inventario</button>
+      <button class="reset-btn" id="btn-switch-char" style="display:none;">Cambiar de personaje</button>
       <button class="reset-btn" id="btn-slots" style="display:none;">Cerrar sesión</button>
       <button class="reset-btn" id="btn-reset" style="display:none;">Borrar personaje</button>
     </div>
@@ -43,12 +44,26 @@
     <div id="username-box"></div>
   </div>
 
+  <!-- ============ CHARACTER SELECT SCREEN ============ -->
+  <div class="screen" id="screen-select">
+    <div class="intro">
+      <h1>Tus personajes</h1>
+      <p>Hasta 6 personajes por cuenta, cada uno independiente: sin equipo ni nivel compartido entre ellos.</p>
+    </div>
+    <div id="select-box"></div>
+  </div>
+
   <!-- ============ CREATION SCREEN ============ -->
   <div class="screen" id="screen-create">
     <div class="intro">
       <h1>Antes de la caída</h1>
       <p>Elige el cuerpo que habitarás en el mundo de Dungeon &amp; Stone. Tu raza define tus cimientos; tu senda de combate, cómo sobrevives al laberinto.</p>
     </div>
+
+    <div class="step-title">Nombre del personaje</div>
+    <p style="color:var(--text-dim); font-size:0.85em; margin:0 0 10px;">Es el nombre que verán los demás jugadores en el ranking. Único en todo el juego, y no se puede cambiar después.</p>
+    <input id="char-nickname" class="auth-input" type="text" placeholder="Nombre del personaje" style="max-width:320px;">
+    <p id="char-nickname-msg" style="color:var(--blood-light); font-size:0.82em; min-height:1.2em; margin:4px 0 0;"></p>
 
     <div class="step-title">Raza</div>
     <div class="card-grid" id="race-grid"></div>

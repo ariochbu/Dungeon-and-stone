@@ -81,13 +81,17 @@ Cada `git push` a `main` vuelve a desplegar solo.
 
 ## Cómo darte a ti mismo el rol de administrador
 
-Por ahora no hay panel de admin en la interfaz (queda para una siguiente
-iteración); el campo ya existe en la base de datos. Para probarlo, en el SQL
-Editor de Supabase:
+El rol de admin es **por personaje**, no por cuenta (una cuenta puede tener
+hasta 6 personajes; solo uno de ellos necesita ser el admin). En el SQL Editor
+de Supabase:
 
 ```sql
-update public.profiles set role = 'admin' where username = 'tu_usuario';
+update public.characters set role = 'admin' where nickname = 'nombre_del_personaje';
 ```
+
+Recomendado: usa un personaje que además tengas oculto del ranking
+(`hidden_from_leaderboard = true`), para que tu cuenta de administración no
+aparezca en el Top 10 público — el panel admin ya trae un botón para eso.
 
 Esto es intencionalmente independiente de quién puede hacer `git push` al
 repositorio o desplegar en Vercel/Netlify (eso lo controlan los permisos del

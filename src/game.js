@@ -662,6 +662,8 @@ function characterToRow(){
 function rowToState(row){
   return {
     char:{
+      id: row.id, slotNumber: row.slot_number, nickname: row.nickname,
+      role: row.role, hiddenFromLeaderboard: row.hidden_from_leaderboard,
       race: row.race, style: row.style,
       level: row.level, xp: row.xp, gold: row.gold,
       curHP: row.cur_hp, curSta: row.cur_sta, curSpi: row.cur_spi,
@@ -685,7 +687,7 @@ const SAVE_DEBOUNCE_MS = 1500;
 async function flushSave(){
   if(!state || !currentUser) return;
   pendingSave = false;
-  const { error } = await supabase.from('characters').update(characterToRow()).eq('user_id', currentUser.id);
+  const { error } = await supabase.from('characters').update(characterToRow()).eq('id', state.char.id);
   if(error) console.error('No se pudo guardar la partida:', error.message);
 }
 
@@ -701,26 +703,31 @@ async function save(){
 window.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='hidden' && pendingSave) flushSave(); });
 window.addEventListener('beforeunload', ()=>{ if(pendingSave) flushSave(); });
 
-async function loadCharacterRow(){
-  const { data, error } = await supabase.from('characters').select('*').eq('user_id', currentUser.id).maybeSingle();
-  if(error){ console.error('No se pudo cargar el personaje:', error.message); return null; }
-  return data;
+async function loadCharacterRows(){
+  const { data, error } = await supabase.from('characters').select('*').eq('user_id', currentUser.id).order('slot_number');
+  if(error){ console.error('No se pudieron cargar los personajes:', error.message); return []; }
+  return data || [];
 }
 
-async function createCharacterOnServer(raceId, styleId){
-  const { data, error } = await supabase.rpc('create_character', {p_race: raceId, p_style: styleId});
+async function createCharacterOnServer(raceId, styleId, nickname){
+  const { data, error } = await supabase.rpc('create_character', {p_race: raceId, p_style: styleId, p_nickname: nickname});
   if(error) throw error;
   return data;
 }
 
-async function deleteCharacterOnServer(){
-  if(!currentUser) return;
-  const { error } = await supabase.from('characters').delete().eq('user_id', currentUser.id);
+async function characterNicknameAvailable(nickname){
+  const { data, error } = await supabase.rpc('character_nickname_available', {p_nickname: nickname});
+  if(error) throw error;
+  return !!data;
+}
+
+async function deleteCharacterById(characterId){
+  const { error } = await supabase.from('characters').delete().eq('id', characterId);
   if(error) console.error('No se pudo borrar el personaje:', error.message);
 }
 
 async function fetchProfile(userId){
-  const { data, error } = await supabase.from('profiles').select('id, username, username_set, role, is_banned').eq('id', userId).maybeSingle();
+  const { data, error } = await supabase.from('profiles').select('id, username, username_set, is_banned').eq('id', userId).maybeSingle();
   if(error){ console.error('No se pudo cargar el perfil:', error.message); return null; }
   return data;
 }
@@ -1195,7 +1202,7 @@ function usePotionInCombat(potionId){
    RENDER: CITY
    ============================================================ */
 function renderCity(){
-  const adminCardHTML = (currentProfile && currentProfile.role === 'admin') ? `
+  const adminCardHTML = (state.char.role === 'admin') ? `
       <div class="action-card">
         <h3>Panel admin</h3>
         <p>Gestiona cuentas de jugadores: banear, restaurar y otorgar rol de administrador.</p>
@@ -1311,9 +1318,9 @@ async function renderRanking(){
     return;
   }
   list.innerHTML = data.map((row,i)=>{
-    const mine = currentProfile && row.username.toLowerCase() === currentProfile.username.toLowerCase();
+    const mine = row.nickname.toLowerCase() === state.char.nickname.toLowerCase();
     return `<div class="equip-row" style="${mine?'color:var(--bronze-light);':''}">
-      <span>#${i+1} ${row.username}${mine ? ' (tú)' : ''}</span>
+      <span>#${i+1} ${row.nickname}${mine ? ' (tú)' : ''}</span>
       <b>Nivel ${row.record_level} · Piso ${row.record_floor_idx}</b>
     </div>`;
   }).join('');
@@ -1344,33 +1351,50 @@ async function loadAdminList(){
   const list = document.getElementById('admin-list');
   const msg = document.getElementById('admin-msg');
   const [profilesRes, charsRes] = await Promise.all([
-    supabase.from('profiles').select('id, username, role, is_banned, hidden_from_leaderboard, created_at').order('created_at', { ascending: false }).limit(100),
-    supabase.from('characters').select('user_id')
+    supabase.from('profiles').select('id, username, is_banned, created_at').order('created_at', { ascending: false }).limit(100),
+    supabase.from('characters').select('id, user_id, nickname, role, hidden_from_leaderboard, level, record_level, record_floor_idx').order('slot_number')
   ]);
   const { data, error } = profilesRes;
   if(!list) return; // el jugador cerró el panel antes de que llegara la respuesta
-  if(error){
+  if(error || charsRes.error){
     list.innerHTML = `<p class="inv-empty-msg">No se pudo cargar la lista de cuentas.</p>`;
     return;
   }
-  const hasCharacter = new Set((charsRes.data || []).map(c => c.user_id));
+  const chars = charsRes.data || [];
+  const charsByUser = new Map();
+  chars.forEach(c=>{
+    if(!charsByUser.has(c.user_id)) charsByUser.set(c.user_id, []);
+    charsByUser.get(c.user_id).push(c);
+  });
 
   list.innerHTML = data.map(p=>{
     const isSelf = p.id === currentUser.id;
     const bannedLabel = p.is_banned ? 'Suspendida' : 'Activa';
     const created = new Date(p.created_at).toLocaleDateString();
-    const ownsCharacter = hasCharacter.has(p.id);
-    return `<div class="inv-item-row">
-      <div>
-        <b>${p.username}</b> <span class="slot-tag">${p.role}</span> <span class="slot-tag" style="${p.is_banned?'color:var(--blood-light); border-color:rgba(178,68,68,0.4);':'color:var(--good);'}">${bannedLabel}</span>${p.hidden_from_leaderboard ? ' <span class="slot-tag">Oculta del ranking</span>' : ''}
-        <div class="inv-item-bonus neutral">Creada: ${created}${ownsCharacter ? '' : ' · sin personaje'}</div>
-      </div>
-      <div style="display:flex; gap:8px; flex-shrink:0; flex-wrap:wrap;">
+    const myChars = charsByUser.get(p.id) || [];
+    const charsHTML = myChars.length ? myChars.map(c=>{
+      const isLoaded = c.id === state.char.id;
+      return `<div class="inv-item-row" style="margin-left:18px;">
+        <div>
+          <b>${c.nickname}</b> <span class="slot-tag">${c.role}</span>${c.hidden_from_leaderboard ? ' <span class="slot-tag">Oculto del ranking</span>' : ''}
+          <div class="inv-item-bonus neutral">Nivel ${c.level} · Récord: Nivel ${c.record_level} · Piso ${c.record_floor_idx}</div>
+        </div>
+        <div style="display:flex; gap:8px; flex-shrink:0; flex-wrap:wrap;">
+          <button class="inv-btn" data-toggle-role="${c.id}" ${isLoaded?'disabled title="No puedes quitarte el rol admin al personaje con el que jugaste esta sesión"':''}>${c.role==='admin'?'Quitar admin':'Hacer admin'}</button>
+          <button class="inv-btn" data-toggle-ranking="${c.id}">${c.hidden_from_leaderboard?'Mostrar en ranking':'Ocultar del ranking'}</button>
+          <button class="inv-btn danger" data-delete-char="${c.id}">Eliminar personaje</button>
+        </div>
+      </div>`;
+    }).join('') : `<p class="inv-empty-msg" style="margin-left:18px;">Sin personajes.</p>`;
+    return `<div class="inv-slot">
+      <div class="inv-item-row" style="background:none; border:none; padding:0; margin-bottom:8px;">
+        <div>
+          <b>${p.username}</b> <span class="slot-tag" style="${p.is_banned?'color:var(--blood-light); border-color:rgba(178,68,68,0.4);':'color:var(--good);'}">${bannedLabel}</span>
+          <div class="inv-item-bonus neutral">Creada: ${created} · ${myChars.length} personaje(s)</div>
+        </div>
         <button class="inv-btn ${p.is_banned?'':'danger'}" data-toggle-ban="${p.id}" ${isSelf?'disabled title="No puedes suspender tu propia cuenta"':''}>${p.is_banned?'Reactivar':'Suspender'}</button>
-        <button class="inv-btn" data-toggle-role="${p.id}" ${isSelf?'disabled title="No puedes quitarte el rol admin a ti mismo"':''}>${p.role==='admin'?'Quitar admin':'Hacer admin'}</button>
-        <button class="inv-btn" data-toggle-ranking="${p.id}">${p.hidden_from_leaderboard?'Mostrar en ranking':'Ocultar del ranking'}</button>
-        <button class="inv-btn danger" data-delete-char="${p.id}" ${ownsCharacter?'':'disabled title="Esta cuenta no tiene personaje"'}>Eliminar personaje</button>
       </div>
+      ${charsHTML}
     </div>`;
   }).join('') || `<p class="inv-empty-msg">No hay cuentas registradas.</p>`;
 
@@ -1388,10 +1412,10 @@ async function loadAdminList(){
   list.querySelectorAll('[data-toggle-role]').forEach(btn=>{
     btn.onclick = async ()=>{
       const id = btn.dataset.toggleRole;
-      const target = data.find(p=>p.id===id);
+      const target = chars.find(c=>c.id===id);
       const newRole = target.role === 'admin' ? 'player' : 'admin';
       btn.disabled = true;
-      const { error } = await supabase.from('profiles').update({ role: newRole }).eq('id', id);
+      const { error } = await supabase.from('characters').update({ role: newRole }).eq('id', id);
       if(error) msg.textContent = 'No se pudo actualizar: ' + error.message;
       else msg.textContent = '';
       await loadAdminList();
@@ -1400,9 +1424,9 @@ async function loadAdminList(){
   list.querySelectorAll('[data-toggle-ranking]').forEach(btn=>{
     btn.onclick = async ()=>{
       const id = btn.dataset.toggleRanking;
-      const target = data.find(p=>p.id===id);
+      const target = chars.find(c=>c.id===id);
       btn.disabled = true;
-      const { error } = await supabase.from('profiles').update({ hidden_from_leaderboard: !target.hidden_from_leaderboard }).eq('id', id);
+      const { error } = await supabase.from('characters').update({ hidden_from_leaderboard: !target.hidden_from_leaderboard }).eq('id', id);
       if(error) msg.textContent = 'No se pudo actualizar: ' + error.message;
       else msg.textContent = '';
       await loadAdminList();
@@ -1411,16 +1435,16 @@ async function loadAdminList(){
   list.querySelectorAll('[data-delete-char]').forEach(btn=>{
     btn.onclick = async ()=>{
       const id = btn.dataset.deleteChar;
-      const target = data.find(p=>p.id===id);
-      if(!confirm(`¿Eliminar el personaje de "${target.username}"? Esta acción no se puede deshacer.`)) return;
-      const typed = prompt(`Para confirmar, escribe exactamente el nombre de usuario "${target.username}":`);
+      const target = chars.find(c=>c.id===id);
+      if(!confirm(`¿Eliminar el personaje "${target.nickname}"? Esta acción no se puede deshacer.`)) return;
+      const typed = prompt(`Para confirmar, escribe exactamente el nombre del personaje "${target.nickname}":`);
       if(typed === null) return;
-      if(typed.trim().toLowerCase() !== target.username.toLowerCase()){
+      if(typed.trim().toLowerCase() !== target.nickname.toLowerCase()){
         msg.textContent = 'El nombre no coincide. No se eliminó nada.';
         return;
       }
       btn.disabled = true;
-      const { error } = await supabase.from('characters').delete().eq('user_id', id);
+      const { error } = await supabase.from('characters').delete().eq('id', id);
       if(error) msg.textContent = 'No se pudo eliminar: ' + error.message;
       else msg.textContent = '';
       await loadAdminList();
@@ -2481,23 +2505,35 @@ function renderCreation(){
   });
 }
 function checkBegin(){
-  document.getElementById('btn-begin').disabled = !(selRace && selStyle);
+  const nickname = document.getElementById('char-nickname').value.trim();
+  document.getElementById('btn-begin').disabled = !(selRace && selStyle && nickname.length >= 3);
 }
+document.getElementById('char-nickname').addEventListener('input', checkBegin);
 
 document.getElementById('btn-begin').onclick = async ()=>{
   const btn = document.getElementById('btn-begin');
+  const msg = document.getElementById('char-nickname-msg');
+  const nickname = document.getElementById('char-nickname').value.trim();
+  msg.textContent = '';
   btn.disabled = true;
   try{
-    const row = await createCharacterOnServer(selRace, selStyle);
+    const available = await characterNicknameAvailable(nickname);
+    if(!available){
+      msg.textContent = 'Ese nombre de personaje ya está en uso.';
+      btn.disabled = false;
+      return;
+    }
+    const row = await createCharacterOnServer(selRace, selStyle, nickname);
     state = rowToState(row);
     const d = derived();
     state.char.curHP = d.maxHP; state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi;
     log(`Despiertas como ${RACES[selRace].name.toLowerCase()}, senda del ${STYLES[selStyle].name.toLowerCase()}. Dungeon & Stone comienza.`);
+    document.getElementById('btn-switch-char').style.display = 'inline-block';
     showScreen('screen-game');
     renderAll();
     save();
   }catch(e){
-    alert('No se pudo crear el personaje: ' + (e && e.message ? e.message : e));
+    msg.textContent = 'No se pudo crear el personaje: ' + (e && e.message ? e.message : e);
     btn.disabled = false;
   }
 };
@@ -2520,19 +2556,18 @@ document.getElementById('btn-slots').onclick = async ()=>{
   // showAuthScreen() se dispara solo desde el listener de onAuthStateChange (evento SIGNED_OUT)
 };
 
-document.getElementById('btn-reset').onclick = async ()=>{
-  if(!confirm('¿Borrar tu personaje? Perderás todo el progreso guardado. Tu cuenta seguirá existiendo y podrás crear un personaje nuevo.')) return;
-  await deleteCharacterOnServer();
+document.getElementById('btn-switch-char').onclick = async ()=>{
+  if(combat && combat.active){ log('No puedes cambiar de personaje durante el combate.'); return; }
+  if(pendingSave) await flushSave();
   state = null; combat = null; invOpen = false; homeOpen = false; shopOpen = false; rankingOpen = false; adminOpen = false;
-  selRace = null; selStyle = null;
-  document.querySelectorAll('.pick-card').forEach(c=>c.classList.remove('selected'));
-  document.getElementById('btn-begin').disabled = true;
-  document.getElementById('gold-badge').style.display = 'none';
-  document.getElementById('tier-badge').style.display = 'none';
-  document.getElementById('btn-inventory').style.display = 'none';
-  document.getElementById('btn-reset').style.display = 'none';
-  document.getElementById('header-sub').textContent = 'El juego que nadie ha superado';
-  showScreen('screen-create');
+  await enterGame();
+};
+
+document.getElementById('btn-reset').onclick = async ()=>{
+  if(!confirm(`¿Borrar a "${state.char.nickname}"? Perderás todo su progreso. Esta acción no se puede deshacer.`)) return;
+  await deleteCharacterById(state.char.id);
+  state = null; combat = null; invOpen = false; homeOpen = false; shopOpen = false; rankingOpen = false; adminOpen = false;
+  await enterGame();
 };
 
 /* ============================================================
@@ -2629,12 +2664,86 @@ function renderUsernameScreen(){
 }
 
 /* ============================================================
-   BOOT — sesión de Supabase → perfil → personaje
+   RENDER: SELECCIÓN DE PERSONAJE (hasta 6 por cuenta)
+   ============================================================ */
+function renderCharacterSelect(rows){
+  const box = document.getElementById('select-box');
+  const rowsHTML = rows.map(row=>{
+    const r = RACES[row.race], s = STYLES[row.style];
+    return `<div class="inv-item-row">
+      <div>
+        <b>${r.icon} ${row.nickname}</b> <span class="slot-tag">${r.name} · ${s.name}</span>${row.role==='admin' ? ' <span class="slot-tag">admin</span>' : ''}
+        <div class="inv-item-bonus neutral">Nivel ${row.level} · Récord: Nivel ${row.record_level} · Piso ${row.record_floor_idx}</div>
+      </div>
+      <div style="display:flex; gap:8px; flex-shrink:0;">
+        <button class="inv-btn" data-play="${row.id}">Jugar</button>
+        <button class="inv-btn danger" data-delete="${row.id}">Eliminar</button>
+      </div>
+    </div>`;
+  }).join('');
+  const canCreateMore = rows.length < 6;
+  box.innerHTML = `
+    <div style="max-width:640px; margin:0 auto;">
+      ${rowsHTML}
+      ${canCreateMore
+        ? `<div class="begin-row"><button class="btn-main" id="btn-new-character">Crear personaje nuevo (${rows.length}/6)</button></div>`
+        : `<p class="inv-empty-msg" style="text-align:center;">Ya tienes el máximo de 6 personajes.</p>`}
+    </div>
+  `;
+  box.querySelectorAll('[data-play]').forEach(btn=>{
+    btn.onclick = ()=>{
+      const row = rows.find(r=>r.id===btn.dataset.play);
+      enterCharacter(row);
+    };
+  });
+  box.querySelectorAll('[data-delete]').forEach(btn=>{
+    btn.onclick = async ()=>{
+      const row = rows.find(r=>r.id===btn.dataset.delete);
+      if(!confirm(`¿Eliminar a "${row.nickname}"? Perderás todo su progreso. Esta acción no se puede deshacer.`)) return;
+      btn.disabled = true;
+      await deleteCharacterById(row.id);
+      await enterGame();
+    };
+  });
+  if(canCreateMore){
+    document.getElementById('btn-new-character').onclick = goToCreation;
+  }
+}
+
+function enterCharacter(row){
+  state = rowToState(row);
+  migrateState();
+  document.getElementById('btn-switch-char').style.display = 'inline-block';
+  showScreen('screen-game');
+  renderAll();
+}
+
+function goToCreation(){
+  document.getElementById('btn-switch-char').style.display = 'none';
+  document.getElementById('btn-reset').style.display = 'none';
+  document.getElementById('gold-badge').style.display = 'none';
+  document.getElementById('tier-badge').style.display = 'none';
+  document.getElementById('btn-inventory').style.display = 'none';
+  document.getElementById('header-sub').textContent = 'El juego que nadie ha superado';
+  renderCreation();
+  selRace = null; selStyle = null;
+  document.querySelectorAll('.pick-card').forEach(c=>c.classList.remove('selected'));
+  const nickInput = document.getElementById('char-nickname');
+  if(nickInput) nickInput.value = '';
+  const nickMsg = document.getElementById('char-nickname-msg');
+  if(nickMsg) nickMsg.textContent = '';
+  document.getElementById('btn-begin').disabled = true;
+  showScreen('screen-create');
+}
+
+/* ============================================================
+   BOOT — sesión de Supabase → perfil → selección de personaje
    ============================================================ */
 function resetHeaderForLoggedOut(){
   document.getElementById('gold-badge').style.display = 'none';
   document.getElementById('tier-badge').style.display = 'none';
   document.getElementById('btn-inventory').style.display = 'none';
+  document.getElementById('btn-switch-char').style.display = 'none';
   document.getElementById('btn-slots').style.display = 'none';
   document.getElementById('btn-reset').style.display = 'none';
   document.getElementById('header-sub').textContent = 'El juego que nadie ha superado';
@@ -2651,19 +2760,19 @@ function showAuthScreen(message){
 
 async function enterGame(){
   document.getElementById('btn-slots').style.display = 'inline-block';
-  const row = await loadCharacterRow();
-  if(!row){
-    renderCreation();
-    selRace = null; selStyle = null;
-    document.querySelectorAll('.pick-card').forEach(c=>c.classList.remove('selected'));
-    document.getElementById('btn-begin').disabled = true;
-    showScreen('screen-create');
+  const rows = await loadCharacterRows();
+  if(!rows.length){
+    goToCreation();
     return;
   }
-  state = rowToState(row);
-  migrateState();
-  showScreen('screen-game');
-  renderAll();
+  document.getElementById('btn-switch-char').style.display = 'none';
+  document.getElementById('btn-reset').style.display = 'none';
+  document.getElementById('gold-badge').style.display = 'none';
+  document.getElementById('tier-badge').style.display = 'none';
+  document.getElementById('btn-inventory').style.display = 'none';
+  document.getElementById('header-sub').textContent = `Cuenta: ${currentProfile.username}`;
+  renderCharacterSelect(rows);
+  showScreen('screen-select');
 }
 
 async function onAuthed(user){

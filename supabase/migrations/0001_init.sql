@@ -1,28 +1,30 @@
--- Dungeon & Stone — esquema inicial (Fase 1)
--- Aplicar en el SQL Editor del proyecto Supabase, o vía `supabase db push`
--- si usas la CLI de Supabase con este repo.
+-- Dungeon & Stone — esquema completo (instalación nueva desde cero)
+-- Si tu proyecto ya existe y corrió una versión anterior de este archivo,
+-- NO vuelvas a correr este script — usa las migraciones incrementales en
+-- orden (0002, 0003, 0004, 0005...) en su lugar.
 
 create extension if not exists citext;
 
 -- ============================================================
--- PROFILES — espejo público de auth.users + rol de juego
+-- PROFILES — la cuenta (login). No guarda rol de juego ni progreso:
+-- eso vive en `characters`, porque una cuenta puede tener varios personajes.
 -- ============================================================
 create table public.profiles (
-  id                     uuid primary key references auth.users(id) on delete cascade,
-  username               citext not null unique,
-  username_set           boolean not null default false, -- false = nombre autogenerado, aún no elegido por el jugador
-  role                   text not null default 'player' check (role in ('player','admin')),
-  is_banned              boolean not null default false,
-  hidden_from_leaderboard boolean not null default false, -- para cuentas de prueba/admin que no deben salir en el ranking público
-  created_at             timestamptz not null default now()
+  id            uuid primary key references auth.users(id) on delete cascade,
+  username      citext not null unique,
+  username_set  boolean not null default false, -- false = nombre autogenerado, aún no elegido por el jugador
+  is_banned     boolean not null default false,
+  created_at    timestamptz not null default now()
 );
 
 alter table public.profiles enable row level security;
 
 -- SECURITY DEFINER: se ejecuta como el dueño de la función (que sí puede leer
--- profiles sin pasar por RLS), evitando que las políticas de abajo se llamen a
--- sí mismas al comprobar el rol (una subconsulta directa a `profiles` dentro de
--- su propia policy causa "infinite recursion detected in policy").
+-- characters sin pasar por RLS), evitando que las políticas de abajo se llamen
+-- a sí mismas al comprobar el rol (una subconsulta directa a una tabla dentro
+-- de su propia policy causa "infinite recursion detected in policy").
+-- El rol de admin es POR PERSONAJE, no por cuenta: una cuenta puede tener un
+-- personaje admin y cinco personajes normales.
 create or replace function public.is_admin()
 returns boolean
 language sql
@@ -30,7 +32,7 @@ stable
 security definer
 set search_path = public
 as $$
-  select exists (select 1 from public.profiles where id = auth.uid() and role = 'admin');
+  select exists (select 1 from public.characters where user_id = auth.uid() and role = 'admin');
 $$;
 grant execute on function public.is_admin() to anon, authenticated;
 
@@ -52,27 +54,20 @@ create policy "profiles: admins update all"
   using (public.is_admin());
 
 -- Un usuario normal puede hacer UPDATE de su propia fila (la policy de arriba lo permite),
--- pero este trigger le impide tocar sus propios campos de privilegio; solo un admin puede.
+-- pero este trigger le impide suspenderse o reactivarse a sí mismo; solo un admin puede.
 create or replace function public.protect_profile_privileges()
 returns trigger
 language plpgsql
 security definer
 set search_path = public
 as $$
-declare
-  acting_role text;
 begin
   -- auth.uid() es NULL cuando la escritura viene del SQL Editor, la CLI o el
   -- service role (conexiones ya de por sí fuera de RLS) — en ese caso confiamos
   -- en la conexión y no revertimos nada. Solo protegemos el camino normal de la
   -- app, donde auth.uid() sí identifica a un usuario autenticado concreto.
-  if auth.uid() is not null then
-    select role into acting_role from public.profiles where id = auth.uid();
-    if acting_role is distinct from 'admin' then
-      new.role := old.role;
-      new.is_banned := old.is_banned;
-      new.hidden_from_leaderboard := old.hidden_from_leaderboard;
-    end if;
+  if auth.uid() is not null and not public.is_admin() then
+    new.is_banned := old.is_banned;
   end if;
   return new;
 end;
@@ -102,7 +97,7 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure public.handle_new_user();
 
--- Comprobación de disponibilidad de username (para feedback instantáneo en el formulario).
+-- Comprobación de disponibilidad de username de cuenta (para feedback instantáneo en el formulario).
 create or replace function public.username_available(p_username text)
 returns boolean
 language sql
@@ -113,7 +108,7 @@ as $$
 $$;
 grant execute on function public.username_available(text) to anon, authenticated;
 
--- Único punto de escritura del username: valida formato y unicidad server-side.
+-- Único punto de escritura del username de cuenta: valida formato y unicidad server-side.
 create or replace function public.set_username(p_username text)
 returns public.profiles
 language plpgsql
@@ -142,30 +137,36 @@ $$;
 grant execute on function public.set_username(text) to authenticated;
 
 -- ============================================================
--- CHARACTERS — 1 personaje por cuenta
+-- CHARACTERS — hasta 6 personajes por cuenta, totalmente independientes
+-- entre sí (nivel, oro, equipo, rol de admin, visibilidad en el ranking).
 -- ============================================================
 create table public.characters (
-  id                  uuid primary key default gen_random_uuid(),
-  user_id             uuid not null unique references public.profiles(id) on delete cascade,
-  race                text not null check (race in ('barbaro','enano','hada','humano','draconido','bestia')),
-  style               text not null check (style in ('pesada','doblefilo','tirador','canalizador')),
-  level               int  not null default 1  check (level between 1 and 60),
-  xp                  int  not null default 0  check (xp >= 0),
-  gold                int  not null default 20 check (gold >= 0),
-  cur_hp              int,
-  cur_sta             int,
-  cur_spi             int,
-  equip               jsonb not null default '{"arma":null,"arma2":null,"armadura":null,"amuleto":null,"casco":null,"botas":null,"guantes":null}'::jsonb,
-  inventory           jsonb not null default '[]'::jsonb,
-  item_counter        int  not null default 0,
-  max_level_unlocked  int  not null default 1  check (max_level_unlocked between 1 and 10),
-  record_level        int  not null default 1  check (record_level between 1 and 10),
-  record_floor_idx    int  not null default 0  check (record_floor_idx >= 0),
-  stash               jsonb not null default '{"gold":0,"items":[]}'::jsonb,
-  soul_slots          jsonb not null default '[]'::jsonb,
-  dungeon             jsonb,
-  created_at          timestamptz not null default now(),
-  updated_at          timestamptz not null default now()
+  id                      uuid primary key default gen_random_uuid(),
+  user_id                 uuid not null references public.profiles(id) on delete cascade,
+  slot_number             int  not null check (slot_number between 1 and 6),
+  nickname                citext not null unique, -- único en todo el juego: es lo que se ve en el ranking
+  role                    text not null default 'player' check (role in ('player','admin')),
+  hidden_from_leaderboard boolean not null default false,
+  race                    text not null check (race in ('barbaro','enano','hada','humano','draconido','bestia')),
+  style                   text not null check (style in ('pesada','doblefilo','tirador','canalizador')),
+  level                   int  not null default 1  check (level between 1 and 60),
+  xp                      int  not null default 0  check (xp >= 0),
+  gold                    int  not null default 20 check (gold >= 0),
+  cur_hp                  int,
+  cur_sta                 int,
+  cur_spi                 int,
+  equip                   jsonb not null default '{"arma":null,"arma2":null,"armadura":null,"amuleto":null,"casco":null,"botas":null,"guantes":null}'::jsonb,
+  inventory               jsonb not null default '[]'::jsonb,
+  item_counter            int  not null default 0,
+  max_level_unlocked      int  not null default 1  check (max_level_unlocked between 1 and 10),
+  record_level            int  not null default 1  check (record_level between 1 and 10),
+  record_floor_idx        int  not null default 0  check (record_floor_idx >= 0),
+  stash                   jsonb not null default '{"gold":0,"items":[]}'::jsonb,
+  soul_slots              jsonb not null default '[]'::jsonb,
+  dungeon                 jsonb,
+  created_at              timestamptz not null default now(),
+  updated_at              timestamptz not null default now(),
+  unique (user_id, slot_number)
 );
 
 alter table public.characters enable row level security;
@@ -193,8 +194,9 @@ create policy "characters: admins manage all"
 
 -- Nota: no hay policy de INSERT para 'authenticated'. La única forma de crear un
 -- personaje es la función create_character() de abajo (SECURITY DEFINER), que
--- fuerza valores iniciales seguros sin importar qué mande el cliente.
-create or replace function public.create_character(p_race text, p_style text)
+-- fuerza valores iniciales seguros y asigna el slot ella misma sin importar qué
+-- mande el cliente.
+create or replace function public.create_character(p_race text, p_style text, p_nickname text)
 returns public.characters
 language plpgsql
 security definer
@@ -202,6 +204,7 @@ set search_path = public
 as $$
 declare
   v_row public.characters;
+  v_slot int;
 begin
   if auth.uid() is null then
     raise exception 'not authenticated';
@@ -212,23 +215,46 @@ begin
   if p_style not in ('pesada','doblefilo','tirador','canalizador') then
     raise exception 'senda inválida';
   end if;
-  if exists (select 1 from public.characters where user_id = auth.uid()) then
-    raise exception 'ya tienes un personaje';
+  if p_nickname is null or length(trim(p_nickname)) < 3 or length(trim(p_nickname)) > 20 then
+    raise exception 'El nombre del personaje debe tener entre 3 y 20 caracteres.';
+  end if;
+  if p_nickname !~ '^[A-Za-z0-9_]+$' then
+    raise exception 'El nombre del personaje solo puede tener letras, números y guion bajo.';
   end if;
 
-  insert into public.characters (user_id, race, style, level, xp, gold)
-  values (auth.uid(), p_race, p_style, 1, 0, 20)
+  select min(s) into v_slot
+  from generate_series(1,6) s
+  where s not in (select slot_number from public.characters where user_id = auth.uid());
+
+  if v_slot is null then
+    raise exception 'Ya tienes el máximo de 6 personajes.';
+  end if;
+
+  insert into public.characters (user_id, slot_number, nickname, race, style, level, xp, gold)
+  values (auth.uid(), v_slot, p_nickname, p_race, p_style, 1, 0, 20)
   returning * into v_row;
 
   return v_row;
 end;
 $$;
-grant execute on function public.create_character(text, text) to authenticated;
+grant execute on function public.create_character(text, text, text) to authenticated;
+
+-- Comprobación de disponibilidad de nombre de personaje (único en todo el juego).
+create or replace function public.character_nickname_available(p_nickname text)
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  select not exists (select 1 from public.characters where nickname = p_nickname::citext);
+$$;
+grant execute on function public.character_nickname_available(text) to authenticated;
 
 -- Defensa en profundidad: RLS controla QUIÉN escribe, este trigger controla QUÉ
--- valores son aceptables en cada guardado, para que nadie pueda mandarse oro o
--- nivel arbitrarios desde la consola del navegador. Los topes son deliberadamente
--- generosos (muy por encima de lo que un guardado legítimo produce) y ajustables.
+-- valores son aceptables en cada guardado, para que nadie pueda mandarse oro,
+-- nivel o el rol de admin arbitrarios desde la consola del navegador. Los topes
+-- de oro/nivel son deliberadamente generosos (muy por encima de lo que un
+-- guardado legítimo produce) y ajustables.
 create or replace function public.validate_character_update()
 returns trigger
 language plpgsql
@@ -237,8 +263,20 @@ begin
   if new.user_id <> old.user_id then
     raise exception 'user_id es inmutable';
   end if;
+  if new.slot_number <> old.slot_number then
+    raise exception 'slot_number es inmutable';
+  end if;
+  if new.nickname <> old.nickname then
+    raise exception 'el nombre del personaje es inmutable';
+  end if;
   if new.race <> old.race or new.style <> old.style then
     raise exception 'raza y senda son inmutables tras la creación';
+  end if;
+  -- rol de admin y visibilidad en el ranking: solo una cuenta admin puede tocarlos
+  -- (mismo patrón que protect_profile_privileges usa para is_banned).
+  if auth.uid() is not null and not public.is_admin() then
+    new.role := old.role;
+    new.hidden_from_leaderboard := old.hidden_from_leaderboard;
   end if;
   if new.level < old.level then
     raise exception 'el nivel no puede bajar';
@@ -277,16 +315,15 @@ create trigger trg_validate_character_update
 
 -- ============================================================
 -- RANKING GLOBAL — vista pública de solo lectura (top 10)
--- Se actualiza sola: es una vista, no una tabla desnormalizada.
--- Propiedad del rol que ejecuta esta migración (normalmente postgres), que
--- ignora RLS, así puede exponer username+récord sin dar acceso a profiles/characters
--- completos.
+-- Muestra el nombre del PERSONAJE, no el de la cuenta (una cuenta puede tener
+-- varios personajes en posiciones distintas del ranking, o ninguno si todos
+-- están ocultos). Se actualiza sola: es una vista, no una tabla desnormalizada.
 -- ============================================================
 create view public.leaderboard_top10 as
-select p.username, c.record_level, c.record_floor_idx, c.updated_at
+select c.nickname, c.record_level, c.record_floor_idx, c.updated_at
 from public.characters c
 join public.profiles p on p.id = c.user_id
-where not p.is_banned and not p.hidden_from_leaderboard
+where not p.is_banned and not c.hidden_from_leaderboard
 order by c.record_level desc, c.record_floor_idx desc, c.updated_at asc
 limit 10;
 
