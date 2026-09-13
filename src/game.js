@@ -329,11 +329,23 @@ const WEAPON_OPTIONS = {
   canalizador: {
     arma: ['Vara arcana','Bastón rúnico'],
     arma2: ['Foco arcano']
+  },
+  // Sacerdote no es un estilo de combate del jugador — solo existe para que
+  // los aliados de ese rol tengan su propia arma. Comparte el arma 1 con el
+  // Mago/Canalizador, pero su arma 2 es propia (grimorio/objeto religioso),
+  // no el Foco arcano.
+  sacerdote: {
+    arma: ['Vara arcana','Bastón rúnico'],
+    arma2: ['Grimorio de plegarias','Tomo sagrado','Reliquia bendita']
   }
 };
-const OFFHAND_LABELS = {pesada:'Escudo', doblefilo:'Arma 2', tirador:'Carcaj', canalizador:'Foco'};
+const OFFHAND_LABELS = {pesada:'Escudo', doblefilo:'Arma 2', tirador:'Carcaj', canalizador:'Foco', sacerdote:'Grimorio'};
 // which stat a subclass's weapons feed (pure damage, no other stats — as requested)
-const SHOP_WEAPON_STAT = {pesada:'fis', doblefilo:'hab', tirador:'hab', canalizador:'esp'};
+const SHOP_WEAPON_STAT = {pesada:'fis', doblefilo:'hab', tirador:'hab', canalizador:'esp', sacerdote:'esp'};
+// rol de aliado -> categoría de arma (WEAPON_OPTIONS/SHOP_WEAPON_STAT). Los 4
+// primeros calzan 1-a-1 con los estilos de combate del jugador; sacerdote no
+// tiene equivalente entre esos 4, así que se le agregó su propia entrada arriba.
+const ALLY_ROLE_TO_WEAPON_STYLE = {guerrero:'pesada', arquero:'tirador', asesino:'doblefilo', mago:'canalizador', sacerdote:'sacerdote'};
 // sub-perk poco-común (guardian) weapons roll, following each subclass's logic:
 // heavy weapons never get life steal, dps (doble filo) never gets stun
 const SPECIALS_BY_STYLE = {
@@ -362,8 +374,12 @@ function consumeWard(){
   const idx = state.char.inventory.findIndex(i=>i.kind==='ward');
   if(idx>=0) state.char.inventory.splice(idx,1);
 }
+// Antes solo reconocía al Ogro por id — con el bestiario de 6 décadas esto
+// dejaba el Tótem sin efecto contra Matriarca Escarlata, Riakis, Usurpador,
+// Custodio de la Isla y Storm Gush. Ahora cualquier jefe de década (nivel
+// múltiplo de 10) cuenta, sea cual sea.
 function fightingDecadeBoss(){
-  return !!(combat && combat.active && combat.enemies.some(e=>e.tpl.id==='ogro'));
+  return !!(combat && combat.active && state.dungeon && state.dungeon.level % 10 === 0 && combat.enemies.some(e=>e.tpl.boss));
 }
 function dealDamageToPlayer(amount){
   if(amount<=0) return;
@@ -375,8 +391,8 @@ function dealDamageToPlayer(amount){
   state.char.curHP = Math.max(0, state.char.curHP - amount);
 }
 
-function buyWeapon(slot){
-  const styleId = state.char.style;
+function buyWeapon(slot, styleId){
+  styleId = styleId || state.char.style;
   const opts = WEAPON_OPTIONS[styleId];
   if(!opts || !opts[slot]) return;
   const price = shopWeaponPrice(slot==='arma2');
@@ -385,7 +401,7 @@ function buyWeapon(slot){
   const name = pick(opts[slot]);
   const statKey = SHOP_WEAPON_STAT[styleId] || 'fis';
   addToInventory({slot, name, bonus:{stat:statKey, value:shopWeaponValue()}, rarity:'comun'});
-  log(`Compras <b>${name}</b> por ${price} de oro.`);
+  log(`Compras <b>${name}</b> por ${price} de oro (guardada en la mochila — decide tú a quién equipársela).`);
   renderAll(); save();
 }
 
@@ -429,11 +445,11 @@ function buyGearPocoComun(slot){
 // definido, así que no se vende aquí.
 const SELLO_SHOP_SLOTS = ['arma','armadura','casco','botas','guantes','amuleto'];
 function selloShopPrice(rarity){ return rarity==='rango_a' ? 700 : 350; }
-function makeSelloShopItem(slot, rarity){
+function makeSelloShopItem(slot, rarity, styleId){
   const resPct = rarity==='rango_a' ? RANGO_A_RES_PCT : RANGO_B_RES_PCT;
   const weaponBonus = rarity==='rango_a' ? RANGO_A_WEAPON_BONUS : RANGO_B_WEAPON_BONUS;
   const tag = rarity==='rango_a' ? 'épico' : 'único';
-  const styleId = state.char.style;
+  styleId = styleId || state.char.style;
   const opts = WEAPON_OPTIONS[styleId] || WEAPON_OPTIONS.pesada;
   let name, bonus, special = null;
   if(slot==='arma'){
@@ -459,7 +475,7 @@ function buySelloGear(slot, rarity){
   const price = selloShopPrice(rarity);
   if((state.char.missionCurrency||0) < price){ log('No tienes suficientes Sellos del Laberinto.'); return; }
   state.char.missionCurrency -= price;
-  const item = makeSelloShopItem(slot, rarity);
+  const item = makeSelloShopItem(slot, rarity, slot==='arma' ? shopWeaponRole : null);
   addToInventory(item);
   log(`Compras <b>${item.name}</b> por ${price} Sellos del Laberinto.`);
   renderAll(); save();
@@ -533,7 +549,10 @@ function generateGuardianReward(level){
   const rarity = guardianRewardRarity(decade);
   const weaponBonus = rarity==='rango_a' ? RANGO_A_WEAPON_BONUS : rarity==='rango_b' ? RANGO_B_WEAPON_BONUS : POCO_COMUN_WEAPON_BONUS;
   const resPct = rarity==='rango_a' ? RANGO_A_RES_PCT : rarity==='rango_b' ? RANGO_B_RES_PCT : POCO_COMUN_RES_PCT;
-  const styleId = state.char.style;
+  // Ya no se restringe a tu propio estilo: el objeto va a la mochila
+  // compartida y decides tú después a quién equipárselo, así que el
+  // guardián puede soltar el arma de cualquiera de los 5 roles.
+  const styleId = slot==='arma' || slot==='arma2' ? pick(Object.keys(WEAPON_OPTIONS)) : state.char.style;
   const opts = WEAPON_OPTIONS[styleId] || WEAPON_OPTIONS.pesada;
   let name, bonus, special = null;
   if(slot==='arma' || slot==='arma2'){
@@ -707,6 +726,7 @@ function unsocketStone(slotIdx){
 let state = null;
 let combat = null; // transient combat state, rebuilt each fight
 let invOpen = false; // whether the inventory/equipment panel is showing
+let equipTarget = 'player'; // 'player' o el id de un aliado — a quién equipa el Inventario ahora mismo
 let homeOpen = false; // whether the Hogar (home stash) panel is showing
 let shopOpen = false; // whether the Tienda (shop) panel is showing
 let rankingOpen = false; // whether the Ranking panel is showing
@@ -1272,8 +1292,22 @@ function itemNameHTML(it){
 }
 
 function renderInventory(){
+  const allies = state.char.allies || [];
+  const targetRow = equipTarget!=='player' ? allies.find(a=>a.id===equipTarget) : null;
+  if(equipTarget!=='player' && !targetRow) equipTarget = 'player'; // el aliado ya no existe (lo despediste, etc.)
+  const targetEquip = targetRow ? (targetRow.equip||{}) : state.char.equip;
+  const targetName = targetRow ? targetRow.name : 'ti';
+
+  const targetSelectorHTML = allies.length ? `
+    <div class="section-label" style="margin-top:6px;">Equipando a</div>
+    <select id="equip-target-select" class="auth-input" style="max-width:260px;">
+      <option value="player" ${equipTarget==='player'?'selected':''}>Tú</option>
+      ${allies.map(a=>`<option value="${a.id}" ${equipTarget===a.id?'selected':''}>${a.name} (${a.role})</option>`).join('')}
+    </select>
+  ` : '';
+
   const equippedHTML = EQUIP_SLOTS.map(slot=>{
-    const it = state.char.equip[slot];
+    const it = targetEquip[slot];
     const label = slotLabel(slot);
     if(!it){
       return `<div class="inv-slot">
@@ -1302,7 +1336,7 @@ function renderInventory(){
         ${itemNameHTML(it)} <span class="slot-tag">${slotLabel(it.slot)}</span>
         <div class="inv-item-bonus">${itemBonusText(it)}</div>
       </div>
-      <button class="inv-btn" data-equip="${it.uid}">Equipar</button>
+      <button class="inv-btn" data-equip="${it.uid}">Equipar en ${targetName}</button>
     </div>
   `).join('') : `<p class="inv-empty-msg">No llevas equipo suelto en la mochila.</p>`;
 
@@ -1354,23 +1388,27 @@ function renderInventory(){
     </div>`;
   }).join('') : `<p class="inv-empty-msg">No tienes piedras de alma. Las dejan caer los guardianes de nivel 4 en adelante.</p>`;
 
-  const wardHTML = hasWard()
+  const totemHolders = [];
+  if(hasWard()) totemHolders.push('Tú');
+  allies.forEach(a=>{ if(a.has_totem) totemHolders.push(a.name); });
+  const wardHTML = totemHolders.length
     ? `<div class="inv-item-row">
         <div>
-          <b>${WARD_ITEM.icon} ${WARD_ITEM.name}</b>
-          <div class="inv-item-bonus neutral">${WARD_ITEM.desc}</div>
+          <b>${WARD_ITEM.icon} ${WARD_ITEM.name}</b> <span class="slot-tag">${totemHolders.join(', ')}</span>
+          <div class="inv-item-bonus neutral">${WARD_ITEM.desc} Cada personaje del equipo puede llevar el suyo propio.</div>
         </div>
       </div>`
-    : `<p class="inv-empty-msg">No llevas ningún tótem protector. Los élites pueden dejarlo caer.</p>`;
+    : `<p class="inv-empty-msg">Nadie en tu equipo lleva un tótem protector todavía. Los élites pueden dejarlo caer, para cualquiera de ustedes.</p>`;
 
   document.getElementById('main-panel').innerHTML = `
     <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:4px;">
       <h3 style="color:var(--bronze-light);">Inventario y equipamiento</h3>
       <button class="reset-btn" id="btn-close-inv">Cerrar</button>
     </div>
-    <p style="color:var(--text-dim); font-size:0.85em; margin-top:0;">Equipa y desequipa a tu gusto entre combates para ajustar tu estrategia.</p>
+    <p style="color:var(--text-dim); font-size:0.85em; margin-top:0;">Equipa y desequipa a tu gusto entre combates para ajustar tu estrategia. La mochila es una sola para todo el equipo — decides tú quién se queda con cada objeto.</p>
+    ${targetSelectorHTML}
 
-    <div class="section-label" style="margin-top:6px;">Equipado</div>
+    <div class="section-label" style="margin-top:6px;">Equipado (${targetName})</div>
     ${equippedHTML}
 
     <div class="section-label">Equipo en la mochila</div>
@@ -1388,11 +1426,13 @@ function renderInventory(){
   `;
 
   document.getElementById('btn-close-inv').onclick = ()=>{ invOpen=false; renderAll(); };
+  const targetSelect = document.getElementById('equip-target-select');
+  if(targetSelect) targetSelect.onchange = ()=>{ equipTarget = targetSelect.value; renderInventory(); };
   document.querySelectorAll('[data-equip]').forEach(btn=>{
-    btn.onclick = ()=> equipItem(btn.dataset.equip);
+    btn.onclick = ()=> equipTarget==='player' ? equipItem(btn.dataset.equip) : equipItemOnAlly(btn.dataset.equip, equipTarget);
   });
   document.querySelectorAll('[data-unequip]').forEach(btn=>{
-    btn.onclick = ()=> unequipItem(btn.dataset.unequip);
+    btn.onclick = ()=> equipTarget==='player' ? unequipItem(btn.dataset.unequip) : unequipAllyItem(equipTarget, btn.dataset.unequip);
   });
   document.querySelectorAll('[data-usepotion]').forEach(btn=>{
     btn.onclick = ()=> usePotionOutOfCombat(btn.dataset.usepotion);
@@ -1445,6 +1485,39 @@ function unequipItem(slot){
   state.char.inventory.push(item);
   log(`Desequipas <b>${item.name}</b>.`);
   renderSheet();
+  if(invOpen) renderInventory();
+  save();
+}
+
+async function saveAllyEquip(row){
+  const { error } = await supabase.from('character_allies').update({equip: row.equip||{}}).eq('id', row.id);
+  if(error) console.error('No se pudo guardar el equipo del aliado:', error.message);
+}
+function equipItemOnAlly(uid, allyId){
+  const row = (state.char.allies||[]).find(a=>a.id===allyId);
+  if(!row) return;
+  const idx = state.char.inventory.findIndex(i=>i.kind==='equip' && i.uid===uid);
+  if(idx<0) return;
+  const item = state.char.inventory[idx];
+  if(!row.equip) row.equip = {};
+  const prior = row.equip[item.slot];
+  row.equip[item.slot] = item;
+  state.char.inventory.splice(idx,1);
+  if(prior) state.char.inventory.push(prior);
+  log(`Equipas <b>${item.name}</b> en <b>${row.name}</b>${prior ? ` (guardas ${prior.name} en la mochila)` : ''}.`);
+  saveAllyEquip(row);
+  if(invOpen) renderInventory();
+  save();
+}
+function unequipAllyItem(allyId, slot){
+  const row = (state.char.allies||[]).find(a=>a.id===allyId);
+  if(!row || !row.equip) return;
+  const item = row.equip[slot];
+  if(!item) return;
+  row.equip[slot] = null;
+  state.char.inventory.push(item);
+  log(`Desequipas <b>${item.name}</b> de <b>${row.name}</b>.`);
+  saveAllyEquip(row);
   if(invOpen) renderInventory();
   save();
 }
@@ -1878,7 +1951,7 @@ function renderTaberna(){
     const xpText = a.level>=CHAR_LEVEL_CAP ? 'Nivel máximo' : `${a.xp||0} / ${needed} exp`;
     return `<div class="inv-item-row">
       <div>
-        <b>${tpl.icon||'⚔️'} ${a.name}</b> <span class="slot-tag">${a.role} · nivel ${a.level}</span>
+        <b>${tpl.icon||'⚔️'} ${a.name}</b> <span class="slot-tag">${a.role} · nivel ${a.level}</span>${a.has_totem ? ` <span class="slot-tag">${WARD_ITEM.icon} Tótem</span>` : ''}
         <div class="inv-item-bonus neutral">${tpl.bio||''}</div>
         ${tpl.skillName ? `<div class="inv-item-bonus" style="margin-top:2px;"><b>${tpl.skillName}</b> — ${tpl.skillDesc}</div>` : ''}
         <div class="bar-track" style="margin-top:6px;"><div class="bar-fill xp" style="width:${xpPct}%"></div></div>
@@ -2091,24 +2164,33 @@ async function loadAdminList(){
 /* ============================================================
    RENDER: TIENDA (SHOP)
    ============================================================ */
+const SHOP_ROLE_LABELS = {pesada:'Guerrero (tu senda)', doblefilo:'Asesino', tirador:'Arquero', canalizador:'Mago', sacerdote:'Sacerdote'};
+let shopWeaponRole = null; // null = usa tu propia senda por defecto
 function renderShop(){
-  const styleId = state.char.style;
+  if(!shopWeaponRole) shopWeaponRole = state.char.style;
+  const styleId = shopWeaponRole;
   const opts = WEAPON_OPTIONS[styleId] || {};
   const armaPrice = shopWeaponPrice(false);
   const arma2Price = shopWeaponPrice(true);
   const armaLabel = slotLabel('arma');
-  const arma2Label = slotLabel('arma2');
+  const arma2Label = OFFHAND_LABELS[styleId] || slotLabel('arma2');
+
+  const roleSelectorHTML = `
+    <select id="shop-role-select" class="auth-input" style="max-width:260px; margin-bottom:8px;">
+      ${Object.keys(WEAPON_OPTIONS).map(id=>`<option value="${id}" ${styleId===id?'selected':''}>${SHOP_ROLE_LABELS[id]||id}</option>`).join('')}
+    </select>
+    <p style="color:var(--text-dim); font-size:0.8em; margin:0 0 8px;">El arma se guarda en tu mochila compartida — luego decides tú a quién equipársela desde el Inventario.</p>`;
 
   const weaponRowHTML = (slot, label, price) => `
     <div class="inv-item-row">
       <div>
-        <b>${label}</b> <span class="slot-tag">${state.char.style ? style().name : ''}</span>
+        <b>${label}</b> <span class="slot-tag">${SHOP_ROLE_LABELS[styleId]||styleId}</span>
         <div class="inv-item-bonus">+${shopWeaponValue()} ${STAT_LABELS[SHOP_WEAPON_STAT[styleId]] || ''} · daño puro, sin otras características</div>
       </div>
       <button class="inv-btn" data-buy-weapon="${slot}" ${state.char.gold<price?'disabled':''}>Comprar (${price} oro)</button>
     </div>`;
 
-  const weaponHTML = (opts.arma ? weaponRowHTML('arma', armaLabel, armaPrice) : '')
+  const weaponHTML = roleSelectorHTML + (opts.arma ? weaponRowHTML('arma', armaLabel, armaPrice) : '')
     + (opts.arma2 ? weaponRowHTML('arma2', arma2Label, arma2Price) : '');
 
   const gearHTML = SHOP_GEAR_SLOTS.map(slot=>{
@@ -2144,10 +2226,11 @@ function renderShop(){
       const price = selloShopPrice(rarity);
       const r = RARITIES[rarity];
       const disabled = (state.char.missionCurrency||0) < price;
+      const roleTag = slot==='arma' ? ` (${SHOP_ROLE_LABELS[shopWeaponRole]||shopWeaponRole})` : '';
       return `<div class="inv-item-row">
         <div>
-          <b>${slotLabel(slot)}</b> <span class="slot-tag" style="border-color:${r.color}; color:${r.color};">${r.name}</span>
-          <div class="inv-item-bonus" style="color:${r.color};">Equipo de rango ${r.name} para tu senda</div>
+          <b>${slotLabel(slot)}${roleTag}</b> <span class="slot-tag" style="border-color:${r.color}; color:${r.color};">${r.name}</span>
+          <div class="inv-item-bonus" style="color:${r.color};">Equipo de rango ${r.name} — se guarda en tu mochila</div>
         </div>
         <button class="inv-btn" data-buy-sello="${slot}|${rarity}" ${disabled?'disabled':''}>Comprar (${price} Sellos)</button>
       </div>`;
@@ -2215,8 +2298,10 @@ function renderShop(){
 
   document.getElementById('btn-close-shop').onclick = ()=>{ shopOpen=false; renderAll(); };
   document.querySelectorAll('[data-buy-weapon]').forEach(btn=>{
-    btn.onclick = ()=> buyWeapon(btn.dataset.buyWeapon);
+    btn.onclick = ()=> buyWeapon(btn.dataset.buyWeapon, shopWeaponRole);
   });
+  const shopRoleSelect = document.getElementById('shop-role-select');
+  if(shopRoleSelect) shopRoleSelect.onchange = ()=>{ shopWeaponRole = shopRoleSelect.value; renderShop(); };
   document.querySelectorAll('[data-buy-gear]').forEach(btn=>{
     btn.onclick = ()=> buyGear(btn.dataset.buyGear);
   });
@@ -2613,7 +2698,30 @@ function frontlineTarget(){
   return {kind:'player'};
 }
 function dealDamageToAlly(ally, amount){
+  if(amount<=0) return;
+  if(amount>=ally.hp && fightingDecadeBoss() && ally.hasTotem){
+    ally.hasTotem = false;
+    clearAllyTotem(ally.id);
+    log(`<b>${WARD_ITEM.icon} ${WARD_ITEM.name}</b> de ${ally.name} bloquea el golpe que iba a matarlo, y se desvanece.`);
+    return;
+  }
   ally.hp = Math.max(0, ally.hp - amount);
+}
+function grantAllyTotem(row){
+  row.has_totem = true;
+  const combatAlly = combat && combat.allies ? combat.allies.find(a=>a.id===row.id) : null;
+  if(combatAlly) combatAlly.hasTotem = true;
+  supabase.from('character_allies').update({has_totem:true}).eq('id', row.id).then(({error})=>{
+    if(error) console.error('No se pudo guardar el Tótem del aliado:', error.message);
+  });
+  log(`<b>${row.name}</b> encuentra un <b>${WARD_ITEM.icon} ${WARD_ITEM.name}</b>.`);
+}
+function clearAllyTotem(allyId){
+  const row = (state.char.allies||[]).find(r=>r.id===allyId);
+  if(row) row.has_totem = false;
+  supabase.from('character_allies').update({has_totem:false}).eq('id', allyId).then(({error})=>{
+    if(error) console.error('No se pudo actualizar el Tótem del aliado:', error.message);
+  });
 }
 function isAllyHostile(allyId){ return (combat.hostileAllies||[]).includes(allyId); }
 // Reservado para cuando exista una traición real (el aliado ataca por su
@@ -2626,16 +2734,27 @@ function markAllyHostile(allyId){
 
 // Estadísticas de combate del aliado, derivadas de su nivel — v1 no tiene
 // equipo ni piedras de alma propias todavía, solo la curva base por rol.
+const ALLY_EQUIP_SLOTS = ['arma','arma2','armadura','amuleto','casco','botas','guantes'];
 function makeCombatAlly(row){
   const tpl = ALLY_ROSTER.find(t=>t.templateId===row.template_id);
   const lvl = row.level || 1;
-  const maxHP = Math.round(40 + lvl*7 + (tpl.frontline ? lvl*3 : 0));
-  const atk = Math.round(6 + lvl*1.7);
+  let maxHP = Math.round(40 + lvl*7 + (tpl.frontline ? lvl*3 : 0));
+  let atk = Math.round(6 + lvl*1.7);
+  const res = {fisico:0, fuego:0, hielo:0, veneno:0, aturdimiento:0};
+  const equip = row.equip || {};
+  ALLY_EQUIP_SLOTS.forEach(slot=>{
+    const it = equip[slot];
+    if(!it || !it.bonus) return;
+    if(it.bonus.stat==='maxhp') maxHP += it.bonus.value*8;
+    else if(it.bonus.stat) atk += it.bonus.value; // arma/casco/botas/guantes: bono plano al ataque, más simple que el modelo de stats del jugador
+    else if(it.bonus.res) res[it.bonus.res] = (res[it.bonus.res]||0) + it.bonus.value;
+  });
   return {
     id: row.id, templateId: row.template_id, name: row.name, icon: tpl.icon, role: tpl.role,
     frontline: tpl.frontline, level: lvl,
     maxHP, hp: maxHP, atk, statuses:[], skillCooldown: 1, // 1: no usan su habilidad en el primer turno
-    res:{fisico:0, fuego:0, hielo:0, veneno:0, aturdimiento:0} // sin resistencias propias todavía (v1)
+    hasTotem: !!row.has_totem,
+    res
   };
 }
 const ALLY_SKILL_COOLDOWN = 3; // cada cuántos turnos propios repite su habilidad
@@ -3257,9 +3376,22 @@ function handleVictory(){
     }
   }
 
-  if(isElite && !hasWard() && chance(WARD_DROP_CHANCE)){
-    addToInventory({kind:'ward'});
-    log(`También obtienes: <b>${WARD_ITEM.icon} ${WARD_ITEM.name}</b> (guardado en la mochila).`);
+  if(isElite && chance(WARD_DROP_CHANCE)){
+    // El Tótem es el único objeto que se dropea de forma individual: cada
+    // personaje (tú o un aliado) tiene el suyo propio, no uno compartido. Se
+    // sortea entre quienes todavía no tengan uno.
+    const eligible = [];
+    if(!hasWard()) eligible.push({type:'player'});
+    (state.char.allies||[]).forEach(row=>{ if(!row.has_totem) eligible.push({type:'ally', row}); });
+    if(eligible.length){
+      const target = pick(eligible);
+      if(target.type==='player'){
+        addToInventory({kind:'ward'});
+        log(`También obtienes: <b>${WARD_ITEM.icon} ${WARD_ITEM.name}</b> (guardado en la mochila).`);
+      } else {
+        grantAllyTotem(target.row);
+      }
+    }
   }
 
   let leveled = false;
