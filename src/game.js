@@ -1267,6 +1267,8 @@ function showScreen(id){
 
 function renderAll(){
   ensureSoulSlots();
+  document.getElementById('clock-badge').style.display = 'flex';
+  updateClockBadge();
   document.getElementById('gold-badge').style.display = 'flex';
   document.getElementById('gold-amount').textContent = state.char.gold;
   const tierBadge = document.getElementById('tier-badge');
@@ -3956,6 +3958,8 @@ function renderCombat(){
         <div class="player-card">
           <div class="pc-icon">${race().icon}</div>
           <div style="margin-top:6px; font-size:0.85em;">${state.char.curHP} / ${d.maxHP} HP</div>
+          <div style="margin-top:3px; font-size:0.75em; color:var(--text-dim);">${state.char.curSta} / ${d.maxSta} MP · ${state.char.curSpi} / ${d.maxSpi} Espíritu</div>
+          <div style="margin-top:2px; font-size:0.7em; color:var(--text-dim);">${state.char.level>=CHAR_LEVEL_CAP ? 'Nivel máximo' : `Nivel ${state.char.level} · ${state.char.xp}/${xpNeededForLevel(state.char.level)} XP`}</div>
           <div style="margin-top:6px;">${playerStatusChips || '<span style="color:var(--text-dim); font-size:0.75em;">Sin efectos activos</span>'}</div>
         </div>
         ${allyHTML ? `<h4 style="margin-top:10px;">Tu equipo</h4><div class="enemy-slots">${allyHTML}</div>` : ''}
@@ -4355,14 +4359,40 @@ function goToCreation(){
 /* ============================================================
    BOOT — sesión de Supabase → perfil → selección de personaje
    ============================================================ */
+// Reloj de servidor (hora UTC) + indicador de ciclo — diseñado en "El
+// Consejo del Laberinto" (Capítulo II): 04:00-10:00 UTC es la ventana
+// nocturna (23:00-05:00 hora de Ecuador). Por ahora esto es solo el reloj y
+// el indicador visual en el header — el contenido real del ciclo nocturno
+// (enemigos y debuffs propios) todavía no está implementado, queda
+// pendiente; el laberinto se juega igual a cualquier hora.
+const NOCTURNO_START_UTC = 4, NOCTURNO_END_UTC = 10;
+function isNocturno(date){
+  const h = (date||new Date()).getUTCHours();
+  return h >= NOCTURNO_START_UTC && h < NOCTURNO_END_UTC;
+}
+function updateClockBadge(){
+  const badge = document.getElementById('clock-badge');
+  if(!badge || badge.style.display==='none') return;
+  const now = new Date();
+  const hh = String(now.getUTCHours()).padStart(2,'0');
+  const mm = String(now.getUTCMinutes()).padStart(2,'0');
+  document.getElementById('clock-time').textContent = `${hh}:${mm} UTC`;
+  const nocturno = isNocturno(now);
+  document.getElementById('clock-cycle-icon').textContent = nocturno ? '🌙' : '☀️';
+  badge.title = (nocturno ? 'Ciclo nocturno activo' : 'Ciclo normal') + ' — el ciclo nocturno es de 04:00 a 10:00 UTC.';
+}
+
+// hide(id): getElementById + set display, sin reventar si el header todavía
+// no terminó de montarse — boot() puede llamar a esto antes de que el navegador
+// termine de asentar el DOM inicial (el listener de Supabase re-renderiza
+// igual apenas confirma la sesión, así que perder ese primer intento es
+// inofensivo, pero no debería lanzar un error sin capturar).
+function hide(id){ const el=document.getElementById(id); if(el) el.style.display='none'; }
 function resetHeaderForLoggedOut(){
-  document.getElementById('gold-badge').style.display = 'none';
-  document.getElementById('tier-badge').style.display = 'none';
-  document.getElementById('btn-inventory').style.display = 'none';
-  document.getElementById('btn-switch-char').style.display = 'none';
-  document.getElementById('btn-slots').style.display = 'none';
-  document.getElementById('btn-reset').style.display = 'none';
-  document.getElementById('header-sub').textContent = 'El juego que nadie ha superado';
+  hide('clock-badge'); hide('gold-badge'); hide('tier-badge');
+  hide('btn-inventory'); hide('btn-switch-char'); hide('btn-slots'); hide('btn-reset');
+  const sub = document.getElementById('header-sub');
+  if(sub) sub.textContent = 'El juego que nadie ha superado';
 }
 
 function showAuthScreen(message){
@@ -4433,3 +4463,4 @@ async function boot(){
   });
 }
 boot();
+setInterval(updateClockBadge, 30000);
