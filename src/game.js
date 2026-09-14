@@ -839,6 +839,7 @@ function socketStone(uid){
       log(`Ya llevas una piedra de ${SOUL_FAMILIES[stone.family].name} de rango igual o superior (${old.tier}). No la reemplazas.`);
       return;
     }
+    if(!confirm(`Ya llevas engarzada "${old.name}" (rango ${old.tier}). Reemplazarla la destruye para siempre — no vuelve a tu mochila. ¿Continuar?`)) return;
     state.char.inventory.splice(idx,1);
     state.char.soulSlots[sameFamilySlot] = stone;
     log(`Tu <b>${old.name}</b> se destruye al ser reemplazada por <b>${stone.name}</b>.`);
@@ -859,9 +860,9 @@ function socketStone(uid){
 function unsocketStone(slotIdx){
   const stone = state.char.soulSlots[slotIdx];
   if(!stone) return;
+  if(!confirm(`Retirar "${stone.name}" (rango ${stone.tier}) la destruye para siempre — no vuelve a tu mochila. ¿Continuar?`)) return;
   state.char.soulSlots[slotIdx] = null;
-  state.char.inventory.push(stone);
-  log(`Retiras <b>${stone.name}</b> de tu espacio de alma.`);
+  log(`Retiras <b>${stone.name}</b> de tu espacio de alma — se pierde para siempre.`);
   renderSheet();
   if(invOpen) renderInventory();
   save();
