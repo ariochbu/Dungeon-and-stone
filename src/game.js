@@ -2998,7 +2998,7 @@ function livingAllies(){ return (combat.allies||[]).filter(a=>a.hp>0); }
 // jugador nunca se pone "en el frente del grupo" en el sentido de bloquear —
 // su Frente/Retaguardia sigue siendo su propia postura de siempre.
 function frontlineTarget(){
-  const tank = livingAllies().find(a=>a.frontline);
+  const tank = livingAllies().find(a=>a.pos==='frente');
   if(tank) return {kind:'ally', ally:tank};
   return {kind:'player'};
 }
@@ -3057,6 +3057,10 @@ function makeCombatAlly(row){
   return {
     id: row.id, templateId: row.template_id, name: row.name, icon: tpl.icon, role: tpl.role,
     frontline: tpl.frontline, level: lvl,
+    // pos es dinámico (a diferencia de frontline, que es fijo por rol): un
+    // aliado en peligro puede replegarse a la Retaguardia en pleno combate
+    // (ver allyMaybeSelfPreserve) y ya no ser el objetivo prioritario.
+    pos: tpl.frontline ? 'frente' : 'retaguardia',
     maxHP, hp: maxHP, atk, statuses:[], skillCooldown: 1, // 1: no usan su habilidad en el primer turno
     hasTotem: !!row.has_totem,
     res
@@ -3145,6 +3149,66 @@ function applyStatus(target, statusDef, isPlayer){
     list.push(Object.assign({}, statusDef, {stacks: statusDef.stack?1:undefined}));
   }
 }
+
+// Descripción breve de cada estado (para el tooltip al pasar el puntero o
+// tocar la etiqueta) y si es un buff (verde) o un debuff (rojo) — casi todo
+// en el juego es un debuff; Furioso y Fortalecido son los únicos buffs reales.
+const STATUS_INFO = {
+  Tambaleo:     {buff:false, desc:'Tambalea: el próximo Machacar hace mucho más daño y lo aturde.'},
+  Aturdido:     {buff:false, desc:'Pierde su próximo turno por completo.'},
+  Furioso:      {buff:true,  desc:'+30% daño físico y -20% daño recibido, a cambio de -10% evasión.'},
+  Sangrado:     {buff:false, desc:'Sufre daño por turno. Se acumula hasta x3.'},
+  Marcado:      {buff:false, desc:'Recibe +20% de todo el daño mientras dura.'},
+  Quemadura:    {buff:false, desc:'Sufre daño de fuego por turno.'},
+  Ralentizado:  {buff:false, desc:'-20% evasión y actúa después que el resto.'},
+  Bendecido:    {buff:false, desc:'Sus resistencias caen -20 en todos los elementos mientras dura.'},
+  Fortalecido:  {buff:true,  desc:'Se fortalece con cada turno que pasa: sus estadísticas suben por carga.'},
+  Corrosion:    {buff:false, desc:'-15% resistencia física y solo recibe la mitad de cualquier curación.'},
+  Debilitado:   {buff:false, desc:'Su daño cae un 15%.'},
+  Paralisis:    {buff:false, desc:'Evasión a 0: no puede esquivar nada, ni defendiéndose.'},
+  Ceguera:      {buff:false, desc:'Probabilidad de que sus golpes fallen por completo.'},
+  Miedo:        {buff:false, desc:'Probabilidad de perder el turno por pánico.'},
+  Confusion:    {buff:false, desc:'Probabilidad de golpear al azar — puede alcanzar a un aliado o a sí mismo.'}
+};
+function statusChipHTML(st){
+  const info = STATUS_INFO[st.name];
+  const cls = 'status-chip ' + (info && info.buff ? 'buff' : 'debuff');
+  const desc = (info ? info.desc : '').replace(/"/g,'&quot;');
+  const stacksTxt = st.stacks ? (' x'+st.stacks) : '';
+  return `<span class="${cls}" title="${desc}" data-status-desc="${desc}">${st.name}${stacksTxt} (${st.duration})</span>`;
+}
+function renderStatusChips(list){
+  return (list||[]).map(statusChipHTML).join('');
+}
+function hideStatusTooltip(){
+  const el = document.getElementById('status-tooltip');
+  if(el) el.remove();
+}
+function showStatusTooltip(chipEl, desc){
+  hideStatusTooltip();
+  if(!desc) return;
+  const rect = chipEl.getBoundingClientRect();
+  const tip = document.createElement('div');
+  tip.className = 'status-tooltip';
+  tip.id = 'status-tooltip';
+  tip.textContent = desc;
+  document.body.appendChild(tip);
+  const top = rect.bottom + window.scrollY + 4;
+  let left = rect.left + window.scrollX;
+  const maxLeft = window.innerWidth - tip.offsetWidth - 8;
+  if(left > maxLeft) left = Math.max(8, maxLeft);
+  tip.style.top = top+'px';
+  tip.style.left = left+'px';
+}
+document.addEventListener('click', (e)=>{
+  const chip = e.target.closest && e.target.closest('.status-chip');
+  if(chip && chip.dataset.statusDesc){
+    e.stopPropagation();
+    showStatusTooltip(chip, chip.dataset.statusDesc);
+  } else {
+    hideStatusTooltip();
+  }
+});
 
 function applyEquippedSpecials(target, dmgDealt, skill){
   const sources = ['arma','arma2'].map(slot=>state.char.equip[slot]).filter(it=>it && it.special)
@@ -3383,6 +3447,68 @@ function endPlayerTurn(){
 // IA de aliados v1: sin habilidades propias todavía, solo un golpe básico al
 // enemigo del frente — salvo el Sacerdote, que prioriza curar a quien esté
 // más bajo de vida (tú o otro aliado) antes de atacar.
+// Autopreservación de aliados: antes de su acción normal por rol, un aliado
+// gravemente herido intenta beber de la mochila COMPARTIDA (la misma que
+// usas tú) — la poción de vida más fuerte disponible, o un Antídoto si
+// carga algún efecto negativo. Si no le queda ninguna poción útil y sigue
+// en peligro, se repliega a la Retaguardia en vez de atacar: deja de
+// proteger el Frente, pero ya no es el objetivo prioritario de los
+// enemigos. No es "aprendizaje" en el sentido literal — es una decisión que
+// se reevalúa cada turno según la situación real del combate, no una IA que
+// mejora con el tiempo. Los aliados todavía no tienen su propio MP/espíritu
+// (solo enfriamiento de turnos para su habilidad, ver ALLY_SKILL_COOLDOWN),
+// así que no hay nada que un tónico de MP/espíritu les restaure todavía.
+const ALLY_SELF_PRESERVE_HP_PCT = 0.35;
+const ALLY_RETURN_TO_FRONT_HP_PCT = 0.6;
+function findUsablePotion(potionId){
+  return state.char.inventory.find(i=>i.kind==='potion' && i.potionId===potionId && i.qty>0) || null;
+}
+function consumeInventoryPotion(item){
+  item.qty -= 1;
+  if(item.qty<=0) state.char.inventory = state.char.inventory.filter(i=>i!==item);
+}
+function allyMaybeSelfPreserve(ally){
+  const hpPct = ally.hp/ally.maxHP;
+
+  // Ya a salvo: si es el rol de tanque y se había replegado, vuelve al Frente.
+  if(ally.frontline && ally.pos==='retaguardia' && hpPct >= ALLY_RETURN_TO_FRONT_HP_PCT){
+    ally.pos = 'frente';
+    log(`<b>${ally.name}</b> se recupera lo suficiente y vuelve al Frente.`);
+    return true;
+  }
+
+  if(hpPct <= ALLY_SELF_PRESERVE_HP_PCT){
+    const potion = findUsablePotion('vida_mayor') || findUsablePotion('vida_menor');
+    if(potion){
+      const tpl = POTION_TEMPLATES[potion.potionId];
+      const heal = Math.round(ally.maxHP * tpl.effect.amount);
+      const before = ally.hp;
+      ally.hp = Math.min(ally.maxHP, ally.hp + heal);
+      consumeInventoryPotion(potion);
+      log(`<b>${ally.name}</b> está en peligro y bebe ${tpl.name} de la mochila. Recupera ${ally.hp-before} de vida.`);
+      return true;
+    }
+  }
+
+  if(ally.statuses.length > 0){
+    const antidoto = findUsablePotion('antidoto');
+    if(antidoto){
+      ally.statuses.length = 0;
+      consumeInventoryPotion(antidoto);
+      log(`<b>${ally.name}</b> bebe un Antídoto de la mochila. Sus efectos negativos desaparecen.`);
+      return true;
+    }
+  }
+
+  if(hpPct <= ALLY_SELF_PRESERVE_HP_PCT && ally.pos==='frente'){
+    ally.pos = 'retaguardia';
+    log(`<b>${ally.name}</b> está en peligro y no le quedan pociones — se repliega a la Retaguardia.`);
+    return true;
+  }
+
+  return false;
+}
+
 function resolveAllyTurns(){
   livingAllies().forEach(ally=>{
     if(!combat || combat.over || ally.hp<=0) return;
@@ -3413,6 +3539,8 @@ function resolveAllyTurns(){
       }
       return;
     }
+
+    if(allyMaybeSelfPreserve(ally)) return;
 
     if(ally.role==='sacerdote'){
       const d = derived();
@@ -3945,7 +4073,7 @@ function renderCombat(){
   const enemyHTML = combat.enemies.map((e,i)=>{
     const dead = e.hp<=0;
     const slotTag = i===0 ? 'Frente' : (i===1?'Medio':'Fondo');
-    const statusChips = e.statuses.map(st=>`<span class="status-chip">${st.name}${st.stacks?(' x'+st.stacks):''} (${st.duration})</span>`).join('');
+    const statusChips = renderStatusChips(e.statuses);
     const hpPct = clamp(e.hp/e.maxHP*100,0,100);
     const canTargetAny = livingEnemies().length>0;
     return `<div class="enemy-card ${dead?'dead':''} ${!dead && canTargetAny?'targetable':''}" data-idx="${i}">
@@ -3959,17 +4087,17 @@ function renderCombat(){
     </div>`;
   }).join('');
 
-  const playerStatusChips = combat.playerStatuses.map(st=>`<span class="status-chip">${st.name} (${st.duration})</span>`).join('');
+  const playerStatusChips = renderStatusChips(combat.playerStatuses);
 
   const allyHTML = (combat.allies||[]).map((a,i)=>{
     const dead = a.hp<=0;
     const hostile = isAllyHostile(a.id);
     const hpPct = clamp(a.hp/a.maxHP*100, 0, 100);
-    const statusChips = (a.statuses||[]).map(st=>`<span class="status-chip">${st.name}${st.stacks?(' x'+st.stacks):''} (${st.duration})</span>`).join('');
+    const statusChips = renderStatusChips(a.statuses);
     return `<div class="enemy-card ${dead?'dead':''} ${!dead && hostile?'targetable':''}" ${!dead && hostile ? `data-ally-idx="${i}"` : ''}>
       <div class="ei">${a.icon}</div>
       <div class="einfo">
-        <div class="ename"><span>${a.name}</span>${a.frontline ? '<span class="slot-tag">Frente</span>' : ''}${hostile ? '<span class="slot-tag" style="border-color:var(--blood-light); color:var(--blood-light);">¡Traidor!</span>' : ''}</div>
+        <div class="ename"><span>${a.name}</span><span class="slot-tag">${a.pos==='frente'?'Frente':'Retaguardia'}</span>${hostile ? '<span class="slot-tag" style="border-color:var(--blood-light); color:var(--blood-light);">¡Traidor!</span>' : ''}</div>
         <div class="bar-track" style="margin-top:4px;"><div class="bar-fill hp" style="width:${hpPct}%"></div></div>
         <div style="font-size:0.7em; color:var(--text-dim); margin-top:2px;">${a.hp}/${a.maxHP} HP</div>
         <div>${statusChips}</div>

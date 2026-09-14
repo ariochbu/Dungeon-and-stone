@@ -110,6 +110,14 @@
   .status-chip{
     display:inline-flex; align-items:center; gap:4px; font-size:0.72em; padding:2px 7px; border-radius:20px;
     background:var(--bg-2); border:1px solid var(--border); margin:2px 3px 2px 0; color:var(--text);
+    cursor:help;
+  }
+  .status-chip.buff{border-color:var(--good); color:var(--good);}
+  .status-chip.debuff{border-color:var(--blood-light); color:var(--blood-light);}
+  .status-tooltip{
+    position:absolute; z-index:50; max-width:240px; font-size:0.78em; line-height:1.4;
+    background:var(--panel-2); border:1px solid var(--bronze); border-radius:6px; padding:8px 10px;
+    color:var(--text); box-shadow:0 4px 12px rgba(0,0,0,0.35);
   }
 
   /* ---------- inventory / equipment ---------- */
