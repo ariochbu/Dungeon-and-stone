@@ -161,8 +161,8 @@ const SKILLS = {
 
   corte_rapido: {
     id:'corte_rapido', name:'Corte rápido', cost:{tipo:'estamina', valor:12}, dmgType:'fisico', mult:0.6,
-    requiresPos:'frente', applies:{name:'Sangrado', chance:0.85, duration:3, stack:true, maxStack:3},
-    desc: ()=> `Daño físico. Apila Sangrado (hasta x${skillBonus('corte_rapido','maxStack',3)}).`,
+    requiresPos:'frente', applies:{name:'Sangrado', chance:0.85, duration:4, stack:true, maxStack:3},
+    desc: ()=> `Daño físico. Apila Sangrado (hasta x${skillBonus('corte_rapido','maxStack',3)}) durante 4 turnos.`,
     targetMode:'front'
   },
   danza_cuchillas: {
@@ -2445,10 +2445,44 @@ async function renderAdmin(){
     </div>
     <p style="color:var(--text-dim); font-size:0.85em; margin-top:0;">Gestiona cuentas de jugadores. Los cambios de rol y de baneo quedan protegidos por la base de datos: solo una cuenta admin puede aplicarlos.</p>
     <p id="admin-msg" style="color:var(--blood-light); font-size:0.85em; min-height:1.2em;"></p>
+
+    <div class="section-label" style="margin-top:0;">Actividad sospechosa</div>
+    <p style="color:var(--text-dim); font-size:0.82em; margin:0 0 8px;">Jefes de década o guardianes de piso (nivel 11+) derrotados en 4 turnos propios o menos — a ese ritmo no se puede ganar de forma legítima. Es una señal para revisar, no una prueba: el turno lo cuenta el propio cliente, así que confirmá antes de suspender.</p>
+    <div id="flagged-kills-list"><p class="inv-empty-msg">Cargando alertas…</p></div>
+
+    <div class="section-label">Cuentas</div>
     <div id="admin-list"><p class="inv-empty-msg">Cargando cuentas…</p></div>
   `;
   document.getElementById('btn-close-admin').onclick = ()=>{ adminOpen=false; renderAll(); };
-  await loadAdminList();
+  await Promise.all([loadAdminList(), loadFlaggedKills()]);
+}
+
+async function loadFlaggedKills(){
+  const el = document.getElementById('flagged-kills-list');
+  if(!el) return;
+  const { data, error } = await supabase.from('flagged_boss_kills').select('*').order('created_at', {ascending:false}).limit(50);
+  if(error){ el.innerHTML = `<p class="inv-empty-msg">No se pudo cargar (¿corriste la migración 0017?): ${error.message}</p>`; return; }
+  if(!data || !data.length){ el.innerHTML = `<p class="inv-empty-msg">Sin alertas por ahora.</p>`; return; }
+  el.innerHTML = data.map(f=>{
+    const when = new Date(f.created_at).toLocaleString();
+    const kindLabel = f.kind==='jefe_decada' ? 'Jefe de década' : 'Guardián de piso';
+    return `<div class="inv-item-row">
+      <div>
+        <b>${f.nickname}</b> <span class="slot-tag" style="border-color:var(--blood-light); color:var(--blood-light);">${kindLabel}</span>
+        <div class="inv-item-bonus neutral">Nivel ${f.dungeon_level} derrotado en ${f.turns} turno(s) · ${when}</div>
+      </div>
+      <button class="inv-btn danger" data-flag-ban="${f.user_id}">Suspender cuenta</button>
+    </div>`;
+  }).join('');
+  const msg = document.getElementById('admin-msg');
+  el.querySelectorAll('[data-flag-ban]').forEach(btn=>{
+    btn.onclick = async ()=>{
+      btn.disabled = true;
+      const { error: banError } = await supabase.from('profiles').update({ is_banned: true }).eq('id', btn.dataset.flagBan);
+      if(msg) msg.textContent = banError ? 'No se pudo suspender: ' + banError.message : '';
+      await Promise.all([loadAdminList(), loadFlaggedKills()]);
+    };
+  });
 }
 
 async function loadAdminList(){
@@ -3211,6 +3245,7 @@ function startCombat(enemyGroup, node){
     playerStatuses:[],
     playerDefending:false,
     turnLog:[],
+    turnCount:0, // cuántos turnos propios ya jugaste en ESTA pelea - ver endPlayerTurn() y la alerta de posible trampa en handleVictory()
     over:false
   };
   invOpen = false;
@@ -3732,6 +3767,7 @@ async function playerUseSkill(skillId, targetIdx){
 }
 
 async function endPlayerTurn(){
+  combat.turnCount = (combat.turnCount||0) + 1;
   if(state.dungeon && state.dungeon.ultimateCooldown>0) state.dungeon.ultimateCooldown--;
   checkCombatEnd();
   if(!combat || combat.over) return;
@@ -4186,6 +4222,30 @@ function handleVictory(){
   // limitadas a una sola por batalla (sin importar cuántos enemigos o tiradas
   // haya) para que no caigan dos de golpe en un mismo combate.
   const isDecadeFinal = isBoss && level % 10 === 0;
+
+  // Alerta de posible trampa (pedido explícito): a este ritmo es imposible
+  // ganarle a un jefe de década, o a un guardián de piso de nivel 11 en
+  // adelante, en 4 turnos propios o menos - los guardianes de los niveles
+  // 1-9 quedan afuera a propósito porque esos sí son legítimamente tan
+  // fáciles. Solo se REGISTRA para que lo revise un admin desde el panel
+  // (loadFlaggedKills) - nunca banea sola: el turno se cuenta 100% del lado
+  // del cliente (combat.turnCount en endPlayerTurn), así que alguien que
+  // además de editar el HP del jefe también falsee este número se escapa
+  // igual - esto agarra al que solo tocó el HP y no pensó en el contador.
+  if(isBoss){
+    const turnsThisFight = combat.turnCount || 0;
+    const guardianTooDeepToRush = !isDecadeFinal && level >= 11;
+    if(turnsThisFight <= 4 && (isDecadeFinal || guardianTooDeepToRush)){
+      supabase.from('flagged_boss_kills').insert({
+        character_id: state.char.id, user_id: currentUser.id, nickname: state.char.nickname,
+        kind: isDecadeFinal ? 'jefe_decada' : 'guardian_piso',
+        dungeon_level: level, turns: turnsThisFight
+      }).then(({error})=>{
+        if(error) console.error('No se pudo registrar la alerta de posible trampa:', error.message);
+      });
+    }
+  }
+
   // Grietas (Capítulo IV, El Consejo del Laberinto) todavía no están
   // construidas - cuando existan, el jefe de una Grieta debe activar esto
   // también. Por ahora solo el jefe de década cuenta.
