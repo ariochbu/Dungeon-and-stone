@@ -80,11 +80,11 @@ const STYLES = {
    mantenimiento recurrente todavía; nivel 10 de personaje requerido)
    ============================================================ */
 const ALLY_ROSTER = [
-  {templateId:'aldric', role:'guerrero', name:'Aldric de la Muralla', icon:'🛡️', bio:'Escudero retirado que aún no aprende a rendirse. Se planta al frente y no se mueve.', skillName:'Golpe Pesado', skillDesc:'Cada pocos turnos, un golpe con 60% más de daño.', baseCost:150, costPerLevel:10, frontline:true},
-  {templateId:'neira', role:'arquero', name:'Neira la Certera', icon:'🏹', bio:'Cazadora de las tierras altas. Nunca falla dos veces al mismo blanco.', skillName:'Disparo Certero', skillDesc:'Cada pocos turnos, un disparo que ignora buena parte de la resistencia del objetivo.', baseCost:170, costPerLevel:11, frontline:false},
-  {templateId:'vex', role:'asesino', name:'Vex', icon:'🗡️', bio:'No cuenta su pasado. Solo dice que llegó tarde a la venganza que buscaba.', skillName:'Golpe Sombrío', skillDesc:'Cada pocos turnos, más daño mientras más herido esté el objetivo.', baseCost:190, costPerLevel:12, frontline:false},
-  {templateId:'fennwick', role:'mago', name:'Fennwick', icon:'🔮', bio:'Aprendiz expulsado del Círculo Roto por "experimentar de más".', skillName:'Bola de Fuego', skillDesc:'Cada pocos turnos, daño de fuego en vez de físico — útil contra enemigos resistentes al golpe.', baseCost:220, costPerLevel:14, frontline:false},
-  {templateId:'delyth', role:'sacerdote', name:'Hermana Delyth', icon:'✨', bio:'La última de su orden. Cura a cualquiera que se lo pida, sin preguntar por qué pelea.', skillName:'Bendición Sagrada', skillDesc:'Cuando nadie necesita curación, baja todas las resistencias del enemigo del frente por unos turnos.', baseCost:240, costPerLevel:15, frontline:false}
+  {templateId:'aldric', role:'guerrero', name:'Aldric de la Muralla', icon:'🛡️', bio:'Escudero retirado que aún no aprende a rendirse. Se planta al frente y no se mueve.', skillName:'Golpe Pesado', skillDesc:'Cada pocos turnos, un golpe con 60% más de daño.', baseCost:195, costPerLevel:13, frontline:true},
+  {templateId:'neira', role:'arquero', name:'Neira la Certera', icon:'🏹', bio:'Cazadora de las tierras altas. Nunca falla dos veces al mismo blanco.', skillName:'Disparo Certero', skillDesc:'Cada pocos turnos, un disparo que ignora buena parte de la resistencia del objetivo.', baseCost:220, costPerLevel:14, frontline:false},
+  {templateId:'vex', role:'asesino', name:'Vex', icon:'🗡️', bio:'No cuenta su pasado. Solo dice que llegó tarde a la venganza que buscaba.', skillName:'Golpe Sombrío', skillDesc:'Cada pocos turnos, más daño mientras más herido esté el objetivo.', baseCost:245, costPerLevel:16, frontline:false},
+  {templateId:'fennwick', role:'mago', name:'Fennwick', icon:'🔮', bio:'Aprendiz expulsado del Círculo Roto por "experimentar de más".', skillName:'Bola de Fuego', skillDesc:'Cada pocos turnos, daño de fuego en vez de físico — útil contra enemigos resistentes al golpe.', baseCost:285, costPerLevel:18, frontline:false},
+  {templateId:'delyth', role:'sacerdote', name:'Hermana Delyth', icon:'✨', bio:'La última de su orden. Cura a cualquiera que se lo pida, sin preguntar por qué pelea.', skillName:'Bendición Sagrada', skillDesc:'Cuando nadie necesita curación, baja todas las resistencias del enemigo del frente por unos turnos.', baseCost:310, costPerLevel:20, frontline:false}
 ];
 const ALLY_MIN_LEVEL = 10;
 const MAX_ALLIES = 4;
@@ -1100,7 +1100,8 @@ function rowToState(row){
       stash: row.stash || {gold:0, items:[]},
       soulSlots: (row.soul_slots || []).map(refreshStoneFromTemplate),
       pityGear: row.pity_gear || 0,
-      pityStone: row.pity_stone || 0
+      pityStone: row.pity_stone || 0,
+      bannedAllyTemplates: row.banned_ally_templates || []
     },
     dungeon: row.dungeon || null,
     log: loadLocalLog()
@@ -1167,6 +1168,19 @@ const CHAR_LEVEL_CAP = 60; // tope de nivel de personaje pedido
 function mobXP(level){ return level; }        // mobs normales: 1 en piso 1, 2 en piso 2...
 function eliteXP(level){ return level+1; }    // élites: siempre mob+1
 function guardianXP(level){ return 2*level+2; } // guardianes: 2×mob+2
+// Como siempre se entra al laberinto desde el nivel 1, sin este freno
+// convenía retirarse tras cada limpieza fácil y volver a entrar para
+// farmear el mismo nivel trivial una y otra vez - subía de personaje mucho
+// más rápido de lo que el laberinto en el que realmente estás parado
+// justifica. maxLevelUnlocked() es la frontera más profunda que ya
+// desbloqueaste; cuanto más atrás del nivel que estás peleando quede esa
+// frontera, menos experiencia vale (tuya y de tus aliados) - empuja a seguir
+// avanzando en vez dequedarte reciclando el piso 1 para siempre.
+function xpGapMultiplier(){
+  if(!state.dungeon) return 1;
+  const gap = Math.max(0, maxLevelUnlocked() - state.dungeon.level);
+  return Math.max(0.1, 1 - gap*0.15);
+}
 function xpNeededForLevel(level){
   // Se duplica tal cual pediste (5,10,20,40,80,160,320) hasta el nivel 7→8.
   // A partir de ahí, duplicar cada nivel hasta el 60 pedía cantidades imposibles de
@@ -1856,12 +1870,18 @@ function renderCity(){
     renderSheet(); save();
   };
   document.getElementById('btn-enter-dungeon').onclick = ()=>{
-    stopLoginAudio();
-    const d = derived();
-    state.char.curHP = d.maxHP; state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi;
-    state.dungeon = generateDungeon(1);
-    log('Entras al laberinto desde el nivel 1. El aire cambia; algo respira ahí dentro.');
-    renderAll(); save();
+    showOverlay(
+      'Antes de entrar',
+      'Una vez dentro no podrás retirarte hasta vencer al guardián del nivel o caer en el intento. Si mueres, pierdes el equipo suelto que llevas en la mochila y la mitad de tu oro — lo que ya tienes equipado y lo que guardaste en el Hogar está a salvo.',
+      ()=>{
+        stopLoginAudio();
+        const d = derived();
+        state.char.curHP = d.maxHP; state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi;
+        state.dungeon = generateDungeon(1);
+        log('Entras al laberinto desde el nivel 1. El aire cambia; algo respira ahí dentro.');
+        renderAll(); save();
+      }
+    );
   };
   document.getElementById('btn-open-home').onclick = ()=>{
     invOpen = false; homeOpen = true; shopOpen = false; rankingOpen = false; adminOpen = false;
@@ -2123,11 +2143,14 @@ async function refreshAlliesState(){
 
 // Cada aliado sube de nivel igual que el personaje (misma curva de
 // xpNeededForLevel), pero por su cuenta: recibe el xpGain COMPLETO de cada
-// victoria, sin dividirlo entre el equipo.
+// victoria, sin dividirlo entre el equipo - salvo que haya caído en ESE
+// combate (hp<=0 en combat.allies), en cuyo caso no gana nada: no peleó.
 async function advanceAllyXp(xpGain){
   const allies = state.char.allies;
   if(!allies || !allies.length) return;
   for(const row of allies){
+    const combatAlly = combat && combat.allies ? combat.allies.find(a=>a.id===row.id) : null;
+    if(combatAlly && combatAlly.hp<=0) continue;
     row.xp = (row.xp||0) + xpGain;
     let needed = xpNeededForLevel(row.level);
     let leveled = false;
@@ -2147,6 +2170,7 @@ async function advanceAllyXp(xpGain){
 async function hireAlly(templateId){
   const tpl = ALLY_ROSTER.find(t=>t.templateId===templateId);
   if(!tpl) return;
+  if((state.char.bannedAllyTemplates||[]).includes(templateId)){ log(`${tpl.name} ya no quiere saber nada de ti — no puedes volver a reclutarlo.`); return; }
   const cost = allyHireCost(tpl, state.char.level);
   const { data, error } = await supabase.rpc('hire_ally', {
     p_character_id: state.char.id, p_template_id: tpl.templateId, p_role: tpl.role, p_name: tpl.name, p_cost: cost
@@ -2158,41 +2182,67 @@ async function hireAlly(templateId){
   renderAll();
 }
 async function dismissAlly(allyId){
+  const row = (state.char.allies||[]).find(a=>a.id===allyId);
   const { error } = await supabase.rpc('dismiss_ally', {p_ally_id: allyId});
   if(error){ log('No se pudo despedir al aliado: '+error.message); return; }
   state.char.allies = (state.char.allies||[]).filter(a=>a.id!==allyId);
-  log('Despides a un aliado.');
+  if(row){
+    if(!state.char.bannedAllyTemplates) state.char.bannedAllyTemplates = [];
+    if(!state.char.bannedAllyTemplates.includes(row.template_id)) state.char.bannedAllyTemplates.push(row.template_id);
+  }
+  log('Despides a un aliado. No podrás volver a reclutarlo con este personaje.');
   renderAll();
 }
 
 // Mantenimiento recurrente: cada aliado cobra un salario cada vez que sales
 // del laberinto (retirada voluntaria tras un guardián, o expulsión por
 // derrota) - no se cobra por entrar ni mientras estás dentro. La satisfacción
-// solo se mueve por esto: sube si le pagas, baja si no te alcanza el oro.
-// El tema de la muerte/abandono de un aliado por baja satisfacción queda
-// pendiente hasta definir mejor el combate - por ahora solo se registra.
+// solo se mueve por esto: sube (poco) si le pagas, baja (bastante, y cada vez
+// más) si no te alcanza el oro. Si cae a 15% o menos, el aliado deserta:
+// se va para siempre y nunca vuelve a estar disponible para este personaje
+// (mismo destino que despedirlo a propósito - ver dismiss_ally en el
+// servidor, que ahora también lo marca en characters.banned_ally_templates).
 const ALLY_SATISFACTION_DEFAULT = 50;
-const ALLY_WAGE_SATISFACTION_GAIN = 8;
-const ALLY_WAGE_SATISFACTION_LOSS = 15;
+const ALLY_WAGE_SATISFACTION_GAIN = 2;
+const ALLY_WAGE_SATISFACTION_LOSS_BASE = 7;
+const ALLY_WAGE_SATISFACTION_LOSS_MAX = 10;
+const ALLY_DESERTION_THRESHOLD = 15;
 function allyWage(row){
   const tpl = ALLY_ROSTER.find(t=>t.templateId===row.template_id);
   if(!tpl) return 0;
   return Math.round(tpl.baseCost*0.08 + (row.level||1)*3);
 }
+function desertAlly(row, reason){
+  state.char.allies = (state.char.allies||[]).filter(a=>a.id!==row.id);
+  if(!state.char.bannedAllyTemplates) state.char.bannedAllyTemplates = [];
+  if(!state.char.bannedAllyTemplates.includes(row.template_id)) state.char.bannedAllyTemplates.push(row.template_id);
+  log(`<b>${row.name}</b> ${reason} y abandona tu grupo. No volverá a unirse a ti.`);
+  supabase.rpc('dismiss_ally', {p_ally_id: row.id}).then(({error})=>{
+    if(error) console.error('No se pudo procesar la deserción del aliado:', error.message);
+  });
+}
 function payAlliesOnExit(){
   const allies = state.char.allies || [];
   allies.forEach(row=>{
     if(row.satisfaction===undefined || row.satisfaction===null) row.satisfaction = ALLY_SATISFACTION_DEFAULT;
+    if(row.missed_payments===undefined || row.missed_payments===null) row.missed_payments = 0;
     const wage = allyWage(row);
     if(state.char.gold >= wage){
       state.char.gold -= wage;
+      row.missed_payments = 0;
       row.satisfaction = Math.min(100, row.satisfaction + ALLY_WAGE_SATISFACTION_GAIN);
       log(`Pagas ${wage} de oro a <b>${row.name}</b> por el laberinto. Su satisfacción sube a ${row.satisfaction}%.`);
     } else {
-      row.satisfaction = Math.max(0, row.satisfaction - ALLY_WAGE_SATISFACTION_LOSS);
+      row.missed_payments += 1;
+      const loss = Math.min(ALLY_WAGE_SATISFACTION_LOSS_MAX, ALLY_WAGE_SATISFACTION_LOSS_BASE + (row.missed_payments-1));
+      row.satisfaction = Math.max(0, row.satisfaction - loss);
       log(`No te alcanza el oro para pagarle a <b>${row.name}</b>. Su satisfacción baja a ${row.satisfaction}%.`);
     }
-    supabase.from('character_allies').update({satisfaction: row.satisfaction}).eq('id', row.id).then(({error})=>{
+    if(row.satisfaction <= ALLY_DESERTION_THRESHOLD){
+      desertAlly(row, 'ya no confía en ti');
+      return;
+    }
+    supabase.from('character_allies').update({satisfaction: row.satisfaction, missed_payments: row.missed_payments}).eq('id', row.id).then(({error})=>{
       if(error) console.error('No se pudo guardar la satisfacción del aliado:', error.message);
     });
   });
@@ -2233,18 +2283,24 @@ function renderTaberna(){
     </div>`;
   }).join('') : `<p class="inv-empty-msg">Todavía no has reclutado a nadie.</p>`;
 
+  const bannedTemplates = state.char.bannedAllyTemplates || [];
   const rosterHTML = ALLY_ROSTER.map(tpl=>{
     const already = allies.some(a=>a.template_id===tpl.templateId);
+    const banned = bannedTemplates.includes(tpl.templateId);
     const cost = allyHireCost(tpl, state.char.level);
     const full = allies.length >= MAX_ALLIES;
-    const disabled = already || full || state.char.gold < cost;
+    const disabled = already || banned || full || state.char.gold < cost;
+    let btnLabel = `Reclutar (${cost} oro)`;
+    if(banned) btnLabel = 'Ya no confía en ti';
+    else if(already) btnLabel = 'Ya reclutado';
     return `<div class="inv-item-row">
       <div>
         <b>${tpl.icon} ${tpl.name}</b> <span class="slot-tag">${tpl.role}</span>
         <div class="inv-item-bonus neutral">${tpl.bio}</div>
         <div class="inv-item-bonus" style="margin-top:2px;"><b>${tpl.skillName}</b> — ${tpl.skillDesc}</div>
+        ${banned ? `<div class="inv-item-bonus" style="color:var(--blood-light); margin-top:2px;">Lo despediste o te traicionó antes — no volverá a unirse a este personaje.</div>` : ''}
       </div>
-      <button class="inv-btn" data-hire="${tpl.templateId}" ${disabled?'disabled':''}>${already ? 'Ya reclutado' : `Reclutar (${cost} oro)`}</button>
+      <button class="inv-btn" data-hire="${tpl.templateId}" ${disabled?'disabled':''}>${btnLabel}</button>
     </div>`;
   }).join('');
 
@@ -2253,7 +2309,7 @@ function renderTaberna(){
       <h3 style="color:var(--bronze-light);">Taberna</h3>
       <button class="reset-btn" id="btn-close-taberna">Cerrar</button>
     </div>
-    <p style="color:var(--text-dim); font-size:0.85em; margin-top:0;">Hasta ${MAX_ALLIES} aliados a la vez, ${MAX_ALLIES+1} contándote a ti. Pelean junto a ti automáticamente — el que tiene "frontline" ocupa tu lugar en el frente y absorbe los golpes. Cada uno cobra un salario cada vez que sales del laberinto: si no te alcanza el oro para pagarle, su satisfacción baja. El riesgo de traición todavía no está activo.</p>
+    <p style="color:var(--text-dim); font-size:0.85em; margin-top:0;">Hasta ${MAX_ALLIES} aliados a la vez, ${MAX_ALLIES+1} contándote a ti. Pelean junto a ti automáticamente — el que tiene "frontline" ocupa tu lugar en el frente y absorbe los golpes. Cada uno cobra un salario cada vez que sales del laberinto: si no te alcanza el oro para pagarle varias veces seguidas, pierde la confianza en ti y se va para siempre. Un aliado despedido o que deserta no vuelve a estar disponible.</p>
 
     <div class="section-label">Tu equipo (${allies.length}/${MAX_ALLIES})</div>
     ${hiredHTML}
@@ -3948,7 +4004,7 @@ function handleVictory(){
   const level = state.dungeon.level || 1;
   const rewardMult = 1 + (level-1)*0.08; // los niveles más duros pagan algo mejor (solo aplica al oro)
   const perKillXP = isBoss ? guardianXP(level) : isElite ? eliteXP(level) : mobXP(level);
-  const xpGain = Math.round(perKillXP * combat.enemies.length * (race().id==='humano'?1.1:1));
+  const xpGain = Math.max(1, Math.round(perKillXP * combat.enemies.length * (race().id==='humano'?1.1:1) * xpGapMultiplier()));
   const goldGain = Math.round((rnd(6,14)*combat.enemies.length + (isBoss?60:isElite?20:0)) * rewardMult);
   state.char.xp += xpGain;
   state.char.gold += goldGain;
@@ -4149,14 +4205,14 @@ const TUTORIAL_SLIDES = [
   {title:'Entrar al laberinto', body:'Avanzas piso a piso por sendas: solo puedes moverte a la senda igual o adyacente a la tuya, nunca saltar de un extremo al otro. Cada piso tiene combates, cofres, descansos y de vez en cuando un élite.'},
   {title:'El Hogar', body:'Guarda equipo, pociones y oro. Nada de lo que dejes aquí se pierde si mueres en el laberinto — solo se pierde lo que llevas encima.'},
   {title:'El Gremio', body:'Un tablón de 10 misiones que se refresca cada 12 horas. Complétalas para ganar oro, experiencia y Sellos del Laberinto, canjeables por equipo Único y Épico. Si una misión no te gusta, puedes refrescarla hasta 3 veces por tablón.'},
-  {title:'La Taberna', body:'Desde nivel 10, recluta aliados — guerrero, arquero, asesino, mago o sacerdote — pagando oro una sola vez. Pelean junto a ti de forma automática: el que tiene rol de tanque ocupa el Frente y absorbe los golpes por ti.'},
+  {title:'La Taberna', body:'Desde nivel 10, recluta aliados — guerrero, arquero, asesino, mago o sacerdote — pagando oro. Pelean junto a ti de forma automática: el que tiene rol de tanque ocupa el Frente y absorbe los golpes por ti. Los sacerdotes solo existen como aliados, nunca como senda de combate propia: cuidan a quien pelea, no bajan a pelear ellos mismos.'},
+  {title:'Mantener a tus aliados', body:'Cada aliado te cobra un salario cada vez que sales del laberinto. Pagarlo sube un poco su satisfacción; no poder pagarlo la baja bastante, cada vez más si se repite. Si su satisfacción cae demasiado, deserta y lo pierdes para siempre — no vuelve a estar disponible, ni siquiera despidiéndolo tú antes.'},
   {title:'Ranking', body:'Tu récord personal (el piso más profundo que has alcanzado) y el top 10 de todos los jugadores.'},
   {title:'Combate por turnos', body:'Cada turno eliges una habilidad o acción. Frente y Retaguardia son tus dos posiciones: la mayoría de golpes físicos fuertes exigen estar en el Frente; la Retaguardia da +8% de evasión y favorece las habilidades a distancia.'},
   {title:'MP y Espíritu', body:'El MP paga tus habilidades físicas. El Espíritu paga las mágicas y de utilidad, y también aumenta tu daño mágico. Reposicionarte cambia entre Frente y Retaguardia, y ocupa tu turno.'},
   {title:'Frente y Retaguardia, con aliados', body:'Cuando tengas un aliado tanque en el Frente, los enemigos no podrán llegar hasta tu Retaguardia sin pasar por él primero — igual que tú no puedes golpear al enemigo de atrás sin resolver primero al de adelante. Posicionarte bien pesará tanto como golpear fuerte.'},
   {title:'Defenderse', body:'Te da al menos 50% de probabilidad de esquivar el próximo golpe, y si aun así te alcanzan, el daño se reduce a la mitad. Es una opción real cuando la pelea se pone difícil, no solo un último recurso.'},
   {title:'El Tótem', body:'Un objeto raro que sueltan los élites. Bloquea gratis, una sola vez y sin gastar tu turno, el golpe que te mataría — pero solo funciona contra el jefe final de una década del laberinto (piso 10, 20, 30...).'},
-  {title:'El ciclo nocturno', body:'Entre las 04:00 y las 10:00 (hora de servidor), el laberinto cambia: aparecen enemigos distintos y más peligrosos, con sus propios efectos negativos. Vigila el reloj.'},
   {title:'Buena suerte, viajero', body:'Eso es todo. El laberinto tiene 60 pisos conocidos, y cada década esconde algo distinto. A partir de aquí, el resto lo descubres jugando.'}
 ];
 let tutorialStep = 0;
@@ -4727,12 +4783,13 @@ function goToCreation(){
 /* ============================================================
    BOOT — sesión de Supabase → perfil → selección de personaje
    ============================================================ */
-// Reloj de servidor (hora UTC) + indicador de ciclo — diseñado en "El
-// Consejo del Laberinto" (Capítulo II): 04:00-10:00 UTC es la ventana
-// nocturna (23:00-05:00 hora de Ecuador). Por ahora esto es solo el reloj y
-// el indicador visual en el header — el contenido real del ciclo nocturno
-// (enemigos y debuffs propios) todavía no está implementado, queda
-// pendiente; el laberinto se juega igual a cualquier hora.
+// Reloj de servidor, hora de Ecuador — diseñado en "El Consejo del
+// Laberinto" (Capítulo II) para eventualmente marcar una ventana nocturna
+// (04:00-10:00 UTC / 23:00-05:00 hora de Ecuador). A pedido explícito, el
+// reloj todavía NO muestra ni menciona nada del ciclo (ni ícono de luna/sol
+// ni texto) hasta que el contenido real de la noche (enemigos y debuffs
+// propios) esté implementado — NOCTURNO_START_UTC/isNocturno() quedan listos
+// para cuando llegue esa entrega, pero nada los usa por ahora.
 const NOCTURNO_START_UTC = 4, NOCTURNO_END_UTC = 10;
 const ECUADOR_UTC_OFFSET = -5; // UTC-5 todo el año, Ecuador no usa horario de verano
 function isNocturno(date){
@@ -4747,9 +4804,6 @@ function updateClockBadge(){
   const hh = String(ecuadorHour).padStart(2,'0');
   const mm = String(now.getUTCMinutes()).padStart(2,'0');
   document.getElementById('clock-time').textContent = `${hh}:${mm}`;
-  const nocturno = isNocturno(now);
-  document.getElementById('clock-cycle-icon').textContent = nocturno ? '🌙' : '☀️';
-  badge.title = (nocturno ? 'Ciclo nocturno activo' : 'Ciclo normal') + ' — el ciclo nocturno es de 23:00 a 05:00, hora de Ecuador.';
 }
 
 // hide(id): getElementById + set display, sin reventar si el header todavía
