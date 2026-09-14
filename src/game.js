@@ -1846,16 +1846,28 @@ function missionBandForFloor(floor){
   return 4;
 }
 const MISSION_BAND_RANKS = [['E','F'],['D','C'],['B','A'],['S'],['SS']];
-const MISSION_OBJECTIVE_TYPES = ['kill_elites','clear_floors','defeat_guardian'];
+// Ampliado de 3 a 8 tipos - con solo 3, un tablón de 10 caía casi siempre en
+// las mismas 2-3 misiones repetidas sin variedad real perceptible.
+const MISSION_OBJECTIVE_TYPES = ['kill_elites','clear_floors','defeat_guardian','win_battles','open_chests','rest_bonfires','find_equipment','find_soul_stones'];
 const MISSION_OBJECTIVE_LABEL = {
   kill_elites:'élite(s) derrotado(s)',
   clear_floors:'piso(s) del laberinto avanzado(s)',
-  defeat_guardian:'guardián(es) de nivel derrotado(s)'
+  defeat_guardian:'guardián(es) de nivel derrotado(s)',
+  win_battles:'combate(s) ganado(s) en el laberinto',
+  open_chests:'cofre(s) del laberinto abierto(s)',
+  rest_bonfires:'hoguera(s) de descanso usada(s)',
+  find_equipment:'objeto(s) de equipo encontrado(s)',
+  find_soul_stones:'piedra(s) de alma encontrada(s)'
 };
 const MISSION_OBJECTIVE_TARGET = {
-  kill_elites:     {E:1, F:1, D:2, C:2, B:2, A:3, S:3, SS:4},
-  clear_floors:    {E:3, F:3, D:4, C:4, B:5, A:5, S:6, SS:8},
-  defeat_guardian: {E:1, F:1, D:1, C:1, B:1, A:1, S:1, SS:1}
+  kill_elites:      {E:1, F:1, D:2, C:2, B:2, A:3, S:3, SS:4},
+  clear_floors:     {E:3, F:3, D:4, C:4, B:5, A:5, S:6, SS:8},
+  defeat_guardian:  {E:1, F:1, D:1, C:1, B:1, A:1, S:1, SS:1},
+  win_battles:      {E:3, F:4, D:5, C:6, B:8, A:10,S:12,SS:15},
+  open_chests:      {E:1, F:2, D:2, C:3, B:3, A:4, S:5, SS:6},
+  rest_bonfires:    {E:1, F:1, D:2, C:2, B:3, A:3, S:4, SS:5},
+  find_equipment:   {E:1, F:2, D:2, C:3, B:4, A:5, S:6, SS:8},
+  find_soul_stones: {E:1, F:2, D:2, C:3, B:4, A:5, S:6, SS:8}
 };
 const MISSION_RANK_REWARD = {
   E:{gold:20, xp:15, currency:3},   F:{gold:35, xp:25, currency:3},
@@ -2699,6 +2711,9 @@ function renderMap(){
   html += `</div></div>
   <div class="map-legend">
     <span>🚪 Entrada</span><span>⚔️ Combate</span><span>💰 Tesoro</span><span>🔥 Descanso</span><span>☠️ Élite</span><span>🛡️ Jefe</span>
+  </div>
+  <div style="text-align:center; margin-top:14px;">
+    <button class="reset-btn" id="btn-retreat-dungeon">Retirarse a la ciudad</button>
   </div>`;
 
   document.getElementById('main-panel').innerHTML = html;
@@ -2709,6 +2724,22 @@ function renderMap(){
       enterNode(f,n);
     };
   });
+  document.getElementById('btn-retreat-dungeon').onclick = retreatFromDungeon;
+}
+
+// Salida de emergencia del laberinto: siempre visible en el mapa, sin costo.
+// Antes la única forma de salir era ganar o perder un combate - si el
+// combate se interrumpía a medio pelear (refresco de página, conexión
+// perdida, pestaña recargada por el navegador) el jugador quedaba parado en
+// ese nodo sin ninguna acción disponible (ni el nodo siguiente reachable
+// si era el piso del guardián, que es de un solo nodo final).
+function retreatFromDungeon(){
+  if(!confirm('¿Retirarte del laberinto de vuelta a la ciudad?')) return;
+  state.dungeon = null;
+  playLoginAudio();
+  log('Te retiras del laberinto de vuelta a la ciudad.');
+  renderAll();
+  save();
 }
 
 function enterNode(f,n){
@@ -2770,10 +2801,12 @@ function enterNode(f,n){
         msg += item.kind==='potion'
           ? ` También hallas: <b>${POTION_TEMPLATES[item.potionId].name}</b> (guardada en la mochila).`
           : ` También hallas: <b>${item.name}</b> (guardado en la mochila).`;
+        if(item.kind==='equip') advanceMissionsFor('find_equipment', 1);
       }
     }
     log(msg);
     node.done = true;
+    advanceMissionsFor('open_chests', 1);
     renderAll();
   } else if(node.type==='descanso'){
     const d = derived();
@@ -2782,6 +2815,7 @@ function enterNode(f,n){
     state.char.curSpi = Math.min(d.maxSpi, state.char.curSpi + Math.round(d.maxSpi*0.5));
     log('Una hoguera olvidada. Vida restaurada, MP y espíritu recuperados a medias.');
     node.done = true;
+    advanceMissionsFor('rest_bonfires', 1);
     renderAll();
   }
 }
@@ -3657,6 +3691,7 @@ function handleVictory(){
   // que tú, no una fracción — así todos evolucionan al mismo ritmo que el equipo.
   advanceAllyXp(xpGain);
 
+  advanceMissionsFor('win_battles', 1);
   if(isElite) advanceMissionsFor('kill_elites', 1);
   if(isBoss) advanceMissionsFor('defeat_guardian', 1);
 
@@ -3677,6 +3712,7 @@ function handleVictory(){
       const line = `También obtienes: <b>${itemNameHTML(gearDrop)}</b> (guardado en la mochila).`;
       log(line);
       lootText += ' ' + line;
+      advanceMissionsFor('find_equipment', 1);
     }
     if(!stoneDropped){
       const stoneDrop = rollStoneDropForLevel(state.char.level);
@@ -3686,6 +3722,7 @@ function handleVictory(){
         log(line);
         lootText += ' ' + line;
         stoneDropped = true;
+        advanceMissionsFor('find_soul_stones', 1);
       }
     }
   }
