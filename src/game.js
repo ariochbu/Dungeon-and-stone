@@ -193,8 +193,8 @@ const DECADE_BESTIARY = [
     ],
     elite: [{id:'jefe_goblin', name:'Jefe goblin', icon:'👹', hp:1.9, atk:1.4, res:{fisico:20,fuego:-10,hielo:5,veneno:15,aturdimiento:25}, moves:['pegar','aplastar'], elite:true, frontline:true}],
     guardians: [
-      {id:'hobgoblin', name:'Hobgoblin', icon:'🛡️', hp:3.2, atk:1.6, res:{fisico:15,fuego:5,hielo:5,veneno:15,aturdimiento:30}, moves:['pegar','aplastar','debilitar'], boss:true, frontline:true},
-      {id:'gilgoblin', name:'Gilgoblin', icon:'🔱', hp:3.0, atk:1.7, res:{fisico:10,fuego:10,hielo:10,veneno:20,aturdimiento:20}, moves:['pegar','aplastar','debilitar'], boss:true, frontline:true}
+      {id:'hobgoblin', name:'Hobgoblin', icon:'🛡️', hp:1.8, atk:1.15, res:{fisico:15,fuego:5,hielo:5,veneno:15,aturdimiento:30}, moves:['pegar','aplastar','debilitar'], boss:true, frontline:true},
+      {id:'gilgoblin', name:'Gilgoblin', icon:'🔱', hp:1.7, atk:1.2, res:{fisico:10,fuego:10,hielo:10,veneno:20,aturdimiento:20}, moves:['pegar','aplastar','debilitar'], boss:true, frontline:true}
     ],
     decadeBoss: {id:'ogro', name:'Ogro', icon:'👺', hp:4.2, atk:1.9, res:{fisico:25,fuego:0,hielo:0,veneno:10,aturdimiento:35}, moves:['pegar','aplastar','debilitar'], boss:true, frontline:true}
   },
