@@ -2711,9 +2711,6 @@ function renderMap(){
   html += `</div></div>
   <div class="map-legend">
     <span>🚪 Entrada</span><span>⚔️ Combate</span><span>💰 Tesoro</span><span>🔥 Descanso</span><span>☠️ Élite</span><span>🛡️ Jefe</span>
-  </div>
-  <div style="text-align:center; margin-top:14px;">
-    <button class="reset-btn" id="btn-retreat-dungeon">Retirarse a la ciudad</button>
   </div>`;
 
   document.getElementById('main-panel').innerHTML = html;
@@ -2724,22 +2721,6 @@ function renderMap(){
       enterNode(f,n);
     };
   });
-  document.getElementById('btn-retreat-dungeon').onclick = retreatFromDungeon;
-}
-
-// Salida de emergencia del laberinto: siempre visible en el mapa, sin costo.
-// Antes la única forma de salir era ganar o perder un combate - si el
-// combate se interrumpía a medio pelear (refresco de página, conexión
-// perdida, pestaña recargada por el navegador) el jugador quedaba parado en
-// ese nodo sin ninguna acción disponible (ni el nodo siguiente reachable
-// si era el piso del guardián, que es de un solo nodo final).
-function retreatFromDungeon(){
-  if(!confirm('¿Retirarte del laberinto de vuelta a la ciudad?')) return;
-  state.dungeon = null;
-  playLoginAudio();
-  log('Te retiras del laberinto de vuelta a la ciudad.');
-  renderAll();
-  save();
 }
 
 function enterNode(f,n){
