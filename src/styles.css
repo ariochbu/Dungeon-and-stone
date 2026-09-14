@@ -272,6 +272,22 @@
   .enemy-card.targetable{border-color:var(--bronze); cursor:pointer;}
   .enemy-card.targetable:hover{background:var(--stone);}
   .enemy-card.dead{opacity:0.3; filter:grayscale(1);}
+  /* Marca quién actuó justo antes del render actual (combat.lastActor en
+     resolveAllyTurns/processEnemyTurns) - un temblor en el ícono, no en toda
+     la tarjeta, para que se note sin desordenar el layout. Solo se ve con
+     velocidad x1 (con x2 no hay pausa entre acciones, nada que perceibir). */
+  .enemy-card.acting{border-color:var(--bronze-light); box-shadow:0 0 0 1px rgba(217,183,107,0.35);}
+  .enemy-card.acting .ei{animation:actor-shake 0.5s ease-in-out;}
+  @keyframes actor-shake{
+    0%, 100% { transform:translateX(0) rotate(0deg); }
+    20% { transform:translateX(-3px) rotate(-8deg); }
+    40% { transform:translateX(3px) rotate(8deg); }
+    60% { transform:translateX(-2px) rotate(-5deg); }
+    80% { transform:translateX(2px) rotate(5deg); }
+  }
+  @media (prefers-reduced-motion: reduce){
+    .enemy-card.acting .ei{animation:none;}
+  }
   .enemy-card .ei{font-size:1.6em; flex-shrink:0;}
   .enemy-card .einfo{flex:1; min-width:0;}
   .enemy-card .ename{font-size:0.88em; display:flex; justify-content:space-between;}

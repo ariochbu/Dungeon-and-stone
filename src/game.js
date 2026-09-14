@@ -104,7 +104,7 @@ const LEVEL30_SKILL_BONUS = {
   golpe_bruto:      {tambaleoChance: 0.85},                 // era 0.70
   machacar:         {comboBonusMult: 2.1},                  // era 1.8
   grito_guerra:     {healPct: 0.10, allyDmgMult: 1.10},      // nuevo: cura 10% y +10% daño a aliados 2 turnos
-  corte_rapido:     {maxStack: 4},                           // era 3
+  corte_rapido:     {maxStack: 4, duration: 4},              // maxStack era 3, duration era 3
   golpe_gracia:     {perStackMult: 0.32},                    // era 0.25
   marca_cazador:    {duration: 4},                           // era 3
   explosion_arcana: {bonusMult: 0.75, penaltyIfNone: 0.20}   // era 0.60 / 0.30
@@ -161,8 +161,8 @@ const SKILLS = {
 
   corte_rapido: {
     id:'corte_rapido', name:'Corte rápido', cost:{tipo:'estamina', valor:12}, dmgType:'fisico', mult:0.6,
-    requiresPos:'frente', applies:{name:'Sangrado', chance:0.85, duration:4, stack:true, maxStack:3},
-    desc: ()=> `Daño físico. Apila Sangrado (hasta x${skillBonus('corte_rapido','maxStack',3)}) durante 4 turnos.`,
+    requiresPos:'frente', applies:{name:'Sangrado', chance:0.85, duration:3, stack:true, maxStack:3},
+    desc: ()=> `Daño físico. Apila Sangrado (hasta x${skillBonus('corte_rapido','maxStack',3)}) durante ${skillBonus('corte_rapido','duration',3)} turnos.`,
     targetMode:'front'
   },
   danza_cuchillas: {
@@ -3246,6 +3246,7 @@ function startCombat(enemyGroup, node){
     playerDefending:false,
     turnLog:[],
     turnCount:0, // cuántos turnos propios ya jugaste en ESTA pelea - ver endPlayerTurn() y la alerta de posible trampa en handleVictory()
+    lastActor:null, // quién actuó justo antes del último render - ver el "temblor" (.acting) en renderCombat()
     over:false
   };
   invOpen = false;
@@ -3757,7 +3758,10 @@ async function playerUseSkill(skillId, targetIdx){
     if(skill.applies){
       let applyDef = skill.applies;
       if(skillId==='golpe_bruto') applyDef = Object.assign({}, skill.applies, {chance: skillBonus('golpe_bruto','tambaleoChance', skill.applies.chance)});
-      else if(skillId==='corte_rapido') applyDef = Object.assign({}, skill.applies, {maxStack: skillBonus('corte_rapido','maxStack', skill.applies.maxStack)});
+      else if(skillId==='corte_rapido') applyDef = Object.assign({}, skill.applies, {
+        maxStack: skillBonus('corte_rapido','maxStack', skill.applies.maxStack),
+        duration: skillBonus('corte_rapido','duration', skill.applies.duration)
+      });
       applyStatus(target, applyDef, false);
     }
     applyEquippedSpecials(target, dmg, skill);
@@ -3864,9 +3868,10 @@ function setCombatSpeed(speed){
 async function resolveAllyTurns(){
   const stepDelay = COMBAT_SPEED_DELAY_MS[getCombatSpeed()] || 0;
   for(const ally of livingAllies()){
+    combat.lastActor = {kind:'ally', id: ally.id};
     resolveOneAllyTurn(ally);
     if(!combat || combat.over) break;
-    if(stepDelay>0){ renderCombat(); await sleep(stepDelay); }
+    if(stepDelay>0){ renderCombat(); combat.lastActor = null; await sleep(stepDelay); }
   }
 }
 
@@ -4021,9 +4026,10 @@ async function processEnemyTurns(){
   for(const enemy of livingEnemies()){
     if(!combat || combat.over) break;
     if(enemy.hp<=0) continue;
+    combat.lastActor = {kind:'enemy', idx: combat.enemies.indexOf(enemy)};
     if(stunFlags.get(enemy)) log(`${enemy.name} está aturdido y pierde su turno.`);
     else enemyAct(enemy);
-    if(stepDelay>0){ renderCombat(); await sleep(stepDelay); }
+    if(stepDelay>0){ renderCombat(); combat.lastActor = null; await sleep(stepDelay); }
   }
   if(!combat || combat.over) return;
 
@@ -4519,13 +4525,15 @@ function renderCombat(){
   const s = style();
   const skillIds = s.skills.concat(state.char.level>=LEVEL_60_MILESTONE ? [ULTIMATE_BY_STYLE[s.id]] : []);
 
+  const lastActor = combat.lastActor;
   const enemyHTML = combat.enemies.map((e,i)=>{
     const dead = e.hp<=0;
     const slotTag = i===0 ? 'Frente' : (i===1?'Medio':'Fondo');
     const statusChips = renderStatusChips(e.statuses);
     const hpPct = clamp(e.hp/e.maxHP*100,0,100);
     const canTargetAny = livingEnemies().length>0;
-    return `<div class="enemy-card ${dead?'dead':''} ${!dead && canTargetAny?'targetable':''}" data-idx="${i}">
+    const acting = lastActor && lastActor.kind==='enemy' && lastActor.idx===i;
+    return `<div class="enemy-card ${dead?'dead':''} ${!dead && canTargetAny?'targetable':''} ${acting?'acting':''}" data-idx="${i}">
       <div class="ei">${e.icon}</div>
       <div class="einfo">
         <div class="ename"><span>${e.name}</span><span class="slot-tag">${slotTag}</span></div>
@@ -4543,7 +4551,8 @@ function renderCombat(){
     const hostile = isAllyHostile(a.id);
     const hpPct = clamp(a.hp/a.maxHP*100, 0, 100);
     const statusChips = renderStatusChips(a.statuses);
-    return `<div class="enemy-card ${dead?'dead':''} ${!dead && hostile?'targetable':''}" ${!dead && hostile ? `data-ally-idx="${i}"` : ''}>
+    const acting = lastActor && lastActor.kind==='ally' && lastActor.id===a.id;
+    return `<div class="enemy-card ${dead?'dead':''} ${!dead && hostile?'targetable':''} ${acting?'acting':''}" ${!dead && hostile ? `data-ally-idx="${i}"` : ''}>
       <div class="ei">${a.icon}</div>
       <div class="einfo">
         <div class="ename"><span>${a.name}</span><span class="slot-tag">${a.pos==='frente'?'Frente':'Retaguardia'}</span>${hostile ? '<span class="slot-tag" style="border-color:var(--blood-light); color:var(--blood-light);">¡Traidor!</span>' : ''}</div>
