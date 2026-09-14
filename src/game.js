@@ -1788,6 +1788,7 @@ function renderCity(){
     renderSheet(); save();
   };
   document.getElementById('btn-enter-dungeon').onclick = ()=>{
+    stopLoginAudio();
     const d = derived();
     state.char.curHP = d.maxHP; state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi;
     state.dungeon = generateDungeon(1);
@@ -2826,8 +2827,8 @@ const FLAT_STONE_TABLE = [
 ].filter(e => LEGENDARY_TIERS_ENABLED || !['S','SS'].includes(e.tier));
 // Nivel mínimo de personaje para que un rango pueda caer — Épico y superior
 // necesitan haber avanzado de verdad; todo lo demás (E-B) no tiene tope.
-const GEAR_TIER_MIN_LEVEL = {rango_a:30, legendario:40, ss:50};
-const STONE_TIER_MIN_LEVEL = {A:30, S:40, SS:50};
+const GEAR_TIER_MIN_LEVEL = {rango_a:21, legendario:31, ss:41};
+const STONE_TIER_MIN_LEVEL = {A:21, S:31, SS:41};
 function rollFlatRarity(table, minLevelMap, level){
   for(const entry of table){
     const key = entry.rarity || entry.tier;
@@ -2933,6 +2934,7 @@ function startCombat(enemyGroup, node){
   invOpen = false;
   const allyText = allies.length ? ` A tu lado: ${allies.map(a=>a.name).join(', ')}.` : '';
   log(`¡Emboscada! Te enfrentas a: ${enemyGroup.map(e=>e.name).join(', ')}.${allyText}`);
+  if(node.type==='jefe' && state.dungeon.level % 10 === 0) playBossAudio();
   renderAll();
 }
 
@@ -3632,6 +3634,7 @@ function checkCombatEnd(){
 }
 
 function handleVictory(){
+  stopBossAudio();
   const isBoss = combat.node.type==='jefe';
   const isElite = combat.node.type==='elite';
   const level = state.dungeon.level || 1;
@@ -3757,6 +3760,7 @@ function handleVictory(){
 }
 
 function handleDefeat(){
+  stopBossAudio();
   showOverlay('Caído en el laberinto', `Tu cuerpo cede y el laberinto te expulsa antes del final. Pierdes el equipo suelto que llevabas en la mochila y la mitad de tu oro. Lo que hayas guardado en el Hogar sigue a salvo.`, ()=>{
     const lostItems = state.char.inventory.filter(i=>i.kind==='equip').length;
     const hadWard = hasWard();
@@ -4112,17 +4116,27 @@ document.getElementById('btn-reset').onclick = async ()=>{
 /* ============================================================
    RENDER: LOGIN / REGISTRO
    ============================================================ */
-// Música del login: suena mientras estás en la pantalla de inicio de sesión
-// (screen-auth), se detiene en cuanto te autenticas (onAuthed). El navegador
-// suele bloquear audio con sonido sin una interacción previa del usuario —
-// si play() falla por eso, queda un listener de un solo uso en el primer
-// click/tecla de la página para reintentarlo.
+// Música de login: suena desde la pantalla de inicio de sesión y sigue de
+// largo (a los jugadores les gustó) a través de usuario/selección de
+// personaje/ciudad — se detiene recién cuando entras de verdad al laberinto
+// (btn-enter-dungeon) o si cargas un personaje que ya tenía una corrida
+// activa. El navegador suele bloquear audio con sonido sin una interacción
+// previa del usuario — si play() falla por eso, queda un listener de un solo
+// uso en el primer click/tecla de la página para reintentarlo (mismo patrón
+// reutilizado por el tema de jefe de década, más abajo).
 let loginAudio = null;
 function getLoginAudioMuted(){
   try{ return localStorage.getItem('dsLoginAudioMuted')==='1'; }catch(e){ return false; }
 }
 function setLoginAudioMuted(muted){
   try{ localStorage.setItem('dsLoginAudioMuted', muted?'1':'0'); }catch(e){}
+}
+function playAudioWithRetry(a){
+  const attempt = ()=> a.play().catch(()=>{});
+  attempt();
+  const retry = ()=>{ attempt(); document.removeEventListener('click', retry); document.removeEventListener('keydown', retry); };
+  document.addEventListener('click', retry, {once:true});
+  document.addEventListener('keydown', retry, {once:true});
 }
 function ensureLoginAudio(){
   if(!loginAudio){
@@ -4133,14 +4147,7 @@ function ensureLoginAudio(){
   loginAudio.muted = getLoginAudioMuted();
   return loginAudio;
 }
-function playLoginAudio(){
-  const a = ensureLoginAudio();
-  const attempt = ()=> a.play().catch(()=>{});
-  attempt();
-  const retry = ()=>{ attempt(); document.removeEventListener('click', retry); document.removeEventListener('keydown', retry); };
-  document.addEventListener('click', retry, {once:true});
-  document.addEventListener('keydown', retry, {once:true});
-}
+function playLoginAudio(){ playAudioWithRetry(ensureLoginAudio()); }
 function stopLoginAudio(){
   if(loginAudio) loginAudio.pause();
 }
@@ -4148,8 +4155,28 @@ function toggleLoginAudioMuted(){
   const muted = !getLoginAudioMuted();
   setLoginAudioMuted(muted);
   if(loginAudio) loginAudio.muted = muted;
+  if(bossAudio) bossAudio.muted = muted;
   const btn = document.getElementById('auth-audio-toggle');
   if(btn) btn.textContent = muted ? '🔇 Música' : '🔊 Música';
+}
+
+// Música de jefe de década: suena solo en el combate contra el jefe de un
+// piso múltiplo de 10 (10, 20, 30...), se detiene al resolverse el combate
+// (victoria o derrota). Comparte la misma preferencia de silencio que la
+// música de login — un solo interruptor para toda la música del juego.
+let bossAudio = null;
+function ensureBossAudio(){
+  if(!bossAudio){
+    bossAudio = new Audio('./src/assets/audio/boss-theme.mp4');
+    bossAudio.loop = true;
+    bossAudio.volume = 0.5;
+  }
+  bossAudio.muted = getLoginAudioMuted();
+  return bossAudio;
+}
+function playBossAudio(){ playAudioWithRetry(ensureBossAudio()); }
+function stopBossAudio(){
+  if(bossAudio) bossAudio.pause();
 }
 
 function renderAuthScreen(message){
@@ -4296,6 +4323,7 @@ function renderCharacterSelect(rows){
 function enterCharacter(row){
   state = rowToState(row);
   migrateState();
+  if(state.dungeon) stopLoginAudio(); // ya tenía una corrida activa: entra directo al laberinto, no a la ciudad
   document.getElementById('btn-switch-char').style.display = 'inline-block';
   showScreen('screen-game');
   renderAll();
@@ -4342,6 +4370,7 @@ function showAuthScreen(message){
   invOpen = false; homeOpen = false; shopOpen = false; rankingOpen = false; adminOpen = false;
   currentUser = null; currentProfile = null;
   resetHeaderForLoggedOut();
+  stopBossAudio();
   renderAuthScreen(message);
   showScreen('screen-auth');
   playLoginAudio();
@@ -4365,7 +4394,6 @@ async function enterGame(){
 }
 
 async function onAuthed(user){
-  stopLoginAudio();
   currentUser = user;
   const profile = await fetchProfile(user.id);
   if(!profile){
