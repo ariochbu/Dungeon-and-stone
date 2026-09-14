@@ -2937,11 +2937,22 @@ function rollFlatRarity(table, minLevelMap, level, bypassTiers, pityCounter, pit
   }
   return null;
 }
+const WEAPON_STYLE_IDS = Object.keys(WEAPON_OPTIONS); // ['pesada','doblefilo','tirador','canalizador','sacerdote']
 function generateEquipOfRarity(rarity, floorIdx){
   const slot = pick(['arma','armadura','amuleto','casco','botas','guantes']);
+  const value = Math.round((rnd(1,2) + Math.floor((floorIdx||0)/2)) * LOOT_STAT_MULT[rarity]);
+  if(slot==='arma'){
+    // Un arma suelta de combate/cofre pertenece a un rol al azar, igual que
+    // una comprada en la tienda - se marca con styleId para que
+    // equipItem()/equipItemOnAlly() la restrinjan al mismo rol, y su nombre
+    // sale del pool propio de ese rol en vez del genérico de COMUN_GEAR_NAMES.
+    const styleId = pick(WEAPON_STYLE_IDS);
+    const statKey = SHOP_WEAPON_STAT[styleId] || 'fis';
+    const name = pick(WEAPON_OPTIONS[styleId].arma);
+    return {kind:'equip', slot, name, bonus:{stat:statKey, value}, rarity, styleId};
+  }
   const statPool = ['fis','esp','hab','maxhp'];
   const kind = chance(0.65) ? {stat: pick(statPool)} : {res: pick(['fisico','fuego','hielo','veneno','aturdimiento'])};
-  const value = Math.round((rnd(1,2) + Math.floor((floorIdx||0)/2)) * LOOT_STAT_MULT[rarity]);
   const name = pick(COMUN_GEAR_NAMES[slot]);
   return {kind:'equip', slot, name, bonus: kind.stat ? {stat:kind.stat, value} : {res:kind.res, value: LOOT_RES_PCT[rarity]}, rarity};
 }
