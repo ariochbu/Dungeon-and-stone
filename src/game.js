@@ -4815,6 +4815,7 @@ function hide(id){ const el=document.getElementById(id); if(el) el.style.display
 function resetHeaderForLoggedOut(){
   hide('clock-badge'); hide('gold-badge'); hide('tier-badge'); hide('btn-music-toggle');
   hide('btn-inventory'); hide('btn-switch-char'); hide('btn-slots'); hide('btn-reset');
+  hide('city-nav');
   const sub = document.getElementById('header-sub');
   if(sub) sub.textContent = 'El juego que nadie ha superado';
 }
