@@ -91,6 +91,40 @@ const MAX_ALLIES = 4;
 function allyHireCost(tpl, charLevel){ return tpl.baseCost + charLevel*tpl.costPerLevel; }
 
 // skill definitions
+// Mejoras de habilidad por hito de nivel de personaje (pedido explícito):
+// nivel 30 refuerza las 3 habilidades base de cada senda con números más
+// fuertes, nivel 60 agrega una 4ta habilidad "ultimate" por senda. Los
+// números de la mejora de nivel 30 viven todos acá, en un solo lugar, para
+// que la descripción que se ve en combate (SKILLS[...].desc, ahora function)
+// y la resolución real (playerUseSkill) lean siempre del mismo valor - así
+// nunca hay un texto que diga una cosa y una pelea que haga otra.
+const LEVEL_30_MILESTONE = 30;
+const LEVEL_60_MILESTONE = 60;
+const LEVEL30_SKILL_BONUS = {
+  golpe_bruto:      {tambaleoChance: 0.85},                 // era 0.70
+  machacar:         {comboBonusMult: 2.1},                  // era 1.8
+  grito_guerra:     {healPct: 0.10, allyDmgMult: 1.10},      // nuevo: cura 10% y +10% daño a aliados 2 turnos
+  corte_rapido:     {maxStack: 4},                           // era 3
+  golpe_gracia:     {perStackMult: 0.32},                    // era 0.25
+  marca_cazador:    {duration: 4},                           // era 3
+  explosion_arcana: {bonusMult: 0.75, penaltyIfNone: 0.20}   // era 0.60 / 0.30
+};
+function skillBonus(skillId, field, base){
+  if(!state || !state.char || state.char.level < LEVEL_30_MILESTONE) return base;
+  const b = LEVEL30_SKILL_BONUS[skillId];
+  return (b && b[field]!==undefined) ? b[field] : base;
+}
+// Ultimates de nivel 60: una por senda, tapando el hueco que cada kit tenía
+// (Guerrero sin AoE, Asesino sin pago final grande, Tirador sin rematador,
+// Mago sin nada físico/AoE). Son tan fuertes que están limitadas a
+// ULTIMATE_MAX_USES por entrada al laberinto (no por nivel del laberinto -
+// ver dónde se resetea/preserva ultimateUses en btn-enter-dungeon y en
+// "Continuar al nivel") y a un enfriamiento de ULTIMATE_COOLDOWN_TURNS
+// turnos propios tras usarse (ver endPlayerTurn).
+const ULTIMATE_BY_STYLE = {pesada:'furia_titan', doblefilo:'vals_sangre', tirador:'disparo_cazador_final', canalizador:'cataclismo_elemental'};
+const ULTIMATE_MAX_USES = 3;
+const ULTIMATE_COOLDOWN_TURNS = 5;
+
 const SKILLS = {
   ataque_basico: {
     id:'ataque_basico', name:'Ataque básico', cost:null, dmgType:'fisico', mult:0.55,
@@ -108,23 +142,28 @@ const SKILLS = {
   golpe_bruto: {
     id:'golpe_bruto', name:'Golpe bruto', cost:{tipo:'estamina', valor:15}, dmgType:'fisico', mult:1.0,
     requiresPos:'frente', applies:{name:'Tambaleo', chance:0.7, duration:2},
-    desc:'Daño físico. 70% de aplicar Tambaleo.', targetMode:'front'
+    desc: ()=> `Daño físico. ${Math.round(skillBonus('golpe_bruto','tambaleoChance',0.7)*100)}% de aplicar Tambaleo.`,
+    targetMode:'front'
   },
   machacar: {
     id:'machacar', name:'Machacar', cost:{tipo:'estamina', valor:20}, dmgType:'fisico', mult:0.7,
     requiresPos:'frente', consumes:{name:'Tambaleo', bonusMult:1.8, applies:{name:'Aturdido', duration:1}},
-    desc:'Si el objetivo está Tambaleante: lo aturde y hace mucho más daño.', targetMode:'front'
+    desc: ()=> `Si el objetivo está Tambaleante: lo aturde y hace x${skillBonus('machacar','comboBonusMult',1.8)} de daño.`,
+    targetMode:'front'
   },
   grito_guerra: {
     id:'grito_guerra', name:'Grito de guerra', cost:{tipo:'espiritu', valor:10}, utility:'buff_self',
     applySelf:{name:'Furioso', duration:2, dmgMult:1.3, evasionDelta:-10, incomingDmgReduction:0.2},
-    desc:'+30% daño físico y -20% daño recibido durante 2 turnos, a cambio de -10% evasión.', targetMode:'self'
+    desc: ()=> `+30% daño físico y -20% daño recibido durante 2 turnos, a cambio de -10% evasión.` +
+      (state && state.char && state.char.level>=LEVEL_30_MILESTONE ? ' Además te cura un 10% de tu vida máxima y da +10% de daño a tus aliados durante 2 turnos.' : ''),
+    targetMode:'self'
   },
 
   corte_rapido: {
     id:'corte_rapido', name:'Corte rápido', cost:{tipo:'estamina', valor:12}, dmgType:'fisico', mult:0.6,
     requiresPos:'frente', applies:{name:'Sangrado', chance:0.85, duration:3, stack:true, maxStack:3},
-    desc:'Daño físico. Apila Sangrado (hasta x3).', targetMode:'front'
+    desc: ()=> `Daño físico. Apila Sangrado (hasta x${skillBonus('corte_rapido','maxStack',3)}).`,
+    targetMode:'front'
   },
   danza_cuchillas: {
     id:'danza_cuchillas', name:'Danza de cuchillas', cost:{tipo:'estamina', valor:22}, dmgType:'fisico', mult:0.5, hits:2,
@@ -134,7 +173,8 @@ const SKILLS = {
   golpe_gracia: {
     id:'golpe_gracia', name:'Golpe de gracia', cost:{tipo:'estamina', valor:18}, dmgType:'fisico', mult:0.9,
     requiresPos:'frente', consumesStackBonus:{name:'Sangrado', perStackMult:0.25},
-    desc:'Consume el Sangrado del objetivo: +25% de daño por carga consumida.', targetMode:'front'
+    desc: ()=> `Consume el Sangrado del objetivo: +${Math.round(skillBonus('golpe_gracia','perStackMult',0.25)*100)}% daño por carga consumida.`,
+    targetMode:'front'
   },
 
   disparo_certero: {
@@ -145,7 +185,8 @@ const SKILLS = {
   marca_cazador: {
     id:'marca_cazador', name:'Marca del cazador', cost:{tipo:'espiritu', valor:8}, utility:'mark',
     applies:{name:'Marcado', chance:1, duration:3},
-    desc:'No hace daño. El objetivo recibe +20% de todo el daño durante 3 turnos.', targetMode:'any'
+    desc: ()=> `No hace daño. El objetivo recibe +20% de todo el daño durante ${skillBonus('marca_cazador','duration',3)} turnos.`,
+    targetMode:'any'
   },
   lluvia_flechas: {
     id:'lluvia_flechas', name:'Lluvia de flechas', cost:{tipo:'estamina', valor:20}, dmgType:'fisico', mult:0.55, aoe:true,
@@ -166,7 +207,33 @@ const SKILLS = {
   explosion_arcana: {
     id:'explosion_arcana', name:'Explosión arcana', cost:{tipo:'espiritu', valor:25}, dmgType:'arcano', mult:0.75,
     consumesEither:[{name:'Quemadura', bonusMult:0.6},{name:'Ralentizado', bonusMult:0.6}], penaltyIfNone:0.3,
-    desc:'Consume Quemadura o Ralentizado del objetivo para +60% de daño.', targetMode:'any'
+    desc: ()=> `Consume Quemadura o Ralentizado del objetivo para +${Math.round(skillBonus('explosion_arcana','bonusMult',0.6)*100)}% de daño.`,
+    targetMode:'any'
+  },
+
+  // ---------- Ultimates (nivel 60) ----------
+  furia_titan: {
+    id:'furia_titan', name:'Furia del Titán', cost:null, dmgType:'fisico', mult:1.15, ultimate:true,
+    requiresPos:'frente', targetMode:'all',
+    consumes:{name:'Tambaleo', bonusMult:1.6, applies:{name:'Aturdido', duration:1}},
+    desc:'Ultimate del Guerrero. Golpea a todos los enemigos; a los que estén Tambaleantes los aturde y les hace mucho más daño.'
+  },
+  vals_sangre: {
+    id:'vals_sangre', name:'Vals de sangre', cost:null, dmgType:'fisico', mult:0.5, ultimate:true,
+    requiresPos:'frente', targetMode:'all',
+    consumesStackBonus:{name:'Sangrado', perStackMult:0.3},
+    selfHealPctOfDmg:0.3,
+    desc:'Ultimate del Asesino. Golpea a todos los enemigos consumiendo el Sangrado de cada uno para más daño, y te cura el 30% de lo infligido.'
+  },
+  disparo_cazador_final: {
+    id:'disparo_cazador_final', name:'Disparo del cazador final', cost:null, dmgType:'fisico', mult:1.4, ultimate:true,
+    ignoreResist:1.0, bonusVsMarked:0.5, guaranteedCrit:true, targetMode:'any',
+    desc:'Ultimate del Tirador. Ignora toda la resistencia física, crítico garantizado, y +50% de daño si el objetivo está Marcado.'
+  },
+  cataclismo_elemental: {
+    id:'cataclismo_elemental', name:'Cataclismo elemental', cost:null, dmgType:'mixto', mult:1.0, ultimate:true,
+    targetMode:'all', applies:{name:'Quemadura', chance:1, duration:2},
+    desc:'Ultimate del Mago. Fuego y hielo combinados a todos los enemigos, golpeando la resistencia más débil de cada uno entre las dos.'
   }
 };
 
@@ -3323,6 +3390,7 @@ const STATUS_INFO = {
   Tambaleo:     {buff:false, desc:'Tambalea: el próximo Machacar hace mucho más daño y lo aturde.'},
   Aturdido:     {buff:false, desc:'Pierde su próximo turno por completo.'},
   Furioso:      {buff:true,  desc:'+30% daño físico y -20% daño recibido, a cambio de -10% evasión.'},
+  Inspirado:    {buff:true,  desc:'+daño gracias al Grito de guerra de tu compañero.'},
   Sangrado:     {buff:false, desc:'Sufre daño por turno. Se acumula hasta x3.'},
   Marcado:      {buff:false, desc:'Recibe +20% de todo el daño mientras dura.'},
   Quemadura:    {buff:false, desc:'Sufre daño de fuego por turno.'},
@@ -3412,6 +3480,12 @@ function playerUseSkill(skillId, targetIdx){
   const skill = SKILLS[skillId];
   const d = derived();
 
+  if(skill.ultimate){
+    const usesLeft = ULTIMATE_MAX_USES - (state.dungeon.ultimateUses||0);
+    if(usesLeft<=0){ log(`Ya usaste ${skill.name} las ${ULTIMATE_MAX_USES} veces permitidas en esta entrada al laberinto.`); return; }
+    if((state.dungeon.ultimateCooldown||0) > 0){ log(`${skill.name} todavía se está enfriando (${state.dungeon.ultimateCooldown} turno(s) más).`); return; }
+  }
+
   const miedo = hasStatus(combat.playerStatuses,'Miedo');
   if(miedo && chance(miedo.procChance||0.4)){
     log('El Miedo te paraliza. Pierdes el turno.');
@@ -3462,6 +3536,10 @@ function playerUseSkill(skillId, targetIdx){
       }
     });
   }
+  if(skill.ultimate){
+    state.dungeon.ultimateUses = (state.dungeon.ultimateUses||0) + 1;
+    state.dungeon.ultimateCooldown = ULTIMATE_COOLDOWN_TURNS;
+  }
 
   // resolve target(s)
   let targets = [];
@@ -3488,7 +3566,9 @@ function playerUseSkill(skillId, targetIdx){
   }
 
   if(skill.utility==='mark'){
-    targets.forEach(t=> applyStatus(t, skill.applies, false));
+    let applyDef = skill.applies;
+    if(skillId==='marca_cazador') applyDef = Object.assign({}, skill.applies, {duration: skillBonus('marca_cazador','duration', skill.applies.duration)});
+    targets.forEach(t=> applyStatus(t, applyDef, false));
     log(`Marcas a ${targets.map(t=>t.name).join(', ')}.`);
     endPlayerTurn(); return;
   }
@@ -3504,6 +3584,29 @@ function playerUseSkill(skillId, targetIdx){
     if(existingBuff) existingBuff.duration = effectiveDuration;
     else combat.playerStatuses.push(Object.assign({}, skill.applySelf, {duration: effectiveDuration}));
     log(`Usas ${skill.name}. Te sientes más fuerte.`);
+    // Nivel 30: Grito de guerra también cura y anima al equipo (pedido
+    // explícito) - vive acá en vez de como campos genéricos de SKILLS
+    // porque es el único buff_self con efectos secundarios; si otra
+    // habilidad llega a necesitar lo mismo, generalizar entonces.
+    if(skillId==='grito_guerra' && state.char.level>=LEVEL_30_MILESTONE){
+      const healPct = skillBonus('grito_guerra','healPct',0);
+      if(healPct>0){
+        const heal = Math.round(d.maxHP*healPct);
+        const before = state.char.curHP;
+        state.char.curHP = Math.min(d.maxHP, state.char.curHP+heal);
+        if(state.char.curHP>before) log(`Te curas ${state.char.curHP-before} de vida.`);
+      }
+      const allyDmgMult = skillBonus('grito_guerra','allyDmgMult',1);
+      if(allyDmgMult>1 && livingAllies().length){
+        const allyBuffDuration = 2+1; // mismo +1 que el buff propio, ver comentario arriba
+        livingAllies().forEach(ally=>{
+          const existing = hasStatus(ally.statuses,'Inspirado');
+          if(existing) existing.duration = allyBuffDuration;
+          else ally.statuses.push({name:'Inspirado', duration:allyBuffDuration, dmgMult:allyDmgMult});
+        });
+        log(`Tu grito inspira a tu equipo: +${Math.round((allyDmgMult-1)*100)}% de daño durante 2 turnos.`);
+      }
+    }
     endPlayerTurn(); return;
   }
 
@@ -3541,12 +3644,13 @@ function playerUseSkill(skillId, targetIdx){
       }
     });
 
-    // combo: consumes specific status for bonus (machacar)
+    // combo: consumes specific status for bonus (machacar, y la ultimate furia_titan)
     let comboText = '';
     if(skill.consumes){
       const st = hasStatus(target.statuses, skill.consumes.name);
       if(st){
-        base *= skill.consumes.bonusMult;
+        const bonusMult = skillId==='machacar' ? skillBonus('machacar','comboBonusMult', skill.consumes.bonusMult) : skill.consumes.bonusMult;
+        base *= bonusMult;
         removeStatus(target.statuses, skill.consumes.name);
         applyStatus(target, skill.consumes.applies, false);
         comboText = ` ¡Combo! ${skill.consumes.name} consumido: ${target.name} queda Aturdido.`;
@@ -3559,7 +3663,8 @@ function playerUseSkill(skillId, targetIdx){
     if(skill.consumesStackBonus){
       const st = hasStatus(target.statuses, skill.consumesStackBonus.name);
       if(st){
-        base *= (1 + (st.stacks||1)*skill.consumesStackBonus.perStackMult);
+        const perStackMult = skillId==='golpe_gracia' ? skillBonus('golpe_gracia','perStackMult', skill.consumesStackBonus.perStackMult) : skill.consumesStackBonus.perStackMult;
+        base *= (1 + (st.stacks||1)*perStackMult);
         comboText = ` ¡Ejecución! Consumes ${st.stacks} carga(s) de ${st.name}.`;
         removeStatus(target.statuses, skill.consumesStackBonus.name);
       }
@@ -3572,32 +3677,54 @@ function playerUseSkill(skillId, targetIdx){
       for(const opt of skill.consumesEither){
         const st = hasStatus(target.statuses, opt.name);
         if(st && !used){
-          base *= (1+opt.bonusMult);
+          const bonusMult = skillId==='explosion_arcana' ? skillBonus('explosion_arcana','bonusMult', opt.bonusMult) : opt.bonusMult;
+          base *= (1+bonusMult);
           removeStatus(target.statuses, opt.name);
           comboText = ` ¡Combo elemental! ${opt.name} detonado.`;
           used = true;
         }
       }
-      if(!used) base *= (1-(skill.penaltyIfNone||0));
+      if(!used){
+        const penalty = skillId==='explosion_arcana' ? skillBonus('explosion_arcana','penaltyIfNone', skill.penaltyIfNone||0) : (skill.penaltyIfNone||0);
+        base *= (1-penalty);
+      }
     }
     // marked passive (all incoming dmg +20%)
     if(hasStatus(target.statuses,'Marcado')) base *= 1.2;
 
-    let isCrit = chance(crit);
+    let isCrit = skill.guaranteedCrit ? true : chance(crit);
     if(isCrit) base *= 1.5;
 
     let ignore = skill.ignoreResist||0;
     let resKey = skill.dmgType==='arcano'? null : skill.dmgType;
+    // Cataclismo elemental (ultimate del Mago): "fuego y hielo combinados" se
+    // resuelve golpeando la resistencia más baja de las dos por objetivo, en
+    // vez de tener un dmgType fijo - por eso su SKILLS.dmgType es 'mixto', un
+    // marcador que no coincide con ninguna resistencia real por sí solo.
+    if(skillId==='cataclismo_elemental'){
+      resKey = effectiveEnemyRes(target,'fuego') <= effectiveEnemyRes(target,'hielo') ? 'fuego' : 'hielo';
+    }
     let resVal = resKey ? effectiveEnemyRes(target, resKey)*(1-ignore) : 0;
     let dmg = base*(1-resVal/100);
     if(skill.penaltyIfFrente && combat.playerPos==='frente') dmg *= (1-skill.penaltyIfFrente);
     dmg = Math.max(1, Math.round(dmg));
     if(target.defending) dmg = Math.round(dmg*0.5);
     target.hp = Math.max(0, target.hp - dmg);
+    if(skill.selfHealPctOfDmg){
+      const selfHeal = Math.max(1, Math.round(dmg*skill.selfHealPctOfDmg));
+      const beforeHeal = state.char.curHP;
+      state.char.curHP = Math.min(d.maxHP, state.char.curHP+selfHeal);
+      if(state.char.curHP>beforeHeal) log(`Recuperas ${state.char.curHP-beforeHeal} de vida.`);
+    }
 
     log(`Usas <b>${skill.name}</b> sobre ${target.name}: ${dmg} de daño${isCrit?' (¡crítico!)':''}.${comboText}`);
 
-    if(skill.applies) applyStatus(target, skill.applies, false);
+    if(skill.applies){
+      let applyDef = skill.applies;
+      if(skillId==='golpe_bruto') applyDef = Object.assign({}, skill.applies, {chance: skillBonus('golpe_bruto','tambaleoChance', skill.applies.chance)});
+      else if(skillId==='corte_rapido') applyDef = Object.assign({}, skill.applies, {maxStack: skillBonus('corte_rapido','maxStack', skill.applies.maxStack)});
+      applyStatus(target, applyDef, false);
+    }
     applyEquippedSpecials(target, dmg, skill);
   });
 
@@ -3605,6 +3732,7 @@ function playerUseSkill(skillId, targetIdx){
 }
 
 function endPlayerTurn(){
+  if(state.dungeon && state.dungeon.ultimateCooldown>0) state.dungeon.ultimateCooldown--;
   checkCombatEnd();
   if(!combat || combat.over) return;
   resolveAllyTurns();
@@ -3758,6 +3886,8 @@ function resolveAllyTurns(){
 
     let dmg = ally.atk;
     if(hasStatus(ally.statuses,'Debilitado')) dmg *= 0.85;
+    const inspirado = hasStatus(ally.statuses,'Inspirado');
+    if(inspirado) dmg *= (inspirado.dmgMult||1);
     let resKey = 'fisico';
     let skillText = null;
 
@@ -4121,7 +4251,15 @@ function handleVictory(){
     if(canContinue){
       buttons.push({label:`Continuar al nivel ${clearedLevel+1}`, primary:true, onClick:()=>{
         combat = null;
+        // Los usos/enfriamiento de la ultimate son "por entrada al laberinto",
+        // no por nivel - se llevan al nuevo state.dungeon en vez de resetear
+        // acá (sí se resetean al entrar fresco desde la ciudad, porque ese
+        // generateDungeon(1) nunca pasa por este bloque).
+        const prevUltimateUses = state.dungeon.ultimateUses || 0;
+        const prevUltimateCooldown = state.dungeon.ultimateCooldown || 0;
         state.dungeon = generateDungeon(clearedLevel+1);
+        state.dungeon.ultimateUses = prevUltimateUses;
+        state.dungeon.ultimateCooldown = prevUltimateCooldown;
         updateRecord(clearedLevel+1, 0);
         const d = derived();
         state.char.curHP = d.maxHP; state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi;
@@ -4213,6 +4351,7 @@ const TUTORIAL_SLIDES = [
   {title:'Frente y Retaguardia, con aliados', body:'Cuando tengas un aliado tanque en el Frente, los enemigos no podrán llegar hasta tu Retaguardia sin pasar por él primero — igual que tú no puedes golpear al enemigo de atrás sin resolver primero al de adelante. Posicionarte bien pesará tanto como golpear fuerte.'},
   {title:'Defenderse', body:'Te da al menos 50% de probabilidad de esquivar el próximo golpe, y si aun así te alcanzan, el daño se reduce a la mitad. Es una opción real cuando la pelea se pone difícil, no solo un último recurso.'},
   {title:'El Tótem', body:'Un objeto raro que sueltan los élites. Bloquea gratis, una sola vez y sin gastar tu turno, el golpe que te mataría — pero solo funciona contra el jefe final de una década del laberinto (piso 10, 20, 30...).'},
+  {title:'Kit de habilidades', body:'Al nivel 30, las 3 habilidades de tu senda se vuelven más fuertes. Al nivel 60 desbloqueas una 4ta habilidad, tu ultimate — mucho más poderosa, pero limitada a 3 usos por cada entrada al laberinto y con 5 turnos de enfriamiento tras usarla.'},
   {title:'Buena suerte, viajero', body:'Eso es todo. El laberinto tiene 60 pisos conocidos, y cada década esconde algo distinto. A partir de aquí, el resto lo descubres jugando.'}
 ];
 let tutorialStep = 0;
@@ -4263,7 +4402,7 @@ function closeTutorial(){
 function renderCombat(){
   const d = derived();
   const s = style();
-  const skillIds = s.skills;
+  const skillIds = s.skills.concat(state.char.level>=LEVEL_60_MILESTONE ? [ULTIMATE_BY_STYLE[s.id]] : []);
 
   const enemyHTML = combat.enemies.map((e,i)=>{
     const dead = e.hp<=0;
@@ -4308,20 +4447,30 @@ function renderCombat(){
       if(pool < sk.cost.valor) disabled = true;
     }
     if(sk.requiresPos && combat.playerPos!==sk.requiresPos && !sk.penaltyIfFrente) disabled = true;
-    const costText = sk.cost ? `${sk.cost.valor} ${COST_LABELS[sk.cost.tipo] || sk.cost.tipo}` : 'Gratis';
-    return `<button class="skill-btn" data-skill="${sid}" ${disabled?'disabled':''}>
-      <span class="sname">${sk.name}</span>
+    let costText = sk.cost ? `${sk.cost.valor} ${COST_LABELS[sk.cost.tipo] || sk.cost.tipo}` : 'Gratis';
+    let btnClass = 'skill-btn';
+    if(sk.ultimate){
+      btnClass += ' ultimate-btn';
+      const usesLeft = ULTIMATE_MAX_USES - (state.dungeon.ultimateUses||0);
+      const cooldown = state.dungeon.ultimateCooldown||0;
+      if(usesLeft<=0 || cooldown>0) disabled = true;
+      costText = cooldown>0 ? `Enfriando (${cooldown} turno${cooldown===1?'':'s'})` : `${usesLeft}/${ULTIMATE_MAX_USES} usos`;
+    }
+    const descText = typeof sk.desc==='function' ? sk.desc() : sk.desc;
+    return `<button class="${btnClass}" data-skill="${sid}" ${disabled?'disabled':''}>
+      <span class="sname">${sk.ultimate?'⚡ ':''}${sk.name}</span>
       <span class="scost">${costText}${sk.requiresPos?(' · requiere '+ (sk.requiresPos==='frente'?'Frente':'Retaguardia')):''}</span>
-      <span class="sdesc">${sk.desc}</span>
+      <span class="sdesc">${descText}</span>
     </button>`;
   }).join('');
 
   const utilButtons = ['ataque_basico','defender','reposicionar'].map(sid=>{
     const sk = SKILLS[sid];
+    const descText = typeof sk.desc==='function' ? sk.desc() : sk.desc;
     return `<button class="skill-btn" data-skill="${sid}">
       <span class="sname">${sk.name}</span>
       <span class="scost">Gratis</span>
-      <span class="sdesc">${sk.desc}</span>
+      <span class="sdesc">${descText}</span>
     </button>`;
   }).join('');
 
@@ -4352,8 +4501,11 @@ function renderCombat(){
           <div style="margin-top:2px; font-size:0.7em; color:var(--text-dim);">${state.char.level>=CHAR_LEVEL_CAP ? 'Nivel máximo' : `Nivel ${state.char.level} · ${state.char.xp}/${xpNeededForLevel(state.char.level)} XP`}</div>
           <div style="margin-top:6px;">${playerStatusChips || '<span style="color:var(--text-dim); font-size:0.75em;">Sin efectos activos</span>'}</div>
         </div>
-        ${allyHTML ? `<h4 style="margin-top:10px;">Tu equipo</h4><div class="enemy-slots">${allyHTML}</div>` : ''}
       </div>
+      ${allyHTML ? `<div class="combat-side">
+        <h4>Tu equipo</h4>
+        <div class="enemy-slots">${allyHTML}</div>
+      </div>` : ''}
       <div class="combat-side">
         <h4>Enemigos</h4>
         <div class="enemy-slots">${enemyHTML}</div>

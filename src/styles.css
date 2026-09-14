@@ -245,7 +245,12 @@
   .log-box div:last-child{color:var(--text);}
 
   /* ---------- combat ---------- */
-  .combat-grid{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:14px;}
+  /* auto-fit en vez de 1fr 1fr fijo: con aliados en combate esto son 3
+     tarjetas (Tú/Aliados/Enemigos), no 2 - en pantallas anchas las 3 caben
+     lado a lado (menos scroll vertical, que era la queja concreta en
+     escritorio); en angostas se apilan solas sin necesitar más que el
+     media query de abajo para forzar una sola columna. */
+  .combat-grid{display:grid; grid-template-columns:repeat(auto-fit, minmax(240px,1fr)); gap:16px; margin-bottom:14px;}
   @media (max-width:640px){.combat-grid{grid-template-columns:1fr;}}
   .combat-side h4{font-size:0.78em; color:var(--text-dim); margin-bottom:8px; text-align:center;}
   .pos-toggle{display:flex; justify-content:center; gap:6px; margin-bottom:10px;}
@@ -279,6 +284,13 @@
   .skill-btn .sname{font-size:0.86em; color:var(--bronze-light); display:block;}
   .skill-btn .scost{font-size:0.68em; color:var(--text-dim); display:block; margin-top:2px;}
   .skill-btn .sdesc{font-size:0.68em; color:var(--text-dim); display:block; margin-top:3px;}
+  .skill-btn.ultimate-btn{
+    border-color:var(--bronze); background:linear-gradient(180deg, rgba(184,147,74,0.14), var(--panel-2));
+    box-shadow:0 0 0 1px rgba(184,147,74,0.25) inset;
+  }
+  .skill-btn.ultimate-btn:hover:not(:disabled){border-color:var(--bronze-light); background:linear-gradient(180deg, rgba(217,183,107,0.2), var(--stone));}
+  .skill-btn.ultimate-btn .sname{color:var(--bronze-light); font-weight:700;}
+  .skill-btn.ultimate-btn:disabled{opacity:0.55;}
 
   .screen{display:none;}
   .screen.active{display:block;}
