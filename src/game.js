@@ -1048,6 +1048,8 @@ function characterToRow(){
     record_floor_idx: state.char.record.floorIdx,
     stash: state.char.stash,
     soul_slots: state.char.soulSlots,
+    pity_gear: state.char.pityGear,
+    pity_stone: state.char.pityStone,
     dungeon: state.dungeon
   };
 }
@@ -1067,7 +1069,9 @@ function rowToState(row){
       maxLevelUnlocked: row.max_level_unlocked || 1,
       record: {level: row.record_level || 1, floorIdx: row.record_floor_idx || 0},
       stash: row.stash || {gold:0, items:[]},
-      soulSlots: row.soul_slots || []
+      soulSlots: row.soul_slots || [],
+      pityGear: row.pity_gear || 0,
+      pityStone: row.pity_stone || 0
     },
     dungeon: row.dungeon || null,
     log: loadLocalLog()
@@ -2682,6 +2686,17 @@ function isNodeReachable(dg, fi, ni){
 
 function renderMap(){
   const dg = state.dungeon;
+  const curNode = dg.floors[dg.atFloor][dg.atNode];
+  // Recuperación automática: si el nodo donde estás parado es de combate y
+  // todavía no se resolvió (combat.node.done nunca se marcó) pero ya no hay
+  // combate activo, es que se interrumpió a medio pelear (recarga de
+  // página, conexión perdida) - se retoma la pelea sola en vez de dejarte
+  // sin ninguna acción disponible. No es una salida: sigue siendo
+  // obligatorio ganar o perder para poder avanzar o volver a casa.
+  if(!combat && ['combate','elite','jefe'].includes(curNode.type) && !curNode.done){
+    enterNode(dg.atFloor, dg.atNode);
+    return;
+  }
   const th = visualThreat(dg.level, state.char.level);
   let html = `<h3 style="color:var(--bronze-light); margin-bottom:6px;">El laberinto — Nivel ${dg.level}</h3>
   <p style="color:var(--text-dim); font-size:0.85em; margin-top:0;">Avanza piso a piso hasta el guardián. Elige tu ruta con cuidado. Amenaza: ⚠ ${th} · ${dg.floors.length} pisos.</p>
@@ -2831,8 +2846,8 @@ const FLAT_GEAR_TABLE = [
   {rarity:'ss',         chance:0.00001},  // SS  0.001%
   {rarity:'legendario', chance:0.00005},  // S   0.005%
   {rarity:'rango_a',    chance:0.01},     // A   1%
-  {rarity:'rango_b',    chance:0.02},     // B   2%
-  {rarity:'raro',       chance:0.03},     // C   3%
+  {rarity:'rango_b',    chance:0.01},     // B   1% (bajado de 2%)
+  {rarity:'raro',       chance:0.02},     // C   2% (bajado de 3%)
   {rarity:'poco_comun', chance:0.10},     // F   10% (fusionado en Común, ver E)
   {rarity:'comun',      chance:0.20}      // E   20%
 ].filter(e => LEGENDARY_TIERS_ENABLED || !['ss','legendario'].includes(e.rarity));
@@ -2840,22 +2855,40 @@ const FLAT_STONE_TABLE = [
   {tier:'SS', chance:0.00001},
   {tier:'S',  chance:0.00005},
   {tier:'A',  chance:0.01},
-  {tier:'B',  chance:0.02},
-  {tier:'C',  chance:0.03},
+  {tier:'B',  chance:0.01},   // bajado de 2%
+  {tier:'C',  chance:0.02},   // bajado de 3%
   {tier:'D',  chance:0.05},
   {tier:'F',  chance:0.10},
   {tier:'E',  chance:0.20}
 ].filter(e => LEGENDARY_TIERS_ENABLED || !['S','SS'].includes(e.tier));
 // Nivel mínimo de personaje para que un rango pueda caer — Épico y superior
-// necesitan haber avanzado de verdad; todo lo demás (E-B) no tiene tope.
-const GEAR_TIER_MIN_LEVEL = {rango_a:21, legendario:31, ss:41};
-const STONE_TIER_MIN_LEVEL = {A:21, S:31, SS:41};
-function rollFlatRarity(table, minLevelMap, level){
+// necesitan haber avanzado de verdad; C/B piden haber pasado la primera
+// década (piso 11+); todo lo demás (E-D) no tiene tope. El jefe de década
+// del piso 10 es la única excepción a C/B (ver bypassTiers en handleVictory):
+// es el primer vistazo a esos rangos, incluso para un personaje que llega
+// ahí todavía por debajo del nivel 11.
+const GEAR_TIER_MIN_LEVEL = {rango_a:21, legendario:31, ss:41, rango_b:11, raro:11};
+const STONE_TIER_MIN_LEVEL = {A:21, S:31, SS:41, B:11, C:11};
+// Contador de pity: combates sin un drop de rango A o mejor. Pity suave desde
+// PITY_SOFT (la chance de ese rango sube gradualmente en cada intento
+// fallido); pity duro en PITY_HARD (el siguiente combate lo garantiza). Se
+// resetea a 0 en cuanto cae algo de ese rango o mejor. Solo cuenta combates,
+// no cofres ni tiradas sueltas dentro de un mismo combate.
+const PITY_SOFT = 200, PITY_HARD = 400;
+const GEAR_PITY_TIERS = new Set(['rango_a']); // legendario/ss se suman aquí si alguna vez tienen su propio pity
+const STONE_PITY_TIERS = new Set(['A','S','SS']);
+function pityBoostedChance(counter, baseChance){
+  if(!counter || counter < PITY_SOFT) return baseChance;
+  if(counter >= PITY_HARD) return 1;
+  return baseChance + (1-baseChance) * ((counter-PITY_SOFT)/(PITY_HARD-PITY_SOFT));
+}
+function rollFlatRarity(table, minLevelMap, level, bypassTiers, pityCounter, pityTiers){
   for(const entry of table){
     const key = entry.rarity || entry.tier;
     const minLvl = minLevelMap[key];
-    if(minLvl && (level||1) < minLvl) continue; // todavía no calificas para este rango, prueba el siguiente (más común)
-    if(chance(entry.chance)) return key;
+    if(minLvl && !(bypassTiers && bypassTiers.has(key)) && (level||1) < minLvl) continue; // todavía no calificas para este rango, prueba el siguiente (más común)
+    const useChance = (pityTiers && pityTiers.has(key)) ? pityBoostedChance(pityCounter, entry.chance) : entry.chance;
+    if(chance(useChance)) return key;
   }
   return null;
 }
@@ -2870,13 +2903,13 @@ function generateEquipOfRarity(rarity, floorIdx){
 // Tira contra la tabla plana de equipo para el nivel de personaje dado — usada
 // tanto por cofres/misiones (generateLoot) como por cada victoria en combate.
 // Puede devolver null: no todo combate suelta algo, así es el grindeo.
-function rollGearDropForLevel(level, floorIdx){
-  const rarity = rollFlatRarity(FLAT_GEAR_TABLE, GEAR_TIER_MIN_LEVEL, level);
+function rollGearDropForLevel(level, floorIdx, bypassTiers){
+  const rarity = rollFlatRarity(FLAT_GEAR_TABLE, GEAR_TIER_MIN_LEVEL, level, bypassTiers, state.char.pityGear||0, GEAR_PITY_TIERS);
   if(!rarity) return null;
   return generateEquipOfRarity(rarity, floorIdx);
 }
-function rollStoneDropForLevel(level){
-  const tier = rollFlatRarity(FLAT_STONE_TABLE, STONE_TIER_MIN_LEVEL, level);
+function rollStoneDropForLevel(level, bypassTiers){
+  const tier = rollFlatRarity(FLAT_STONE_TABLE, STONE_TIER_MIN_LEVEL, level, bypassTiers, state.char.pityStone||0, STONE_PITY_TIERS);
   if(!tier) return null;
   const pool = Object.values(SOUL_STONES).filter(s=>s.tier===tier);
   const tpl = pick(pool);
@@ -3684,19 +3717,26 @@ function handleVictory(){
   // haya) para que no caigan dos de golpe en un mismo combate.
   const isDecadeFinal = isBoss && level % 10 === 0;
   const rollCount = combat.enemies.length * (isDecadeFinal ? 2 : 1);
+  // El jefe de década del piso 10 es la única excepción al piso mínimo de
+  // Raro/Único (C/B): es el primer vistazo real a esos rangos, incluso para
+  // un personaje que llega ahí todavía por debajo del nivel 11.
+  const bypassTiers = (isDecadeFinal && level===10) ? new Set(['raro','rango_b','C','B']) : null;
   let lootText = '';
   let stoneDropped = false;
+  let gotRareGear = false;
+  let gotRareStone = false;
   for(let i=0;i<rollCount;i++){
-    const gearDrop = rollGearDropForLevel(state.char.level, state.dungeon.atFloor);
+    const gearDrop = rollGearDropForLevel(state.char.level, state.dungeon.atFloor, bypassTiers);
     if(gearDrop){
       addToInventory(gearDrop);
       const line = `También obtienes: <b>${itemNameHTML(gearDrop)}</b> (guardado en la mochila).`;
       log(line);
       lootText += ' ' + line;
       advanceMissionsFor('find_equipment', 1);
+      if(['rango_a','legendario','ss'].includes(gearDrop.rarity)) gotRareGear = true;
     }
     if(!stoneDropped){
-      const stoneDrop = rollStoneDropForLevel(state.char.level);
+      const stoneDrop = rollStoneDropForLevel(state.char.level, bypassTiers);
       if(stoneDrop){
         addToInventory(stoneDrop);
         const line = `También encuentras una piedra de alma: <b style="color:${SOUL_TIER_COLORS[stoneDrop.tier]};">${stoneDrop.name}</b>.`;
@@ -3704,9 +3744,12 @@ function handleVictory(){
         lootText += ' ' + line;
         stoneDropped = true;
         advanceMissionsFor('find_soul_stones', 1);
+        if(['A','S','SS'].includes(stoneDrop.tier)) gotRareStone = true;
       }
     }
   }
+  state.char.pityGear = gotRareGear ? 0 : (state.char.pityGear||0) + 1;
+  state.char.pityStone = gotRareStone ? 0 : (state.char.pityStone||0) + 1;
 
   if(isElite && chance(WARD_DROP_CHANCE)){
     // El Tótem es el único objeto que se dropea de forma individual: cada
