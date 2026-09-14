@@ -2165,6 +2165,39 @@ async function dismissAlly(allyId){
   renderAll();
 }
 
+// Mantenimiento recurrente: cada aliado cobra un salario cada vez que sales
+// del laberinto (retirada voluntaria tras un guardián, o expulsión por
+// derrota) - no se cobra por entrar ni mientras estás dentro. La satisfacción
+// solo se mueve por esto: sube si le pagas, baja si no te alcanza el oro.
+// El tema de la muerte/abandono de un aliado por baja satisfacción queda
+// pendiente hasta definir mejor el combate - por ahora solo se registra.
+const ALLY_SATISFACTION_DEFAULT = 50;
+const ALLY_WAGE_SATISFACTION_GAIN = 8;
+const ALLY_WAGE_SATISFACTION_LOSS = 15;
+function allyWage(row){
+  const tpl = ALLY_ROSTER.find(t=>t.templateId===row.template_id);
+  if(!tpl) return 0;
+  return Math.round(tpl.baseCost*0.08 + (row.level||1)*3);
+}
+function payAlliesOnExit(){
+  const allies = state.char.allies || [];
+  allies.forEach(row=>{
+    if(row.satisfaction===undefined || row.satisfaction===null) row.satisfaction = ALLY_SATISFACTION_DEFAULT;
+    const wage = allyWage(row);
+    if(state.char.gold >= wage){
+      state.char.gold -= wage;
+      row.satisfaction = Math.min(100, row.satisfaction + ALLY_WAGE_SATISFACTION_GAIN);
+      log(`Pagas ${wage} de oro a <b>${row.name}</b> por el laberinto. Su satisfacción sube a ${row.satisfaction}%.`);
+    } else {
+      row.satisfaction = Math.max(0, row.satisfaction - ALLY_WAGE_SATISFACTION_LOSS);
+      log(`No te alcanza el oro para pagarle a <b>${row.name}</b>. Su satisfacción baja a ${row.satisfaction}%.`);
+    }
+    supabase.from('character_allies').update({satisfaction: row.satisfaction}).eq('id', row.id).then(({error})=>{
+      if(error) console.error('No se pudo guardar la satisfacción del aliado:', error.message);
+    });
+  });
+}
+
 function renderTaberna(){
   const panel = document.getElementById('main-panel');
   if(state.char.level < ALLY_MIN_LEVEL){
@@ -2185,13 +2218,16 @@ function renderTaberna(){
     const needed = xpNeededForLevel(a.level);
     const xpPct = a.level>=CHAR_LEVEL_CAP ? 100 : clamp((a.xp||0)/needed*100, 0, 100);
     const xpText = a.level>=CHAR_LEVEL_CAP ? 'Nivel máximo' : `${a.xp||0} / ${needed} exp`;
+    const satisfaction = a.satisfaction===undefined || a.satisfaction===null ? ALLY_SATISFACTION_DEFAULT : a.satisfaction;
+    const satColor = satisfaction>=70 ? 'var(--good)' : satisfaction>=40 ? 'var(--bronze-light)' : 'var(--blood-light)';
     return `<div class="inv-item-row">
       <div>
-        <b>${tpl.icon||'⚔️'} ${a.name}</b> <span class="slot-tag">${a.role} · nivel ${a.level}</span>${a.has_totem ? ` <span class="slot-tag">${WARD_ITEM.icon} Tótem</span>` : ''}
+        <b>${tpl.icon||'⚔️'} ${a.name}</b> <span class="slot-tag">${a.role} · nivel ${a.level}</span>${a.has_totem ? ` <span class="slot-tag">${WARD_ITEM.icon} Tótem</span>` : ''} <span class="slot-tag" style="border-color:${satColor}; color:${satColor};">Satisfacción ${satisfaction}%</span>
         <div class="inv-item-bonus neutral">${tpl.bio||''}</div>
         ${tpl.skillName ? `<div class="inv-item-bonus" style="margin-top:2px;"><b>${tpl.skillName}</b> — ${tpl.skillDesc}</div>` : ''}
         <div class="bar-track" style="margin-top:6px;"><div class="bar-fill xp" style="width:${xpPct}%"></div></div>
         <div style="font-size:0.7em; color:var(--text-dim); margin-top:2px;">${xpText}</div>
+        <div style="font-size:0.7em; color:var(--text-dim); margin-top:2px;">Paga ${allyWage(a)} de oro cada vez que sales del laberinto. Si no te alcanza el oro, su satisfacción baja.</div>
       </div>
       <button class="inv-btn danger" data-dismiss="${a.id}">Despedir</button>
     </div>`;
@@ -3038,10 +3074,9 @@ function makeEnemy(tpl, floorIdx, level){
    COMBAT
    ============================================================ */
 function startCombat(enemyGroup, node){
-  // v1: los aliados entran a cada combate con la vida al máximo (todavía no
-  // se persiste el daño entre peleas ni la sátisfacción por ser derribados —
-  // eso es de la siguiente entrega, junto con el mantenimiento recurrente y
-  // la lealtad).
+  // makeCombatAlly recupera la vida con la que cada aliado terminó su último
+  // combate en este mismo nivel (ver syncAllyHPToDungeon) - un aliado
+  // derribado sigue fuera de combate hasta avanzar de nivel, no revive aquí.
   const allies = (state.char.allies||[]).map(makeCombatAlly);
   combat = {
     active:true,
@@ -3124,6 +3159,11 @@ function makeCombatAlly(row){
     else if(it.bonus.stat) atk += it.bonus.value; // arma/casco/botas/guantes: bono plano al ataque, más simple que el modelo de stats del jugador
     else if(it.bonus.res) res[it.bonus.res] = (res[it.bonus.res]||0) + it.bonus.value;
   });
+  // Si este aliado ya peleó en el nivel actual, arranca donde quedó (herido o
+  // derribado) en vez de con la vida completa - ver syncAllyHPToDungeon().
+  let hp = maxHP;
+  const savedHP = state.dungeon && state.dungeon.allyHP ? state.dungeon.allyHP[row.id] : undefined;
+  if(savedHP !== undefined) hp = Math.max(0, Math.min(maxHP, savedHP));
   return {
     id: row.id, templateId: row.template_id, name: row.name, icon: tpl.icon, role: tpl.role,
     frontline: tpl.frontline, level: lvl,
@@ -3131,7 +3171,7 @@ function makeCombatAlly(row){
     // aliado en peligro puede replegarse a la Retaguardia en pleno combate
     // (ver allyMaybeSelfPreserve) y ya no ser el objetivo prioritario.
     pos: tpl.frontline ? 'frente' : 'retaguardia',
-    maxHP, hp: maxHP, atk, statuses:[], skillCooldown: 1, // 1: no usan su habilidad en el primer turno
+    maxHP, hp, atk, statuses:[], skillCooldown: 1, // 1: no usan su habilidad en el primer turno
     hasTotem: !!row.has_totem,
     res
   };
@@ -3813,7 +3853,7 @@ function enemyAct(enemy){
       dealDamageToAlly(ally, aDmg);
       applyStatus(ally, corrosion, false);
       log(`${enemy.name} golpea a todo tu grupo por igual: ${aDmg} de daño a ${ally.name}.`);
-      if(ally.hp<=0) log(`<b>${ally.name}</b> cae en combate — se recuperará al terminar la pelea.`);
+      if(ally.hp<=0) log(`<b>${ally.name}</b> cae en combate y queda fuera de acción hasta que avances al siguiente nivel del laberinto.`);
     });
     log(`Una <b>Corrosión</b> se extiende sobre el grupo: -${CORROSION_RES_PENALTY} de resistencia física y curación reducida a la mitad durante 2 turnos.`);
     return;
@@ -3857,7 +3897,7 @@ function enemyAct(enemy){
     finalDmg = Math.max(1, Math.round(allyDmg));
     dealDamageToAlly(ally, finalDmg);
     log(`${enemy.name} ${text} a ${ally.name}: ${finalDmg} de daño.`);
-    if(ally.hp<=0) log(`<b>${ally.name}</b> cae en combate — se recuperará al terminar la pelea.`);
+    if(ally.hp<=0) log(`<b>${ally.name}</b> cae en combate y queda fuera de acción hasta que avances al siguiente nivel del laberinto.`);
   }
 
   // Vitalidad: devuelve un % del daño físico recibido a quien lo infligió
@@ -3874,16 +3914,29 @@ function enemyAct(enemy){
   }
 }
 
+// Guarda la vida con la que terminó cada aliado en state.dungeon.allyHP, para
+// que la siguiente pelea del mismo nivel arranque donde quedó (un aliado
+// derribado sigue fuera de combate) en vez de reaparecer con vida completa.
+// Se limpia solo cuando se genera un state.dungeon nuevo (entrar al
+// laberinto o avanzar de nivel), momento en el que todos vuelven a full HP.
+function syncAllyHPToDungeon(){
+  if(!state.dungeon) return;
+  if(!state.dungeon.allyHP) state.dungeon.allyHP = {};
+  (combat.allies||[]).forEach(a=>{ state.dungeon.allyHP[a.id] = a.hp; });
+}
+
 function checkCombatEnd(){
   if(!combat || combat.over) return;
   if(state.char.curHP<=0){
     combat.over = true;
+    syncAllyHPToDungeon();
     log('Caes al suelo. La oscuridad del laberinto te envuelve...');
     handleDefeat();
     return;
   }
   if(livingEnemies().length===0){
     combat.over = true;
+    syncAllyHPToDungeon();
     handleVictory();
   }
 }
@@ -4026,6 +4079,7 @@ function handleVictory(){
       log(`Regresas a la ciudad conservando tu botín. Se te cobran ${tax} de oro en impuestos.`);
       combat = null;
       state.dungeon = null;
+      payAlliesOnExit();
       playLoginAudio();
       renderAll(); save();
     }});
@@ -4051,6 +4105,7 @@ function handleDefeat(){
     state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi;
     combat = null;
     state.dungeon = null;
+    payAlliesOnExit();
     playLoginAudio();
     if(lostItems>0) log(`Pierdes ${lostItems} objeto(s) de equipo que llevabas en la mochila.`);
     if(hadWard) log(`Tu <b>${WARD_ITEM.icon} ${WARD_ITEM.name}</b> se pierde junto con el resto de tu equipo suelto.`);
