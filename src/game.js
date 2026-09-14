@@ -3359,10 +3359,10 @@ function playerUseSkill(skillId, targetIdx){
 
 function endPlayerTurn(){
   checkCombatEnd();
-  if(combat.over) return;
+  if(!combat || combat.over) return;
   resolveAllyTurns();
   checkCombatEnd();
-  if(combat.over) return;
+  if(!combat || combat.over) return;
   processEnemyTurns();
 }
 
@@ -3371,7 +3371,7 @@ function endPlayerTurn(){
 // más bajo de vida (tú o otro aliado) antes de atacar.
 function resolveAllyTurns(){
   livingAllies().forEach(ally=>{
-    if(ally.hp<=0 || combat.over) return;
+    if(!combat || combat.over || ally.hp<=0) return;
     if(ally.skillCooldown===undefined) ally.skillCooldown = 0;
     ally.skillCooldown = Math.max(0, ally.skillCooldown-1);
 
@@ -3512,7 +3512,7 @@ function processEnemyTurns(){
   });
 
   checkCombatEnd();
-  if(combat.over) return;
+  if(!combat || combat.over) return;
 
   livingEnemies().forEach(enemy=>{
     if(enemy.hp<=0) return;
