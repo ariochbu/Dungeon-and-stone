@@ -1865,10 +1865,10 @@ function usePotionOutOfCombat(potionId){
   }
 }
 
-function usePotionInCombat(potionId){
+async function usePotionInCombat(potionId){
   if(!combat || combat.over) return;
   if(applyPotionEffect(potionId)){
-    endPlayerTurn();
+    await endPlayerTurn();
   }
 }
 
@@ -3475,7 +3475,7 @@ function applyEquippedSpecials(target, dmgDealt, skill){
   });
 }
 
-function playerUseSkill(skillId, targetIdx){
+async function playerUseSkill(skillId, targetIdx){
   if(!combat || combat.over) return;
   const skill = SKILLS[skillId];
   const d = derived();
@@ -3489,7 +3489,7 @@ function playerUseSkill(skillId, targetIdx){
   const miedo = hasStatus(combat.playerStatuses,'Miedo');
   if(miedo && chance(miedo.procChance||0.4)){
     log('El Miedo te paraliza. Pierdes el turno.');
-    endPlayerTurn();
+    await endPlayerTurn();
     return;
   }
 
@@ -3507,12 +3507,12 @@ function playerUseSkill(skillId, targetIdx){
   if(skill.utility==='defend'){
     combat.playerDefending = true;
     log('Te preparas para recibir el próximo golpe.');
-    endPlayerTurn(); return;
+    await endPlayerTurn(); return;
   }
   if(skill.utility==='reposition'){
     combat.playerPos = combat.playerPos==='frente' ? 'retaguardia' : 'frente';
     log(`Te mueves a ${combat.playerPos==='frente'?'el Frente':'la Retaguardia'}.`);
-    endPlayerTurn(); return;
+    await endPlayerTurn(); return;
   }
 
   // spend cost
@@ -3570,7 +3570,7 @@ function playerUseSkill(skillId, targetIdx){
     if(skillId==='marca_cazador') applyDef = Object.assign({}, skill.applies, {duration: skillBonus('marca_cazador','duration', skill.applies.duration)});
     targets.forEach(t=> applyStatus(t, applyDef, false));
     log(`Marcas a ${targets.map(t=>t.name).join(', ')}.`);
-    endPlayerTurn(); return;
+    await endPlayerTurn(); return;
   }
   if(skill.utility==='buff_self'){
     // refresh the existing buff instead of stacking a duplicate entry (duplicates used to
@@ -3607,7 +3607,7 @@ function playerUseSkill(skillId, targetIdx){
         log(`Tu grito inspira a tu equipo: +${Math.round((allyDmgMult-1)*100)}% de daño durante 2 turnos.`);
       }
     }
-    endPlayerTurn(); return;
+    await endPlayerTurn(); return;
   }
 
   const confusion = hasStatus(combat.playerStatuses,'Confusion');
@@ -3615,7 +3615,7 @@ function playerUseSkill(skillId, targetIdx){
     const selfDmg = Math.max(1, Math.round(skillBaseDamage() * skill.mult));
     log(`La Confusión te hace atacar a ciegas... ¡y te golpeas a ti mismo!`);
     dealDamageToPlayer(selfDmg);
-    endPlayerTurn();
+    await endPlayerTurn();
     return;
   }
 
@@ -3728,17 +3728,17 @@ function playerUseSkill(skillId, targetIdx){
     applyEquippedSpecials(target, dmg, skill);
   });
 
-  endPlayerTurn();
+  await endPlayerTurn();
 }
 
-function endPlayerTurn(){
+async function endPlayerTurn(){
   if(state.dungeon && state.dungeon.ultimateCooldown>0) state.dungeon.ultimateCooldown--;
   checkCombatEnd();
   if(!combat || combat.over) return;
-  resolveAllyTurns();
+  await resolveAllyTurns();
   checkCombatEnd();
   if(!combat || combat.over) return;
-  processEnemyTurns();
+  await processEnemyTurns();
 }
 
 // IA de aliados v1: sin habilidades propias todavía, solo un golpe básico al
@@ -3806,8 +3806,35 @@ function allyMaybeSelfPreserve(ally){
   return false;
 }
 
-function resolveAllyTurns(){
-  livingAllies().forEach(ally=>{
+// Velocidad de combate: antes todo el turno (aliados + enemigos) se
+// resolvía de golpe y solo se pintaba el resultado final, así que no se
+// llegaba a apreciar que los aliados/enemigos estuvieran "jugando" - pedido
+// explícito de bajar el ritmo por defecto (x1) a algo perceptible, dejando
+// x2 (el comportamiento de siempre, sin pausas) como opción del jugador.
+// Se guarda en localStorage, no en el personaje - es una preferencia de
+// pantalla, no de progreso.
+function sleep(ms){ return new Promise(resolve=> setTimeout(resolve, ms)); }
+const COMBAT_SPEED_DELAY_MS = {1: 650, 2: 0};
+function getCombatSpeed(){
+  try{
+    const v = parseInt(localStorage.getItem('dsCombatSpeed'), 10);
+    return (v===1 || v===2) ? v : 1;
+  }catch(e){ return 1; }
+}
+function setCombatSpeed(speed){
+  try{ localStorage.setItem('dsCombatSpeed', String(speed)); }catch(e){}
+}
+
+async function resolveAllyTurns(){
+  const stepDelay = COMBAT_SPEED_DELAY_MS[getCombatSpeed()] || 0;
+  for(const ally of livingAllies()){
+    resolveOneAllyTurn(ally);
+    if(!combat || combat.over) break;
+    if(stepDelay>0){ renderCombat(); await sleep(stepDelay); }
+  }
+}
+
+function resolveOneAllyTurn(ally){
     if(!combat || combat.over || ally.hp<=0) return;
     if(ally.skillCooldown===undefined) ally.skillCooldown = 0;
     ally.skillCooldown = Math.max(0, ally.skillCooldown-1);
@@ -3909,7 +3936,6 @@ function resolveAllyTurns(){
     log(skillText
       ? `<b>${ally.name}</b> ${skillText} ${enemyTarget.name}: ${dmg} de daño.`
       : `<b>${ally.name}</b> ataca a ${enemyTarget.name}: ${dmg} de daño.`);
-  });
 }
 
 function tickStatuses(list, ownerName, target){
@@ -3942,7 +3968,7 @@ function decrementStatuses(list){
   }
 }
 
-function processEnemyTurns(){
+async function processEnemyTurns(){
   combat.playerDefending = false;
 
   // apply DOT and determine stun per enemy (does not decrement durations yet)
@@ -3955,11 +3981,15 @@ function processEnemyTurns(){
   checkCombatEnd();
   if(!combat || combat.over) return;
 
-  livingEnemies().forEach(enemy=>{
-    if(enemy.hp<=0) return;
-    if(stunFlags.get(enemy)){ log(`${enemy.name} está aturdido y pierde su turno.`); return; }
-    enemyAct(enemy);
-  });
+  const stepDelay = COMBAT_SPEED_DELAY_MS[getCombatSpeed()] || 0;
+  for(const enemy of livingEnemies()){
+    if(!combat || combat.over) break;
+    if(enemy.hp<=0) continue;
+    if(stunFlags.get(enemy)) log(`${enemy.name} está aturdido y pierde su turno.`);
+    else enemyAct(enemy);
+    if(stepDelay>0){ renderCombat(); await sleep(stepDelay); }
+  }
+  if(!combat || combat.over) return;
 
   // decrement every status exactly once per turn cycle (enemies + player + aliados)
   // (player DOT — Sangrado/Quemadura — needs to actually tick before we decrement it away;
@@ -4399,6 +4429,31 @@ function closeTutorial(){
 /* ============================================================
    RENDER: COMBAT
    ============================================================ */
+// Evita que dos acciones se resuelvan superpuestas mientras la secuencia
+// animada de un turno (aliados y enemigos actuando uno por uno) sigue en
+// curso - los botones ya quedan disabled en renderCombat mientras
+// combat.turnBusy es true, esto es el candado real detrás de eso.
+async function guardedPlayerUseSkill(skillId, targetIdx){
+  if(!combat || combat.turnBusy) return;
+  combat.turnBusy = true;
+  try{ await playerUseSkill(skillId, targetIdx); }
+  finally{
+    // El último render real fue el de renderAll() al final de
+    // processEnemyTurns, con turnBusy todavía en true (recién se libera
+    // acá) - sin este re-render los botones se quedaban disabled para
+    // siempre tras el primer turno, aunque combat.turnBusy ya fuera false.
+    if(combat){ combat.turnBusy = false; if(!combat.over) renderCombat(); }
+  }
+}
+async function guardedUsePotionInCombat(potionId){
+  if(!combat || combat.turnBusy) return;
+  combat.turnBusy = true;
+  try{ await usePotionInCombat(potionId); }
+  finally{
+    if(combat){ combat.turnBusy = false; if(!combat.over) renderCombat(); }
+  }
+}
+
 function renderCombat(){
   const d = derived();
   const s = style();
@@ -4441,7 +4496,7 @@ function renderCombat(){
 
   const skillButtons = skillIds.map(sid=>{
     const sk = SKILLS[sid];
-    let disabled = false;
+    let disabled = !!combat.turnBusy;
     if(sk.cost){
       const pool = sk.cost.tipo==='estamina'?state.char.curSta:state.char.curSpi;
       if(pool < sk.cost.valor) disabled = true;
@@ -4467,7 +4522,7 @@ function renderCombat(){
   const utilButtons = ['ataque_basico','defender','reposicionar'].map(sid=>{
     const sk = SKILLS[sid];
     const descText = typeof sk.desc==='function' ? sk.desc() : sk.desc;
-    return `<button class="skill-btn" data-skill="${sid}">
+    return `<button class="skill-btn" data-skill="${sid}" ${combat.turnBusy?'disabled':''}>
       <span class="sname">${sk.name}</span>
       <span class="scost">Gratis</span>
       <span class="sdesc">${descText}</span>
@@ -4477,15 +4532,22 @@ function renderCombat(){
   const potionItems = state.char.inventory.filter(i=>i.kind==='potion');
   const potionButtons = potionItems.length ? potionItems.map(it=>{
     const tpl = POTION_TEMPLATES[it.potionId];
-    return `<button class="skill-btn potion-btn" data-potion="${it.potionId}">
+    return `<button class="skill-btn potion-btn" data-potion="${it.potionId}" ${combat.turnBusy?'disabled':''}>
       <span class="sname">${tpl.icon} ${tpl.name} <span class="slot-tag">x${it.qty}</span></span>
       <span class="scost">Gratis · consume tu turno</span>
       <span class="sdesc">${tpl.desc}</span>
     </button>`;
   }).join('') : `<p class="inv-empty-msg">No tienes pociones para usar.</p>`;
 
+  const combatSpeed = getCombatSpeed();
   document.getElementById('main-panel').innerHTML = `
-    <h3 style="color:var(--bronze-light); margin-bottom:10px;">Combate</h3>
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px;">
+      <h3 style="color:var(--bronze-light); margin:0;">Combate</h3>
+      <div class="pos-toggle" id="combat-speed-toggle" style="margin:0;" title="Qué tan rápido se resuelven los turnos de aliados y enemigos">
+        <span class="pos-pill ${combatSpeed===1?'active':''}" data-speed="1">x1</span>
+        <span class="pos-pill ${combatSpeed===2?'active':''}" data-speed="2">x2</span>
+      </div>
+    </div>
     <div class="combat-grid">
       <div class="combat-side">
         <h4>Tú</h4>
@@ -4532,20 +4594,26 @@ function renderCombat(){
         document.querySelectorAll('.enemy-card.targetable').forEach(card=>{
           card.onclick = ()=>{
             if(card.dataset.allyIdx !== undefined){
-              playerUseSkill(sid, 'ally:'+card.dataset.allyIdx);
+              guardedPlayerUseSkill(sid, 'ally:'+card.dataset.allyIdx);
             } else {
               const idx = parseInt(card.dataset.idx);
-              playerUseSkill(sid, idx);
+              guardedPlayerUseSkill(sid, idx);
             }
           };
         });
       } else {
-        playerUseSkill(sid, null);
+        guardedPlayerUseSkill(sid, null);
       }
     };
   });
   document.querySelectorAll('.skill-btn[data-potion]').forEach(btn=>{
-    btn.onclick = ()=> usePotionInCombat(btn.dataset.potion);
+    btn.onclick = ()=> guardedUsePotionInCombat(btn.dataset.potion);
+  });
+  document.querySelectorAll('#combat-speed-toggle [data-speed]').forEach(el=>{
+    el.onclick = ()=>{
+      setCombatSpeed(parseInt(el.dataset.speed,10));
+      renderCombat();
+    };
   });
 }
 
