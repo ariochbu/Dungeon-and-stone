@@ -2253,7 +2253,7 @@ function renderTaberna(){
       <h3 style="color:var(--bronze-light);">Taberna</h3>
       <button class="reset-btn" id="btn-close-taberna">Cerrar</button>
     </div>
-    <p style="color:var(--text-dim); font-size:0.85em; margin-top:0;">Hasta ${MAX_ALLIES} aliados a la vez, ${MAX_ALLIES+1} contándote a ti. Pelean junto a ti automáticamente — el que tiene "frontline" ocupa tu lugar en el frente y absorbe los golpes. El mantenimiento diario y el riesgo de traición todavía no están activos.</p>
+    <p style="color:var(--text-dim); font-size:0.85em; margin-top:0;">Hasta ${MAX_ALLIES} aliados a la vez, ${MAX_ALLIES+1} contándote a ti. Pelean junto a ti automáticamente — el que tiene "frontline" ocupa tu lugar en el frente y absorbe los golpes. Cada uno cobra un salario cada vez que sales del laberinto: si no te alcanza el oro para pagarle, su satisfacción baja. El riesgo de traición todavía no está activo.</p>
 
     <div class="section-label">Tu equipo (${allies.length}/${MAX_ALLIES})</div>
     ${hiredHTML}
