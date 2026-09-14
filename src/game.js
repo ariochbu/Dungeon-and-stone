@@ -408,7 +408,7 @@ function buyWeapon(slot, styleId){
   state.char.gold -= price;
   const name = pick(opts[slot]);
   const statKey = SHOP_WEAPON_STAT[styleId] || 'fis';
-  addToInventory({slot, name, bonus:{stat:statKey, value:shopWeaponValue()}, rarity:'comun'});
+  addToInventory({slot, name, bonus:{stat:statKey, value:shopWeaponValue()}, rarity:'comun', styleId});
   log(`Compras <b>${name}</b> por ${price} de oro (guardada en la mochila — decide tú a quién equipársela).`);
   renderAll(); save();
 }
@@ -475,7 +475,7 @@ function buyWeaponRaro(slot, styleId){
   state.char.gold -= price;
   const name = pick(opts[slot]);
   const statKey = SHOP_WEAPON_STAT[styleId] || 'fis';
-  addToInventory({slot, name, bonus:{stat:statKey, value:RARO_WEAPON_BONUS}, rarity:'raro'});
+  addToInventory({slot, name, bonus:{stat:statKey, value:RARO_WEAPON_BONUS}, rarity:'raro', styleId});
   log(`Compras <b>${name}</b> por ${price} de oro (guardada en la mochila).`);
   renderAll(); save();
 }
@@ -509,6 +509,7 @@ function makeSelloShopItem(slot, rarity, styleId){
   }
   const item = {slot, name, bonus, rarity};
   if(special) item.special = special;
+  if(slot==='arma') item.styleId = styleId;
   return item;
 }
 function buySelloGear(slot, rarity){
@@ -1454,7 +1455,12 @@ function itemBonusText(item){
 }
 function itemNameHTML(it){
   const r = RARITIES[it.rarity||'comun'];
-  return `<b style="color:${r.color};">${it.name}</b> <span class="slot-tag" style="border-color:${r.color}; color:${r.color};">${r.name}</span>`;
+  // Las armas compradas para un rol específico (Guerrero/Arquero/Asesino/
+  // Mago/Sacerdote) llevan su etiqueta aquí, visible en todas partes donde
+  // se lista el objeto — el equipo de combate/cofres nunca tiene styleId,
+  // así que sigue sin ninguna etiqueta (es universal, como siempre).
+  const roleTag = it.styleId ? ` <span class="slot-tag" style="border-color:var(--bronze); color:var(--bronze-light);">${SHOP_ROLE_LABELS[it.styleId]||it.styleId}</span>` : '';
+  return `<b style="color:${r.color};">${it.name}</b> <span class="slot-tag" style="border-color:${r.color}; color:${r.color};">${r.name}</span>${roleTag}`;
 }
 
 function renderInventory(){
@@ -1642,6 +1648,10 @@ function equipItem(uid){
   const idx = state.char.inventory.findIndex(i=>i.kind==='equip' && i.uid===uid);
   if(idx<0) return;
   const item = state.char.inventory[idx];
+  if(item.styleId && item.styleId !== state.char.style){
+    log(`<b>${item.name}</b> es un arma de ${SHOP_ROLE_LABELS[item.styleId]||item.styleId} — tu senda no puede usarla.`);
+    return;
+  }
   const prior = state.char.equip[item.slot];
   state.char.equip[item.slot] = item;
   state.char.inventory.splice(idx,1);
@@ -1673,6 +1683,13 @@ function equipItemOnAlly(uid, allyId){
   const idx = state.char.inventory.findIndex(i=>i.kind==='equip' && i.uid===uid);
   if(idx<0) return;
   const item = state.char.inventory[idx];
+  // Misma restricción que el jugador (equipItem): un arma comprada para un
+  // rol no la puede llevar un aliado de otro rol. El equipo suelto de
+  // combate/cofres nunca lleva styleId, así que sigue siendo universal.
+  if(item.styleId && item.styleId !== ALLY_ROLE_TO_WEAPON_STYLE[row.role]){
+    log(`<b>${item.name}</b> es un arma de ${SHOP_ROLE_LABELS[item.styleId]||item.styleId} — ${row.name} (${row.role}) no puede usarla.`);
+    return;
+  }
   if(!row.equip) row.equip = {};
   const prior = row.equip[item.slot];
   row.equip[item.slot] = item;
@@ -2350,7 +2367,7 @@ async function loadAdminList(){
 /* ============================================================
    RENDER: TIENDA (SHOP)
    ============================================================ */
-const SHOP_ROLE_LABELS = {pesada:'Guerrero (tu senda)', doblefilo:'Asesino', tirador:'Arquero', canalizador:'Mago', sacerdote:'Sacerdote'};
+const SHOP_ROLE_LABELS = {pesada:'Guerrero', doblefilo:'Asesino', tirador:'Arquero', canalizador:'Mago', sacerdote:'Sacerdote'};
 let shopWeaponRole = null; // null = usa tu propia senda por defecto
 function renderShop(){
   if(!shopWeaponRole) shopWeaponRole = state.char.style;
@@ -2363,7 +2380,7 @@ function renderShop(){
 
   const roleSelectorHTML = `
     <select id="shop-role-select" class="auth-input" style="max-width:260px; margin-bottom:8px;">
-      ${Object.keys(WEAPON_OPTIONS).map(id=>`<option value="${id}" ${styleId===id?'selected':''}>${SHOP_ROLE_LABELS[id]||id}</option>`).join('')}
+      ${Object.keys(WEAPON_OPTIONS).map(id=>`<option value="${id}" ${styleId===id?'selected':''}>${SHOP_ROLE_LABELS[id]||id}${id===state.char.style?' (tu senda)':''}</option>`).join('')}
     </select>
     <p style="color:var(--text-dim); font-size:0.8em; margin:0 0 8px;">El arma se guarda en tu mochila compartida — luego decides tú a quién equipársela desde el Inventario.</p>`;
 
@@ -2486,7 +2503,7 @@ function renderShop(){
       <h3 style="color:var(--bronze-light);">Tienda</h3>
       <button class="reset-btn" id="btn-close-shop">Cerrar</button>
     </div>
-    <p style="color:var(--text-dim); font-size:0.85em; margin-top:0;">Oro disponible: <b>${state.char.gold}</b>. Las armas que vendemos aquí son de rareza común: solo dan daño, sin ventajas adicionales. Solo se ofrecen las que calzan con tu senda de combate (${style().name}).</p>
+    <p style="color:var(--text-dim); font-size:0.85em; margin-top:0;">Oro disponible: <b>${state.char.gold}</b>. Las armas que vendemos aquí son de rareza común: solo dan daño, sin ventajas adicionales. Elige el rol para el que compras — cada arma solo la puede usar tu personaje o un aliado de ese mismo rol.</p>
 
     <div class="section-label">Armas de tu senda</div>
     ${weaponHTML || '<p class="inv-empty-msg">No hay armas disponibles para tu senda de combate.</p>'}
