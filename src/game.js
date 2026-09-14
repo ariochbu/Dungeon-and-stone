@@ -4112,11 +4112,54 @@ document.getElementById('btn-reset').onclick = async ()=>{
 /* ============================================================
    RENDER: LOGIN / REGISTRO
    ============================================================ */
+// Música del login: suena mientras estás en la pantalla de inicio de sesión
+// (screen-auth), se detiene en cuanto te autenticas (onAuthed). El navegador
+// suele bloquear audio con sonido sin una interacción previa del usuario —
+// si play() falla por eso, queda un listener de un solo uso en el primer
+// click/tecla de la página para reintentarlo.
+let loginAudio = null;
+function getLoginAudioMuted(){
+  try{ return localStorage.getItem('dsLoginAudioMuted')==='1'; }catch(e){ return false; }
+}
+function setLoginAudioMuted(muted){
+  try{ localStorage.setItem('dsLoginAudioMuted', muted?'1':'0'); }catch(e){}
+}
+function ensureLoginAudio(){
+  if(!loginAudio){
+    loginAudio = new Audio('./src/assets/audio/login-theme.mp4');
+    loginAudio.loop = true;
+    loginAudio.volume = 0.5;
+  }
+  loginAudio.muted = getLoginAudioMuted();
+  return loginAudio;
+}
+function playLoginAudio(){
+  const a = ensureLoginAudio();
+  const attempt = ()=> a.play().catch(()=>{});
+  attempt();
+  const retry = ()=>{ attempt(); document.removeEventListener('click', retry); document.removeEventListener('keydown', retry); };
+  document.addEventListener('click', retry, {once:true});
+  document.addEventListener('keydown', retry, {once:true});
+}
+function stopLoginAudio(){
+  if(loginAudio) loginAudio.pause();
+}
+function toggleLoginAudioMuted(){
+  const muted = !getLoginAudioMuted();
+  setLoginAudioMuted(muted);
+  if(loginAudio) loginAudio.muted = muted;
+  const btn = document.getElementById('auth-audio-toggle');
+  if(btn) btn.textContent = muted ? '🔇 Música' : '🔊 Música';
+}
+
 function renderAuthScreen(message){
   const wrap = document.getElementById('auth-box');
   let mode = 'login';
   wrap.innerHTML = `
     <div class="pick-card" style="max-width:380px; margin:0 auto; text-align:left;">
+      <div style="display:flex; justify-content:flex-end; margin-bottom:10px;">
+        <button class="reset-btn" id="auth-audio-toggle" style="padding:4px 10px; font-size:0.8em;">${getLoginAudioMuted() ? '🔇 Música' : '🔊 Música'}</button>
+      </div>
       <div style="display:flex; gap:8px; margin-bottom:14px;">
         <button class="inv-btn" id="auth-tab-login" style="flex:1;">Iniciar sesión</button>
         <button class="inv-btn" id="auth-tab-register" style="flex:1;">Crear cuenta</button>
@@ -4127,6 +4170,7 @@ function renderAuthScreen(message){
       <p id="auth-msg" style="color:var(--blood-light); font-size:0.85em; min-height:1.2em; margin-top:12px;">${message||''}</p>
     </div>
   `;
+  document.getElementById('auth-audio-toggle').onclick = toggleLoginAudioMuted;
   function renderForm(){
     const form = document.getElementById('auth-form');
     form.innerHTML = `
@@ -4300,6 +4344,7 @@ function showAuthScreen(message){
   resetHeaderForLoggedOut();
   renderAuthScreen(message);
   showScreen('screen-auth');
+  playLoginAudio();
 }
 
 async function enterGame(){
@@ -4320,6 +4365,7 @@ async function enterGame(){
 }
 
 async function onAuthed(user){
+  stopLoginAudio();
   currentUser = user;
   const profile = await fetchProfile(user.id);
   if(!profile){
