@@ -4136,18 +4136,32 @@ function setLoginAudioMuted(muted){
   try{ localStorage.setItem('dsLoginAudioMuted', muted?'1':'0'); }catch(e){}
 }
 function playAudioWithRetry(a){
-  const attempt = ()=> a.play().catch(()=>{});
-  attempt();
-  const retry = ()=>{ attempt(); document.removeEventListener('click', retry); document.removeEventListener('keydown', retry); };
-  document.addEventListener('click', retry, {once:true});
-  document.addEventListener('keydown', retry, {once:true});
+  a.play().catch(()=>{});
+  // Reintenta en cada click/tecla (no solo el primero) hasta confirmar que
+  // de verdad quedó sonando — un solo reintento fallido (frecuente en
+  // móviles, más estrictos con el autoplay) dejaba la música muda el resto
+  // de la sesión sin ningún otro intento.
+  const retry = ()=>{
+    if(!a.paused){ document.removeEventListener('click', retry); document.removeEventListener('keydown', retry); return; }
+    a.play().catch(()=>{});
+  };
+  document.addEventListener('click', retry);
+  document.addEventListener('keydown', retry);
+}
+// El atributo loop nativo no siempre repite de forma confiable en archivos
+// .mp4 exportados de WhatsApp (metadata de duración imprecisa) — antes la
+// música simplemente se detenía sola al terminar la pista una vez. Con loop
+// además de un respaldo explícito en 'ended' que la reinicia a mano, cubre
+// ambos casos.
+function makeLoopingAudio(src){
+  const a = new Audio(src);
+  a.loop = true;
+  a.volume = 0.5;
+  a.addEventListener('ended', ()=>{ a.currentTime = 0; a.play().catch(()=>{}); });
+  return a;
 }
 function ensureLoginAudio(){
-  if(!loginAudio){
-    loginAudio = new Audio('./src/assets/audio/login-theme.mp4');
-    loginAudio.loop = true;
-    loginAudio.volume = 0.5;
-  }
+  if(!loginAudio) loginAudio = makeLoopingAudio('./src/assets/audio/login-theme.mp4');
   loginAudio.muted = getLoginAudioMuted();
   return loginAudio;
 }
@@ -4170,11 +4184,7 @@ function toggleLoginAudioMuted(){
 // música de login — un solo interruptor para toda la música del juego.
 let bossAudio = null;
 function ensureBossAudio(){
-  if(!bossAudio){
-    bossAudio = new Audio('./src/assets/audio/boss-theme.mp4');
-    bossAudio.loop = true;
-    bossAudio.volume = 0.5;
-  }
+  if(!bossAudio) bossAudio = makeLoopingAudio('./src/assets/audio/boss-theme.mp4');
   bossAudio.muted = getLoginAudioMuted();
   return bossAudio;
 }
