@@ -1317,6 +1317,19 @@ function renderAll(){
   }
   document.getElementById('header-sub').textContent = race().name + ' · ' + style().name + ' · Nivel ' + state.char.level;
 
+  const navEl = document.getElementById('city-nav');
+  if(navEl){
+    const inDungeonRun = !!(state.dungeon && !state.dungeon.floors[state.dungeon.floors.length-1][0].done);
+    const inCombat = !!(combat && combat.active);
+    navEl.style.display = (inDungeonRun || inCombat) ? 'none' : 'flex';
+    const navAdminBtn = document.getElementById('nav-admin-btn');
+    if(navAdminBtn) navAdminBtn.style.display = (state.char.role==='admin') ? 'inline-flex' : 'none';
+    const activeNavKey = homeOpen?'home' : shopOpen?'shop' : tabernaOpen?'taberna' : missionsOpen?'missions' : rankingOpen?'ranking' : adminOpen?'admin' : 'city';
+    navEl.querySelectorAll('.nav-btn').forEach(btn=>{
+      btn.classList.toggle('active', btn.dataset.nav===activeNavKey);
+    });
+  }
+
   const invBtn = document.getElementById('btn-inventory');
   invBtn.style.display = 'inline-block';
   invBtn.classList.toggle('active', invOpen);
@@ -2395,8 +2408,8 @@ function renderShop(){
   const opts = WEAPON_OPTIONS[styleId] || {};
   const armaPrice = shopWeaponPrice(false);
   const arma2Price = shopWeaponPrice(true);
-  const armaLabel = slotLabel('arma');
-  const arma2Label = OFFHAND_LABELS[styleId] || slotLabel('arma2');
+  const armaLabel = (opts.arma || []).join(' / ') || slotLabel('arma');
+  const arma2Label = (opts.arma2 || []).join(' / ') || (OFFHAND_LABELS[styleId] || slotLabel('arma2'));
 
   const roleSelectorHTML = `
     <select id="shop-role-select" class="auth-input" style="max-width:260px; margin-bottom:8px;">
@@ -2419,7 +2432,7 @@ function renderShop(){
   const weaponRowRaroHTML = (slot, label, price) => `
     <div class="inv-item-row">
       <div>
-        <b>${label}</b> <span class="slot-tag" style="border-color:${RARITIES.raro.color}; color:${RARITIES.raro.color};">Raro</span>
+        <b>${label}</b> <span class="slot-tag" style="border-color:${RARITIES.raro.color}; color:${RARITIES.raro.color};">Raro</span> <span class="slot-tag" style="border-color:var(--bronze); color:var(--bronze-light);">${SHOP_ROLE_LABELS[styleId]||styleId}</span>
         <div class="inv-item-bonus">+${RARO_WEAPON_BONUS} ${STAT_LABELS[SHOP_WEAPON_STAT[styleId]] || ''} · daño puro, sin otras características</div>
       </div>
       <button class="inv-btn" data-buy-weapon-raro="${slot}" ${state.char.gold<price?'disabled':''}>Comprar (${price} oro)</button>
@@ -2470,14 +2483,15 @@ function renderShop(){
   }).join('');
 
   const selloHTML = SELLO_SHOP_SLOTS.map(slot=>{
+    const selloName = slot==='arma' ? ((opts.arma || []).join(' / ') || slotLabel(slot)) : slotLabel(slot);
+    const selloRoleTagHTML = slot==='arma' ? ` <span class="slot-tag" style="border-color:var(--bronze); color:var(--bronze-light);">${SHOP_ROLE_LABELS[shopWeaponRole]||shopWeaponRole}</span>` : '';
     return ['rango_b','rango_a'].map(rarity=>{
       const price = selloShopPrice(rarity);
       const r = RARITIES[rarity];
       const disabled = (state.char.missionCurrency||0) < price;
-      const roleTag = slot==='arma' ? ` (${SHOP_ROLE_LABELS[shopWeaponRole]||shopWeaponRole})` : '';
       return `<div class="inv-item-row">
         <div>
-          <b>${slotLabel(slot)}${roleTag}</b> <span class="slot-tag" style="border-color:${r.color}; color:${r.color};">${r.name}</span>
+          <b>${selloName}</b> <span class="slot-tag" style="border-color:${r.color}; color:${r.color};">${r.name}</span>${selloRoleTagHTML}
           <div class="inv-item-bonus" style="color:${r.color};">Equipo de rango ${r.name} — se guarda en tu mochila</div>
         </div>
         <button class="inv-btn" data-buy-sello="${slot}|${rarity}" ${disabled?'disabled':''}>Comprar (${price} Sellos)</button>
@@ -4219,7 +4233,7 @@ function renderCombat(){
           <span class="pos-pill ${combat.playerPos==='frente'?'active':''}">Frente</span>
           <span class="pos-pill ${combat.playerPos==='retaguardia'?'active':''}">Retaguardia</span>
         </div>
-        <div style="font-size:0.7em; color:var(--text-dim); margin:2px 0 6px;">Frente: exige la mayoría de habilidades físicas de golpe. Retaguardia: +8% evasión y mejor para habilidades a distancia.</div>
+        <div class="pos-hint" style="font-size:0.7em; color:var(--text-dim); margin:2px 0 6px;">Frente: exige la mayoría de habilidades físicas de golpe. Retaguardia: +8% evasión y mejor para habilidades a distancia.</div>
         <div class="player-card">
           <div class="pc-icon">${race().icon}</div>
           <div style="margin-top:6px; font-size:0.85em;">${state.char.curHP} / ${d.maxHP} HP</div>
@@ -4363,6 +4377,22 @@ document.getElementById('btn-inventory').onclick = ()=>{
   invOpen = !invOpen;
   renderAll();
 };
+
+document.querySelectorAll('#city-nav .nav-btn').forEach(btn=>{
+  btn.onclick = ()=>{
+    if(!state) return;
+    if(combat && combat.active) return;
+    const key = btn.dataset.nav;
+    invOpen = false; homeOpen = false; shopOpen = false; rankingOpen = false; adminOpen = false; missionsOpen = false; tabernaOpen = false;
+    if(key==='home') homeOpen = true;
+    else if(key==='shop') shopOpen = true;
+    else if(key==='taberna') tabernaOpen = true;
+    else if(key==='missions') missionsOpen = true;
+    else if(key==='ranking') rankingOpen = true;
+    else if(key==='admin'){ if(state.char.role==='admin') adminOpen = true; }
+    renderAll();
+  };
+});
 
 document.getElementById('btn-slots').onclick = async ()=>{
   if(combat && combat.active){ log('No puedes cerrar sesión durante el combate.'); return; }
@@ -4649,6 +4679,7 @@ function goToCreation(){
 // (enemigos y debuffs propios) todavía no está implementado, queda
 // pendiente; el laberinto se juega igual a cualquier hora.
 const NOCTURNO_START_UTC = 4, NOCTURNO_END_UTC = 10;
+const ECUADOR_UTC_OFFSET = -5; // UTC-5 todo el año, Ecuador no usa horario de verano
 function isNocturno(date){
   const h = (date||new Date()).getUTCHours();
   return h >= NOCTURNO_START_UTC && h < NOCTURNO_END_UTC;
@@ -4657,12 +4688,13 @@ function updateClockBadge(){
   const badge = document.getElementById('clock-badge');
   if(!badge || badge.style.display==='none') return;
   const now = new Date();
-  const hh = String(now.getUTCHours()).padStart(2,'0');
+  const ecuadorHour = ((now.getUTCHours() + ECUADOR_UTC_OFFSET) % 24 + 24) % 24;
+  const hh = String(ecuadorHour).padStart(2,'0');
   const mm = String(now.getUTCMinutes()).padStart(2,'0');
-  document.getElementById('clock-time').textContent = `${hh}:${mm} UTC`;
+  document.getElementById('clock-time').textContent = `${hh}:${mm}`;
   const nocturno = isNocturno(now);
   document.getElementById('clock-cycle-icon').textContent = nocturno ? '🌙' : '☀️';
-  badge.title = (nocturno ? 'Ciclo nocturno activo' : 'Ciclo normal') + ' — el ciclo nocturno es de 04:00 a 10:00 UTC.';
+  badge.title = (nocturno ? 'Ciclo nocturno activo' : 'Ciclo normal') + ' — el ciclo nocturno es de 23:00 a 05:00, hora de Ecuador.';
 }
 
 // hide(id): getElementById + set display, sin reventar si el header todavía

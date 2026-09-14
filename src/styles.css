@@ -60,8 +60,22 @@
   .inv-toggle-btn:hover:not(:disabled){border-color:var(--bronze); color:var(--bronze-light);}
   .inv-toggle-btn.active{border-color:var(--bronze); color:var(--bronze-light); background:rgba(184,147,74,0.08);}
 
+  .city-nav{
+    display:flex; flex-wrap:wrap; gap:6px; margin-bottom:14px;
+  }
+  .nav-btn{
+    background:var(--panel-2); border:1px solid var(--border); color:var(--text-dim);
+    padding:7px 14px; border-radius:20px; font-size:0.82em;
+  }
+  .nav-btn:hover:not(:disabled){border-color:var(--bronze); color:var(--bronze-light);}
+  .nav-btn.active{border-color:var(--bronze); color:var(--bronze-light); background:rgba(184,147,74,0.12);}
+
   .layout{display:grid; grid-template-columns: 290px minmax(0,1fr); gap:14px; align-items:start;}
-  @media (max-width:840px){ .layout{grid-template-columns:minmax(0,1fr);} }
+  @media (max-width:840px){
+    .layout{grid-template-columns:minmax(0,1fr);}
+    .layout .sheet{order:2;}
+    .layout .main-col{order:1;}
+  }
 
   .panel{
     background:var(--panel); border:1px solid var(--border); border-radius:4px;
@@ -293,6 +307,13 @@
     header.top{padding:8px 12px;}
     header.top h1{font-size:1.25em;}
     .panel{padding:12px;}
+    .city-nav{gap:5px; margin-bottom:10px;}
+    .nav-btn{padding:6px 11px; font-size:0.78em;}
+    .combat-grid{gap:10px; margin-bottom:10px;}
+    .pos-hint{display:none;}
+    .enemy-slots{gap:6px;}
+    .enemy-card{padding:8px 10px; gap:8px;}
+    .enemy-card .ei{font-size:1.35em;}
   }
   @media (max-width:480px){
     body{font-size:15.5px;}
@@ -303,6 +324,8 @@
     .skills-bar{grid-template-columns:repeat(auto-fit, minmax(128px,1fr));}
     .stat-grid{gap:6px;}
     .overlay-card{padding:22px 18px; max-width:92vw;}
+    .player-card{padding:9px;}
+    .enemy-card .ename{font-size:0.82em;}
   }
   @media (max-height:420px) and (orientation:landscape){
     .city-art{padding:14px 10px;}
