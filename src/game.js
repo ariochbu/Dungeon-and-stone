@@ -651,10 +651,10 @@ const SOUL_STONES = {
     special:{type:'esp_refund', chance:0.05, amount:0.05},
     desc:'+4 Espíritu. 5% de probabilidad de recuperar el 5% del espíritu gastado.', preview:'Desde A: probabilidad de que tu próxima habilidad cueste la mitad de espíritu.'},
   instinto_e:  {id:'instinto_e',  family:'instinto',  name:'Piedra del Alma: Instinto (E)',         tier:'E', icon:'🟢', bonus:{stat:'hab', value:2},
-    desc:'+2 Habilidad permanente.', preview:'Desde F: probabilidad de quemar o congelar según la habilidad. Desde A: doble lanzamiento.'},
+    desc:'+2 Habilidad permanente.', preview:'Desde F: probabilidad de quemar, congelar/ralentizar o sangrar según la habilidad. Desde A: doble lanzamiento.'},
   instinto_f:  {id:'instinto_f',  family:'instinto',  name:'Piedra del Alma: Instinto (F)',         tier:'F', icon:'🟢', bonus:{stat:'hab', value:4},
     special:{type:'elemental_proc', chance:0.02},
-    desc:'+4 Habilidad. 2% de probabilidad de quemar (fuego) o congelar/ralentizar (hielo) al enemigo, según la habilidad usada.', preview:'Desde A: probabilidad de lanzar la habilidad dos veces (la segunda gratis, sin gastar turno).'},
+    desc:'+4 Habilidad. 2% de probabilidad de quemar (fuego), congelar/ralentizar (hielo) o sangrar (físico) al enemigo, según la habilidad usada.', preview:'Desde A: probabilidad de lanzar la habilidad dos veces (la segunda gratis, sin gastar turno).'},
   vitalidad_e: {id:'vitalidad_e', family:'vitalidad', name:'Piedra del Alma: Vitalidad (E)',        tier:'E', icon:'❤️', bonus:{stat:'maxhp', value:1},
     desc:'+8 Vida máxima aprox.', preview:'Desde F: refleja parte del daño recibido. Desde A: probabilidad de autocurarte.'},
   vitalidad_f: {id:'vitalidad_f', family:'vitalidad', name:'Piedra del Alma: Vitalidad (F)',        tier:'F', icon:'❤️', bonus:{stat:'maxhp', value:2},
@@ -687,12 +687,12 @@ const SOUL_STONES = {
   vigor_c:     {id:'vigor_c',     family:'vigor',     name:'Piedra del Alma: Vigor (C)',            tier:'C', icon:'🟤', bonus:{stat:'fis', value:16},
     special:{type:'aturdir', chance:0.08},
     desc:'+16 Físico. 8% de probabilidad de aturdir al enemigo al golpear.', preview:'Desde A: roba vida (% del daño causado).'},
-  vigor_b:     {id:'vigor_b',     family:'vigor',     name:'Piedra del Alma: Vigor (B)',            tier:'B', icon:'🟤', bonus:{stat:'fis', value:32},
+  vigor_b:     {id:'vigor_b',     family:'vigor',     name:'Piedra del Alma: Vigor (B)',            tier:'B', icon:'🟤', bonus:{stat:'fis', value:24},
     special:{type:'aturdir', chance:0.16},
-    desc:'+32 Físico. 16% de probabilidad de aturdir al enemigo al golpear.', preview:'Desde A: roba vida (% del daño causado).'},
-  vigor_a:     {id:'vigor_a',     family:'vigor',     name:'Piedra del Alma: Vigor (A)',            tier:'A', icon:'🟤', bonus:{stat:'fis', value:64},
+    desc:'+24 Físico. 16% de probabilidad de aturdir al enemigo al golpear.', preview:'Desde A: roba vida (% del daño causado).'},
+  vigor_a:     {id:'vigor_a',     family:'vigor',     name:'Piedra del Alma: Vigor (A)',            tier:'A', icon:'🟤', bonus:{stat:'fis', value:32},
     special:{type:'robovida', percent:0.05},
-    desc:'+64 Físico. Robas el 5% del daño físico que causas como vida.'},
+    desc:'+32 Físico. Robas el 5% del daño físico que causas como vida.'},
 
   sabiduria_d: {id:'sabiduria_d', family:'sabiduria', name:'Piedra del Alma: Sabiduría (D)',        tier:'D', icon:'📘', bonus:{stat:'maxsta', value:32},
     special:{type:'mp_refund', chance:0.10, amount:0.05},
@@ -700,12 +700,12 @@ const SOUL_STONES = {
   sabiduria_c: {id:'sabiduria_c', family:'sabiduria', name:'Piedra del Alma: Sabiduría (C)',        tier:'C', icon:'📘', bonus:{stat:'maxsta', value:64},
     special:{type:'mp_refund', chance:0.20, amount:0.05},
     desc:'+64 MP máximo. 20% de probabilidad de recuperar el 5% del MP gastado.', preview:'Desde A: probabilidad de escudo de maná (pendiente de implementar).'},
-  sabiduria_b: {id:'sabiduria_b', family:'sabiduria', name:'Piedra del Alma: Sabiduría (B)',        tier:'B', icon:'📘', bonus:{stat:'maxsta', value:128},
+  sabiduria_b: {id:'sabiduria_b', family:'sabiduria', name:'Piedra del Alma: Sabiduría (B)',        tier:'B', icon:'📘', bonus:{stat:'maxsta', value:96},
     special:{type:'mp_refund', chance:0.40, amount:0.05},
-    desc:'+128 MP máximo. 40% de probabilidad de recuperar el 5% del MP gastado.', preview:'Desde A: probabilidad de escudo de maná (pendiente de implementar).'},
-  sabiduria_a: {id:'sabiduria_a', family:'sabiduria', name:'Piedra del Alma: Sabiduría (A)',        tier:'A', icon:'📘', bonus:{stat:'maxsta', value:256},
+    desc:'+96 MP máximo. 40% de probabilidad de recuperar el 5% del MP gastado.', preview:'Desde A: probabilidad de escudo de maná (pendiente de implementar).'},
+  sabiduria_a: {id:'sabiduria_a', family:'sabiduria', name:'Piedra del Alma: Sabiduría (A)',        tier:'A', icon:'📘', bonus:{stat:'maxsta', value:128},
     special:{type:'mp_refund', chance:0.80, amount:0.05},
-    desc:'+256 MP máximo. 80% de probabilidad de recuperar el 5% del MP gastado. (El escudo de maná prometido en este rango todavía no está implementado.)'},
+    desc:'+128 MP máximo. 80% de probabilidad de recuperar el 5% del MP gastado. (El escudo de maná prometido en este rango todavía no está implementado.)'},
 
   voluntad_d:  {id:'voluntad_d',  family:'voluntad',  name:'Piedra del Alma: Voluntad (D)',         tier:'D', icon:'🔷', bonus:{stat:'esp', value:8},
     special:{type:'esp_refund', chance:0.10, amount:0.05},
@@ -713,25 +713,25 @@ const SOUL_STONES = {
   voluntad_c:  {id:'voluntad_c',  family:'voluntad',  name:'Piedra del Alma: Voluntad (C)',         tier:'C', icon:'🔷', bonus:{stat:'esp', value:16},
     special:{type:'esp_refund', chance:0.20, amount:0.05},
     desc:'+16 Espíritu. 20% de probabilidad de recuperar el 5% del espíritu gastado.', preview:'Desde A: próxima habilidad a mitad de costo (pendiente de implementar).'},
-  voluntad_b:  {id:'voluntad_b',  family:'voluntad',  name:'Piedra del Alma: Voluntad (B)',         tier:'B', icon:'🔷', bonus:{stat:'esp', value:32},
+  voluntad_b:  {id:'voluntad_b',  family:'voluntad',  name:'Piedra del Alma: Voluntad (B)',         tier:'B', icon:'🔷', bonus:{stat:'esp', value:24},
     special:{type:'esp_refund', chance:0.40, amount:0.05},
-    desc:'+32 Espíritu. 40% de probabilidad de recuperar el 5% del espíritu gastado.', preview:'Desde A: próxima habilidad a mitad de costo (pendiente de implementar).'},
-  voluntad_a:  {id:'voluntad_a',  family:'voluntad',  name:'Piedra del Alma: Voluntad (A)',         tier:'A', icon:'🔷', bonus:{stat:'esp', value:64},
+    desc:'+24 Espíritu. 40% de probabilidad de recuperar el 5% del espíritu gastado.', preview:'Desde A: próxima habilidad a mitad de costo (pendiente de implementar).'},
+  voluntad_a:  {id:'voluntad_a',  family:'voluntad',  name:'Piedra del Alma: Voluntad (A)',         tier:'A', icon:'🔷', bonus:{stat:'esp', value:32},
     special:{type:'esp_refund', chance:0.80, amount:0.05},
-    desc:'+64 Espíritu. 80% de probabilidad de recuperar el 5% del espíritu gastado. (La mitad de costo prometida en este rango todavía no está implementada.)'},
+    desc:'+32 Espíritu. 80% de probabilidad de recuperar el 5% del espíritu gastado. (La mitad de costo prometida en este rango todavía no está implementada.)'},
 
   instinto_d:  {id:'instinto_d',  family:'instinto',  name:'Piedra del Alma: Instinto (D)',         tier:'D', icon:'🟢', bonus:{stat:'hab', value:8},
     special:{type:'elemental_proc', chance:0.04},
-    desc:'+8 Habilidad. 4% de probabilidad de quemar o congelar/ralentizar al enemigo, según la habilidad usada.', preview:'Desde A: doble lanzamiento (pendiente de implementar).'},
+    desc:'+8 Habilidad. 4% de probabilidad de quemar (fuego), congelar/ralentizar (hielo) o sangrar (físico) al enemigo, según la habilidad usada.', preview:'Desde A: doble lanzamiento (pendiente de implementar).'},
   instinto_c:  {id:'instinto_c',  family:'instinto',  name:'Piedra del Alma: Instinto (C)',         tier:'C', icon:'🟢', bonus:{stat:'hab', value:16},
     special:{type:'elemental_proc', chance:0.08},
-    desc:'+16 Habilidad. 8% de probabilidad de quemar o congelar/ralentizar al enemigo, según la habilidad usada.', preview:'Desde A: doble lanzamiento (pendiente de implementar).'},
-  instinto_b:  {id:'instinto_b',  family:'instinto',  name:'Piedra del Alma: Instinto (B)',         tier:'B', icon:'🟢', bonus:{stat:'hab', value:32},
+    desc:'+16 Habilidad. 8% de probabilidad de quemar (fuego), congelar/ralentizar (hielo) o sangrar (físico) al enemigo, según la habilidad usada.', preview:'Desde A: doble lanzamiento (pendiente de implementar).'},
+  instinto_b:  {id:'instinto_b',  family:'instinto',  name:'Piedra del Alma: Instinto (B)',         tier:'B', icon:'🟢', bonus:{stat:'hab', value:24},
     special:{type:'elemental_proc', chance:0.16},
-    desc:'+32 Habilidad. 16% de probabilidad de quemar o congelar/ralentizar al enemigo, según la habilidad usada.', preview:'Desde A: doble lanzamiento (pendiente de implementar).'},
-  instinto_a:  {id:'instinto_a',  family:'instinto',  name:'Piedra del Alma: Instinto (A)',         tier:'A', icon:'🟢', bonus:{stat:'hab', value:64},
+    desc:'+24 Habilidad. 16% de probabilidad de quemar (fuego), congelar/ralentizar (hielo) o sangrar (físico) al enemigo, según la habilidad usada.', preview:'Desde A: doble lanzamiento (pendiente de implementar).'},
+  instinto_a:  {id:'instinto_a',  family:'instinto',  name:'Piedra del Alma: Instinto (A)',         tier:'A', icon:'🟢', bonus:{stat:'hab', value:32},
     special:{type:'elemental_proc', chance:0.32},
-    desc:'+64 Habilidad. 32% de probabilidad de quemar o congelar/ralentizar al enemigo, según la habilidad usada. (El doble lanzamiento prometido en este rango todavía no está implementado.)'},
+    desc:'+32 Habilidad. 32% de probabilidad de quemar (fuego), congelar/ralentizar (hielo) o sangrar (físico) al enemigo, según la habilidad usada. (El doble lanzamiento prometido en este rango todavía no está implementado.)'},
 
   vitalidad_d: {id:'vitalidad_d', family:'vitalidad', name:'Piedra del Alma: Vitalidad (D)',        tier:'D', icon:'❤️', bonus:{stat:'maxhp', value:4},
     special:{type:'reflect', pct:0.02},
@@ -739,12 +739,12 @@ const SOUL_STONES = {
   vitalidad_c: {id:'vitalidad_c', family:'vitalidad', name:'Piedra del Alma: Vitalidad (C)',        tier:'C', icon:'❤️', bonus:{stat:'maxhp', value:8},
     special:{type:'reflect', pct:0.04},
     desc:'+64 Vida máxima aprox. Devuelves el 4% del daño físico que recibes a tu atacante.', preview:'Desde A: probabilidad de autocurarte (pendiente de implementar).'},
-  vitalidad_b: {id:'vitalidad_b', family:'vitalidad', name:'Piedra del Alma: Vitalidad (B)',        tier:'B', icon:'❤️', bonus:{stat:'maxhp', value:16},
+  vitalidad_b: {id:'vitalidad_b', family:'vitalidad', name:'Piedra del Alma: Vitalidad (B)',        tier:'B', icon:'❤️', bonus:{stat:'maxhp', value:12},
     special:{type:'reflect', pct:0.08},
-    desc:'+128 Vida máxima aprox. Devuelves el 8% del daño físico que recibes a tu atacante.', preview:'Desde A: probabilidad de autocurarte (pendiente de implementar).'},
-  vitalidad_a: {id:'vitalidad_a', family:'vitalidad', name:'Piedra del Alma: Vitalidad (A)',        tier:'A', icon:'❤️', bonus:{stat:'maxhp', value:32},
+    desc:'+96 Vida máxima aprox. Devuelves el 8% del daño físico que recibes a tu atacante.', preview:'Desde A: probabilidad de autocurarte (pendiente de implementar).'},
+  vitalidad_a: {id:'vitalidad_a', family:'vitalidad', name:'Piedra del Alma: Vitalidad (A)',        tier:'A', icon:'❤️', bonus:{stat:'maxhp', value:16},
     special:{type:'reflect', pct:0.16},
-    desc:'+256 Vida máxima aprox. Devuelves el 16% del daño físico que recibes a tu atacante. (La autocuración prometida en este rango todavía no está implementada.)'},
+    desc:'+128 Vida máxima aprox. Devuelves el 16% del daño físico que recibes a tu atacante. (La autocuración prometida en este rango todavía no está implementada.)'},
 
   furia_d:     {id:'furia_d',     family:'furia',     name:'Piedra del Alma: Furia Contenida (D)',  tier:'D', icon:'🔥',
     special:{type:'lowhp_dmg_v2', threshold:0.3, base:soulFuriaBase('D'), missingScale:soulFuriaMissingScale('D')},
@@ -775,40 +775,40 @@ const SOUL_STONES = {
   // Rangos S y SS: mismas fórmulas, continuadas un escalón más. SS es el tope
   // absoluto del sistema — numerado/único mundial en espíritu, aunque todavía
   // sin ese control de unicidad real implementado.
-  vigor_s:     {id:'vigor_s',     family:'vigor',     name:'Piedra del Alma: Vigor (S)',            tier:'S', icon:'🟤', bonus:{stat:'fis', value:128},
+  vigor_s:     {id:'vigor_s',     family:'vigor',     name:'Piedra del Alma: Vigor (S)',            tier:'S', icon:'🟤', bonus:{stat:'fis', value:40},
     special:{type:'robovida', percent:0.10},
-    desc:'+128 Físico. Robas el 10% del daño físico que causas como vida.'},
-  vigor_ss:    {id:'vigor_ss',    family:'vigor',     name:'Piedra del Alma: Vigor (SS)',           tier:'SS', icon:'🟤', bonus:{stat:'fis', value:256},
+    desc:'+40 Físico. Robas el 10% del daño físico que causas como vida.'},
+  vigor_ss:    {id:'vigor_ss',    family:'vigor',     name:'Piedra del Alma: Vigor (SS)',           tier:'SS', icon:'🟤', bonus:{stat:'fis', value:50},
     special:{type:'robovida', percent:0.15},
-    desc:'+256 Físico. Robas el 15% del daño físico que causas como vida.'},
+    desc:'+50 Físico. Robas el 15% del daño físico que causas como vida.'},
 
-  sabiduria_s: {id:'sabiduria_s', family:'sabiduria', name:'Piedra del Alma: Sabiduría (S)',        tier:'S', icon:'📘', bonus:{stat:'maxsta', value:512},
+  sabiduria_s: {id:'sabiduria_s', family:'sabiduria', name:'Piedra del Alma: Sabiduría (S)',        tier:'S', icon:'📘', bonus:{stat:'maxsta', value:160},
     special:{type:'mp_refund', chance:1, amount:0.05},
-    desc:'+512 MP máximo. Recuperas siempre el 5% del MP gastado.'},
-  sabiduria_ss:{id:'sabiduria_ss',family:'sabiduria', name:'Piedra del Alma: Sabiduría (SS)',       tier:'SS', icon:'📘', bonus:{stat:'maxsta', value:1024},
+    desc:'+160 MP máximo. Recuperas siempre el 5% del MP gastado.'},
+  sabiduria_ss:{id:'sabiduria_ss',family:'sabiduria', name:'Piedra del Alma: Sabiduría (SS)',       tier:'SS', icon:'📘', bonus:{stat:'maxsta', value:200},
     special:{type:'mp_refund', chance:1, amount:0.05},
-    desc:'+1024 MP máximo. Recuperas siempre el 5% del MP gastado.'},
+    desc:'+200 MP máximo. Recuperas siempre el 5% del MP gastado.'},
 
-  voluntad_s:  {id:'voluntad_s',  family:'voluntad',  name:'Piedra del Alma: Voluntad (S)',         tier:'S', icon:'🔷', bonus:{stat:'esp', value:128},
+  voluntad_s:  {id:'voluntad_s',  family:'voluntad',  name:'Piedra del Alma: Voluntad (S)',         tier:'S', icon:'🔷', bonus:{stat:'esp', value:40},
     special:{type:'esp_refund', chance:1, amount:0.05},
-    desc:'+128 Espíritu. Recuperas siempre el 5% del espíritu gastado.'},
-  voluntad_ss: {id:'voluntad_ss', family:'voluntad',  name:'Piedra del Alma: Voluntad (SS)',        tier:'SS', icon:'🔷', bonus:{stat:'esp', value:256},
+    desc:'+40 Espíritu. Recuperas siempre el 5% del espíritu gastado.'},
+  voluntad_ss: {id:'voluntad_ss', family:'voluntad',  name:'Piedra del Alma: Voluntad (SS)',        tier:'SS', icon:'🔷', bonus:{stat:'esp', value:50},
     special:{type:'esp_refund', chance:1, amount:0.05},
-    desc:'+256 Espíritu. Recuperas siempre el 5% del espíritu gastado.'},
+    desc:'+50 Espíritu. Recuperas siempre el 5% del espíritu gastado.'},
 
-  instinto_s:  {id:'instinto_s',  family:'instinto',  name:'Piedra del Alma: Instinto (S)',         tier:'S', icon:'🟢', bonus:{stat:'hab', value:128},
+  instinto_s:  {id:'instinto_s',  family:'instinto',  name:'Piedra del Alma: Instinto (S)',         tier:'S', icon:'🟢', bonus:{stat:'hab', value:40},
     special:{type:'elemental_proc', chance:0.64},
-    desc:'+128 Habilidad. 64% de probabilidad de quemar o congelar/ralentizar al enemigo, según la habilidad usada.'},
-  instinto_ss: {id:'instinto_ss', family:'instinto',  name:'Piedra del Alma: Instinto (SS)',        tier:'SS', icon:'🟢', bonus:{stat:'hab', value:256},
+    desc:'+40 Habilidad. 64% de probabilidad de quemar (fuego), congelar/ralentizar (hielo) o sangrar (físico) al enemigo, según la habilidad usada.'},
+  instinto_ss: {id:'instinto_ss', family:'instinto',  name:'Piedra del Alma: Instinto (SS)',        tier:'SS', icon:'🟢', bonus:{stat:'hab', value:50},
     special:{type:'elemental_proc', chance:1},
-    desc:'+256 Habilidad. Siempre quemas o congelas/ralentizas al enemigo, según la habilidad usada.'},
+    desc:'+50 Habilidad. Siempre quemas, congelas/ralentizas o sangras al enemigo, según la habilidad usada.'},
 
-  vitalidad_s: {id:'vitalidad_s', family:'vitalidad', name:'Piedra del Alma: Vitalidad (S)',        tier:'S', icon:'❤️', bonus:{stat:'maxhp', value:64},
+  vitalidad_s: {id:'vitalidad_s', family:'vitalidad', name:'Piedra del Alma: Vitalidad (S)',        tier:'S', icon:'❤️', bonus:{stat:'maxhp', value:20},
     special:{type:'reflect', pct:0.32},
-    desc:'+512 Vida máxima aprox. Devuelves el 32% del daño físico que recibes a tu atacante.'},
-  vitalidad_ss:{id:'vitalidad_ss',family:'vitalidad', name:'Piedra del Alma: Vitalidad (SS)',       tier:'SS', icon:'❤️', bonus:{stat:'maxhp', value:128},
+    desc:'+160 Vida máxima aprox. Devuelves el 32% del daño físico que recibes a tu atacante.'},
+  vitalidad_ss:{id:'vitalidad_ss',family:'vitalidad', name:'Piedra del Alma: Vitalidad (SS)',       tier:'SS', icon:'❤️', bonus:{stat:'maxhp', value:25},
     special:{type:'reflect', pct:0.5},
-    desc:'+1024 Vida máxima aprox. Devuelves el 50% del daño físico que recibes a tu atacante.'},
+    desc:'+200 Vida máxima aprox. Devuelves el 50% del daño físico que recibes a tu atacante.'},
 
   furia_s:     {id:'furia_s',     family:'furia',     name:'Piedra del Alma: Furia Contenida (S)',  tier:'S', icon:'🔥',
     special:{type:'lowhp_dmg_v2', threshold:0.3, base:soulFuriaBase('S'), missingScale:soulFuriaMissingScale('S')},
@@ -1063,6 +1063,26 @@ function characterToRow(){
   };
 }
 
+// Las piedras de alma se guardan como una copia congelada de su plantilla
+// en el momento en que caen (bonus/desc/special quedan escritos tal cual en
+// el JSON del personaje) - así que un rebalanceo posterior a SOUL_STONES
+// nunca llegaba a las piedras que un jugador ya tenía en la mochila o
+// engarzadas, solo a las nuevas. refreshStoneFromTemplate() las "sana" cada
+// vez que el personaje carga: vuelve a leer la plantilla actual por
+// stoneId y reemplaza bonus/desc/special/nombre/ícono, conservando solo lo
+// que es realmente de esa instancia (uid). Si la piedra queda socketeada o
+// en la mochila, el próximo combate/guardado ya usa las estadísticas
+// vigentes sin ninguna migración de base de datos.
+function refreshStoneFromTemplate(stone){
+  if(!stone || stone.kind!=='soulstone') return stone;
+  const tpl = SOUL_STONES[stone.stoneId];
+  if(!tpl) return stone; // plantilla renombrada/eliminada - se deja como está, defensivo
+  return Object.assign({}, stone, {
+    name: tpl.name, tier: tpl.tier, icon: tpl.icon, desc: tpl.desc,
+    preview: tpl.preview, bonus: tpl.bonus, special: tpl.special
+  });
+}
+
 function rowToState(row){
   return {
     char:{
@@ -1073,12 +1093,12 @@ function rowToState(row){
       missionRerollCycle: row.mission_reroll_cycle || null, missionRerollCount: row.mission_reroll_count || 0,
       curHP: row.cur_hp, curSta: row.cur_sta, curSpi: row.cur_spi,
       equip: row.equip || {arma:null, arma2:null, armadura:null, amuleto:null, casco:null, botas:null, guantes:null},
-      inventory: row.inventory || [],
+      inventory: (row.inventory || []).map(refreshStoneFromTemplate),
       itemCounter: row.item_counter || 0,
       maxLevelUnlocked: row.max_level_unlocked || 1,
       record: {level: row.record_level || 1, floorIdx: row.record_floor_idx || 0},
       stash: row.stash || {gold:0, items:[]},
-      soulSlots: row.soul_slots || [],
+      soulSlots: (row.soul_slots || []).map(refreshStoneFromTemplate),
       pityGear: row.pity_gear || 0,
       pityStone: row.pity_stone || 0
     },
@@ -3258,6 +3278,9 @@ function applyEquippedSpecials(target, dmgDealt, skill){
       } else if(skill.dmgType==='hielo' && chance(sp.chance)){
         applyStatus(target, {name:'Ralentizado', duration:2}, false);
         log(`<b>${it.name}</b> congela a ${target.name}.`);
+      } else if(skill.dmgType==='fisico' && chance(sp.chance)){
+        applyStatus(target, {name:'Sangrado', duration:3, stack:true, maxStack:3}, false);
+        log(`<b>${it.name}</b> abre una herida en ${target.name}, que empieza a sangrar.`);
       }
     }
   });
