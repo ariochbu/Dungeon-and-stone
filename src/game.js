@@ -1269,6 +1269,9 @@ function renderAll(){
   ensureSoulSlots();
   document.getElementById('clock-badge').style.display = 'flex';
   updateClockBadge();
+  const musicBtn = document.getElementById('btn-music-toggle');
+  musicBtn.style.display = 'inline-block';
+  musicBtn.textContent = getLoginAudioMuted() ? '🔇 Música' : '🔊 Música';
   document.getElementById('gold-badge').style.display = 'flex';
   document.getElementById('gold-amount').textContent = state.char.gold;
   const tierBadge = document.getElementById('tier-badge');
@@ -3749,6 +3752,7 @@ function handleVictory(){
       log(`Regresas a la ciudad conservando tu botín. Se te cobran ${tax} de oro en impuestos.`);
       combat = null;
       state.dungeon = null;
+      playLoginAudio();
       renderAll(); save();
     }});
     showChoiceOverlay('Guardián derrotado', bodyText, buttons);
@@ -3773,6 +3777,7 @@ function handleDefeat(){
     state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi;
     combat = null;
     state.dungeon = null;
+    playLoginAudio();
     if(lostItems>0) log(`Pierdes ${lostItems} objeto(s) de equipo que llevabas en la mochila.`);
     if(hadWard) log(`Tu <b>${WARD_ITEM.icon} ${WARD_ITEM.name}</b> se pierde junto con el resto de tu equipo suelto.`);
     renderAll();
@@ -4085,6 +4090,9 @@ document.getElementById('btn-begin').onclick = async ()=>{
   }
 };
 
+const musicToggleBtn = document.getElementById('btn-music-toggle');
+if(musicToggleBtn) musicToggleBtn.onclick = toggleLoginAudioMuted;
+
 document.getElementById('btn-inventory').onclick = ()=>{
   if(!state) return;
   if(combat && combat.active){ log('No puedes abrir el inventario en combate. Usa tus pociones desde el panel de combate.'); return; }
@@ -4174,8 +4182,11 @@ function toggleLoginAudioMuted(){
   setLoginAudioMuted(muted);
   if(loginAudio) loginAudio.muted = muted;
   if(bossAudio) bossAudio.muted = muted;
-  const btn = document.getElementById('auth-audio-toggle');
-  if(btn) btn.textContent = muted ? '🔇 Música' : '🔊 Música';
+  const label = muted ? '🔇 Música' : '🔊 Música';
+  const authBtn = document.getElementById('auth-audio-toggle');
+  if(authBtn) authBtn.textContent = label;
+  const headerBtn = document.getElementById('btn-music-toggle');
+  if(headerBtn) headerBtn.textContent = label;
 }
 
 // Música de jefe de década: suena solo en el combate contra el jefe de un
@@ -4337,7 +4348,9 @@ function renderCharacterSelect(rows){
 function enterCharacter(row){
   state = rowToState(row);
   migrateState();
-  if(state.dungeon) stopLoginAudio(); // ya tenía una corrida activa: entra directo al laberinto, no a la ciudad
+  // si ya tenía una corrida activa entra directo al laberinto (sin música de
+  // ciudad); si no, aterriza en la ciudad y la música debe sonar ahí también
+  if(state.dungeon) stopLoginAudio(); else playLoginAudio();
   document.getElementById('btn-switch-char').style.display = 'inline-block';
   showScreen('screen-game');
   renderAll();
@@ -4399,7 +4412,7 @@ function updateClockBadge(){
 // inofensivo, pero no debería lanzar un error sin capturar).
 function hide(id){ const el=document.getElementById(id); if(el) el.style.display='none'; }
 function resetHeaderForLoggedOut(){
-  hide('clock-badge'); hide('gold-badge'); hide('tier-badge');
+  hide('clock-badge'); hide('gold-badge'); hide('tier-badge'); hide('btn-music-toggle');
   hide('btn-inventory'); hide('btn-switch-char'); hide('btn-slots'); hide('btn-reset');
   const sub = document.getElementById('header-sub');
   if(sub) sub.textContent = 'El juego que nadie ha superado';
