@@ -73,8 +73,6 @@
   .layout{display:grid; grid-template-columns: 290px minmax(0,1fr); gap:14px; align-items:start;}
   @media (max-width:840px){
     .layout{grid-template-columns:minmax(0,1fr);}
-    .layout .sheet{order:2;}
-    .layout .main-col{order:1;}
   }
 
   .panel{
@@ -156,6 +154,11 @@
   .inv-btn.danger:hover:not(:disabled){background:rgba(140,47,47,0.15);}
   .inv-empty-msg{font-size:0.82em; color:var(--text-dim); margin:0 0 8px;}
   .inv-combat-note{font-size:0.74em; color:var(--text-dim); margin:4px 0 10px;}
+  /* Categorías de la mochila en una fila horizontal con scroll propio en vez
+     de una subsección por slot apilada hacia abajo — el móvil es quien más
+     sufre esa lista vertical creciendo sin parar. */
+  .inv-filter-bar{display:flex; flex-wrap:nowrap; gap:6px; overflow-x:auto; padding-bottom:6px; margin-bottom:2px;}
+  .inv-filter-bar .nav-btn{flex-shrink:0;}
 
   /* ---------- creation screen ---------- */
   .intro{text-align:center; margin-bottom:22px;}
@@ -263,7 +266,7 @@
   .player-card{
     background:var(--panel-2); border:1px solid var(--border); border-radius:5px; padding:12px; text-align:center;
   }
-  .player-card .pc-icon{font-size:2em;}
+  .player-card .pc-icon{font-size:2em; position:relative; display:inline-block;}
   .enemy-slots{display:flex; flex-direction:column; gap:8px;}
   .enemy-card{
     background:var(--panel-2); border:1px solid var(--border); border-radius:5px; padding:10px 12px;
@@ -288,10 +291,37 @@
   @media (prefers-reduced-motion: reduce){
     .enemy-card.acting .ei{animation:none;}
   }
-  .enemy-card .ei{font-size:1.6em; flex-shrink:0;}
+  .enemy-card .ei{font-size:1.6em; flex-shrink:0; position:relative; display:inline-block;}
   .enemy-card .einfo{flex:1; min-width:0;}
   .enemy-card .ename{font-size:0.88em; display:flex; justify-content:space-between;}
   .slot-tag{font-size:0.62em; color:var(--text-dim); border:1px solid var(--border); padding:0 5px; border-radius:8px;}
+
+  /* Indicador de acción: qué habilidad usa quien actúa (burbuja de texto
+     junto a su nombre) y cuánta vida pierde o gana cada objetivo (número
+     flotante sobre su ícono) - la Crónica queda muy abajo para seguir el
+     combate solo leyéndola. Ambos comparten ciclo de vida con .acting
+     (combat.lastActor/lastAction) y por eso también quedan limitados a
+     velocidad x1 en renderCombat(). */
+  .action-caption{
+    font-size:0.68em; color:var(--bronze-light); margin-top:2px; font-style:italic;
+  }
+  .float-num{
+    position:absolute; left:50%; top:0; transform:translateX(-50%);
+    font-family:'Cinzel', Georgia, serif; font-size:0.5em; font-weight:700; white-space:nowrap;
+    text-shadow:0 1px 2px rgba(0,0,0,0.6);
+    animation:float-up 0.6s ease-out forwards;
+    pointer-events:none;
+  }
+  .float-num.dmg{color:var(--blood-light);}
+  .float-num.heal{color:var(--good);}
+  @keyframes float-up{
+    0% { opacity:0; transform:translateX(-50%) translateY(4px); }
+    20% { opacity:1; transform:translateX(-50%) translateY(0); }
+    100% { opacity:0; transform:translateX(-50%) translateY(-22px); }
+  }
+  @media (prefers-reduced-motion: reduce){
+    .float-num{animation:none; opacity:1; transform:translateX(-50%) translateY(-10px);}
+  }
 
   .skills-bar{display:grid; grid-template-columns:repeat(auto-fit, minmax(160px,1fr)); gap:8px; margin-top:6px;}
   .skill-btn{

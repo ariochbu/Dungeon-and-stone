@@ -498,6 +498,33 @@ function buyGear(slot){
   renderAll(); save();
 }
 
+// Kit inicial (petición del 2026-09-14): antes un personaje nuevo arrancaba
+// desnudo con 20 de oro y tenía que ganar su primera arma jugando. Ahora
+// arranca ya equipado con un set común completo (mismo generador que la
+// tienda, a valores de nivel 1) más un fondo de pociones básico, para no
+// perder la primera media hora sin poder pelear en serio. Se llama una sola
+// vez, justo después de create_character, con state.char.level todavía en 1.
+const STARTER_GOLD = 200;
+const STARTER_POTIONS = {vida_mayor:5, vida_menor:10, estamina:5, espiritu:5};
+function grantStarterKit(){
+  state.char.gold = STARTER_GOLD;
+  const styleId = state.char.style;
+  const opts = WEAPON_OPTIONS[styleId] || WEAPON_OPTIONS.pesada;
+  const statKey = SHOP_WEAPON_STAT[styleId] || 'fis';
+  const weaponValue = shopWeaponValue();
+  state.char.equip.arma = {kind:'equip', slot:'arma', name:pick(opts.arma), bonus:{stat:statKey, value:weaponValue}, rarity:'comun', styleId};
+  if(opts.arma2) state.char.equip.arma2 = {kind:'equip', slot:'arma2', name:pick(opts.arma2), bonus:{stat:statKey, value:weaponValue}, rarity:'comun', styleId};
+  SHOP_GEAR_SLOTS.forEach(slot=>{
+    const bonus = slot==='amuleto'
+      ? {res: pick(['fisico','fuego','hielo','veneno','aturdimiento']), value: COMUN_RES_PCT}
+      : {stat: GUARDIAN_SLOT_STAT[slot] || 'maxhp', value: shopGearValue(slot)};
+    state.char.equip[slot] = {kind:'equip', slot, name: pick(COMUN_GEAR_NAMES[slot]), bonus, rarity:'comun'};
+  });
+  Object.entries(STARTER_POTIONS).forEach(([potionId, qty])=>{
+    state.char.inventory.push({kind:'potion', potionId, qty});
+  });
+}
+
 // Equipo poco común, también con oro (no Sellos) — un escalón intermedio
 // entre lo común de siempre y la tienda de Sellos del Gremio.
 function shopGearPricePocoComun(slot){ return Math.round(shopGearPrice(slot) * 2.2); }
@@ -952,6 +979,7 @@ let state = null;
 let combat = null; // transient combat state, rebuilt each fight
 let invOpen = false; // whether the inventory/equipment panel is showing
 let equipTarget = 'player'; // 'player' o el id de un aliado — a quién equipa el Inventario ahora mismo
+let invGearFilter = 'todos'; // 'todos' o un EQUIP_SLOTS — qué categoría de la mochila se muestra
 let homeOpen = false; // whether the Hogar (home stash) panel is showing
 let shopOpen = false; // whether the Tienda (shop) panel is showing
 let rankingOpen = false; // whether the Ranking panel is showing
@@ -1079,6 +1107,7 @@ function migrateState(){
   if(state.char.maxLevelUnlocked===undefined){
     state.char.maxLevelUnlocked = Math.max(1, Math.min(LEVEL_CAP, (state.char.dungeonsCleared||0) + 1));
   }
+  if(state.char.checkpointLevel===undefined) state.char.checkpointLevel = 1;
   if(!state.char.stash) state.char.stash = {gold:0, items:[]};
   if(!state.char.equip.hasOwnProperty('arma2')) state.char.equip.arma2 = null;
   ['casco','botas','guantes'].forEach(s=>{ if(!state.char.equip.hasOwnProperty(s)) state.char.equip[s] = null; });
@@ -1120,6 +1149,7 @@ function characterToRow(){
     inventory: state.char.inventory,
     item_counter: state.char.itemCounter,
     max_level_unlocked: state.char.maxLevelUnlocked,
+    checkpoint_level: state.char.checkpointLevel,
     record_level: state.char.record.level,
     record_floor_idx: state.char.record.floorIdx,
     stash: state.char.stash,
@@ -1163,6 +1193,7 @@ function rowToState(row){
       inventory: (row.inventory || []).map(refreshStoneFromTemplate),
       itemCounter: row.item_counter || 0,
       maxLevelUnlocked: row.max_level_unlocked || 1,
+      checkpointLevel: row.checkpoint_level || 1,
       record: {level: row.record_level || 1, floorIdx: row.record_floor_idx || 0},
       stash: row.stash || {gold:0, items:[]},
       soulSlots: (row.soul_slots || []).map(refreshStoneFromTemplate),
@@ -1616,10 +1647,18 @@ function renderInventory(){
   const gearItems = state.char.inventory.filter(i=>i.kind==='equip');
   const potionItems = state.char.inventory.filter(i=>i.kind==='potion');
 
-  // Filtros por slot: una subsección por tipo de equipo (Arma, Arma 2,
-  // Armadura, Amuleto, Casco, Botas, Guantes) en vez de una sola lista plana
-  // mezclando todo — más fácil de escanear cuando la mochila crece.
-  const gearHTML = gearItems.length ? EQUIP_SLOTS.map(slot=>{
+  // Filtros por slot: en vez de apilar una subsección por tipo de equipo
+  // (Arma, Arma 2, Armadura...) siempre visibles una debajo de otra —lo que
+  // hacía crecer mucho el scroll vertical en el móvil a medida que la
+  // mochila se llena—, una barra horizontal de chips elige qué categoría
+  // mostrar. "Todos" mantiene el listado completo de siempre.
+  const gearSlotsPresent = EQUIP_SLOTS.filter(slot=> gearItems.some(it=>it.slot===slot));
+  if(invGearFilter!=='todos' && !gearSlotsPresent.includes(invGearFilter)) invGearFilter = 'todos';
+  const gearFilterHTML = gearItems.length ? `<div class="inv-filter-bar">
+    <button class="nav-btn ${invGearFilter==='todos'?'active':''}" data-gearfilter="todos">Todos</button>
+    ${gearSlotsPresent.map(slot=>`<button class="nav-btn ${invGearFilter===slot?'active':''}" data-gearfilter="${slot}">${slotLabel(slot)}</button>`).join('')}
+  </div>` : '';
+  const gearHTML = gearItems.length ? EQUIP_SLOTS.filter(slot=> invGearFilter==='todos' || slot===invGearFilter).map(slot=>{
     const items = gearItems.filter(it=>it.slot===slot);
     if(!items.length) return '';
     const rows = items.map(it=>`
@@ -1706,6 +1745,7 @@ function renderInventory(){
     ${equippedHTML}
 
     <div class="section-label">Equipo en la mochila</div>
+    ${gearFilterHTML}
     ${gearHTML}
 
     <div class="section-label">Pociones</div>
@@ -1722,6 +1762,9 @@ function renderInventory(){
   document.getElementById('btn-close-inv').onclick = ()=>{ invOpen=false; renderAll(); };
   const targetSelect = document.getElementById('equip-target-select');
   if(targetSelect) targetSelect.onchange = ()=>{ equipTarget = targetSelect.value; renderInventory(); };
+  document.querySelectorAll('[data-gearfilter]').forEach(btn=>{
+    btn.onclick = ()=>{ invGearFilter = btn.dataset.gearfilter; renderInventory(); };
+  });
   document.querySelectorAll('[data-equip]').forEach(btn=>{
     btn.onclick = ()=> equipTarget==='player' ? equipItem(btn.dataset.equip) : equipItemOnAlly(btn.dataset.equip, equipTarget);
   });
@@ -1898,8 +1941,11 @@ function renderCity(){
       </div>
       <div class="action-card">
         <h3>Entrar al laberinto</h3>
-        <p>Siempre se entra desde el nivel 1, piso 1.</p>
-        <button id="btn-enter-dungeon">Entrar (Nivel 1)</button>
+        <p>${state.char.checkpointLevel>1
+          ? `Ya liberaste un checkpoint en el nivel ${state.char.checkpointLevel} (venciste al jefe del piso ${state.char.checkpointLevel-1}). Puedes reanudar ahí o volver a empezar desde el nivel 1.`
+          : 'Siempre se entra desde el nivel 1, piso 1.'}</p>
+        <button id="btn-enter-dungeon" data-level="1">Entrar (Nivel 1)</button>
+        ${state.char.checkpointLevel>1 ? `<button id="btn-enter-checkpoint" data-level="${state.char.checkpointLevel}" style="margin-top:6px;">Entrar desde el checkpoint (Nivel ${state.char.checkpointLevel})</button>` : ''}
       </div>
       <div class="action-card">
         <h3>Hogar</h3>
@@ -1928,7 +1974,7 @@ function renderCity(){
       </div>
     </div>
     <div class="section-label">Antes de partir</div>
-    <p style="color:var(--text-dim); font-size:0.85em; margin-top:0;">Revisa tu 🎒 Inventario (arriba) para equipar mejor equipo o comprobar cuántas pociones llevas antes de entrar al laberinto. Si mueres dentro perderás el equipo suelto de tu mochila y la mitad de tu oro; si te retiras tras vencer a un guardián, conservas todo.</p>
+    <p style="color:var(--text-dim); font-size:0.85em; margin-top:0;">Revisa tu 🎒 Inventario (arriba) para equipar mejor equipo o comprobar cuántas pociones llevas antes de entrar al laberinto. Si mueres dentro perderás el equipo suelto de tu mochila y el ${DEFEAT_GOLD_LOSS_PCT}% de tu oro; si te retiras tras vencer a un guardián, conservas todo.</p>
   `;
   document.getElementById('btn-rest-city').onclick = ()=>{
     const d = derived();
@@ -1936,20 +1982,25 @@ function renderCity(){
     log('Descansas en la ciudad. Vida, MP y espíritu restaurados.');
     renderSheet(); save();
   };
-  document.getElementById('btn-enter-dungeon').onclick = ()=>{
+  const enterDungeonAt = (startLevel)=>{
     showOverlay(
       'Antes de entrar',
-      'Una vez dentro no podrás retirarte hasta vencer al guardián del nivel o caer en el intento. Si mueres, pierdes el equipo suelto que llevas en la mochila y la mitad de tu oro — lo que ya tienes equipado y lo que guardaste en el Hogar está a salvo.',
+      `Una vez dentro no podrás retirarte hasta vencer al guardián del nivel o caer en el intento. Si mueres, pierdes el equipo suelto que llevas en la mochila y el ${DEFEAT_GOLD_LOSS_PCT}% de tu oro — lo que ya tienes equipado y lo que guardaste en el Hogar está a salvo.`,
       ()=>{
         stopLoginAudio();
         const d = derived();
         state.char.curHP = d.maxHP; state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi;
-        state.dungeon = generateDungeon(1);
-        log('Entras al laberinto desde el nivel 1. El aire cambia; algo respira ahí dentro.');
+        state.dungeon = generateDungeon(startLevel);
+        log(startLevel>1
+          ? `Entras al laberinto desde tu checkpoint, nivel ${startLevel}. El aire cambia; algo respira ahí dentro.`
+          : 'Entras al laberinto desde el nivel 1. El aire cambia; algo respira ahí dentro.');
         renderAll(); save();
       }
     );
   };
+  document.getElementById('btn-enter-dungeon').onclick = ()=> enterDungeonAt(1);
+  const btnCheckpoint = document.getElementById('btn-enter-checkpoint');
+  if(btnCheckpoint) btnCheckpoint.onclick = ()=> enterDungeonAt(state.char.checkpointLevel);
   document.getElementById('btn-open-home').onclick = ()=>{
     invOpen = false; homeOpen = true; shopOpen = false; rankingOpen = false; adminOpen = false;
     renderAll();
@@ -2980,7 +3031,22 @@ function renderMap(){
     <span>🚪 Entrada</span><span>⚔️ Combate</span><span>💰 Tesoro</span><span>🔥 Descanso</span><span>☠️ Élite</span><span>🛡️ Jefe</span>
   </div>`;
 
+  // El mapa se reconstruye entero en cada avance (elegir una senda,
+  // recuperación automática de combate interrumpido, etc.) — sin esto,
+  // reemplazar el innerHTML de #main-panel reseteaba el scroll horizontal
+  // de .map-wrap a 0 cada vez, obligando a desplazarse de nuevo desde el
+  // principio a cada rato a medida que las sendas avanzan hacia la derecha.
+  const prevWrap = document.querySelector('.map-wrap');
+  const prevScrollLeft = prevWrap ? prevWrap.scrollLeft : null;
+
   document.getElementById('main-panel').innerHTML = html;
+
+  const wrap = document.querySelector('.map-wrap');
+  if(wrap){
+    if(prevScrollLeft !== null) wrap.scrollLeft = prevScrollLeft;
+    const currentNode = wrap.querySelector('.node.current');
+    if(currentNode) currentNode.scrollIntoView({inline:'nearest', block:'nearest'});
+  }
 
   document.querySelectorAll('.node.reachable').forEach(el=>{
     el.onclick = ()=>{
@@ -3247,6 +3313,7 @@ function startCombat(enemyGroup, node){
     turnLog:[],
     turnCount:0, // cuántos turnos propios ya jugaste en ESTA pelea - ver endPlayerTurn() y la alerta de posible trampa en handleVictory()
     lastActor:null, // quién actuó justo antes del último render - ver el "temblor" (.acting) en renderCombat()
+    lastAction:null, // {label, effects:[{targetKind:'enemy'|'ally'|'player', key, amount, kind:'dmg'|'heal'}]} de ese mismo actor - ver los números flotantes en renderCombat()
     over:false
   };
   invOpen = false;
@@ -3811,6 +3878,7 @@ function allyMaybeSelfPreserve(ally){
   if(ally.frontline && ally.pos==='retaguardia' && hpPct >= ALLY_RETURN_TO_FRONT_HP_PCT){
     ally.pos = 'frente';
     log(`<b>${ally.name}</b> se recupera lo suficiente y vuelve al Frente.`);
+    combat.lastAction = {label:'Vuelve al Frente', effects:[]};
     return true;
   }
 
@@ -3823,6 +3891,7 @@ function allyMaybeSelfPreserve(ally){
       ally.hp = Math.min(ally.maxHP, ally.hp + heal);
       consumeInventoryPotion(potion);
       log(`<b>${ally.name}</b> está en peligro y bebe ${tpl.name} de la mochila. Recupera ${ally.hp-before} de vida.`);
+      combat.lastAction = {label:tpl.name, effects:[{targetKind:'ally', key:ally.id, amount:ally.hp-before, kind:'heal'}]};
       return true;
     }
   }
@@ -3833,6 +3902,7 @@ function allyMaybeSelfPreserve(ally){
       ally.statuses.length = 0;
       consumeInventoryPotion(antidoto);
       log(`<b>${ally.name}</b> bebe un Antídoto de la mochila. Sus efectos negativos desaparecen.`);
+      combat.lastAction = {label:'Antídoto', effects:[]};
       return true;
     }
   }
@@ -3840,6 +3910,7 @@ function allyMaybeSelfPreserve(ally){
   if(hpPct <= ALLY_SELF_PRESERVE_HP_PCT && ally.pos==='frente'){
     ally.pos = 'retaguardia';
     log(`<b>${ally.name}</b> está en peligro y no le quedan pociones — se repliega a la Retaguardia.`);
+    combat.lastAction = {label:'Se repliega', effects:[]};
     return true;
   }
 
@@ -3869,9 +3940,10 @@ async function resolveAllyTurns(){
   const stepDelay = COMBAT_SPEED_DELAY_MS[getCombatSpeed()] || 0;
   for(const ally of livingAllies()){
     combat.lastActor = {kind:'ally', id: ally.id};
+    combat.lastAction = null;
     resolveOneAllyTurn(ally);
     if(!combat || combat.over) break;
-    if(stepDelay>0){ renderCombat(); combat.lastActor = null; await sleep(stepDelay); }
+    if(stepDelay>0){ renderCombat(); combat.lastActor = null; combat.lastAction = null; await sleep(stepDelay); }
   }
 }
 
@@ -3883,6 +3955,7 @@ function resolveOneAllyTurn(ally){
     const miedo = hasStatus(ally.statuses,'Miedo');
     if(miedo && chance(miedo.procChance||0.4)){
       log(`<b>${ally.name}</b> está paralizado de miedo y pierde su turno.`);
+      combat.lastAction = {label:'Paralizado de miedo', effects:[]};
       return;
     }
 
@@ -3897,10 +3970,12 @@ function resolveOneAllyTurn(ally){
         // para cuando el aliado te ataque sin un efecto de estado de por medio.
         log(`<b>${ally.name}</b> está confundido y te golpea a ti por error.`);
         dealDamageToPlayer(dmg);
+        combat.lastAction = {label:'Confundido', effects:[{targetKind:'player', amount:dmg, kind:'dmg'}]};
       } else {
         const victim = pick(otherAllies);
         log(`<b>${ally.name}</b> está confundido y golpea a <b>${victim.name}</b> por error.`);
         dealDamageToAlly(victim, dmg);
+        combat.lastAction = {label:'Confundido', effects:[{targetKind:'ally', key:victim.id, amount:dmg, kind:'dmg'}]};
       }
       return;
     }
@@ -3918,6 +3993,7 @@ function resolveOneAllyTurn(ally){
         const before = state.char.curHP;
         state.char.curHP = Math.min(d.maxHP, state.char.curHP+heal);
         log(`<b>${ally.name}</b> te cura ${state.char.curHP-before} de vida.`);
+        combat.lastAction = {label:'Bendición curativa', effects:[{targetKind:'player', amount:state.char.curHP-before, kind:'heal'}]};
         return;
       }
       if(mostInjured && allyPct < 0.5){
@@ -3925,6 +4001,7 @@ function resolveOneAllyTurn(ally){
         const before = mostInjured.hp;
         mostInjured.hp = Math.min(mostInjured.maxHP, mostInjured.hp+heal);
         log(`<b>${ally.name}</b> cura a <b>${mostInjured.name}</b> ${mostInjured.hp-before} de vida.`);
+        combat.lastAction = {label:'Bendición curativa', effects:[{targetKind:'ally', key:mostInjured.id, amount:mostInjured.hp-before, kind:'heal'}]};
         return;
       }
       // Nadie necesita curación: Bendición Sagrada — baja todas las
@@ -3938,6 +4015,7 @@ function resolveOneAllyTurn(ally){
           applyStatus(target, {name:'Bendecido', duration:3}, false);
           ally.skillCooldown = ALLY_SKILL_COOLDOWN;
           log(`<b>${ally.name}</b> pronuncia una Bendición Sagrada sobre ${target.name}: sus resistencias caen.`);
+          combat.lastAction = {label:'Bendición Sagrada', effects:[]};
           return;
         }
       }
@@ -3949,6 +4027,7 @@ function resolveOneAllyTurn(ally){
     const ceguera = hasStatus(ally.statuses,'Ceguera');
     if(ceguera && chance(ceguera.procChance||0.32)){
       log(`<b>${ally.name}</b> falla su golpe por la Ceguera.`);
+      combat.lastAction = {label:'Ceguera (falla)', effects:[]};
       return;
     }
 
@@ -3958,17 +4037,19 @@ function resolveOneAllyTurn(ally){
     if(inspirado) dmg *= (inspirado.dmgMult||1);
     let resKey = 'fisico';
     let skillText = null;
+    let skillName = null;
 
     if(ally.skillCooldown<=0 && ally.role!=='sacerdote'){
       ally.skillCooldown = ALLY_SKILL_COOLDOWN;
-      if(ally.role==='guerrero'){ dmg *= 1.6; skillText = 'descarga un Golpe Pesado sobre'; }
-      else if(ally.role==='arquero'){ dmg *= 1.0; skillText = 'clava un Disparo Certero (ignora parte de la resistencia) en'; }
+      if(ally.role==='guerrero'){ dmg *= 1.6; skillText = 'descarga un Golpe Pesado sobre'; skillName = 'Golpe Pesado'; }
+      else if(ally.role==='arquero'){ dmg *= 1.0; skillText = 'clava un Disparo Certero (ignora parte de la resistencia) en'; skillName = 'Disparo Certero'; }
       else if(ally.role==='asesino'){
         const missingPct = 1 - (enemyTarget.hp/enemyTarget.maxHP);
         dmg *= 1 + missingPct*0.6;
         skillText = 'aprovecha un Golpe Sombrío contra';
+        skillName = 'Golpe Sombrío';
       }
-      else if(ally.role==='mago'){ resKey = 'fuego'; dmg *= 1.15; skillText = 'lanza una Bola de Fuego a'; }
+      else if(ally.role==='mago'){ resKey = 'fuego'; dmg *= 1.15; skillText = 'lanza una Bola de Fuego a'; skillName = 'Bola de Fuego'; }
     }
 
     const resVal = ally.role==='arquero' && skillText ? effectiveEnemyRes(enemyTarget, resKey)*0.6 : effectiveEnemyRes(enemyTarget, resKey);
@@ -3977,6 +4058,7 @@ function resolveOneAllyTurn(ally){
     log(skillText
       ? `<b>${ally.name}</b> ${skillText} ${enemyTarget.name}: ${dmg} de daño.`
       : `<b>${ally.name}</b> ataca a ${enemyTarget.name}: ${dmg} de daño.`);
+    combat.lastAction = {label: skillName || 'Ataque', effects:[{targetKind:'enemy', key:fi, amount:dmg, kind:'dmg'}]};
 }
 
 function tickStatuses(list, ownerName, target){
@@ -4027,9 +4109,10 @@ async function processEnemyTurns(){
     if(!combat || combat.over) break;
     if(enemy.hp<=0) continue;
     combat.lastActor = {kind:'enemy', idx: combat.enemies.indexOf(enemy)};
-    if(stunFlags.get(enemy)) log(`${enemy.name} está aturdido y pierde su turno.`);
+    combat.lastAction = null;
+    if(stunFlags.get(enemy)){ log(`${enemy.name} está aturdido y pierde su turno.`); combat.lastAction = {label:'Aturdido', effects:[]}; }
     else enemyAct(enemy);
-    if(stepDelay>0){ renderCombat(); combat.lastActor = null; await sleep(stepDelay); }
+    if(stepDelay>0){ renderCombat(); combat.lastActor = null; combat.lastAction = null; await sleep(stepDelay); }
   }
   if(!combat || combat.over) return;
 
@@ -4054,6 +4137,10 @@ async function processEnemyTurns(){
 
 const SUMMON_TEMPLATE = {id:'criatura_menor', name:'Criatura menor invocada', icon:'👾', hp:0.3, atk:0.5, res:{fisico:0,fuego:0,hielo:0,veneno:0,aturdimiento:0}, moves:['pegar']};
 
+// Nombres cortos para la burbuja de acción sobre la tarjeta del enemigo —
+// el texto narrado de más arriba (`text`) es demasiado largo para eso.
+const MOVE_LABELS = {robar:'Robo', morder:'Mordisco', debilitar:'Debilitar', aplastar:'Golpe brutal', paralizar:'Parálisis', cegar:'Cegar', atemorizar:'Atemorizar', confundir:'Confundir'};
+
 function enemyAct(enemy){
   if(!enemy.cooldowns) enemy.cooldowns = {};
   Object.keys(enemy.cooldowns).forEach(k=> enemy.cooldowns[k] = Math.max(0, enemy.cooldowns[k]-1));
@@ -4062,6 +4149,7 @@ function enemyAct(enemy){
   const evasion = target.kind==='ally' ? computeAllyEvasion(target.ally) : computeCritEvasion().evasion;
   if(chance(evasion)){
     log(`${enemy.name} ataca a ${target.kind==='ally' ? target.ally.name : 'ti'}, ¡pero esquiva!`);
+    combat.lastAction = {label:'¡Esquivado!', effects:[]};
     return;
   }
 
@@ -4069,11 +4157,13 @@ function enemyAct(enemy){
   const move = pick(available.length ? available : enemy.tpl.moves);
 
   // movimientos de soporte: no hacen daño directo, resuelven su efecto y terminan el turno del enemigo ahí.
+  const enemyIdx = combat.enemies.indexOf(enemy);
   if(move==='curar'){
     const heal = Math.max(1, Math.round(enemy.maxHP*0.12));
     const before = enemy.hp;
     enemy.hp = Math.min(enemy.maxHP, enemy.hp+heal);
     log(`${enemy.name} se cura ${enemy.hp-before} de vida.`);
+    combat.lastAction = {label:'Se cura', effects:[{targetKind:'enemy', key:enemyIdx, amount:enemy.hp-before, kind:'heal'}]};
     return;
   }
   if(move==='buff_pasivo'){
@@ -4081,6 +4171,7 @@ function enemyAct(enemy){
     if(buff) buff.stacks = (buff.stacks||1)+1;
     else enemy.statuses.push({name:'Fortalecido', duration:99, stacks:1, stack:true});
     log(`${enemy.name} se fortalece con cada turno que pasa.`);
+    combat.lastAction = {label:'Se fortalece', effects:[]};
     return;
   }
   if(move==='invocar'){
@@ -4090,6 +4181,7 @@ function enemyAct(enemy){
       combat.enemies.push(makeEnemy(SUMMON_TEMPLATE, state.dungeon.atFloor, state.dungeon.level));
     }
     if(toSummon>0) log(`${enemy.name} invoca ${toSummon>1?'dos criaturas menores':'una criatura menor'}.`);
+    combat.lastAction = {label:'Invoca', effects:[]};
     return;
   }
   // El ataque en área de verdad pega a todo el grupo (jugador + cada aliado
@@ -4105,15 +4197,18 @@ function enemyAct(enemy){
     dealDamageToPlayer(pDmg);
     applyStatus(null, corrosion, true);
     log(`${enemy.name} golpea a todo tu grupo por igual: ${pDmg} de daño a ti.`);
+    const areaEffects = [{targetKind:'player', amount:pDmg, kind:'dmg'}];
     livingAllies().forEach(ally=>{
       const aResVal = ((ally.res && ally.res.fisico)||0) - corrosionResPenalty(ally.statuses);
       const aDmg = Math.max(1, Math.round(dmg*(1-aResVal/100)));
       dealDamageToAlly(ally, aDmg);
       applyStatus(ally, corrosion, false);
       log(`${enemy.name} golpea a todo tu grupo por igual: ${aDmg} de daño a ${ally.name}.`);
+      areaEffects.push({targetKind:'ally', key:ally.id, amount:aDmg, kind:'dmg'});
       if(ally.hp<=0) log(`<b>${ally.name}</b> cae en combate y queda fuera de acción hasta que avances al siguiente nivel del laberinto.`);
     });
     log(`Una <b>Corrosión</b> se extiende sobre el grupo: -${CORROSION_RES_PENALTY} de resistencia física y curación reducida a la mitad durante 2 turnos.`);
+    combat.lastAction = {label:'Golpe en área', effects:areaEffects};
     return;
   }
 
@@ -4122,6 +4217,7 @@ function enemyAct(enemy){
   const fortalecido = hasStatus(enemy.statuses,'Fortalecido');
   if(fortalecido) dmg = Math.round(dmg * (1 + (fortalecido.stacks||1)*0.04));
   let text = 'ataca';
+  const moveLabel = MOVE_LABELS[move] || 'Ataque';
   // Los aliados ahora son "un personaje más": los mismos movimientos que
   // afligen al jugador afligen a quien esté en el frente, sea quien sea.
   const onPlayer = target.kind==='player';
@@ -4148,6 +4244,7 @@ function enemyAct(enemy){
     finalDmg = Math.max(1, Math.round(finalDmg));
     dealDamageToPlayer(finalDmg);
     log(`${enemy.name} ${text}: ${finalDmg} de daño.`);
+    combat.lastAction = {label:moveLabel, effects:[{targetKind:'player', amount:finalDmg, kind:'dmg'}]};
   } else {
     const ally = target.ally;
     let allyDmg = dmg*(1-(((ally.res && ally.res.fisico)||0) - corrosionResPenalty(ally.statuses))/100);
@@ -4156,6 +4253,7 @@ function enemyAct(enemy){
     dealDamageToAlly(ally, finalDmg);
     log(`${enemy.name} ${text} a ${ally.name}: ${finalDmg} de daño.`);
     if(ally.hp<=0) log(`<b>${ally.name}</b> cae en combate y queda fuera de acción hasta que avances al siguiente nivel del laberinto.`);
+    combat.lastAction = {label:moveLabel, effects:[{targetKind:'ally', key:ally.id, amount:finalDmg, kind:'dmg'}]};
   }
 
   // Vitalidad: devuelve un % del daño físico recibido a quien lo infligió
@@ -4337,6 +4435,13 @@ function handleVictory(){
     const clearedLevel = level;
     const wasFrontier = clearedLevel === maxLevelUnlocked();
     if(wasFrontier) state.char.maxLevelUnlocked = Math.min(LEVEL_CAP, clearedLevel+1);
+    // Checkpoints: solo los jefes de década (piso 10, 20, 30...) habilitan un
+    // punto de entrada nuevo, en el piso siguiente (11, 21, 31...). Si mueres
+    // en el 15, tu próxima entrada igual arranca en el 11 - no hay checkpoint
+    // a mitad de década, solo al cerrarla.
+    if(isDecadeFinal){
+      state.char.checkpointLevel = Math.max(state.char.checkpointLevel||1, clearedLevel+1);
+    }
     log(`Derrotas al guardián del nivel ${clearedLevel}.`);
 
     const canContinue = clearedLevel < LEVEL_CAP;
@@ -4383,13 +4488,17 @@ function handleVictory(){
   save();
 }
 
+// Antes se perdía la mitad del oro al caer - subido a un castigo más serio
+// (petición del 2026-09-14) para que la economía de aliados y el gasto en
+// pociones durante una corrida difícil pesen de verdad.
+const DEFEAT_GOLD_LOSS_PCT = 60;
 function handleDefeat(){
   stopBossAudio();
-  showOverlay('Caído en el laberinto', `Tu cuerpo cede y el laberinto te expulsa antes del final. Pierdes el equipo suelto que llevabas en la mochila y la mitad de tu oro. Lo que hayas guardado en el Hogar sigue a salvo.`, ()=>{
+  showOverlay('Caído en el laberinto', `Tu cuerpo cede y el laberinto te expulsa antes del final. Pierdes el equipo suelto que llevabas en la mochila y el ${DEFEAT_GOLD_LOSS_PCT}% de tu oro. Lo que hayas guardado en el Hogar sigue a salvo.`, ()=>{
     const lostItems = state.char.inventory.filter(i=>i.kind==='equip').length;
     const hadWard = hasWard();
     state.char.inventory = state.char.inventory.filter(i=>i.kind!=='equip' && i.kind!=='ward');
-    state.char.gold = Math.round(state.char.gold*0.5);
+    state.char.gold = Math.round(state.char.gold*(1-DEFEAT_GOLD_LOSS_PCT/100));
     const d = derived();
     state.char.curHP = Math.round(d.maxHP*0.5);
     state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi;
@@ -4502,6 +4611,7 @@ function closeTutorial(){
 async function guardedPlayerUseSkill(skillId, targetIdx){
   if(!combat || combat.turnBusy) return;
   combat.turnBusy = true;
+  combat.lastActor = null; combat.lastAction = null;
   try{ await playerUseSkill(skillId, targetIdx); }
   finally{
     // El último render real fue el de renderAll() al final de
@@ -4514,6 +4624,7 @@ async function guardedPlayerUseSkill(skillId, targetIdx){
 async function guardedUsePotionInCombat(potionId){
   if(!combat || combat.turnBusy) return;
   combat.turnBusy = true;
+  combat.lastActor = null; combat.lastAction = null;
   try{ await usePotionInCombat(potionId); }
   finally{
     if(combat){ combat.turnBusy = false; if(!combat.over) renderCombat(); }
@@ -4526,17 +4637,30 @@ function renderCombat(){
   const skillIds = s.skills.concat(state.char.level>=LEVEL_60_MILESTONE ? [ULTIMATE_BY_STYLE[s.id]] : []);
 
   const lastActor = combat.lastActor;
+  // Indicador de "quién hace qué": la Crónica queda muy abajo como para
+  // seguir el combate ahí, así que la acción del turno se repite encima de
+  // la tarjeta que actúa (burbuja con el nombre de la habilidad) y encima de
+  // cada objetivo que recibe algo (número flotante de daño o cura). Solo a
+  // velocidad x1 - a x2 no hay pausa entre pasos para llegar a leerlo.
+  const showActionFX = getCombatSpeed()===1;
+  const lastAction = showActionFX ? combat.lastAction : null;
+  const floatNumsFor = (targetKind, key)=> !lastAction ? '' : lastAction.effects
+    .filter(ef=> ef.targetKind===targetKind && ef.key===key)
+    .map(ef=> `<div class="float-num ${ef.kind}">${ef.kind==='heal'?'+':'-'}${ef.amount}</div>`).join('');
+  const actionCaptionHTML = (acting)=> acting && lastAction ? `<div class="action-caption">${lastAction.label}</div>` : '';
+
   const enemyHTML = combat.enemies.map((e,i)=>{
     const dead = e.hp<=0;
     const slotTag = i===0 ? 'Frente' : (i===1?'Medio':'Fondo');
     const statusChips = renderStatusChips(e.statuses);
     const hpPct = clamp(e.hp/e.maxHP*100,0,100);
     const canTargetAny = livingEnemies().length>0;
-    const acting = lastActor && lastActor.kind==='enemy' && lastActor.idx===i;
+    const acting = showActionFX && lastActor && lastActor.kind==='enemy' && lastActor.idx===i;
     return `<div class="enemy-card ${dead?'dead':''} ${!dead && canTargetAny?'targetable':''} ${acting?'acting':''}" data-idx="${i}">
-      <div class="ei">${e.icon}</div>
+      <div class="ei">${e.icon}${floatNumsFor('enemy', i)}</div>
       <div class="einfo">
         <div class="ename"><span>${e.name}</span><span class="slot-tag">${slotTag}</span></div>
+        ${actionCaptionHTML(acting)}
         <div class="bar-track" style="margin-top:4px;"><div class="bar-fill hp" style="width:${hpPct}%"></div></div>
         <div style="font-size:0.7em; color:var(--text-dim); margin-top:2px;">${e.hp}/${e.maxHP} HP</div>
         <div>${statusChips}</div>
@@ -4551,11 +4675,12 @@ function renderCombat(){
     const hostile = isAllyHostile(a.id);
     const hpPct = clamp(a.hp/a.maxHP*100, 0, 100);
     const statusChips = renderStatusChips(a.statuses);
-    const acting = lastActor && lastActor.kind==='ally' && lastActor.id===a.id;
+    const acting = showActionFX && lastActor && lastActor.kind==='ally' && lastActor.id===a.id;
     return `<div class="enemy-card ${dead?'dead':''} ${!dead && hostile?'targetable':''} ${acting?'acting':''}" ${!dead && hostile ? `data-ally-idx="${i}"` : ''}>
-      <div class="ei">${a.icon}</div>
+      <div class="ei">${a.icon}${floatNumsFor('ally', a.id)}</div>
       <div class="einfo">
         <div class="ename"><span>${a.name}</span><span class="slot-tag">${a.pos==='frente'?'Frente':'Retaguardia'}</span>${hostile ? '<span class="slot-tag" style="border-color:var(--blood-light); color:var(--blood-light);">¡Traidor!</span>' : ''}</div>
+        ${actionCaptionHTML(acting)}
         <div class="bar-track" style="margin-top:4px;"><div class="bar-fill hp" style="width:${hpPct}%"></div></div>
         <div style="font-size:0.7em; color:var(--text-dim); margin-top:2px;">${a.hp}/${a.maxHP} HP</div>
         <div>${statusChips}</div>
@@ -4626,7 +4751,7 @@ function renderCombat(){
         </div>
         <div class="pos-hint" style="font-size:0.7em; color:var(--text-dim); margin:2px 0 6px;">Frente: exige la mayoría de habilidades físicas de golpe. Retaguardia: +8% evasión y mejor para habilidades a distancia.</div>
         <div class="player-card">
-          <div class="pc-icon">${race().icon}</div>
+          <div class="pc-icon">${race().icon}${floatNumsFor('player', undefined)}</div>
           <div style="margin-top:6px; font-size:0.85em;">${state.char.curHP} / ${d.maxHP} HP</div>
           <div style="margin-top:3px; font-size:0.75em; color:var(--text-dim);">${state.char.curSta} / ${d.maxSta} MP · ${state.char.curSpi} / ${d.maxSpi} Espíritu</div>
           <div style="margin-top:2px; font-size:0.7em; color:var(--text-dim);">${state.char.level>=CHAR_LEVEL_CAP ? 'Nivel máximo' : `Nivel ${state.char.level} · ${state.char.xp}/${xpNeededForLevel(state.char.level)} XP`}</div>
@@ -4751,6 +4876,7 @@ document.getElementById('btn-begin').onclick = async ()=>{
     }
     const row = await createCharacterOnServer(selRace, selStyle, nickname);
     state = rowToState(row);
+    grantStarterKit();
     const d = derived();
     state.char.curHP = d.maxHP; state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi;
     log(`Despiertas como ${RACES[selRace].name.toLowerCase()}, senda del ${STYLES[selStyle].name.toLowerCase()}. Dungeon & Stone comienza.`);
