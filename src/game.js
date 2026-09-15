@@ -54,7 +54,7 @@ const RACES = {
 
 const STYLES = {
   pesada: {
-    id:'pesada', name:'Arma pesada', icon:'🔨', scaleStat:'fis',
+    id:'pesada', name:'Guerrero', icon:'🔨', scaleStat:'fis',
     desc:'Mazos y hachas. Rompe la guardia y remata al aturdido.',
     skills:['golpe_bruto','machacar','grito_guerra']
   },
@@ -183,7 +183,7 @@ const SKILLS = {
     desc:'Ignora 50% de la resistencia física. Menos preciso desde el Frente.', targetMode:'any'
   },
   marca_cazador: {
-    id:'marca_cazador', name:'Marca del cazador', cost:{tipo:'espiritu', valor:8}, utility:'mark',
+    id:'marca_cazador', name:'Marca del cazador', cost:{tipo:'espiritu', valor:20}, utility:'mark',
     applies:{name:'Marcado', chance:1, duration:3},
     desc: ()=> `No hace daño. El objetivo recibe +20% de todo el daño durante ${skillBonus('marca_cazador','duration',3)} turnos.`,
     targetMode:'any'
