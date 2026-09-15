@@ -1469,7 +1469,19 @@ function derived(){
   const precision = clamp(equipModsSum(eq, 'precision')/100 + state.char.level*PRECISION_PER_LEVEL, 0, 0.9);
   const penetracionNivel = state.char.level*PENETRACION_PER_LEVEL;
   const critChance = clamp(0.05 + hab*0.006 + (race().id==='bestia'?0.15:0), 0, 0.6);
-  let evasionBase = 0.04 + hab*0.005 + (race().id==='hada'?0.15:0);
+  // Esquivar: viene de Habilidad, pero solo la parte "natural" (raza + nivel)
+  // pesa completo — la que aporta EQUIPO pesa la mitad (2026-09-16, pedido
+  // explícito). El Asesino es la única senda cuya arma1+arma2+guantes vierten
+  // TODO su bono en Habilidad (ver GEAR_CLASS_STAT/WEAPON_CATALOG.doblefilo),
+  // así que sin este freno llegaba a 40-60% de esquivar ya en nivel 10-20 con
+  // buen equipo — se quiere que ese techo se sienta recién por los niveles
+  // 35-40, sin perder la esencia de "el Asesino esquiva mucho porque invierte
+  // en Habilidad". Las demás sendas casi no cambian: su equipo no alimenta
+  // Habilidad, así que su evasión ya era casi toda "natural".
+  const habNatural = race().stats.hab + Math.floor((state.char.level-1)*1);
+  const habGear = Math.max(0, hab - habNatural);
+  const EVASION_GEAR_HAB_WEIGHT = 0.5;
+  let evasionBase = 0.04 + habNatural*0.005 + habGear*0.005*EVASION_GEAR_HAB_WEIGHT + (race().id==='hada'?0.15:0);
   socketedStones().forEach(s=>{
     if(s.special && s.special.type==='evasion_flat') evasionBase += s.special.value;
   });
