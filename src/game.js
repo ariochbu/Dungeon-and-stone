@@ -371,21 +371,6 @@ const RARITIES = {
   legendario: {id:'legendario', name:'Legendario', color:'#d1594f'}, // mismo color que SOUL_TIER_COLORS.S
   ss: {id:'ss', name:'SS', color:'#e23c6b'} // mismo color que SOUL_TIER_COLORS.SS
 };
-const RANGO_B_RES_PCT = 20;
-const RANGO_A_RES_PCT = 28;
-const LEGENDARIO_RES_PCT = 34;
-const SS_RES_PCT = 40;
-
-// Valores planos por rareza: todo objeto de una misma rareza da el mismo
-// bono de resistencia, sin importar en qué piso/nivel se consiguió. (Las
-// armas ya no usan un bono plano por rareza — cada nombre tiene el suyo,
-// ver WEAPON_CATALOG.)
-const COMUN_RES_PCT = 5;
-const POCO_COMUN_RES_PCT = 12;
-// Raro (C): un escalón entre Poco Común y Único (B) — levemente por encima
-// del primero, levemente por debajo del segundo, como se pidió.
-const RARO_RES_PCT = 16;
-
 // ============================================================
 // CATÁLOGO DE ARMAS — recalibración 2026-09-15 (pedido explícito de
 // ariochbu). Cada arma con NOMBRE PROPIO tiene su propio valor y sus
@@ -579,6 +564,143 @@ function makeWeaponItem(slot, styleId, rank, name){
   return item;
 }
 
+// ============================================================
+// CATÁLOGO DE EQUIPO GENERAL — recalibración 2026-09-16 (pedido explícito).
+// Igual que las armas: cada senda tiene su propio nombre por rango para
+// casco/armadura/botas/guantes/amuleto ("Accesorio" en pantalla — el slot
+// interno sigue llamándose 'amuleto', ver slotLabel(), mismo criterio que el
+// renombre Arma pesada -> Guerrero: solo cambia la etiqueta, no la clave).
+// Los NÚMEROS de casco/armadura/botas/amuleto son los mismos para las 5
+// sendas (solo el nombre cambia); guantes es la única pieza que de verdad
+// varía en stat: Físico para Guerrero/Arquero (pesada/tirador), Habilidad
+// para Asesino/Mago/Sacerdote (doblefilo/mago/sacerdote).
+// ============================================================
+const GEAR_RANK_ORDER = ['comun','poco_comun','raro','rango_b','rango_a'];
+const GEAR_NAMES = {
+  pesada: {
+    casco:['Casco de piedra','Casco de bronce','Casco de plata','Casco de oro','Casco de platino'],
+    armadura:['Placa de piedra','Placa de bronce','Placa de plata','Placa de oro','Placa de platino'],
+    botas:['Grevas de piedra','Grevas de bronce','Grevas de plata','Grevas de oro','Grevas de platino'],
+    guantes:['Manoplas de piedra','Manoplas de bronce','Manoplas de plata','Manoplas de oro','Manoplas de platino'],
+    amuleto:['Talismán roto','Talismán','Talismán imbuido con magia','Talismán de sangre','Talismán despertado'],
+  },
+  doblefilo: {
+    casco:['Máscara de piedra','Máscara de bronce','Máscara de plata','Máscara de oro','Máscara de platino'],
+    armadura:['Manto de piedra','Manto de bronce','Manto de plata','Manto de oro','Manto de platino'],
+    botas:['Zapatillas de piedra','Zapatillas de bronce','Zapatillas de plata','Zapatillas de oro','Zapatillas de platino'],
+    guantes:['Zarpas de piedra','Zarpas de bronce','Zarpas de plata','Zarpas de oro','Zarpas de platino'],
+    amuleto:['Anillo roto','Anillo','Anillo imbuido con magia','Anillo de sangre','Anillo despertado'],
+  },
+  tirador: {
+    casco:['Capucha de piedra','Capucha de bronce','Capucha de plata','Capucha de oro','Capucha de platino'],
+    armadura:['Cota de piedra','Cota de bronce','Cota de plata','Cota de oro','Cota de platino'],
+    botas:['Botas de piedra','Botas de bronce','Botas de plata','Botas de oro','Botas de platino'],
+    guantes:['Guantes de piedra','Guantes de bronce','Guantes de plata','Guantes de oro','Guantes de platino'],
+    amuleto:['Amuleto roto','Amuleto','Amuleto imbuido con magia','Amuleto de sangre','Amuleto despertado'],
+  },
+  mago: {
+    casco:['Diadema de piedra','Diadema de bronce','Diadema de plata','Diadema de oro','Diadema de platino'],
+    armadura:['Túnica de piedra','Túnica de bronce','Túnica de plata','Túnica de oro','Túnica de platino'],
+    botas:['Sandalias de piedra','Sandalias de bronce','Sandalias de plata','Sandalias de oro','Sandalias de platino'],
+    guantes:['Mitones de piedra','Mitones de bronce','Mitones de plata','Mitones de oro','Mitones de platino'],
+    amuleto:['Libro roto','Libro','Libro imbuido con magia','Libro de sangre','Libro despertado'],
+  },
+  // Sacerdote comparte los números de Mago (ambos escalan Habilidad) pero
+  // con nombres propios — evité repetir "Libro" en el amuleto para que no
+  // compita en nombre con el del Mago; le puse "Reliquia" en su lugar.
+  sacerdote: {
+    casco:['Corona de piedra','Corona de bronce','Corona de plata','Corona de oro','Corona de platino'],
+    armadura:['Sotana de piedra','Sotana de bronce','Sotana de plata','Sotana de oro','Sotana de platino'],
+    botas:['Alpargatas de piedra','Alpargatas de bronce','Alpargatas de plata','Alpargatas de oro','Alpargatas de platino'],
+    guantes:['Vendas de piedra','Vendas de bronce','Vendas de plata','Vendas de oro','Vendas de platino'],
+    amuleto:['Reliquia rota','Reliquia','Reliquia imbuida con fe','Reliquia de sangre','Reliquia despertada'],
+  },
+};
+// Casco: vida máxima (flat, SIN el ×8 que sí aplica al viejo bonus.stat==
+// 'maxhp' de Armadura — ver item.mods en derived()) + Precisión (nueva:
+// contrarresta la evasión enemiga) + a rango A, aumento de daño.
+const CASCO_TIERS = [
+  {rank:'comun', mods:{maxhp_flat:15}},
+  {rank:'poco_comun', mods:{maxhp_flat:20, precision:5}},
+  {rank:'raro', mods:{maxhp_flat:25, precision:10}},
+  {rank:'rango_b', mods:{maxhp_flat:30, precision:15}},
+  {rank:'rango_a', mods:{maxhp_flat:35, precision:20}, specials:[{type:'aumento_dano', value:0.05, text:'de aumento de daño'}]},
+];
+// Armadura: resistencia física de siempre (mismo canal que raza/amuleto,
+// dmgType 'fisico') + % de reducción de daño recibido + a rango A, bloqueo.
+const ARMADURA_TIERS = [
+  {rank:'comun', bonus:{res:'fisico', value:10}},
+  {rank:'poco_comun', bonus:{res:'fisico', value:15}, specials:[{type:'reduccion_dano', value:0.05, text:'de reducción de daño recibido'}]},
+  {rank:'raro', bonus:{res:'fisico', value:20}, specials:[{type:'reduccion_dano', value:0.08, text:'de reducción de daño recibido'}]},
+  {rank:'rango_b', bonus:{res:'fisico', value:25}, specials:[{type:'reduccion_dano', value:0.12, text:'de reducción de daño recibido'}]},
+  {rank:'rango_a', bonus:{res:'fisico', value:30}, specials:[{type:'reduccion_dano', value:0.12, text:'de reducción de daño recibido'},{type:'bloqueo', chance:0.05, text:'de bloquear ataque'}]},
+];
+// Botas: Resistencia mágica (canal nuevo, ver derived().resMagica — listo
+// para cuando el bestiario tenga ataques elementales propios, todavía casi
+// ningún enemigo pega distinto de físico) + resistencia a efectos de estado
+// "físicos" (Sangrado/Debilitado/Parálisis/Ceguera/Ralentizado/Tambaleo -
+// Miedo/Confusión son alteraciones MENTALES, esas las cubre el amuleto) + a
+// rango A, evasión.
+const BOTAS_TIERS = [
+  {rank:'comun', mods:{res_magica:10}},
+  {rank:'poco_comun', mods:{res_magica:15, resistencia_estado:5}},
+  {rank:'raro', mods:{res_magica:20, resistencia_estado:8}},
+  {rank:'rango_b', mods:{res_magica:25, resistencia_estado:12}},
+  {rank:'rango_a', mods:{res_magica:30, resistencia_estado:12}, specials:[{type:'evasion_flat', value:0.05, text:'de evasión'}]},
+];
+// Amuleto/Accesorio: % Fortaleza mental (resiste Miedo/Confusión
+// específicamente) + MP plano + a rango A, Espíritu plano también.
+const AMULETO_TIERS = [
+  {rank:'comun', mods:{fortaleza_mental:5}},
+  {rank:'poco_comun', mods:{fortaleza_mental:8, mp_flat:5}},
+  {rank:'raro', mods:{fortaleza_mental:12, mp_flat:10}},
+  {rank:'rango_b', mods:{fortaleza_mental:15, mp_flat:15}},
+  {rank:'rango_a', mods:{fortaleza_mental:18, mp_flat:15, espiritu_flat:5}},
+];
+// Guantes: la única pieza donde el stat de verdad cambia por senda. A rango
+// A penetra la defensa contraria a su propio daño — física para
+// Guerrero/Arquero, mágica para Asesino/Mago/Sacerdote (reusa
+// 'penetracion_armadura' de las armas; 'penetracion_magica' es nuevo).
+function guantesTiers(stat, penType, penText){
+  return [
+    {rank:'comun', bonus:{stat, value:5}},
+    {rank:'poco_comun', bonus:{stat, value:8}, specials:[{type:'aumento_dano', value:0.05, text:'de aumento de daño'}]},
+    {rank:'raro', bonus:{stat, value:12}, specials:[{type:'aumento_dano', value:0.08, text:'de aumento de daño'}]},
+    {rank:'rango_b', bonus:{stat, value:16}, specials:[{type:'aumento_dano', value:0.12, text:'de aumento de daño'}]},
+    {rank:'rango_a', bonus:{stat, value:20}, specials:[{type:'aumento_dano', value:0.12, text:'de aumento de daño'},{type:penType, value:0.05, text:penText}]},
+  ];
+}
+const GEAR_CLASS_STAT = {pesada:'fis', tirador:'fis', doblefilo:'hab', mago:'hab', sacerdote:'hab'};
+const GEAR_PENETRATION = {
+  pesada:['penetracion_armadura','de penetración de armadura física'],
+  tirador:['penetracion_armadura','de penetración de armadura física'],
+  doblefilo:['penetracion_magica','de penetración de resistencia mágica'],
+  mago:['penetracion_magica','de penetración de resistencia mágica'],
+  sacerdote:['penetracion_magica','de penetración de resistencia mágica'],
+};
+const GEAR_CATALOG = {};
+Object.keys(GEAR_NAMES).forEach(cls=>{
+  const [penType, penText] = GEAR_PENETRATION[cls];
+  GEAR_CATALOG[cls] = {
+    casco: CASCO_TIERS, armadura: ARMADURA_TIERS, botas: BOTAS_TIERS, amuleto: AMULETO_TIERS,
+    guantes: guantesTiers(GEAR_CLASS_STAT[cls], penType, penText),
+  };
+});
+function makeGearItem(slot, styleId, rank){
+  const tiers = GEAR_CATALOG[styleId] && GEAR_CATALOG[styleId][slot];
+  if(!tiers) return null;
+  const idx = GEAR_RANK_ORDER.indexOf(rank);
+  const tier = tiers[idx];
+  if(idx<0 || !tier) return null;
+  const names = GEAR_NAMES[styleId] && GEAR_NAMES[styleId][slot];
+  const name = (names && names[idx]) || slotLabel(slot);
+  const item = {kind:'equip', slot, name, rarity:rank, styleId};
+  if(tier.bonus) item.bonus = Object.assign({}, tier.bonus);
+  if(tier.mods) item.mods = Object.assign({}, tier.mods);
+  if(tier.specials && tier.specials.length) item.specials = tier.specials.map(s=>Object.assign({}, s));
+  return item;
+}
+
 function shopWeaponPrice(isOffhand){ return isOffhand ? 40 + state.char.level*4 : 55 + state.char.level*6; }
 const SHOP_POTION_PRICES = {vida_menor:12, vida_mayor:30, estamina:12, espiritu:12, antidoto:22};
 
@@ -626,30 +748,30 @@ function buyWeapon(slot, styleId, name){
   renderAll(); save();
 }
 
-// equipo común no ligado a la senda de combate: armadura, casco, botas,
-// guantes y amuleto. Cada uno da un único bono plano, igual que las armas.
+// equipo común no ligado al arma: armadura, casco, botas, guantes y
+// amuleto ("Accesorio" en pantalla). Ahora cada senda tiene su propio
+// nombre y (para guantes) su propio stat — ver GEAR_CATALOG. El precio en
+// oro sigue siendo el mismo para las 5, solo el nombre/stat cambia.
 const SHOP_GEAR_SLOTS = ['armadura','casco','botas','guantes','amuleto'];
 function shopGearPrice(slot){ return slot==='armadura' ? 45 + state.char.level*4 : 35 + state.char.level*3; }
-function shopGearValue(slot){ return slot==='armadura' ? 2 + Math.floor(state.char.level/2) : 2 + Math.floor(state.char.level/3); }
 function buyGear(slot){
+  const cls = shopWeaponRole || state.char.style;
   const price = shopGearPrice(slot);
   if(state.char.gold < price){ log('No tienes suficiente oro para eso.'); return; }
+  const item = makeGearItem(slot, cls, 'comun');
+  if(!item) return;
   state.char.gold -= price;
-  const name = pick(COMUN_GEAR_NAMES[slot]);
-  const bonus = slot==='amuleto'
-    ? {res: pick(['fisico','fuego','hielo','veneno','aturdimiento']), value: COMUN_RES_PCT}
-    : {stat: GUARDIAN_SLOT_STAT[slot] || 'maxhp', value: shopGearValue(slot)};
-  addToInventory({slot, name, bonus, rarity:'comun'});
-  log(`Compras <b>${name}</b> por ${price} de oro.`);
+  addToInventory(item);
+  log(`Compras <b>${item.name}</b> por ${price} de oro.`);
   renderAll(); save();
 }
 
 // Kit inicial (petición del 2026-09-14): antes un personaje nuevo arrancaba
 // desnudo con 20 de oro y tenía que ganar su primera arma jugando. Ahora
 // arranca ya equipado con un set común completo (mismo generador que la
-// tienda, a valores de nivel 1) más un fondo de pociones básico, para no
-// perder la primera media hora sin poder pelear en serio. Se llama una sola
-// vez, justo después de create_character, con state.char.level todavía en 1.
+// tienda) más un fondo de pociones básico, para no perder la primera media
+// hora sin poder pelear en serio. Se llama una sola vez, justo después de
+// create_character, con state.char.level todavía en 1.
 const STARTER_GOLD = 200;
 const STARTER_POTIONS = {vida_mayor:5, vida_menor:10, estamina:5, espiritu:5};
 function grantStarterKit(){
@@ -659,10 +781,7 @@ function grantStarterKit(){
   state.char.equip.arma = makeWeaponItem('arma', styleId, 'comun');
   if(cat.arma2) state.char.equip.arma2 = makeWeaponItem('arma2', styleId, 'comun');
   SHOP_GEAR_SLOTS.forEach(slot=>{
-    const bonus = slot==='amuleto'
-      ? {res: pick(['fisico','fuego','hielo','veneno','aturdimiento']), value: COMUN_RES_PCT}
-      : {stat: GUARDIAN_SLOT_STAT[slot] || 'maxhp', value: shopGearValue(slot)};
-    state.char.equip[slot] = {kind:'equip', slot, name: pick(COMUN_GEAR_NAMES[slot]), bonus, rarity:'comun'};
+    state.char.equip[slot] = makeGearItem(slot, styleId, 'comun');
   });
   Object.entries(STARTER_POTIONS).forEach(([potionId, qty])=>{
     state.char.inventory.push({kind:'potion', potionId, qty});
@@ -672,34 +791,30 @@ function grantStarterKit(){
 // Equipo poco común, también con oro (no Sellos) — un escalón intermedio
 // entre lo común de siempre y la tienda de Sellos del Gremio.
 function shopGearPricePocoComun(slot){ return Math.round(shopGearPrice(slot) * 2.2); }
-function shopGearValuePocoComun(slot){ return slot==='armadura' ? 4 + Math.floor(state.char.level/2) : 4 + Math.floor(state.char.level/3); }
 function buyGearPocoComun(slot){
+  const cls = shopWeaponRole || state.char.style;
   const price = shopGearPricePocoComun(slot);
   if(state.char.gold < price){ log('No tienes suficiente oro para eso.'); return; }
+  const item = makeGearItem(slot, cls, 'poco_comun');
+  if(!item) return;
   state.char.gold -= price;
-  const name = pick(COMUN_GEAR_NAMES[slot]);
-  const bonus = slot==='amuleto'
-    ? {res: pick(['fisico','fuego','hielo','veneno','aturdimiento']), value: POCO_COMUN_RES_PCT}
-    : {stat: GUARDIAN_SLOT_STAT[slot] || 'maxhp', value: shopGearValuePocoComun(slot)};
-  addToInventory({slot, name, bonus, rarity:'poco_comun'});
-  log(`Compras <b>${name}</b> por ${price} de oro.`);
+  addToInventory(item);
+  log(`Compras <b>${item.name}</b> por ${price} de oro.`);
   renderAll(); save();
 }
 
 // Raro (C): un escalón por encima de Poco Común, todavía con oro — el techo
 // del oro antes de tener que pasar a Sellos del Gremio por Único/Épico.
 function shopGearPriceRaro(slot){ return Math.round(shopGearPrice(slot) * 3.4); }
-function shopGearValueRaro(slot){ return slot==='armadura' ? 6 + Math.floor(state.char.level/2) : 6 + Math.floor(state.char.level/3); }
 function buyGearRaro(slot){
+  const cls = shopWeaponRole || state.char.style;
   const price = shopGearPriceRaro(slot);
   if(state.char.gold < price){ log('No tienes suficiente oro para eso.'); return; }
+  const item = makeGearItem(slot, cls, 'raro');
+  if(!item) return;
   state.char.gold -= price;
-  const name = pick(COMUN_GEAR_NAMES[slot]);
-  const bonus = slot==='amuleto'
-    ? {res: pick(['fisico','fuego','hielo','veneno','aturdimiento']), value: RARO_RES_PCT}
-    : {stat: GUARDIAN_SLOT_STAT[slot] || 'maxhp', value: shopGearValueRaro(slot)};
-  addToInventory({slot, name, bonus, rarity:'raro'});
-  log(`Compras <b>${name}</b> por ${price} de oro.`);
+  addToInventory(item);
+  log(`Compras <b>${item.name}</b> por ${price} de oro.`);
   renderAll(); save();
 }
 // Arma Raro (C): mismo trato que la de senda común, pero con más bono de daño.
@@ -722,27 +837,21 @@ function buyWeaponRaro(slot, styleId, name){
 const SELLO_SHOP_SLOTS = ['arma','armadura','casco','botas','guantes','amuleto'];
 function selloShopPrice(rarity){ return rarity==='rango_a' ? 700 : 350; }
 function makeSelloShopItem(slot, rarity, styleId, name){
-  const resPct = rarity==='rango_a' ? RANGO_A_RES_PCT : RANGO_B_RES_PCT;
-  const tag = rarity==='rango_a' ? 'épico' : 'único';
   styleId = styleId || state.char.style;
   if(slot==='arma'){
+    // Las armas no cambian de nombre por rango (siguen siendo "Martillo de
+    // guerra" en cualquier rango) — acá sí hace falta el sufijo para marcar
+    // que es la versión Único/Épico comprada con Sellos.
+    const tag = rarity==='rango_a' ? 'épico' : 'único';
     const item = makeWeaponItem('arma', styleId, rarity, name);
     if(!item) return null;
     item.name = `${item.name} ${tag} del Gremio`;
     return item;
   }
-  let itemName, bonus;
-  if(slot==='armadura'){
-    itemName = `Placa ${tag} del Gremio`;
-    bonus = {stat:'maxhp', value: (rarity==='rango_a' ? 10 : 6) + Math.floor(state.char.level/2)};
-  } else if(slot==='amuleto'){
-    itemName = `Reliquia ${tag} del Gremio`;
-    bonus = {res: pick(['fisico','fuego','hielo','veneno','aturdimiento']), value: resPct};
-  } else {
-    itemName = `${slotLabel(slot)} ${tag} del Gremio`;
-    bonus = {stat: GUARDIAN_SLOT_STAT[slot], value: (rarity==='rango_a' ? 8 : 5) + Math.floor(state.char.level/3)};
-  }
-  return {slot, name:itemName, bonus, rarity};
+  // El equipo general SÍ cambia de nombre por rango (de piedra/bronce/
+  // plata/oro/platino, ver GEAR_NAMES) — ese nombre ya deja claro el rango,
+  // no hace falta un sufijo "del Gremio" encima.
+  return makeGearItem(slot, styleId, rarity);
 }
 function buySelloGear(slot, rarity, name){
   const price = selloShopPrice(rarity);
@@ -773,15 +882,13 @@ const AUTO_GEAR_LEVEL = {raro:10, rango_b:20}; // rango_a no depende del nivel, 
 // (ver el tag de makeSelloShopItem), así que la progresión automática usa
 // la misma etiqueta para no decir una cosa distinta al resto de la tienda.
 const AUTO_GEAR_TIER_LABEL = {raro:'Raro', rango_b:'Único', rango_a:'Épico'};
+// Siempre 'sacerdote' explícito — antes de que el equipo general tuviera
+// styleId esto daba igual (cualquier nombre/stat servía para cualquier
+// senda), pero ahora que SÍ está restringido por senda, dejar que
+// makeSelloShopItem() caiga a state.char.style por defecto le pondría al
+// aliado equipo con el nombre/stat de la senda del JUGADOR, no la suya.
 function makeAutoGearItem(slot, rarity){
-  if(rarity==='raro'){
-    const name = pick(COMUN_GEAR_NAMES[slot]);
-    const bonus = slot==='amuleto'
-      ? {res: pick(['fisico','fuego','hielo','veneno','aturdimiento']), value: RARO_RES_PCT}
-      : {stat: GUARDIAN_SLOT_STAT[slot] || 'maxhp', value: shopGearValueRaro(slot)};
-    return {kind:'equip', slot, name, bonus, rarity:'raro'};
-  }
-  return makeSelloShopItem(slot, rarity); // rango_b/rango_a — sin styleId, no es un arma
+  return makeGearItem(slot, 'sacerdote', rarity);
 }
 async function saveAllyAutoGear(row){
   const { error } = await supabase.from('character_allies').update({
@@ -855,7 +962,12 @@ function itemSellValue(item){
     if(item.bonus.stat) bonusValue = item.bonus.value*4;
     else if(item.bonus.res) bonusValue = item.bonus.value*1.5;
   }
-  const specialBonus = item.special ? 15 : 0;
+  // item.mods: estadísticas del equipo general nuevas (maxhp_flat, precision,
+  // res_magica, resistencia_estado, fortaleza_mental, mp_flat, espiritu_flat
+  // — ver GEAR_CATALOG), cada una suma algo de valor aunque no pasen por bonus.
+  Object.values(item.mods||{}).forEach(v=> bonusValue += v*1.5);
+  const specialsCount = (item.specials||(item.special?[item.special]:[])).length;
+  const specialBonus = specialsCount * 15;
   return Math.round((rarityBase + bonusValue + specialBonus) * 0.5);
 }
 function sellEquipOrStone(uid){
@@ -1251,7 +1363,7 @@ function style(){ return STYLES[state.char.style]; }
 const EQUIP_SLOTS = ['arma','arma2','armadura','amuleto','casco','botas','guantes'];
 function slotLabel(slot){
   if(slot==='arma2') return OFFHAND_LABELS[state.char.style] || 'Arma 2';
-  return {arma:'Arma', armadura:'Armadura', amuleto:'Amuleto', casco:'Casco', botas:'Botas', guantes:'Guantes'}[slot] || slot;
+  return {arma:'Arma', armadura:'Armadura', amuleto:'Accesorio', casco:'Casco', botas:'Botas', guantes:'Guantes'}[slot] || slot;
 }
 
 function baseStat(key){
@@ -1293,12 +1405,28 @@ function derived(){
     if(s.bonus && s.bonus.stat === 'maxhp') maxHP += s.bonus.value*8;
     if(s.bonus && s.bonus.stat === 'maxsta') maxSta += s.bonus.value; // Sabiduría: valor directo, sin escalar
   });
+  // Equipo general (recalibración 2026-09-16): casco/botas/accesorio dan
+  // estadísticas nuevas que no encajan en el molde bonus.stat/bonus.res de
+  // siempre (una sola pareja clave/valor por objeto) — viven en item.mods,
+  // un diccionario libre {clave: valor} que se suma acá. maxhp_flat (Casco)
+  // es HP real, sin el ×8 que sí aplica al viejo bonus.stat==='maxhp' de
+  // Armadura.
+  maxHP += equipModsSum(eq, 'maxhp_flat');
+  maxSta += equipModsSum(eq, 'mp_flat');
+  maxSpi += equipModsSum(eq, 'espiritu_flat');
+  const resMagica = clamp(equipModsSum(eq, 'res_magica'), -60, 80);
+  const fortalezaMental = clamp(equipModsSum(eq, 'fortaleza_mental')/100, 0, 0.9);
+  const resistenciaEstado = clamp(equipModsSum(eq, 'resistencia_estado')/100, 0, 0.9);
+  const precision = clamp(equipModsSum(eq, 'precision')/100, 0, 0.9);
   const critChance = clamp(0.05 + hab*0.006 + (race().id==='bestia'?0.15:0), 0, 0.6);
   let evasionBase = 0.04 + hab*0.005 + (race().id==='hada'?0.15:0);
   socketedStones().forEach(s=>{
     if(s.special && s.special.type==='evasion_flat') evasionBase += s.special.value;
   });
-  return {fis,esp,hab,maxHP,maxSta,maxSpi,critChance,evasionBase};
+  specialsFromEquip(eq).forEach(sp=>{
+    if(sp.type==='evasion_flat') evasionBase += sp.value;
+  });
+  return {fis,esp,hab,maxHP,maxSta,maxSpi,critChance,evasionBase,resMagica,fortalezaMental,resistenciaEstado,precision};
 }
 
 function scaleStatValue(){
@@ -1818,6 +1946,11 @@ function specialDisplayText(sp){
 // Descripción de un objeto: pedido explícito de que sea ÚNICAMENTE lo que
 // describimos por rareza — "+19 de habilidad, 15% de aplicar sangrado 2
 // turnos." — sin adornos genéricos como "daño puro" ni texto de relleno.
+// item.mods: estadísticas del equipo general que no encajan en el molde
+// bonus.stat/bonus.res de siempre (ver GEAR_CATALOG) — cada objeto puede
+// traer varias a la vez (ej. Casco: maxhp_flat + precision juntos).
+const MOD_LABELS = {maxhp_flat:'Vida máxima', precision:'Precisión', res_magica:'Resistencia mágica', resistencia_estado:'Resistencia a efectos de estado', fortaleza_mental:'Fortaleza mental', mp_flat:'MP', espiritu_flat:'Espíritu'};
+const MOD_IS_PERCENT = new Set(['precision','resistencia_estado','fortaleza_mental']);
 function itemBonusText(item){
   const parts = [];
   if(item.bonus && item.bonus.value!==0){
@@ -1825,16 +1958,20 @@ function itemBonusText(item){
       ? `+${item.bonus.value} ${STAT_LABELS[item.bonus.stat] || item.bonus.stat}`
       : `+${item.bonus.value}% Resistencia a ${RES_LABELS[item.bonus.res] || item.bonus.res}`);
   }
+  Object.entries(item.mods||{}).forEach(([key,value])=>{
+    if(!value) return;
+    parts.push(`+${value}${MOD_IS_PERCENT.has(key)?'%':''} ${MOD_LABELS[key]||key}`);
+  });
   const specials = item.specials || (item.special ? [item.special] : []);
   specials.forEach(sp=> parts.push(specialDisplayText(sp)));
   return parts.join(', ') + (parts.length ? '.' : '');
 }
 function itemNameHTML(it){
   const r = RARITIES[it.rarity||'comun'];
-  // Las armas compradas para un rol específico (Guerrero/Arquero/Asesino/
-  // Mago/Sacerdote) llevan su etiqueta aquí, visible en todas partes donde
-  // se lista el objeto — el equipo de combate/cofres nunca tiene styleId,
-  // así que sigue sin ninguna etiqueta (es universal, como siempre).
+  // Las armas y el equipo general comprados/generados para una senda
+  // específica (Guerrero/Asesino/Arquero/Mago/Sacerdote) llevan su
+  // etiqueta aquí — el equipo de botín/cofres sí puede venir sin styleId
+  // en casos viejos, en cuyo caso no se muestra ninguna etiqueta.
   const roleTag = it.styleId ? ` <span class="slot-tag" style="border-color:var(--bronze); color:var(--bronze-light);">${SHOP_ROLE_LABELS[it.styleId]||it.styleId}</span>` : '';
   return `<b style="color:${r.color};">${it.name}</b> <span class="slot-tag" style="border-color:${r.color}; color:${r.color};">${r.name}</span>${roleTag}`;
 }
@@ -2943,47 +3080,24 @@ function renderShop(){
   const weaponRaroHTML = weaponShopRows('arma', 'raro', raroTag, 'buy-weapon-raro', shopWeaponPriceRaro(false))
     + weaponShopRows('arma2', 'raro', raroTag, 'buy-weapon-raro', shopWeaponPriceRaro(true));
 
-  const gearHTML = SHOP_GEAR_SLOTS.map(slot=>{
-    const price = shopGearPrice(slot);
-    const bonusText = slot==='amuleto'
-      ? `+${COMUN_RES_PCT}% a una resistencia al azar`
-      : `+${shopGearValue(slot)} ${STAT_LABELS[GUARDIAN_SLOT_STAT[slot] || 'maxhp'] || ''}`;
+  const gearShopRow = (slot, rank, rankTag, dataAttr, price)=>{
+    const preview = makeGearItem(slot, styleId, rank);
+    if(!preview) return '';
     return `<div class="inv-item-row">
       <div>
-        <b>${slotLabel(slot)}</b>
-        <div class="inv-item-bonus">${bonusText} · sin otras características</div>
+        <b>${preview.name}</b>${rankTag}
+        <div class="inv-item-bonus">${itemBonusText(preview)}</div>
       </div>
-      <button class="inv-btn" data-buy-gear="${slot}" ${state.char.gold<price?'disabled':''}>Comprar (${price} oro)</button>
+      <button class="inv-btn" data-${dataAttr}="${slot}" ${state.char.gold<price?'disabled':''}>Comprar (${price} oro)</button>
     </div>`;
-  }).join('');
+  };
+  const gearHTML = SHOP_GEAR_SLOTS.map(slot=> gearShopRow(slot, 'comun', '', 'buy-gear', shopGearPrice(slot))).join('');
 
-  const pocoComunHTML = SHOP_GEAR_SLOTS.map(slot=>{
-    const price = shopGearPricePocoComun(slot);
-    const bonusText = slot==='amuleto'
-      ? `+${POCO_COMUN_RES_PCT}% a una resistencia al azar`
-      : `+${shopGearValuePocoComun(slot)} ${STAT_LABELS[GUARDIAN_SLOT_STAT[slot] || 'maxhp'] || ''}`;
-    return `<div class="inv-item-row">
-      <div>
-        <b>${slotLabel(slot)}</b> <span class="slot-tag" style="border-color:${RARITIES.poco_comun.color}; color:${RARITIES.poco_comun.color};">Poco común</span>
-        <div class="inv-item-bonus">${bonusText}</div>
-      </div>
-      <button class="inv-btn" data-buy-gear-poco="${slot}" ${state.char.gold<price?'disabled':''}>Comprar (${price} oro)</button>
-    </div>`;
-  }).join('');
+  const pocoComunTag = ` <span class="slot-tag" style="border-color:${RARITIES.poco_comun.color}; color:${RARITIES.poco_comun.color};">Poco común</span>`;
+  const pocoComunHTML = SHOP_GEAR_SLOTS.map(slot=> gearShopRow(slot, 'poco_comun', pocoComunTag, 'buy-gear-poco', shopGearPricePocoComun(slot))).join('');
 
-  const raroHTML = SHOP_GEAR_SLOTS.map(slot=>{
-    const price = shopGearPriceRaro(slot);
-    const bonusText = slot==='amuleto'
-      ? `+${RARO_RES_PCT}% a una resistencia al azar`
-      : `+${shopGearValueRaro(slot)} ${STAT_LABELS[GUARDIAN_SLOT_STAT[slot] || 'maxhp'] || ''}`;
-    return `<div class="inv-item-row">
-      <div>
-        <b>${slotLabel(slot)}</b> <span class="slot-tag" style="border-color:${RARITIES.raro.color}; color:${RARITIES.raro.color};">Raro</span>
-        <div class="inv-item-bonus">${bonusText}</div>
-      </div>
-      <button class="inv-btn" data-buy-gear-raro="${slot}" ${state.char.gold<price?'disabled':''}>Comprar (${price} oro)</button>
-    </div>`;
-  }).join('');
+  const raroTagGear = ` <span class="slot-tag" style="border-color:${RARITIES.raro.color}; color:${RARITIES.raro.color};">Raro</span>`;
+  const raroHTML = SHOP_GEAR_SLOTS.map(slot=> gearShopRow(slot, 'raro', raroTagGear, 'buy-gear-raro', shopGearPriceRaro(slot))).join('');
 
   const selloHTML = SELLO_SHOP_SLOTS.map(slot=>{
     return ['rango_b','rango_a'].map(rarity=>{
@@ -3005,10 +3119,12 @@ function renderShop(){
           </div>`;
         }).join('');
       }
+      const preview = makeGearItem(slot, shopWeaponRole, rarity);
+      if(!preview) return '';
       return `<div class="inv-item-row">
         <div>
-          <b>${slotLabel(slot)}</b> <span class="slot-tag" style="border-color:${r.color}; color:${r.color};">${r.name}</span>
-          <div class="inv-item-bonus" style="color:${r.color};">Equipo de rango ${r.name} — se guarda en tu mochila</div>
+          <b>${preview.name}</b> <span class="slot-tag" style="border-color:${r.color}; color:${r.color};">${r.name}</span>
+          <div class="inv-item-bonus">${itemBonusText(preview)}</div>
         </div>
         <button class="inv-btn" data-buy-sello="${slot}|${rarity}" ${disabled?'disabled':''}>Comprar (${price} Sellos)</button>
       </div>`;
@@ -3428,18 +3544,6 @@ function enterNode(f,n){
 /* ============================================================
    LOOT
    ============================================================ */
-// nombres de objeto común compartidos entre el botín del laberinto y la tienda
-const COMUN_GEAR_NAMES = {
-  arma:['Filo desgastado','Hoja del laberinto','Astilla de hueso','Punta templada'],
-  armadura:['Cota remendada','Placa de piedra','Manto raído','Escamas frías'],
-  amuleto:['Amuleto de sangre','Talismán roto','Anillo apagado','Cuenta tallada'],
-  casco:['Yelmo mellado','Capucha andrajosa','Máscara resquebrajada','Cráneo pulido'],
-  botas:['Botas de cuero curtido','Sandalias del errante','Grebas oxidadas','Zapatillas silenciosas'],
-  guantes:['Guanteletes de hierro','Manoplas raídas','Guantes de esgrima','Zarpas envueltas']
-};
-const LOOT_RES_PCT = {comun:COMUN_RES_PCT, poco_comun:POCO_COMUN_RES_PCT, raro:RARO_RES_PCT, rango_b:RANGO_B_RES_PCT, rango_a:RANGO_A_RES_PCT, legendario:LEGENDARIO_RES_PCT, ss:SS_RES_PCT};
-const LOOT_STAT_MULT = {comun:1, poco_comun:1.6, raro:2.0, rango_b:2.5, rango_a:3.5, legendario:4.5, ss:6.0};
-
 // Tabla plana de drop: el juego es de grindeo — cada rango tiene su propia
 // probabilidad fija, independiente del piso/década (reemplaza la vieja tabla
 // por banda). Se revisa de más raro a más común, cada uno un chance()
@@ -3512,20 +3616,16 @@ function rollFlatRarity(table, minLevelMap, level, bypassTiers, pityCounter, pit
 const WEAPON_STYLE_IDS = ['pesada','doblefilo','tirador','mago'];
 function generateEquipOfRarity(rarity, floorIdx){
   const slot = pick(['arma','armadura','amuleto','casco','botas','guantes']);
-  const value = Math.round((rnd(1,2) + Math.floor((floorIdx||0)/2)) * LOOT_STAT_MULT[rarity]);
-  if(slot==='arma'){
-    // El botín de arma ahora sale del mismo catálogo fijo por rango que la
-    // tienda (WEAPON_CATALOG) — ya no escala con el piso, para que un cofre
-    // nunca pueda dar más stats de los que ese rango da en cualquier otro
-    // lado (pedido explícito: "los cofres solo pueden dar equipamiento de
-    // los que vamos a dar, no pueden dar stats mas altos").
-    const styleId = pick(WEAPON_STYLE_IDS);
-    return makeWeaponItem('arma', styleId, rarity);
-  }
-  const statPool = ['fis','esp','hab','maxhp'];
-  const kind = chance(0.65) ? {stat: pick(statPool)} : {res: pick(['fisico','fuego','hielo','veneno','aturdimiento'])};
-  const name = pick(COMUN_GEAR_NAMES[slot]);
-  return {kind:'equip', slot, name, bonus: kind.stat ? {stat:kind.stat, value} : {res:kind.res, value: LOOT_RES_PCT[rarity]}, rarity};
+  // El botín (arma Y equipo general) ahora sale del mismo catálogo fijo por
+  // rango que la tienda — ya no escala con el piso ni tira un stat al azar,
+  // para que un cofre nunca pueda dar más (ni distinto) de lo que ese rango
+  // ya da en cualquier otro lado (pedido explícito: "los cofres solo pueden
+  // dar equipamiento de los que vamos a dar, no pueden dar stats mas
+  // altos"). Sacerdote queda fuera del pool aleatorio (ver WEAPON_STYLE_IDS
+  // más abajo): un jugador nunca puede equiparse esa senda.
+  const styleId = pick(WEAPON_STYLE_IDS);
+  if(slot==='arma') return makeWeaponItem('arma', styleId, rarity);
+  return makeGearItem(slot, styleId, rarity);
 }
 // Tira contra la tabla plana de equipo para el nivel de personaje dado — usada
 // tanto por cofres/misiones (generateLoot) como por cada victoria en combate.
@@ -3584,9 +3684,14 @@ function makeEnemy(tpl, floorIdx, level){
   }
   const res = Object.assign({}, tpl.res);
   if(tpl.boss && level===1) res.fisico = 5; // defensa física reducida solo para el guardián de nivel 1
+  // Esquivar (2026-09-16, pedido explícito junto con Precisión en el
+  // equipo): los enemigos ahora también pueden esquivar un golpe. Valores
+  // base propios (no vinieron especificados) — bajos para que un jugador
+  // sin Precisión casi no lo note, más notorio contra élites/jefes.
+  const evasion = tpl.boss ? 0.10 : tpl.elite ? 0.08 : 0.05;
   return {
     tpl, name:tpl.name, icon:tpl.icon,
-    maxHP:hp, hp:hp, atk:atk, res,
+    maxHP:hp, hp:hp, atk:atk, res, evasion,
     statuses:[], defending:false, cooldowns:{}
   };
 }
@@ -3682,13 +3787,13 @@ function allyMaxHP(row){
     const it = equip[slot];
     if(it && it.bonus && it.bonus.stat==='maxhp') maxHP += it.bonus.value*8;
   });
+  maxHP += equipModsSum(equip, 'maxhp_flat'); // Casco (nuevo): HP real, sin el ×8 de arriba
   return maxHP;
 }
-// MP y Espíritu de un aliado: mismo pool de nivel para los dos (los aliados
-// todavía no tienen equipo que los afecte), usado tanto por makeCombatAlly()
-// como por la hoguera de descanso para restaurarlos a full.
-function allyMaxMP(row){ return Math.round(30 + (row.level||1)*5); }
-function allyMaxSpirit(row){ return Math.round(30 + (row.level||1)*5); }
+// MP y Espíritu de un aliado: mismo pool de nivel para los dos, más lo que
+// sume el Amuleto/Accesorio (mp_flat/espiritu_flat, ver GEAR_CATALOG).
+function allyMaxMP(row){ return Math.round(30 + (row.level||1)*5) + equipModsSum(row.equip||{}, 'mp_flat'); }
+function allyMaxSpirit(row){ return Math.round(30 + (row.level||1)*5) + equipModsSum(row.equip||{}, 'espiritu_flat'); }
 // Costo de habilidad de aliado: guerrero/arquero/asesino gastan MP (estamina),
 // mago/sacerdote gastan espíritu — igual que el jugador. Sin recurso
 // suficiente, el aliado hace un ataque básico en vez de su habilidad ese
@@ -3726,6 +3831,10 @@ function makeCombatAlly(row){
   // specialsFromEquip), leídos una sola vez acá para no recalcularlos cada
   // turno de combate.
   const specials = specialsFromEquip(equip);
+  // Fortaleza mental / Resistencia a efectos de estado del Amuleto/Botas —
+  // ver applyStatus(), que las lee de acá cuando el objetivo es un aliado.
+  const mentalResist = clamp(equipModsSum(equip,'fortaleza_mental')/100, 0, 0.9);
+  const statusResist = clamp(equipModsSum(equip,'resistencia_estado')/100, 0, 0.9);
   return {
     id: row.id, templateId: row.template_id, name: row.name, icon: tpl.icon, role: tpl.role,
     frontline: tpl.frontline, level: lvl,
@@ -3735,7 +3844,7 @@ function makeCombatAlly(row){
     pos: tpl.frontline ? 'frente' : 'retaguardia',
     maxHP, hp, maxMP, mp, maxSpirit, spirit, atk, statuses:[], skillCooldown: 1, // 1: no usan su habilidad en el primer turno
     hasTotem: !!row.has_totem,
-    res, specials
+    res, specials, mentalResist, statusResist
   };
 }
 const ALLY_SKILL_COOLDOWN = 3; // cada cuántos turnos propios repite su habilidad
@@ -3789,7 +3898,8 @@ function computeCritEvasion(){
 // base plana — la Parálisis igual los anula por completo, como al jugador.
 function computeAllyEvasion(ally){
   if(hasStatus(ally.statuses,'Paralisis')) return 0;
-  return 0.06;
+  const evasionFlat = (ally.specials||[]).filter(sp=>sp.type==='evasion_flat').reduce((sum,sp)=>sum+sp.value,0);
+  return 0.06 + evasionFlat;
 }
 
 // probabilidad combinada de aturdir al golpear, sumando todas las fuentes
@@ -3804,9 +3914,26 @@ function totalStunChance(){
   return 1-noStun;
 }
 
+// Miedo/Confusión son "alteraciones mentales" (pedido explícito) — las
+// resiste Fortaleza mental (Accesorio). El resto de efectos con chance
+// propia (Ceguera, Parálisis) los resiste Resistencia a efectos de estado
+// (Botas). Solo reduce estados que ya pasan por el chance propio de
+// applyStatus — los que un weapon-special pre-rolla antes de llamar acá
+// (Sangrado, Silencio, Aturdido retardado, etc.) no pasan por este filtro.
+const MENTAL_STATUSES = new Set(['Miedo','Confusion']);
 function applyStatus(target, statusDef, isPlayer){
   if(!statusDef) return;
-  if(statusDef.chance!==undefined && !chance(statusDef.chance)) return;
+  if(statusDef.chance!==undefined){
+    let effChance = statusDef.chance;
+    const isMental = MENTAL_STATUSES.has(statusDef.name);
+    if(isPlayer){
+      const d = derived();
+      effChance *= isMental ? (1-d.fortalezaMental) : (1-d.resistenciaEstado);
+    } else if(target && (target.mentalResist || target.statusResist)){
+      effChance *= isMental ? (1-(target.mentalResist||0)) : (1-(target.statusResist||0));
+    }
+    if(!chance(effChance)) return;
+  }
   const list = isPlayer ? combat.playerStatuses : target.statuses;
   const existing = list.find(s=>s.name===statusDef.name);
   if(existing && statusDef.stack){
@@ -3891,9 +4018,23 @@ function itemSpecialsArr(it){ return it.specials || (it.special ? [it.special] :
 // Todos los specials de las armas equipadas (arma + arma2) de un personaje —
 // usado tanto para el jugador (state.char.equip) como, en la versión de
 // aliado, para el array ya aplanado que guarda cada ally.specials.
+// Suma el valor de una clave de item.mods (estadísticas del equipo general
+// que no encajan en el molde bonus.stat/bonus.res de siempre: maxhp_flat,
+// precision, res_magica, resistencia_estado, fortaleza_mental, mp_flat,
+// espiritu_flat — ver GEAR_CATALOG) a través de TODO el equipo.
+function equipModsSum(equip, key){
+  let total = 0;
+  EQUIP_SLOTS.forEach(slot=>{
+    const it = equip && equip[slot];
+    if(it && it.mods && it.mods[key]!==undefined) total += it.mods[key];
+  });
+  return total;
+}
+// Todo el equipo (armas Y equipo general: armadura/casco/botas/guantes,
+// ahora que ese equipo también trae specials — antes solo miraba arma/arma2).
 function specialsFromEquip(equip){
   const out = [];
-  ['arma','arma2'].forEach(slot=>{
+  EQUIP_SLOTS.forEach(slot=>{
     const it = equip && equip[slot];
     if(it) itemSpecialsArr(it).forEach(sp=> out.push(sp));
   });
@@ -3905,7 +4046,7 @@ function blockChance(specialsArr){
 
 function applyEquippedSpecials(target, dmgDealt, skill){
   const sources = [];
-  ['arma','arma2'].forEach(slot=>{
+  EQUIP_SLOTS.forEach(slot=>{
     const it = state.char.equip[slot];
     if(it) itemSpecialsArr(it).forEach(sp=> sources.push({it, sp}));
   });
@@ -4016,7 +4157,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
     // Sabiduría/Voluntad (piedras) y Vara arcana (arma de Mago/Sacerdote):
     // probabilidad de recuperar parte de lo gastado — mismo mecanismo,
     // ahora también leído de las armas equipadas, no solo de las piedras.
-    const refundSources = socketedStones().concat(['arma','arma2'].map(slot=>state.char.equip[slot]).filter(Boolean));
+    const refundSources = socketedStones().concat(EQUIP_SLOTS.map(slot=>state.char.equip[slot]).filter(Boolean));
     refundSources.forEach(it=>{
       itemSpecialsArr(it).forEach(sp=>{
         if(sp.type==='mp_refund' && skill.cost.tipo==='estamina' && chance(sp.chance)){
@@ -4127,6 +4268,16 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
       log(`La Ceguera hace que tu golpe hacia ${target.name} no encuentre nada.`);
       return;
     }
+    // Esquivar del enemigo (equipo general: Precisión, ver GEAR_CATALOG) —
+    // solo enemigos de verdad tienen tpl/evasion; un aliado hostil como
+    // objetivo no esquiva por esta vía.
+    if(target.tpl){
+      const dodgeChance = Math.max(0, (target.evasion||0) - d.precision);
+      if(chance(dodgeChance)){
+        log(`${target.name} esquiva tu ataque.`);
+        return;
+      }
+    }
     // evasion of enemy (simple: small base)
     let base = skillBaseDamage() * skill.mult * (skill.hits||1);
 
@@ -4217,10 +4368,14 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
       resKey = effectiveEnemyRes(target,'fuego') <= effectiveEnemyRes(target,'hielo') ? 'fuego' : 'hielo';
     }
     let resVal = resKey ? effectiveEnemyRes(target, resKey)*(1-ignore) : 0;
-    // Arco largo / Carcaj de cuero: penetración de armadura — resta puntos
-    // de resistencia fijos a este golpe, siempre activo (no es un proc).
+    // Arco largo/Carcaj y guantes de Guerrero/Arquero: penetración de
+    // ARMADURA FÍSICA, solo contra golpes físicos. Guantes de Asesino/Mago/
+    // Sacerdote: penetración de RESISTENCIA MÁGICA, solo contra golpes que
+    // no sean físicos (fuego/hielo/veneno/arcano). Ambas restan puntos fijos,
+    // siempre activas (no son un proc).
     specialsFromEquip(state.char.equip).forEach(sp=>{
-      if(sp.type==='penetracion_armadura') resVal -= sp.value*100;
+      if(sp.type==='penetracion_armadura' && resKey==='fisico') resVal -= sp.value*100;
+      if(sp.type==='penetracion_magica' && resKey && resKey!=='fisico') resVal -= sp.value*100;
     });
     let dmg = base*(1-resVal/100);
     if(skill.penaltyIfFrente && combat.playerPos==='frente') dmg *= (1-skill.penaltyIfFrente);
@@ -4483,6 +4638,14 @@ function resolveOneAllyTurn(ally){
       combat.lastAction = {label:'Ceguera (falla)', effects:[]};
       return;
     }
+    // Esquivar del enemigo: los aliados no tienen Precisión propia todavía
+    // (el equipo general de un aliado no aporta ese stat), así que aquí se
+    // tira contra la evasión cruda del objetivo, sin contrarresto.
+    if(chance(enemyTarget.evasion||0)){
+      log(`${enemyTarget.name} esquiva el golpe de <b>${ally.name}</b>.`);
+      combat.lastAction = {label:'¡Esquivado!', effects:[]};
+      return;
+    }
 
     let dmg = ally.atk;
     if(hasStatus(ally.statuses,'Debilitado')) dmg *= 0.85;
@@ -4510,7 +4673,10 @@ function resolveOneAllyTurn(ally){
     }
 
     let resVal = ally.role==='arquero' && skillText ? effectiveEnemyRes(enemyTarget, resKey)*0.6 : effectiveEnemyRes(enemyTarget, resKey);
-    (ally.specials||[]).forEach(sp=>{ if(sp.type==='penetracion_armadura') resVal -= sp.value*100; });
+    (ally.specials||[]).forEach(sp=>{
+      if(sp.type==='penetracion_armadura' && resKey==='fisico') resVal -= sp.value*100;
+      if(sp.type==='penetracion_magica' && resKey!=='fisico') resVal -= sp.value*100;
+    });
     dmg = Math.max(1, Math.round(dmg*(1-resVal/100)));
     enemyTarget.hp = Math.max(0, enemyTarget.hp - dmg);
     log(skillText
