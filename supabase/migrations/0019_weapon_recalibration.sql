@@ -23,8 +23,14 @@
 
 begin;
 
--- 0) Rango 'canalizador' -> 'mago' en los propios personajes.
+-- 0) Rango 'canalizador' -> 'mago' en los propios personajes. La senda
+-- normalmente es inmutable tras crear el personaje (trg_validate_character_
+-- update, ver 0001/0018) - acá es un simple arreglo de nombre interno, no un
+-- cambio de senda real, así que desactivamos el trigger solo para esta
+-- sentencia y lo volvemos a activar de inmediato.
+alter table public.characters disable trigger trg_validate_character_update;
 update public.characters set style = 'mago' where style = 'canalizador';
+alter table public.characters enable trigger trg_validate_character_update;
 
 -- 1) Función temporal (pg_temp: vive solo durante esta sesión del SQL
 -- Editor, desaparece sola al cerrar la pestaña — no queda nada instalado en
