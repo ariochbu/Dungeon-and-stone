@@ -3125,16 +3125,22 @@ function enterNode(f,n){
   } else if(node.type==='descanso'){
     const d = derived();
     state.char.curHP = d.maxHP;
-    state.char.curSta = Math.min(d.maxSta, state.char.curSta + Math.round(d.maxSta*0.5));
-    state.char.curSpi = Math.min(d.maxSpi, state.char.curSpi + Math.round(d.maxSpi*0.5));
-    // Antes la hoguera solo curaba al jugador - state.dungeon.allyHP (la vida
-    // con la que cada aliado sigue entre combates de un mismo nivel, ver
-    // syncAllyHPToDungeon) nunca se tocaba, así que un aliado herido o caído
-    // seguía igual después de descansar. Ahora revive y cura a todo el
-    // equipo a vida completa, igual que al jugador.
+    state.char.curSta = d.maxSta;
+    state.char.curSpi = d.maxSpi;
+    // La hoguera restaura TODO a full de forma automática: vida, MP y
+    // espíritu del jugador, y también la vida, MP y espíritu que cada aliado
+    // arrastra entre combates del mismo nivel (state.dungeon.allyHP/allyMP/
+    // allySpirit, ver syncAllyHPToDungeon) — antes solo tocaba al jugador y
+    // encima solo curaba MP/espíritu a medias.
     if(!state.dungeon.allyHP) state.dungeon.allyHP = {};
-    (state.char.allies||[]).forEach(row=>{ state.dungeon.allyHP[row.id] = allyMaxHP(row); });
-    log('Una hoguera olvidada. Vida restaurada, MP y espíritu recuperados a medias. Tu equipo también se recupera por completo.');
+    if(!state.dungeon.allyMP) state.dungeon.allyMP = {};
+    if(!state.dungeon.allySpirit) state.dungeon.allySpirit = {};
+    (state.char.allies||[]).forEach(row=>{
+      state.dungeon.allyHP[row.id] = allyMaxHP(row);
+      state.dungeon.allyMP[row.id] = allyMaxMP(row);
+      state.dungeon.allySpirit[row.id] = allyMaxSpirit(row);
+    });
+    log('Una hoguera olvidada. Vida, MP y espíritu restaurados por completo, para ti y para todo tu equipo.');
     node.done = true;
     advanceMissionsFor('rest_bonfires', 1);
     renderAll();
@@ -3393,6 +3399,18 @@ function allyMaxHP(row){
   });
   return maxHP;
 }
+// MP y Espíritu de un aliado: mismo pool de nivel para los dos (los aliados
+// todavía no tienen equipo que los afecte), usado tanto por makeCombatAlly()
+// como por la hoguera de descanso para restaurarlos a full.
+function allyMaxMP(row){ return Math.round(30 + (row.level||1)*5); }
+function allyMaxSpirit(row){ return Math.round(30 + (row.level||1)*5); }
+// Costo de habilidad de aliado: guerrero/arquero/asesino gastan MP (estamina),
+// mago/sacerdote gastan espíritu — igual que el jugador. Sin recurso
+// suficiente, el aliado hace un ataque básico en vez de su habilidad ese
+// turno (no se resetea el enfriamiento, así que lo intenta de nuevo apenas
+// se regenere).
+const ALLY_SKILL_COST = 20;
+const ALLY_SKILL_POOL = {guerrero:'mp', arquero:'mp', asesino:'mp', mago:'spirit', sacerdote:'spirit'};
 function makeCombatAlly(row){
   const tpl = ALLY_ROSTER.find(t=>t.templateId===row.template_id);
   const lvl = row.level || 1;
@@ -3412,6 +3430,13 @@ function makeCombatAlly(row){
   let hp = maxHP;
   const savedHP = state.dungeon && state.dungeon.allyHP ? state.dungeon.allyHP[row.id] : undefined;
   if(savedHP !== undefined) hp = Math.max(0, Math.min(maxHP, savedHP));
+  const maxMP = allyMaxMP(row);
+  const maxSpirit = allyMaxSpirit(row);
+  let mp = maxMP, spirit = maxSpirit;
+  const savedMP = state.dungeon && state.dungeon.allyMP ? state.dungeon.allyMP[row.id] : undefined;
+  if(savedMP !== undefined) mp = Math.max(0, Math.min(maxMP, savedMP));
+  const savedSpirit = state.dungeon && state.dungeon.allySpirit ? state.dungeon.allySpirit[row.id] : undefined;
+  if(savedSpirit !== undefined) spirit = Math.max(0, Math.min(maxSpirit, savedSpirit));
   return {
     id: row.id, templateId: row.template_id, name: row.name, icon: tpl.icon, role: tpl.role,
     frontline: tpl.frontline, level: lvl,
@@ -3419,7 +3444,7 @@ function makeCombatAlly(row){
     // aliado en peligro puede replegarse a la Retaguardia en pleno combate
     // (ver allyMaybeSelfPreserve) y ya no ser el objetivo prioritario.
     pos: tpl.frontline ? 'frente' : 'retaguardia',
-    maxHP, hp, atk, statuses:[], skillCooldown: 1, // 1: no usan su habilidad en el primer turno
+    maxHP, hp, maxMP, mp, maxSpirit, spirit, atk, statuses:[], skillCooldown: 1, // 1: no usan su habilidad en el primer turno
     hasTotem: !!row.has_totem,
     res
   };
@@ -4010,7 +4035,9 @@ function resolveOneAllyTurn(ally){
       const others = livingAllies().filter(a=>a!==ally);
       const mostInjured = others.sort((a,b)=>(a.hp/a.maxHP)-(b.hp/b.maxHP))[0];
       const allyPct = mostInjured ? mostInjured.hp/mostInjured.maxHP : 1;
-      if(playerPct < 0.5 && playerPct <= allyPct){
+      const hasSpirit = ally.spirit>=ALLY_SKILL_COST;
+      if(playerPct < 0.5 && playerPct <= allyPct && hasSpirit){
+        ally.spirit -= ALLY_SKILL_COST;
         const heal = Math.round(d.maxHP*0.15*healMultiplierFor(combat.playerStatuses));
         const before = state.char.curHP;
         state.char.curHP = Math.min(d.maxHP, state.char.curHP+heal);
@@ -4018,7 +4045,8 @@ function resolveOneAllyTurn(ally){
         combat.lastAction = {label:'Bendición curativa', effects:[{targetKind:'player', amount:state.char.curHP-before, kind:'heal'}]};
         return;
       }
-      if(mostInjured && allyPct < 0.5){
+      if(mostInjured && allyPct < 0.5 && hasSpirit){
+        ally.spirit -= ALLY_SKILL_COST;
         const heal = Math.round(mostInjured.maxHP*0.15*healMultiplierFor(mostInjured.statuses));
         const before = mostInjured.hp;
         mostInjured.hp = Math.min(mostInjured.maxHP, mostInjured.hp+heal);
@@ -4026,14 +4054,15 @@ function resolveOneAllyTurn(ally){
         combat.lastAction = {label:'Bendición curativa', effects:[{targetKind:'ally', key:mostInjured.id, amount:mostInjured.hp-before, kind:'heal'}]};
         return;
       }
-      // Nadie necesita curación: Bendición Sagrada — baja todas las
-      // resistencias del enemigo del frente, para que tanto tus golpes como
-      // los del resto del equipo rindan más contra objetivos muy resistentes
-      // (el hueco que Riakis necesita para poder caer).
-      if(ally.skillCooldown<=0){
+      // Nadie necesita curación (o no le queda espíritu para curar): Bendición
+      // Sagrada — baja todas las resistencias del enemigo del frente, para
+      // que tanto tus golpes como los del resto del equipo rindan más contra
+      // objetivos muy resistentes (el hueco que Riakis necesita para caer).
+      if(ally.skillCooldown<=0 && hasSpirit){
         const fiBless = frontEnemyIndex();
         if(fiBless>=0){
           const target = combat.enemies[fiBless];
+          ally.spirit -= ALLY_SKILL_COST;
           applyStatus(target, {name:'Bendecido', duration:3}, false);
           ally.skillCooldown = ALLY_SKILL_COOLDOWN;
           log(`<b>${ally.name}</b> pronuncia una Bendición Sagrada sobre ${target.name}: sus resistencias caen.`);
@@ -4061,8 +4090,9 @@ function resolveOneAllyTurn(ally){
     let skillText = null;
     let skillName = null;
 
-    if(ally.skillCooldown<=0 && ally.role!=='sacerdote'){
+    if(ally.skillCooldown<=0 && ally.role!=='sacerdote' && ally[ALLY_SKILL_POOL[ally.role]]>=ALLY_SKILL_COST){
       ally.skillCooldown = ALLY_SKILL_COOLDOWN;
+      ally[ALLY_SKILL_POOL[ally.role]] -= ALLY_SKILL_COST;
       if(ally.role==='guerrero'){ dmg *= 1.6; skillText = 'descarga un Golpe Pesado sobre'; skillName = 'Golpe Pesado'; }
       else if(ally.role==='arquero'){ dmg *= 1.0; skillText = 'clava un Disparo Certero (ignora parte de la resistencia) en'; skillName = 'Disparo Certero'; }
       else if(ally.role==='asesino'){
@@ -4147,10 +4177,14 @@ async function processEnemyTurns(){
   decrementStatuses(combat.playerStatuses);
   (combat.allies||[]).forEach(ally=> decrementStatuses(ally.statuses));
 
-  // player regen
+  // player y aliados regeneran MP/Espíritu cada ciclo de turno, igual ritmo
   const d = derived();
   state.char.curSta = Math.min(d.maxSta, state.char.curSta+5);
   state.char.curSpi = Math.min(d.maxSpi, state.char.curSpi+5);
+  livingAllies().forEach(a=>{
+    a.mp = Math.min(a.maxMP, a.mp+5);
+    a.spirit = Math.min(a.maxSpirit, a.spirit+5);
+  });
 
   checkCombatEnd();
   renderAll();
@@ -4292,15 +4326,22 @@ function enemyAct(enemy){
   }
 }
 
-// Guarda la vida con la que terminó cada aliado en state.dungeon.allyHP, para
-// que la siguiente pelea del mismo nivel arranque donde quedó (un aliado
-// derribado sigue fuera de combate) en vez de reaparecer con vida completa.
-// Se limpia solo cuando se genera un state.dungeon nuevo (entrar al
-// laberinto o avanzar de nivel), momento en el que todos vuelven a full HP.
+// Guarda la vida, MP y espíritu con la que terminó cada aliado en
+// state.dungeon.allyHP/allyMP/allySpirit, para que la siguiente pelea del
+// mismo nivel arranque donde quedó (un aliado derribado o sin MP sigue así)
+// en vez de reaparecer con todo full. Se limpia solo cuando se genera un
+// state.dungeon nuevo (entrar al laberinto o avanzar de nivel), momento en
+// el que todos vuelven a full HP/MP/Espíritu.
 function syncAllyHPToDungeon(){
   if(!state.dungeon) return;
   if(!state.dungeon.allyHP) state.dungeon.allyHP = {};
-  (combat.allies||[]).forEach(a=>{ state.dungeon.allyHP[a.id] = a.hp; });
+  if(!state.dungeon.allyMP) state.dungeon.allyMP = {};
+  if(!state.dungeon.allySpirit) state.dungeon.allySpirit = {};
+  (combat.allies||[]).forEach(a=>{
+    state.dungeon.allyHP[a.id] = a.hp;
+    state.dungeon.allyMP[a.id] = a.mp;
+    state.dungeon.allySpirit[a.id] = a.spirit;
+  });
 }
 
 function checkCombatEnd(){
@@ -4698,6 +4739,8 @@ function renderCombat(){
     const hpPct = clamp(a.hp/a.maxHP*100, 0, 100);
     const statusChips = renderStatusChips(a.statuses);
     const acting = showActionFX && lastActor && lastActor.kind==='ally' && lastActor.id===a.id;
+    const mpPct = clamp(a.mp/a.maxMP*100, 0, 100);
+    const spPct = clamp(a.spirit/a.maxSpirit*100, 0, 100);
     return `<div class="enemy-card ${dead?'dead':''} ${!dead && hostile?'targetable':''} ${acting?'acting':''}" ${!dead && hostile ? `data-ally-idx="${i}"` : ''}>
       <div class="ei">${a.icon}${floatNumsFor('ally', a.id)}</div>
       <div class="einfo">
@@ -4705,6 +4748,9 @@ function renderCombat(){
         ${actionCaptionHTML(acting)}
         <div class="bar-track" style="margin-top:4px;"><div class="bar-fill hp" style="width:${hpPct}%"></div></div>
         <div style="font-size:0.7em; color:var(--text-dim); margin-top:2px;">${a.hp}/${a.maxHP} HP</div>
+        <div class="bar-track" style="margin-top:3px; height:5px;"><div class="bar-fill st" style="width:${mpPct}%"></div></div>
+        <div class="bar-track" style="margin-top:2px; height:5px;"><div class="bar-fill sp" style="width:${spPct}%"></div></div>
+        <div style="font-size:0.65em; color:var(--text-dim); margin-top:2px;">${a.mp}/${a.maxMP} MP · ${a.spirit}/${a.maxSpirit} Espíritu</div>
         <div>${statusChips}</div>
       </div>
     </div>`;
