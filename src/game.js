@@ -68,8 +68,8 @@ const STYLES = {
     desc:'Distancia y precisión. Marca, retrocede, dispara.',
     skills:['disparo_certero','marca_cazador','lluvia_flechas']
   },
-  canalizador: {
-    id:'canalizador', name:'Canalizador', icon:'🔥', scaleStat:'esp',
+  mago: {
+    id:'mago', name:'Mago', icon:'🔥', scaleStat:'esp',
     desc:'Fuego y hielo. Siembra el elemento y detónalo después.',
     skills:['bola_fuego','lanza_hielo','explosion_arcana']
   }
@@ -121,7 +121,7 @@ function skillBonus(skillId, field, base){
 // ver dónde se resetea/preserva ultimateUses en btn-enter-dungeon y en
 // "Continuar al nivel") y a un enfriamiento de ULTIMATE_COOLDOWN_TURNS
 // turnos propios tras usarse (ver endPlayerTurn).
-const ULTIMATE_BY_STYLE = {pesada:'furia_titan', doblefilo:'vals_sangre', tirador:'disparo_cazador_final', canalizador:'cataclismo_elemental'};
+const ULTIMATE_BY_STYLE = {pesada:'furia_titan', doblefilo:'vals_sangre', tirador:'disparo_cazador_final', mago:'cataclismo_elemental'};
 const ULTIMATE_MAX_USES = 3;
 const ULTIMATE_COOLDOWN_TURNS = 5;
 
@@ -370,67 +370,212 @@ const RARITIES = {
 };
 const RANGO_B_RES_PCT = 20;
 const RANGO_A_RES_PCT = 28;
-const RANGO_B_WEAPON_BONUS = 14;
-const RANGO_A_WEAPON_BONUS = 20;
 const LEGENDARIO_RES_PCT = 34;
 const SS_RES_PCT = 40;
 
 // Valores planos por rareza: todo objeto de una misma rareza da el mismo
-// bono de resistencia, y toda arma poco común da el mismo bono de daño,
-// sin importar en qué piso/nivel se consiguió.
+// bono de resistencia, sin importar en qué piso/nivel se consiguió. (Las
+// armas ya no usan un bono plano por rareza — cada nombre tiene el suyo,
+// ver WEAPON_CATALOG.)
 const COMUN_RES_PCT = 5;
 const POCO_COMUN_RES_PCT = 12;
-const POCO_COMUN_WEAPON_BONUS = 8;
 // Raro (C): un escalón entre Poco Común y Único (B) — levemente por encima
 // del primero, levemente por debajo del segundo, como se pidió.
 const RARO_RES_PCT = 16;
-const RARO_WEAPON_BONUS = 11;
 
-// weapon/offhand options the shop sells, keyed by combat style; each subclass can only
-// buy the gear that fits its playstyle (heavy weapons + shield, dual blades, bow + quiver, staff + focus)
-const WEAPON_OPTIONS = {
+// ============================================================
+// CATÁLOGO DE ARMAS — recalibración 2026-09-15 (pedido explícito de
+// ariochbu). Cada arma con NOMBRE PROPIO tiene su propio valor y sus
+// propios efectos especiales por rango — ya no es "un bono genérico por
+// senda", cada nombre dentro de una senda se juega distinto a partir de
+// Poco Común. En Común (E) todavía no hay diferencia entre nombres: solo
+// daño base fijo, tal como se pidió.
+// Estructura: WEAPON_CATALOG[styleId][slot][nombre] = [{rank, value, specials}, ...]
+// rank usa los mismos ids que RARITIES (comun=E, poco_comun=F, raro=C,
+// rango_b=B, rango_a=A). "value" es el bono a WEAPON_CATALOG[styleId].stat.
+// "specials" es un array (0, 1 o 2 efectos) — ver aplicación en combate.
+function wTier(rank, value, specials){ return {rank, value, specials: specials||[]}; }
+
+// Arma 1 de Mago y Sacerdote es EL MISMO pool (Vara arcana / Bastón rúnico)
+// con los mismos números — se define una sola vez y ambas sendas la comparten,
+// para que nunca puedan divergir por accidente.
+const MAGO_ARMA1 = {
+  'Vara arcana': [
+    wTier('comun', 13),
+    wTier('poco_comun', 18, [{type:'esp_refund', chance:0.05, amount:0.5, text:'de recuperar la mitad del espíritu gastado'}]),
+    wTier('raro', 22, [{type:'esp_refund', chance:0.08, amount:0.5, text:'de recuperar la mitad del espíritu gastado'}]),
+    wTier('rango_b', 26, [{type:'esp_refund', chance:0.12, amount:0.5, text:'de recuperar la mitad del espíritu gastado'}]),
+    wTier('rango_a', 30, [{type:'esp_refund', chance:0.15, amount:0.5, text:'de recuperar la mitad del espíritu gastado'}]),
+  ],
+  'Bastón rúnico': [
+    wTier('comun', 13),
+    wTier('poco_comun', 18, [{type:'aumento_dano', value:0.05, text:'de aumento de daño'}]),
+    wTier('raro', 22, [{type:'aumento_dano', value:0.08, text:'de aumento de daño'}]),
+    wTier('rango_b', 26, [{type:'aumento_dano', value:0.10, text:'de aumento de daño'}]),
+    wTier('rango_a', 30, [{type:'aumento_dano', value:0.13, text:'de aumento de daño'}]),
+  ],
+};
+
+const WEAPON_CATALOG = {
   pesada: {
-    arma: ['Martillo de guerra','Maza de combate','Espadón pesado'],
-    arma2: ['Escudo de hierro']
+    stat:'fis',
+    arma: {
+      'Martillo de guerra': [
+        wTier('comun', 12),
+        wTier('poco_comun', 20, [{type:'aturdir_retardado', chance:0.08, text:'de aturdir al oponente (su próximo turno)'}]),
+        wTier('raro', 27, [{type:'aturdir_retardado', chance:0.14, text:'de aturdir al oponente (su próximo turno)'}]),
+        wTier('rango_b', 33, [{type:'aturdir_retardado', chance:0.20, text:'de aturdir al oponente (su próximo turno)'}]),
+        wTier('rango_a', 42, [{type:'aturdir_retardado', chance:0.20, text:'de aturdir al oponente (su próximo turno)'}, {type:'aumento_dano', value:0.05, text:'de aumento de daño contra monstruos'}]),
+      ],
+      'Maza de combate': [
+        wTier('comun', 12),
+        wTier('poco_comun', 19, [{type:'retroceso', chance:0.12, text:'de aplicar retroceso'}]),
+        wTier('raro', 26, [{type:'retroceso', chance:0.18, text:'de aplicar retroceso'}]),
+        wTier('rango_b', 30, [{type:'retroceso', chance:0.22, text:'de aplicar retroceso'}]),
+        wTier('rango_a', 38, [{type:'retroceso', chance:0.18, text:'de aplicar retroceso'}, {type:'reduccion_dano', value:0.05, text:'de reducción de daño recibido'}]),
+      ],
+      'Espadón pesado': [
+        wTier('comun', 12),
+        wTier('poco_comun', 19, [{type:'bloqueo', chance:0.05, text:'de bloquear ataque'}]),
+        wTier('raro', 26, [{type:'bloqueo', chance:0.09, text:'de bloquear ataque'}]),
+        wTier('rango_b', 30, [{type:'bloqueo', chance:0.12, text:'de bloquear ataque'}]),
+        wTier('rango_a', 37, [{type:'bloqueo', chance:0.12, text:'de bloquear ataque'}, {type:'reduccion_dano', value:0.05, text:'de reducción de daño recibido'}]),
+      ],
+    },
+    arma2: {
+      'Escudo de hierro': [
+        wTier('comun', 0, [{type:'bloqueo', chance:0.10, text:'de bloquear ataque'}]),
+        wTier('poco_comun', 0, [{type:'bloqueo', chance:0.12, text:'de bloquear ataque'}]),
+        wTier('raro', 0, [{type:'bloqueo', chance:0.16, text:'de bloquear ataque'}]),
+        wTier('rango_b', 0, [{type:'bloqueo', chance:0.18, text:'de bloquear ataque'}]),
+        wTier('rango_a', 0, [{type:'bloqueo', chance:0.18, text:'de bloquear ataque'}, {type:'reflect', pct:0.10, text:'de devolver el daño recibido'}]),
+      ],
+    },
   },
   doblefilo: {
-    arma: ['Daga curva','Cuchillo largo'],
-    arma2: ['Daga gemela']
+    stat:'hab',
+    arma: {
+      'Daga curva': [
+        wTier('comun', 10),
+        wTier('poco_comun', 14, [{type:'sangrado', chance:0.12, text:'de aplicar sangrado 2 turnos'}]),
+        wTier('raro', 19, [{type:'sangrado', chance:0.15, text:'de aplicar sangrado 2 turnos'}]),
+        wTier('rango_b', 24, [{type:'sangrado', chance:0.20, text:'de aplicar sangrado 2 turnos'}]),
+        wTier('rango_a', 29, [{type:'sangrado', chance:0.20, text:'de aplicar sangrado 2 turnos'}, {type:'succion_hechizo', percent:0.10, text:'succión de hechizo'}]),
+      ],
+      'Cuchillo largo': [
+        wTier('comun', 10),
+        wTier('poco_comun', 17, [{type:'sangrado', chance:0.05, text:'de aplicar sangrado 2 turnos'}]),
+        wTier('raro', 22, [{type:'sangrado', chance:0.08, text:'de aplicar sangrado 2 turnos'}]),
+        wTier('rango_b', 29, [{type:'sangrado', chance:0.12, text:'de aplicar sangrado 2 turnos'}]),
+        wTier('rango_a', 34, [{type:'sangrado', chance:0.12, text:'de aplicar sangrado 2 turnos'}, {type:'silencio', chance:0.10, text:'de aplicar silencio al enemigo'}]),
+      ],
+    },
+    arma2: {
+      'Daga gemela': [
+        wTier('comun', 10),
+        wTier('poco_comun', 14, [{type:'sangrado', chance:0.12, text:'de aplicar sangrado 2 turnos'}]),
+        wTier('raro', 19, [{type:'sangrado', chance:0.15, text:'de aplicar sangrado 2 turnos'}]),
+        wTier('rango_b', 24, [{type:'sangrado', chance:0.20, text:'de aplicar sangrado 2 turnos'}]),
+        wTier('rango_a', 29, [{type:'sangrado', chance:0.20, text:'de aplicar sangrado 2 turnos'}, {type:'succion_hechizo', percent:0.10, text:'succión de hechizo'}]),
+      ],
+      'Cuchillo gemelo': [
+        wTier('comun', 10),
+        wTier('poco_comun', 17, [{type:'sangrado', chance:0.05, text:'de aplicar sangrado 2 turnos'}]),
+        wTier('raro', 22, [{type:'sangrado', chance:0.08, text:'de aplicar sangrado 2 turnos'}]),
+        wTier('rango_b', 29, [{type:'sangrado', chance:0.12, text:'de aplicar sangrado 2 turnos'}]),
+        wTier('rango_a', 34, [{type:'sangrado', chance:0.12, text:'de aplicar sangrado 2 turnos'}, {type:'silencio', chance:0.10, text:'de aplicar silencio al enemigo'}]),
+      ],
+    },
   },
   tirador: {
-    arma: ['Arco corto','Arco largo'],
-    arma2: ['Carcaj de cuero']
+    stat:'fis',
+    arma: {
+      'Arco corto': [
+        wTier('comun', 10),
+        wTier('poco_comun', 16, [{type:'robovida', percent:0.10, text:'de robo de vida'}]),
+        wTier('raro', 20, [{type:'robovida', percent:0.12, text:'de robo de vida'}]),
+        wTier('rango_b', 25, [{type:'robovida', percent:0.15, text:'de robo de vida'}]),
+        wTier('rango_a', 30, [{type:'robovida', percent:0.15, text:'de robo de vida'}, {type:'segundo_ataque_basico', chance:0.10, text:'de realizar un segundo ataque básico'}]),
+      ],
+      'Arco largo': [
+        wTier('comun', 10),
+        wTier('poco_comun', 18, [{type:'penetracion_armadura', value:0.10, text:'de penetración de armadura'}]),
+        wTier('raro', 23, [{type:'penetracion_armadura', value:0.12, text:'de penetración de armadura'}]),
+        wTier('rango_b', 29, [{type:'penetracion_armadura', value:0.15, text:'de penetración de armadura'}]),
+        wTier('rango_a', 35, [{type:'penetracion_armadura', value:0.15, text:'de penetración de armadura'}, {type:'aumento_dano', value:0.05, text:'de aumento de daño'}]),
+      ],
+    },
+    arma2: {
+      'Carcaj de cuero': [
+        wTier('comun', 10),
+        wTier('poco_comun', 14, [{type:'robovida', percent:0.10, text:'de robo de vida'}]),
+        wTier('raro', 18, [{type:'robovida', percent:0.12, text:'de robo de vida'}]),
+        wTier('rango_b', 22, [{type:'robovida', percent:0.15, text:'de robo de vida'}]),
+        wTier('rango_a', 26, [{type:'robovida', percent:0.15, text:'de robo de vida'}, {type:'segundo_ataque_basico', chance:0.10, text:'de realizar un segundo ataque básico'}]),
+      ],
+    },
   },
-  canalizador: {
-    arma: ['Vara arcana','Bastón rúnico'],
-    arma2: ['Foco arcano']
+  mago: {
+    stat:'esp',
+    arma: MAGO_ARMA1,
+    arma2: {
+      'Foco arcano': [
+        wTier('comun', 10),
+        wTier('poco_comun', 15, [{type:'doble_encantamiento', chance:0.05, text:'de realizar doble encantamiento'}]),
+        wTier('raro', 20, [{type:'doble_encantamiento', chance:0.08, text:'de realizar doble encantamiento'}]),
+        wTier('rango_b', 24, [{type:'doble_encantamiento', chance:0.12, text:'de realizar doble encantamiento'}]),
+        wTier('rango_a', 28, [{type:'doble_encantamiento', chance:0.15, text:'de realizar doble encantamiento'}]),
+      ],
+    },
   },
   // Sacerdote no es un estilo de combate del jugador — solo existe para que
   // los aliados de ese rol tengan su propia arma. Comparte el arma 1 con el
-  // Mago/Canalizador, pero su arma 2 es propia (grimorio/objeto religioso),
-  // no el Foco arcano.
+  // Mago (MAGO_ARMA1), pero su arma 2 es propia (grimorio/tomo).
   sacerdote: {
-    arma: ['Vara arcana','Bastón rúnico'],
-    arma2: ['Grimorio de plegarias','Tomo sagrado','Reliquia bendita']
-  }
+    stat:'esp',
+    arma: MAGO_ARMA1,
+    arma2: {
+      'Grimorio de plegarias': [
+        wTier('comun', 10),
+        wTier('poco_comun', 15, [{type:'bendecido_dur', text:'Aumenta la duración de Bendecido a 3 turnos'}]),
+        wTier('raro', 20, [{type:'bendecido_dur', text:'Aumenta la duración de Bendecido a 3 turnos'}]),
+        wTier('rango_b', 24, [{type:'bendecido_dur', text:'Aumenta la duración de Bendecido a 3 turnos'}]),
+        // Ojo: el número del debuff "aumento de daño recibido" no vino especificado
+        // en el pedido original — usé 10% como valor razonable por defecto.
+        wTier('rango_a', 28, [{type:'bendecido_dur', text:'Aumenta la duración de Bendecido a 3 turnos'}, {type:'dano_recibido_debuff', value:0.10, text:'de aumento de daño recibido al enemigo bendecido, por 2 turnos'}]),
+      ],
+      'Tomo sagrado': [
+        wTier('comun', 10),
+        wTier('poco_comun', 15, [{type:'aumento_curacion', value:0.05, text:'de aumento de curación'}]),
+        wTier('raro', 20, [{type:'aumento_curacion', value:0.08, text:'de aumento de curación'}]),
+        wTier('rango_b', 24, [{type:'aumento_curacion', value:0.12, text:'de aumento de curación'}]),
+        wTier('rango_a', 28, [{type:'aumento_curacion', value:0.12, text:'de aumento de curación'}, {type:'dano_aliado_curado', value:0.05, text:'de aumento de daño al aliado curado, por 2 turnos'}]),
+      ],
+    },
+  },
 };
-const OFFHAND_LABELS = {pesada:'Escudo', doblefilo:'Arma 2', tirador:'Carcaj', canalizador:'Foco', sacerdote:'Grimorio'};
-// which stat a subclass's weapons feed (pure damage, no other stats — as requested)
-const SHOP_WEAPON_STAT = {pesada:'fis', doblefilo:'hab', tirador:'hab', canalizador:'esp', sacerdote:'esp'};
-// rol de aliado -> categoría de arma (WEAPON_OPTIONS/SHOP_WEAPON_STAT). Los 4
-// primeros calzan 1-a-1 con los estilos de combate del jugador; sacerdote no
-// tiene equivalente entre esos 4, así que se le agregó su propia entrada arriba.
-const ALLY_ROLE_TO_WEAPON_STYLE = {guerrero:'pesada', arquero:'tirador', asesino:'doblefilo', mago:'canalizador', sacerdote:'sacerdote'};
-// sub-perk poco-común (guardian) weapons roll, following each subclass's logic:
-// heavy weapons never get life steal, dps (doble filo) never gets stun
-const SPECIALS_BY_STYLE = {
-  pesada: {type:'aturdir', label:'posibilidad de aturdir', chance:0.12},
-  doblefilo: {type:'robovida', label:'robo de vida', percent:0.10},
-  tirador: {type:'aturdir', label:'posibilidad de aturdir', chance:0.10},
-  canalizador: {type:'robovida', label:'robo de vida', percent:0.08}
-};
+const OFFHAND_LABELS = {pesada:'Escudo', doblefilo:'Arma 2', tirador:'Carcaj', mago:'Foco', sacerdote:'Grimorio'};
+// rol de aliado -> senda de arma (WEAPON_CATALOG). Los 4 primeros calzan
+// 1-a-1 con las sendas de combate del jugador; sacerdote no tiene
+// equivalente entre esos 4, así que tiene su propia entrada en el catálogo.
+const ALLY_ROLE_TO_WEAPON_STYLE = {guerrero:'pesada', arquero:'tirador', asesino:'doblefilo', mago:'mago', sacerdote:'sacerdote'};
+function weaponEntry(styleId, slot, name, rank){
+  const cat = WEAPON_CATALOG[styleId];
+  const pool = cat && cat[slot] && cat[slot][name];
+  return pool ? pool.find(e=>e.rank===rank) : null;
+}
+function makeWeaponItem(slot, styleId, rank, name){
+  const cat = WEAPON_CATALOG[styleId];
+  if(!cat || !cat[slot]) return null;
+  const names = Object.keys(cat[slot]);
+  const chosenName = (name && cat[slot][name]) ? name : pick(names);
+  const entry = weaponEntry(styleId, slot, chosenName, rank);
+  if(!entry) return null;
+  const item = {kind:'equip', slot, name:chosenName, bonus:{stat:cat.stat, value:entry.value}, rarity:rank, styleId};
+  if(entry.specials && entry.specials.length) item.specials = entry.specials.map(s=>Object.assign({}, s));
+  return item;
+}
 
-function shopWeaponValue(){ return 3 + Math.floor(state.char.level/2); }
 function shopWeaponPrice(isOffhand){ return isOffhand ? 40 + state.char.level*4 : 55 + state.char.level*6; }
 const SHOP_POTION_PRICES = {vida_menor:12, vida_mayor:30, estamina:12, espiritu:12, antidoto:22};
 
@@ -466,17 +611,15 @@ function dealDamageToPlayer(amount){
   state.char.curHP = Math.max(0, state.char.curHP - amount);
 }
 
-function buyWeapon(slot, styleId){
+function buyWeapon(slot, styleId, name){
   styleId = styleId || state.char.style;
-  const opts = WEAPON_OPTIONS[styleId];
-  if(!opts || !opts[slot]) return;
   const price = shopWeaponPrice(slot==='arma2');
   if(state.char.gold < price){ log('No tienes suficiente oro para eso.'); return; }
+  const item = makeWeaponItem(slot, styleId, 'comun', name);
+  if(!item) return;
   state.char.gold -= price;
-  const name = pick(opts[slot]);
-  const statKey = SHOP_WEAPON_STAT[styleId] || 'fis';
-  addToInventory({slot, name, bonus:{stat:statKey, value:shopWeaponValue()}, rarity:'comun', styleId});
-  log(`Compras <b>${name}</b> por ${price} de oro (guardada en la mochila — decide tú a quién equipársela).`);
+  addToInventory(item);
+  log(`Compras <b>${item.name}</b> por ${price} de oro (guardada en la mochila — decide tú a quién equipársela).`);
   renderAll(); save();
 }
 
@@ -509,11 +652,9 @@ const STARTER_POTIONS = {vida_mayor:5, vida_menor:10, estamina:5, espiritu:5};
 function grantStarterKit(){
   state.char.gold = STARTER_GOLD;
   const styleId = state.char.style;
-  const opts = WEAPON_OPTIONS[styleId] || WEAPON_OPTIONS.pesada;
-  const statKey = SHOP_WEAPON_STAT[styleId] || 'fis';
-  const weaponValue = shopWeaponValue();
-  state.char.equip.arma = {kind:'equip', slot:'arma', name:pick(opts.arma), bonus:{stat:statKey, value:weaponValue}, rarity:'comun', styleId};
-  if(opts.arma2) state.char.equip.arma2 = {kind:'equip', slot:'arma2', name:pick(opts.arma2), bonus:{stat:statKey, value:weaponValue}, rarity:'comun', styleId};
+  const cat = WEAPON_CATALOG[styleId] || WEAPON_CATALOG.pesada;
+  state.char.equip.arma = makeWeaponItem('arma', styleId, 'comun');
+  if(cat.arma2) state.char.equip.arma2 = makeWeaponItem('arma2', styleId, 'comun');
   SHOP_GEAR_SLOTS.forEach(slot=>{
     const bonus = slot==='amuleto'
       ? {res: pick(['fisico','fuego','hielo','veneno','aturdimiento']), value: COMUN_RES_PCT}
@@ -560,17 +701,15 @@ function buyGearRaro(slot){
 }
 // Arma Raro (C): mismo trato que la de senda común, pero con más bono de daño.
 function shopWeaponPriceRaro(isOffhand){ return Math.round(shopWeaponPrice(isOffhand) * 2.6); }
-function buyWeaponRaro(slot, styleId){
+function buyWeaponRaro(slot, styleId, name){
   styleId = styleId || state.char.style;
-  const opts = WEAPON_OPTIONS[styleId];
-  if(!opts || !opts[slot]) return;
   const price = shopWeaponPriceRaro(slot==='arma2');
   if(state.char.gold < price){ log('No tienes suficiente oro para eso.'); return; }
+  const item = makeWeaponItem(slot, styleId, 'raro', name);
+  if(!item) return;
   state.char.gold -= price;
-  const name = pick(opts[slot]);
-  const statKey = SHOP_WEAPON_STAT[styleId] || 'fis';
-  addToInventory({slot, name, bonus:{stat:statKey, value:RARO_WEAPON_BONUS}, rarity:'raro', styleId});
-  log(`Compras <b>${name}</b> por ${price} de oro (guardada en la mochila).`);
+  addToInventory(item);
+  log(`Compras <b>${item.name}</b> por ${price} de oro (guardada en la mochila).`);
   renderAll(); save();
 }
 
@@ -579,38 +718,35 @@ function buyWeaponRaro(slot, styleId){
 // definido, así que no se vende aquí.
 const SELLO_SHOP_SLOTS = ['arma','armadura','casco','botas','guantes','amuleto'];
 function selloShopPrice(rarity){ return rarity==='rango_a' ? 700 : 350; }
-function makeSelloShopItem(slot, rarity, styleId){
+function makeSelloShopItem(slot, rarity, styleId, name){
   const resPct = rarity==='rango_a' ? RANGO_A_RES_PCT : RANGO_B_RES_PCT;
-  const weaponBonus = rarity==='rango_a' ? RANGO_A_WEAPON_BONUS : RANGO_B_WEAPON_BONUS;
   const tag = rarity==='rango_a' ? 'épico' : 'único';
   styleId = styleId || state.char.style;
-  const opts = WEAPON_OPTIONS[styleId] || WEAPON_OPTIONS.pesada;
-  let name, bonus, special = null;
   if(slot==='arma'){
-    name = pick(opts.arma) + ` ${tag} del Gremio`;
-    const statKey = SHOP_WEAPON_STAT[styleId] || 'fis';
-    bonus = {stat:statKey, value: weaponBonus};
-    special = SPECIALS_BY_STYLE[styleId] || null;
-  } else if(slot==='armadura'){
-    name = `Placa ${tag} del Gremio`;
+    const item = makeWeaponItem('arma', styleId, rarity, name);
+    if(!item) return null;
+    item.name = `${item.name} ${tag} del Gremio`;
+    return item;
+  }
+  let itemName, bonus;
+  if(slot==='armadura'){
+    itemName = `Placa ${tag} del Gremio`;
     bonus = {stat:'maxhp', value: (rarity==='rango_a' ? 10 : 6) + Math.floor(state.char.level/2)};
   } else if(slot==='amuleto'){
-    name = `Reliquia ${tag} del Gremio`;
+    itemName = `Reliquia ${tag} del Gremio`;
     bonus = {res: pick(['fisico','fuego','hielo','veneno','aturdimiento']), value: resPct};
   } else {
-    name = `${slotLabel(slot)} ${tag} del Gremio`;
+    itemName = `${slotLabel(slot)} ${tag} del Gremio`;
     bonus = {stat: GUARDIAN_SLOT_STAT[slot], value: (rarity==='rango_a' ? 8 : 5) + Math.floor(state.char.level/3)};
   }
-  const item = {slot, name, bonus, rarity};
-  if(special) item.special = special;
-  if(slot==='arma') item.styleId = styleId;
-  return item;
+  return {slot, name:itemName, bonus, rarity};
 }
-function buySelloGear(slot, rarity){
+function buySelloGear(slot, rarity, name){
   const price = selloShopPrice(rarity);
   if((state.char.missionCurrency||0) < price){ log('No tienes suficientes Sellos del Laberinto.'); return; }
+  const item = makeSelloShopItem(slot, rarity, slot==='arma' ? shopWeaponRole : null, name);
+  if(!item) return;
   state.char.missionCurrency -= price;
-  const item = makeSelloShopItem(slot, rarity, slot==='arma' ? shopWeaponRole : null);
   addToInventory(item);
   log(`Compras <b>${item.name}</b> por ${price} Sellos del Laberinto.`);
   renderAll(); save();
@@ -1588,15 +1724,27 @@ const STAT_LABELS = {fis:'Físico', esp:'Espíritu', hab:'Habilidad', maxhp:'Vid
 const RES_LABELS = {fisico:'Físico', fuego:'Fuego', hielo:'Hielo', veneno:'Veneno', aturdimiento:'Aturdimiento'};
 const COST_LABELS = {estamina:'MP', espiritu:'Espíritu'};
 
+// Texto de un solo special (arma o piedra) — cada uno trae su propio "text"
+// ya redactado (ver WEAPON_CATALOG); esta función solo antepone el % que
+// corresponda (chance/value/percent/pct, en ese orden) o nada si el efecto
+// es un flag puro sin número (ej. "Aumenta la duración de Bendecido").
+function specialDisplayText(sp){
+  const pct = sp.chance!==undefined ? sp.chance : sp.value!==undefined ? sp.value : sp.percent!==undefined ? sp.percent : sp.pct!==undefined ? sp.pct : null;
+  return pct!==null ? `${Math.round(pct*100)}% ${sp.text||sp.label||''}` : (sp.text||sp.label||'');
+}
+// Descripción de un objeto: pedido explícito de que sea ÚNICAMENTE lo que
+// describimos por rareza — "+19 de habilidad, 15% de aplicar sangrado 2
+// turnos." — sin adornos genéricos como "daño puro" ni texto de relleno.
 function itemBonusText(item){
-  let txt = item.bonus.stat
-    ? `+${item.bonus.value} ${STAT_LABELS[item.bonus.stat] || item.bonus.stat}`
-    : `+${item.bonus.value}% Resistencia a ${RES_LABELS[item.bonus.res] || item.bonus.res}`;
-  if(item.special){
-    if(item.special.type==='aturdir') txt += ` · ${Math.round(item.special.chance*100)}% ${item.special.label}`;
-    else if(item.special.type==='robovida') txt += ` · ${Math.round(item.special.percent*100)}% ${item.special.label}`;
+  const parts = [];
+  if(item.bonus && item.bonus.value!==0){
+    parts.push(item.bonus.stat
+      ? `+${item.bonus.value} ${STAT_LABELS[item.bonus.stat] || item.bonus.stat}`
+      : `+${item.bonus.value}% Resistencia a ${RES_LABELS[item.bonus.res] || item.bonus.res}`);
   }
-  return txt;
+  const specials = item.specials || (item.special ? [item.special] : []);
+  specials.forEach(sp=> parts.push(specialDisplayText(sp)));
+  return parts.join(', ') + (parts.length ? '.' : '');
 }
 function itemNameHTML(it){
   const r = RARITIES[it.rarity||'comun'];
@@ -2644,45 +2792,48 @@ async function loadAdminList(){
 /* ============================================================
    RENDER: TIENDA (SHOP)
    ============================================================ */
-const SHOP_ROLE_LABELS = {pesada:'Guerrero', doblefilo:'Asesino', tirador:'Arquero', canalizador:'Mago', sacerdote:'Sacerdote'};
+const SHOP_ROLE_LABELS = {pesada:'Guerrero', doblefilo:'Asesino', tirador:'Arquero', mago:'Mago', sacerdote:'Sacerdote'};
 let shopWeaponRole = null; // null = usa tu propia senda por defecto
+// Cada arma con nombre propio ahora tiene su propio bono/especial por rango
+// (ver WEAPON_CATALOG), así que la tienda ya no puede mostrar "una fila por
+// slot" con un bono genérico — lista cada nombre como su propia fila,
+// generando un objeto de vista previa con makeWeaponItem() para reutilizar
+// exactamente el mismo texto que vería el jugador si la comprara.
+function weaponShopRows(slot, rank, rankTag, dataAttr, price){
+  const cat = WEAPON_CATALOG[shopWeaponRole];
+  if(!cat || !cat[slot]) return '';
+  return Object.keys(cat[slot]).map(name=>{
+    const preview = makeWeaponItem(slot, shopWeaponRole, rank, name);
+    if(!preview) return '';
+    return `<div class="inv-item-row">
+      <div>
+        <b>${name}</b> ${rankTag} <span class="slot-tag" style="border-color:var(--bronze); color:var(--bronze-light);">${SHOP_ROLE_LABELS[shopWeaponRole]||shopWeaponRole}</span>
+        <div class="inv-item-bonus">${itemBonusText(preview)}</div>
+      </div>
+      <button class="inv-btn" data-${dataAttr}="${slot}|${name}" ${state.char.gold<price?'disabled':''}>Comprar (${price} oro)</button>
+    </div>`;
+  }).join('');
+}
+
 function renderShop(){
   if(!shopWeaponRole) shopWeaponRole = state.char.style;
   const styleId = shopWeaponRole;
-  const opts = WEAPON_OPTIONS[styleId] || {};
   const armaPrice = shopWeaponPrice(false);
   const arma2Price = shopWeaponPrice(true);
-  const armaLabel = (opts.arma || []).join(' / ') || slotLabel('arma');
-  const arma2Label = (opts.arma2 || []).join(' / ') || (OFFHAND_LABELS[styleId] || slotLabel('arma2'));
 
   const roleSelectorHTML = `
     <select id="shop-role-select" class="auth-input" style="max-width:260px; margin-bottom:8px;">
-      ${Object.keys(WEAPON_OPTIONS).map(id=>`<option value="${id}" ${styleId===id?'selected':''}>${SHOP_ROLE_LABELS[id]||id}${id===state.char.style?' (tu senda)':''}</option>`).join('')}
+      ${Object.keys(WEAPON_CATALOG).map(id=>`<option value="${id}" ${styleId===id?'selected':''}>${SHOP_ROLE_LABELS[id]||id}${id===state.char.style?' (tu senda)':''}</option>`).join('')}
     </select>
     <p style="color:var(--text-dim); font-size:0.8em; margin:0 0 8px;">El arma se guarda en tu mochila compartida — luego decides tú a quién equipársela desde el Inventario.</p>`;
 
-  const weaponRowHTML = (slot, label, price) => `
-    <div class="inv-item-row">
-      <div>
-        <b>${label}</b> <span class="slot-tag">${SHOP_ROLE_LABELS[styleId]||styleId}</span>
-        <div class="inv-item-bonus">+${shopWeaponValue()} ${STAT_LABELS[SHOP_WEAPON_STAT[styleId]] || ''} · daño puro, sin otras características</div>
-      </div>
-      <button class="inv-btn" data-buy-weapon="${slot}" ${state.char.gold<price?'disabled':''}>Comprar (${price} oro)</button>
-    </div>`;
+  const weaponHTML = roleSelectorHTML
+    + weaponShopRows('arma', 'comun', '', 'buy-weapon', armaPrice)
+    + weaponShopRows('arma2', 'comun', '', 'buy-weapon', arma2Price);
 
-  const weaponHTML = roleSelectorHTML + (opts.arma ? weaponRowHTML('arma', armaLabel, armaPrice) : '')
-    + (opts.arma2 ? weaponRowHTML('arma2', arma2Label, arma2Price) : '');
-
-  const weaponRowRaroHTML = (slot, label, price) => `
-    <div class="inv-item-row">
-      <div>
-        <b>${label}</b> <span class="slot-tag" style="border-color:${RARITIES.raro.color}; color:${RARITIES.raro.color};">Raro</span> <span class="slot-tag" style="border-color:var(--bronze); color:var(--bronze-light);">${SHOP_ROLE_LABELS[styleId]||styleId}</span>
-        <div class="inv-item-bonus">+${RARO_WEAPON_BONUS} ${STAT_LABELS[SHOP_WEAPON_STAT[styleId]] || ''} · daño puro, sin otras características</div>
-      </div>
-      <button class="inv-btn" data-buy-weapon-raro="${slot}" ${state.char.gold<price?'disabled':''}>Comprar (${price} oro)</button>
-    </div>`;
-  const weaponRaroHTML = (opts.arma ? weaponRowRaroHTML('arma', armaLabel, shopWeaponPriceRaro(false)) : '')
-    + (opts.arma2 ? weaponRowRaroHTML('arma2', arma2Label, shopWeaponPriceRaro(true)) : '');
+  const raroTag = `<span class="slot-tag" style="border-color:${RARITIES.raro.color}; color:${RARITIES.raro.color};">Raro</span>`;
+  const weaponRaroHTML = weaponShopRows('arma', 'raro', raroTag, 'buy-weapon-raro', shopWeaponPriceRaro(false))
+    + weaponShopRows('arma2', 'raro', raroTag, 'buy-weapon-raro', shopWeaponPriceRaro(true));
 
   const gearHTML = SHOP_GEAR_SLOTS.map(slot=>{
     const price = shopGearPrice(slot);
@@ -2727,15 +2878,28 @@ function renderShop(){
   }).join('');
 
   const selloHTML = SELLO_SHOP_SLOTS.map(slot=>{
-    const selloName = slot==='arma' ? ((opts.arma || []).join(' / ') || slotLabel(slot)) : slotLabel(slot);
-    const selloRoleTagHTML = slot==='arma' ? ` <span class="slot-tag" style="border-color:var(--bronze); color:var(--bronze-light);">${SHOP_ROLE_LABELS[shopWeaponRole]||shopWeaponRole}</span>` : '';
     return ['rango_b','rango_a'].map(rarity=>{
       const price = selloShopPrice(rarity);
       const r = RARITIES[rarity];
       const disabled = (state.char.missionCurrency||0) < price;
+      if(slot==='arma'){
+        const cat = WEAPON_CATALOG[shopWeaponRole];
+        if(!cat) return '';
+        return Object.keys(cat.arma).map(name=>{
+          const preview = makeWeaponItem('arma', shopWeaponRole, rarity, name);
+          if(!preview) return '';
+          return `<div class="inv-item-row">
+            <div>
+              <b>${name}</b> <span class="slot-tag" style="border-color:${r.color}; color:${r.color};">${r.name}</span> <span class="slot-tag" style="border-color:var(--bronze); color:var(--bronze-light);">${SHOP_ROLE_LABELS[shopWeaponRole]||shopWeaponRole}</span>
+              <div class="inv-item-bonus">${itemBonusText(preview)}</div>
+            </div>
+            <button class="inv-btn" data-buy-sello="arma|${rarity}|${name}" ${disabled?'disabled':''}>Comprar (${price} Sellos)</button>
+          </div>`;
+        }).join('');
+      }
       return `<div class="inv-item-row">
         <div>
-          <b>${selloName}</b> <span class="slot-tag" style="border-color:${r.color}; color:${r.color};">${r.name}</span>${selloRoleTagHTML}
+          <b>${slotLabel(slot)}</b> <span class="slot-tag" style="border-color:${r.color}; color:${r.color};">${r.name}</span>
           <div class="inv-item-bonus" style="color:${r.color};">Equipo de rango ${r.name} — se guarda en tu mochila</div>
         </div>
         <button class="inv-btn" data-buy-sello="${slot}|${rarity}" ${disabled?'disabled':''}>Comprar (${price} Sellos)</button>
@@ -2781,7 +2945,7 @@ function renderShop(){
       <h3 style="color:var(--bronze-light);">Tienda</h3>
       <button class="reset-btn" id="btn-close-shop">Cerrar</button>
     </div>
-    <p style="color:var(--text-dim); font-size:0.85em; margin-top:0;">Oro disponible: <b>${state.char.gold}</b>. Las armas que vendemos aquí son de rareza común: solo dan daño, sin ventajas adicionales. Elige el rol para el que compras — cada arma solo la puede usar tu personaje o un aliado de ese mismo rol.</p>
+    <p style="color:var(--text-dim); font-size:0.85em; margin-top:0;">Oro disponible: <b>${state.char.gold}</b>. Elige el rol para el que compras — cada arma solo la puede usar tu personaje o un aliado de ese mismo rol. Cada nombre de arma tiene su propio bono y su propio efecto especial a partir de Poco Común.</p>
 
     <div class="section-label">Armas de tu senda</div>
     ${weaponHTML || '<p class="inv-empty-msg">No hay armas disponibles para tu senda de combate.</p>'}
@@ -2810,7 +2974,10 @@ function renderShop(){
 
   document.getElementById('btn-close-shop').onclick = ()=>{ shopOpen=false; renderAll(); };
   document.querySelectorAll('[data-buy-weapon]').forEach(btn=>{
-    btn.onclick = ()=> buyWeapon(btn.dataset.buyWeapon, shopWeaponRole);
+    btn.onclick = ()=>{
+      const [slot, name] = btn.dataset.buyWeapon.split('|');
+      buyWeapon(slot, shopWeaponRole, name);
+    };
   });
   const shopRoleSelect = document.getElementById('shop-role-select');
   if(shopRoleSelect) shopRoleSelect.onchange = ()=>{ shopWeaponRole = shopRoleSelect.value; renderShop(); };
@@ -2821,15 +2988,18 @@ function renderShop(){
     btn.onclick = ()=> buyGearPocoComun(btn.dataset.buyGearPoco);
   });
   document.querySelectorAll('[data-buy-weapon-raro]').forEach(btn=>{
-    btn.onclick = ()=> buyWeaponRaro(btn.dataset.buyWeaponRaro, shopWeaponRole);
+    btn.onclick = ()=>{
+      const [slot, name] = btn.dataset.buyWeaponRaro.split('|');
+      buyWeaponRaro(slot, shopWeaponRole, name);
+    };
   });
   document.querySelectorAll('[data-buy-gear-raro]').forEach(btn=>{
     btn.onclick = ()=> buyGearRaro(btn.dataset.buyGearRaro);
   });
   document.querySelectorAll('[data-buy-sello]').forEach(btn=>{
     btn.onclick = ()=>{
-      const [slot, rarity] = btn.dataset.buySello.split('|');
-      buySelloGear(slot, rarity);
+      const [slot, rarity, name] = btn.dataset.buySello.split('|');
+      buySelloGear(slot, rarity, name);
     };
   });
   document.querySelectorAll('[data-buy-potion]').forEach(btn=>{
@@ -3223,19 +3393,26 @@ function rollFlatRarity(table, minLevelMap, level, bypassTiers, pityCounter, pit
   }
   return null;
 }
-const WEAPON_STYLE_IDS = Object.keys(WEAPON_OPTIONS); // ['pesada','doblefilo','tirador','canalizador','sacerdote']
+// Solo las 4 sendas que el propio jugador puede usar entran al pool de botín
+// al azar — Sacerdote es exclusivo de aliados de Taberna, así que antes
+// "desperdiciaba" 1 de cada 5 tiradas en un arma que el jugador nunca podía
+// equiparse. Ariochbu reportó que el Guerrero parecía dropear más que el
+// resto: revisando el código, pick() ya era uniforme entre las 5 sendas —
+// no encontré un sesgo real hacia Guerrero específicamente — pero excluir
+// Sacerdote de este pool sí deja las 4 sendas jugables exactamente parejas
+// (25% cada una), que es la garantía explícita que se pidió.
+const WEAPON_STYLE_IDS = ['pesada','doblefilo','tirador','mago'];
 function generateEquipOfRarity(rarity, floorIdx){
   const slot = pick(['arma','armadura','amuleto','casco','botas','guantes']);
   const value = Math.round((rnd(1,2) + Math.floor((floorIdx||0)/2)) * LOOT_STAT_MULT[rarity]);
   if(slot==='arma'){
-    // Un arma suelta de combate/cofre pertenece a un rol al azar, igual que
-    // una comprada en la tienda - se marca con styleId para que
-    // equipItem()/equipItemOnAlly() la restrinjan al mismo rol, y su nombre
-    // sale del pool propio de ese rol en vez del genérico de COMUN_GEAR_NAMES.
+    // El botín de arma ahora sale del mismo catálogo fijo por rango que la
+    // tienda (WEAPON_CATALOG) — ya no escala con el piso, para que un cofre
+    // nunca pueda dar más stats de los que ese rango da en cualquier otro
+    // lado (pedido explícito: "los cofres solo pueden dar equipamiento de
+    // los que vamos a dar, no pueden dar stats mas altos").
     const styleId = pick(WEAPON_STYLE_IDS);
-    const statKey = SHOP_WEAPON_STAT[styleId] || 'fis';
-    const name = pick(WEAPON_OPTIONS[styleId].arma);
-    return {kind:'equip', slot, name, bonus:{stat:statKey, value}, rarity, styleId};
+    return makeWeaponItem('arma', styleId, rarity);
   }
   const statPool = ['fis','esp','hab','maxhp'];
   const kind = chance(0.65) ? {stat: pick(statPool)} : {res: pick(['fisico','fuego','hielo','veneno','aturdimiento'])};
@@ -3437,6 +3614,10 @@ function makeCombatAlly(row){
   if(savedMP !== undefined) mp = Math.max(0, Math.min(maxMP, savedMP));
   const savedSpirit = state.dungeon && state.dungeon.allySpirit ? state.dungeon.allySpirit[row.id] : undefined;
   if(savedSpirit !== undefined) spirit = Math.max(0, Math.min(maxSpirit, savedSpirit));
+  // Specials del arma/arma2 equipadas — mismo formato que el jugador (ver
+  // specialsFromEquip), leídos una sola vez acá para no recalcularlos cada
+  // turno de combate.
+  const specials = specialsFromEquip(equip);
   return {
     id: row.id, templateId: row.template_id, name: row.name, icon: tpl.icon, role: tpl.role,
     frontline: tpl.frontline, level: lvl,
@@ -3446,7 +3627,7 @@ function makeCombatAlly(row){
     pos: tpl.frontline ? 'frente' : 'retaguardia',
     maxHP, hp, maxMP, mp, maxSpirit, spirit, atk, statuses:[], skillCooldown: 1, // 1: no usan su habilidad en el primer turno
     hasTotem: !!row.has_totem,
-    res
+    res, specials
   };
 }
 const ALLY_SKILL_COOLDOWN = 3; // cada cuántos turnos propios repite su habilidad
@@ -3552,7 +3733,8 @@ const STATUS_INFO = {
   Paralisis:    {buff:false, desc:'Evasión a 0: no puede esquivar nada, ni defendiéndose.'},
   Ceguera:      {buff:false, desc:'Probabilidad de que sus golpes fallen por completo.'},
   Miedo:        {buff:false, desc:'Probabilidad de perder el turno por pánico.'},
-  Confusion:    {buff:false, desc:'Probabilidad de golpear al azar — puede alcanzar a un aliado o a sí mismo.'}
+  Confusion:    {buff:false, desc:'Probabilidad de golpear al azar — puede alcanzar a un aliado o a sí mismo.'},
+  Silencio:     {buff:false, desc:'Su próximo turno solo puede usar ataques básicos, sin habilidades especiales.'}
 };
 function statusChipHTML(st){
   const info = STATUS_INFO[st.name];
@@ -3594,17 +3776,65 @@ document.addEventListener('click', (e)=>{
   }
 });
 
+// Junta los specials de un item, sea el nuevo formato en array (armas del
+// catálogo, puede traer 2 a la vez desde rango A) o el viejo campo singular
+// (piedras de alma, sin tocar — para no alterar su comportamiento ya vivo).
+function itemSpecialsArr(it){ return it.specials || (it.special ? [it.special] : []); }
+// Todos los specials de las armas equipadas (arma + arma2) de un personaje —
+// usado tanto para el jugador (state.char.equip) como, en la versión de
+// aliado, para el array ya aplanado que guarda cada ally.specials.
+function specialsFromEquip(equip){
+  const out = [];
+  ['arma','arma2'].forEach(slot=>{
+    const it = equip && equip[slot];
+    if(it) itemSpecialsArr(it).forEach(sp=> out.push(sp));
+  });
+  return out;
+}
+function blockChance(specialsArr){
+  return Math.min(0.6, (specialsArr||[]).filter(sp=>sp.type==='bloqueo').reduce((sum,sp)=>sum+sp.chance,0));
+}
+
 function applyEquippedSpecials(target, dmgDealt, skill){
-  const sources = ['arma','arma2'].map(slot=>state.char.equip[slot]).filter(it=>it && it.special)
-    .concat(socketedStones().filter(s=>s.special));
-  sources.forEach(it=>{
-    const sp = it.special;
+  const sources = [];
+  ['arma','arma2'].forEach(slot=>{
+    const it = state.char.equip[slot];
+    if(it) itemSpecialsArr(it).forEach(sp=> sources.push({it, sp}));
+  });
+  socketedStones().forEach(s=> itemSpecialsArr(s).forEach(sp=> sources.push({it:s, sp})));
+  sources.forEach(({it, sp})=>{
     if(sp.type==='aturdir'){
+      // Piedras de alma únicamente (formato viejo) — inmediato, sin cambios.
       if(chance(sp.chance)){
         applyStatus(target, {name:'Aturdido', duration:1}, false);
         log(`<b>${it.name}</b> aturde a ${target.name}.`);
       }
-    } else if(sp.type==='robovida'){
+    } else if(sp.type==='retroceso'){
+      // Inmediato: se aplica ya mismo, así que el enemigo pierde la acción
+      // que le tocaba este mismo ciclo de turno (ver processEnemyTurns).
+      if(chance(sp.chance)){
+        applyStatus(target, {name:'Aturdido', duration:1}, false);
+        log(`<b>${it.name}</b> aplica Retroceso a ${target.name}.`);
+      }
+    } else if(sp.type==='aturdir_retardado'){
+      // Retardado: no aplica el estado ahora — solo marca la bandera, que
+      // processEnemyTurns convierte en Aturdido real recién al final de ESTE
+      // ciclo, para que afecte el turno del enemigo del ciclo SIGUIENTE.
+      if(chance(sp.chance)){
+        target.pendingStun = true;
+        log(`<b>${it.name}</b> deja tambaleando a ${target.name} — quedará aturdido su próximo turno.`);
+      }
+    } else if(sp.type==='sangrado'){
+      if(chance(sp.chance)){
+        applyStatus(target, {name:'Sangrado', duration:2, stack:true, maxStack:3}, false);
+        log(`<b>${it.name}</b> abre una herida en ${target.name}, que empieza a sangrar.`);
+      }
+    } else if(sp.type==='silencio'){
+      if(chance(sp.chance)){
+        applyStatus(target, {name:'Silencio', duration:1}, false);
+        log(`<b>${it.name}</b> silencia a ${target.name}: su próximo turno solo podrá usar ataques básicos.`);
+      }
+    } else if(sp.type==='robovida' || sp.type==='succion_hechizo'){
       const heal = Math.max(1, Math.round(dmgDealt*sp.percent));
       const d = derived();
       const before = state.char.curHP;
@@ -3625,26 +3855,32 @@ function applyEquippedSpecials(target, dmgDealt, skill){
   });
 }
 
-async function playerUseSkill(skillId, targetIdx){
+// isRepeat: true solo para la repetición gratuita de doble encantamiento
+// (Foco arcano) o segundo ataque básico (Arco corto/Carcaj épicos) — la
+// acción original ya pasó por Miedo/Confusión/costo, así que la repetición
+// se salta todo eso y va directo a resolver el golpe otra vez.
+async function playerUseSkill(skillId, targetIdx, isRepeat){
   if(!combat || combat.over) return;
   const skill = SKILLS[skillId];
   const d = derived();
 
-  if(skill.ultimate){
+  if(skill.ultimate && !isRepeat){
     const usesLeft = ULTIMATE_MAX_USES - (state.dungeon.ultimateUses||0);
     if(usesLeft<=0){ log(`Ya usaste ${skill.name} las ${ULTIMATE_MAX_USES} veces permitidas en esta entrada al laberinto.`); return; }
     if((state.dungeon.ultimateCooldown||0) > 0){ log(`${skill.name} todavía se está enfriando (${state.dungeon.ultimateCooldown} turno(s) más).`); return; }
   }
 
-  const miedo = hasStatus(combat.playerStatuses,'Miedo');
-  if(miedo && chance(miedo.procChance||0.4)){
-    log('El Miedo te paraliza. Pierdes el turno.');
-    await endPlayerTurn();
-    return;
+  if(!isRepeat){
+    const miedo = hasStatus(combat.playerStatuses,'Miedo');
+    if(miedo && chance(miedo.procChance||0.4)){
+      log('El Miedo te paraliza. Pierdes el turno.');
+      await endPlayerTurn();
+      return;
+    }
   }
 
   // resource check
-  if(skill.cost){
+  if(skill.cost && !isRepeat){
     const pool = skill.cost.tipo==='estamina' ? state.char.curSta : state.char.curSpi;
     if(pool < skill.cost.valor){ log('No tienes recursos suficientes para eso.'); return; }
   }
@@ -3666,24 +3902,28 @@ async function playerUseSkill(skillId, targetIdx){
   }
 
   // spend cost
-  if(skill.cost){
+  if(skill.cost && !isRepeat){
     if(skill.cost.tipo==='estamina') state.char.curSta -= skill.cost.valor;
     else state.char.curSpi -= skill.cost.valor;
-    // Sabiduría/Voluntad: probabilidad de recuperar parte de lo gastado
-    socketedStones().forEach(s=>{
-      if(!s.special) return;
-      if(s.special.type==='mp_refund' && skill.cost.tipo==='estamina' && chance(s.special.chance)){
-        const d0 = derived();
-        const refund = Math.max(1, Math.round(skill.cost.valor*s.special.amount));
-        state.char.curSta = Math.min(d0.maxSta, state.char.curSta+refund);
-        log(`<b>${s.name}</b> te devuelve ${refund} de MP.`);
-      }
-      if(s.special.type==='esp_refund' && skill.cost.tipo==='espiritu' && chance(s.special.chance)){
-        const d0 = derived();
-        const refund = Math.max(1, Math.round(skill.cost.valor*s.special.amount));
-        state.char.curSpi = Math.min(d0.maxSpi, state.char.curSpi+refund);
-        log(`<b>${s.name}</b> te devuelve ${refund} de espíritu.`);
-      }
+    // Sabiduría/Voluntad (piedras) y Vara arcana (arma de Mago/Sacerdote):
+    // probabilidad de recuperar parte de lo gastado — mismo mecanismo,
+    // ahora también leído de las armas equipadas, no solo de las piedras.
+    const refundSources = socketedStones().concat(['arma','arma2'].map(slot=>state.char.equip[slot]).filter(Boolean));
+    refundSources.forEach(it=>{
+      itemSpecialsArr(it).forEach(sp=>{
+        if(sp.type==='mp_refund' && skill.cost.tipo==='estamina' && chance(sp.chance)){
+          const d0 = derived();
+          const refund = Math.max(1, Math.round(skill.cost.valor*sp.amount));
+          state.char.curSta = Math.min(d0.maxSta, state.char.curSta+refund);
+          log(`<b>${it.name}</b> te devuelve ${refund} de MP.`);
+        }
+        if(sp.type==='esp_refund' && skill.cost.tipo==='espiritu' && chance(sp.chance)){
+          const d0 = derived();
+          const refund = Math.max(1, Math.round(skill.cost.valor*sp.amount));
+          state.char.curSpi = Math.min(d0.maxSpi, state.char.curSpi+refund);
+          log(`<b>${it.name}</b> te devuelve ${refund} de espíritu.`);
+        }
+      });
     });
   }
   if(skill.ultimate){
@@ -3760,7 +4000,7 @@ async function playerUseSkill(skillId, targetIdx){
     await endPlayerTurn(); return;
   }
 
-  const confusion = hasStatus(combat.playerStatuses,'Confusion');
+  const confusion = !isRepeat && hasStatus(combat.playerStatuses,'Confusion');
   if(confusion && chance(confusion.procChance||0.35)){
     const selfDmg = Math.max(1, Math.round(skillBaseDamage() * skill.mult));
     log(`La Confusión te hace atacar a ciegas... ¡y te golpeas a ti mismo!`);
@@ -3793,6 +4033,15 @@ async function playerUseSkill(skillId, targetIdx){
         base *= 1 + s.special.base + missingPct*s.special.missingScale;
       }
     });
+    // Bastón rúnico / Arco largo / Martillo de guerra épico: bono de daño
+    // plano del arma equipada, siempre activo (no es una probabilidad).
+    specialsFromEquip(state.char.equip).forEach(sp=>{
+      if(sp.type==='aumento_dano') base *= (1+sp.value);
+    });
+    // Grimorio de plegarias épico (aliado Sacerdote): el enemigo bendecido
+    // recibe más daño de todo el equipo mientras dure, tú incluido.
+    const blessedDebuff = hasStatus(target.statuses,'Bendecido');
+    if(blessedDebuff && blessedDebuff.incomingDmgMult) base *= blessedDebuff.incomingDmgMult;
 
     // combo: consumes specific status for bonus (machacar, y la ultimate furia_titan)
     let comboText = '';
@@ -3855,6 +4104,11 @@ async function playerUseSkill(skillId, targetIdx){
       resKey = effectiveEnemyRes(target,'fuego') <= effectiveEnemyRes(target,'hielo') ? 'fuego' : 'hielo';
     }
     let resVal = resKey ? effectiveEnemyRes(target, resKey)*(1-ignore) : 0;
+    // Arco largo / Carcaj de cuero: penetración de armadura — resta puntos
+    // de resistencia fijos a este golpe, siempre activo (no es un proc).
+    specialsFromEquip(state.char.equip).forEach(sp=>{
+      if(sp.type==='penetracion_armadura') resVal -= sp.value*100;
+    });
     let dmg = base*(1-resVal/100);
     if(skill.penaltyIfFrente && combat.playerPos==='frente') dmg *= (1-skill.penaltyIfFrente);
     dmg = Math.max(1, Math.round(dmg));
@@ -3880,6 +4134,24 @@ async function playerUseSkill(skillId, targetIdx){
     }
     applyEquippedSpecials(target, dmg, skill);
   });
+
+  // Foco arcano (Mago) / Arco corto y Carcaj de cuero épicos (Arquero): una
+  // sola repetición gratuita del mismo golpe, sin volver a cobrar el costo.
+  // Nunca aplica a un ultimate (evita una segunda ejecución gratis de algo
+  // ya limitado por usos/enfriamiento) ni encadena una segunda repetición.
+  if(!isRepeat && !skill.ultimate){
+    const equipSpecials = specialsFromEquip(state.char.equip);
+    if(skill.cost && equipSpecials.some(sp=>sp.type==='doble_encantamiento' && chance(sp.chance))){
+      log(`Tu arma realiza un <b>doble encantamiento</b>: ${skill.name} se relanza sin costo.`);
+      await playerUseSkill(skillId, targetIdx, true);
+      return;
+    }
+    if(skillId==='ataque_basico' && equipSpecials.some(sp=>sp.type==='segundo_ataque_basico' && chance(sp.chance))){
+      log('Realizas un segundo ataque básico.');
+      await playerUseSkill(skillId, targetIdx, true);
+      return;
+    }
+  }
 
   await endPlayerTurn();
 }
@@ -4036,21 +4308,33 @@ function resolveOneAllyTurn(ally){
       const mostInjured = others.sort((a,b)=>(a.hp/a.maxHP)-(b.hp/b.maxHP))[0];
       const allyPct = mostInjured ? mostInjured.hp/mostInjured.maxHP : 1;
       const hasSpirit = ally.spirit>=ALLY_SKILL_COST;
+      // Tomo sagrado: aumento de curación plano sobre el % base de Bendición.
+      const healBonus = 1 + (ally.specials||[]).filter(sp=>sp.type==='aumento_curacion').reduce((s,sp)=>s+sp.value,0);
+      // Tomo sagrado épico: el aliado curado recibe +daño 2 turnos (reusa Inspirado).
+      const healDmgBuff = (ally.specials||[]).find(sp=>sp.type==='dano_aliado_curado');
       if(playerPct < 0.5 && playerPct <= allyPct && hasSpirit){
         ally.spirit -= ALLY_SKILL_COST;
-        const heal = Math.round(d.maxHP*0.15*healMultiplierFor(combat.playerStatuses));
+        const heal = Math.round(d.maxHP*0.15*healBonus*healMultiplierFor(combat.playerStatuses));
         const before = state.char.curHP;
         state.char.curHP = Math.min(d.maxHP, state.char.curHP+heal);
         log(`<b>${ally.name}</b> te cura ${state.char.curHP-before} de vida.`);
+        if(healDmgBuff){
+          const existing = hasStatus(combat.playerStatuses,'Inspirado');
+          if(existing) existing.duration = 2; else combat.playerStatuses.push({name:'Inspirado', duration:2, dmgMult:1+healDmgBuff.value});
+        }
         combat.lastAction = {label:'Bendición curativa', effects:[{targetKind:'player', amount:state.char.curHP-before, kind:'heal'}]};
         return;
       }
       if(mostInjured && allyPct < 0.5 && hasSpirit){
         ally.spirit -= ALLY_SKILL_COST;
-        const heal = Math.round(mostInjured.maxHP*0.15*healMultiplierFor(mostInjured.statuses));
+        const heal = Math.round(mostInjured.maxHP*0.15*healBonus*healMultiplierFor(mostInjured.statuses));
         const before = mostInjured.hp;
         mostInjured.hp = Math.min(mostInjured.maxHP, mostInjured.hp+heal);
         log(`<b>${ally.name}</b> cura a <b>${mostInjured.name}</b> ${mostInjured.hp-before} de vida.`);
+        if(healDmgBuff){
+          const existing = hasStatus(mostInjured.statuses,'Inspirado');
+          if(existing) existing.duration = 2; else mostInjured.statuses.push({name:'Inspirado', duration:2, dmgMult:1+healDmgBuff.value});
+        }
         combat.lastAction = {label:'Bendición curativa', effects:[{targetKind:'ally', key:mostInjured.id, amount:mostInjured.hp-before, kind:'heal'}]};
         return;
       }
@@ -4063,7 +4347,12 @@ function resolveOneAllyTurn(ally){
         if(fiBless>=0){
           const target = combat.enemies[fiBless];
           ally.spirit -= ALLY_SKILL_COST;
-          applyStatus(target, {name:'Bendecido', duration:3}, false);
+          // Grimorio de plegarias: duración base 2, Poco Común+ la sube a 3.
+          const grimorioDur = (ally.specials||[]).some(sp=>sp.type==='bendecido_dur');
+          const grimorioDebuff = (ally.specials||[]).find(sp=>sp.type==='dano_recibido_debuff');
+          const blessDef = {name:'Bendecido', duration: grimorioDur?3:2};
+          if(grimorioDebuff) blessDef.incomingDmgMult = 1+grimorioDebuff.value;
+          applyStatus(target, blessDef, false);
           ally.skillCooldown = ALLY_SKILL_COOLDOWN;
           log(`<b>${ally.name}</b> pronuncia una Bendición Sagrada sobre ${target.name}: sus resistencias caen.`);
           combat.lastAction = {label:'Bendición Sagrada', effects:[]};
@@ -4086,6 +4375,9 @@ function resolveOneAllyTurn(ally){
     if(hasStatus(ally.statuses,'Debilitado')) dmg *= 0.85;
     const inspirado = hasStatus(ally.statuses,'Inspirado');
     if(inspirado) dmg *= (inspirado.dmgMult||1);
+    (ally.specials||[]).forEach(sp=>{ if(sp.type==='aumento_dano') dmg *= (1+sp.value); });
+    const blessedDebuff = hasStatus(enemyTarget.statuses,'Bendecido');
+    if(blessedDebuff && blessedDebuff.incomingDmgMult) dmg *= blessedDebuff.incomingDmgMult;
     let resKey = 'fisico';
     let skillText = null;
     let skillName = null;
@@ -4104,13 +4396,51 @@ function resolveOneAllyTurn(ally){
       else if(ally.role==='mago'){ resKey = 'fuego'; dmg *= 1.15; skillText = 'lanza una Bola de Fuego a'; skillName = 'Bola de Fuego'; }
     }
 
-    const resVal = ally.role==='arquero' && skillText ? effectiveEnemyRes(enemyTarget, resKey)*0.6 : effectiveEnemyRes(enemyTarget, resKey);
+    let resVal = ally.role==='arquero' && skillText ? effectiveEnemyRes(enemyTarget, resKey)*0.6 : effectiveEnemyRes(enemyTarget, resKey);
+    (ally.specials||[]).forEach(sp=>{ if(sp.type==='penetracion_armadura') resVal -= sp.value*100; });
     dmg = Math.max(1, Math.round(dmg*(1-resVal/100)));
     enemyTarget.hp = Math.max(0, enemyTarget.hp - dmg);
     log(skillText
       ? `<b>${ally.name}</b> ${skillText} ${enemyTarget.name}: ${dmg} de daño.`
       : `<b>${ally.name}</b> ataca a ${enemyTarget.name}: ${dmg} de daño.`);
+    applyAllySpecials(ally, enemyTarget, dmg);
     combat.lastAction = {label: skillName || 'Ataque', effects:[{targetKind:'enemy', key:fi, amount:dmg, kind:'dmg'}]};
+}
+
+// Equivalente de applyEquippedSpecials() para aliados — mismos tipos de
+// special, pero curando ally.hp en vez de state.char.curHP. Los mecanismos
+// que solo tienen sentido para el jugador (esp_refund, doble_encantamiento,
+// segundo ataque básico) no están acá: los aliados no tienen un kit de
+// habilidades propio con costo variable, así que no aplican.
+function applyAllySpecials(ally, target, dmgDealt){
+  (ally.specials||[]).forEach(sp=>{
+    if(sp.type==='retroceso'){
+      if(chance(sp.chance)){
+        applyStatus(target, {name:'Aturdido', duration:1}, false);
+        log(`<b>${ally.name}</b> aplica Retroceso a ${target.name}.`);
+      }
+    } else if(sp.type==='aturdir_retardado'){
+      if(chance(sp.chance)){
+        target.pendingStun = true;
+        log(`<b>${ally.name}</b> deja tambaleando a ${target.name} — quedará aturdido su próximo turno.`);
+      }
+    } else if(sp.type==='sangrado'){
+      if(chance(sp.chance)){
+        applyStatus(target, {name:'Sangrado', duration:2, stack:true, maxStack:3}, false);
+        log(`<b>${ally.name}</b> abre una herida en ${target.name}, que empieza a sangrar.`);
+      }
+    } else if(sp.type==='silencio'){
+      if(chance(sp.chance)){
+        applyStatus(target, {name:'Silencio', duration:1}, false);
+        log(`<b>${ally.name}</b> silencia a ${target.name}.`);
+      }
+    } else if(sp.type==='robovida' || sp.type==='succion_hechizo'){
+      const heal = Math.max(1, Math.round(dmgDealt*sp.percent));
+      const before = ally.hp;
+      ally.hp = Math.min(ally.maxHP, ally.hp+heal);
+      if(ally.hp>before) log(`<b>${ally.name}</b> recupera ${ally.hp-before} de vida.`);
+    }
+  });
 }
 
 function tickStatuses(list, ownerName, target){
@@ -4186,6 +4516,15 @@ async function processEnemyTurns(){
     a.spirit = Math.min(a.maxSpirit, a.spirit+5);
   });
 
+  // Aturdir (retardado, ver applyEquippedSpecials): la bandera marcada este
+  // ciclo recién se convierte en el estado Aturdido real acá, al final —
+  // así stunFlags de ESTE ciclo (calculado arriba, al principio) nunca lo ve,
+  // y sí lo verá el próximo ciclo. Es la diferencia con Retroceso, que aplica
+  // Aturdido de inmediato y por eso sí afecta el ciclo en curso.
+  combat.enemies.forEach(e=>{
+    if(e.pendingStun){ applyStatus(e, {name:'Aturdido', duration:1}, false); e.pendingStun = false; }
+  });
+
   checkCombatEnd();
   renderAll();
   save();
@@ -4208,9 +4547,21 @@ function enemyAct(enemy){
     combat.lastAction = {label:'¡Esquivado!', effects:[]};
     return;
   }
+  // Bloqueo (Guerrero: Espadón pesado y Escudo de hierro): una segunda capa
+  // de "el golpe no llega", igual de incondicional que la esquiva de arriba.
+  const defenderSpecials = target.kind==='ally' ? (target.ally.specials||[]) : specialsFromEquip(state.char.equip);
+  const bChance = blockChance(defenderSpecials);
+  if(bChance>0 && chance(bChance)){
+    log(`${enemy.name} ataca a ${target.kind==='ally' ? target.ally.name : 'ti'}, ¡pero el escudo bloquea el golpe por completo!`);
+    combat.lastAction = {label:'¡Bloqueado!', effects:[]};
+    return;
+  }
 
   const available = enemy.tpl.moves.filter(m=> !(m==='invocar' && enemy.cooldowns.invocar>0));
-  const move = pick(available.length ? available : enemy.tpl.moves);
+  let move = pick(available.length ? available : enemy.tpl.moves);
+  // Silencio (Asesino, Cuchillo largo/gemelo A): fuerza un ataque básico
+  // liso este turno, sin importar qué movimiento especial le tocaba.
+  if(hasStatus(enemy.statuses,'Silencio')) move = null;
 
   // movimientos de soporte: no hacen daño directo, resuelven su efecto y terminan el turno del enemigo ahí.
   const enemyIdx = combat.enemies.indexOf(enemy);
@@ -4297,6 +4648,10 @@ function enemyAct(enemy){
     const furiosoBuff = hasStatus(combat.playerStatuses,'Furioso');
     if(furiosoBuff && furiosoBuff.incomingDmgReduction) finalDmg *= (1 - furiosoBuff.incomingDmgReduction);
     if(hasStatus(combat.playerStatuses,'Paralisis')) finalDmg *= 1.25; // indefenso: sin evasión y más daño recibido
+    // Maza de combate / Espadón pesado épicos: reducción de daño recibido pasiva.
+    specialsFromEquip(state.char.equip).forEach(sp=>{
+      if(sp.type==='reduccion_dano') finalDmg *= (1-sp.value);
+    });
     finalDmg = Math.max(1, Math.round(finalDmg));
     dealDamageToPlayer(finalDmg);
     log(`${enemy.name} ${text}: ${finalDmg} de daño.`);
@@ -4305,6 +4660,7 @@ function enemyAct(enemy){
     const ally = target.ally;
     let allyDmg = dmg*(1-(((ally.res && ally.res.fisico)||0) - corrosionResPenalty(ally.statuses))/100);
     if(hasStatus(ally.statuses,'Paralisis')) allyDmg *= 1.25; // indefenso: igual que al jugador
+    (ally.specials||[]).forEach(sp=>{ if(sp.type==='reduccion_dano') allyDmg *= (1-sp.value); });
     finalDmg = Math.max(1, Math.round(allyDmg));
     dealDamageToAlly(ally, finalDmg);
     log(`${enemy.name} ${text} a ${ally.name}: ${finalDmg} de daño.`);
@@ -4312,9 +4668,9 @@ function enemyAct(enemy){
     combat.lastAction = {label:moveLabel, effects:[{targetKind:'ally', key:ally.id, amount:finalDmg, kind:'dmg'}]};
   }
 
-  // Vitalidad: devuelve un % del daño físico recibido a quien lo infligió
-  // (piedra engarzada del jugador, así que solo aplica cuando el golpe fue
-  // contra el propio jugador).
+  // Vitalidad / Escudo de hierro épico: devuelve un % del daño físico
+  // recibido a quien lo infligió — piedra engarzada (solo si golpeó al
+  // jugador) o especial de equipo (jugador o aliado, según a quién le pegó).
   if(onPlayer){
     socketedStones().forEach(s=>{
       if(s.special && s.special.type==='reflect'){
@@ -4324,6 +4680,12 @@ function enemyAct(enemy){
       }
     });
   }
+  const reflectSources = onPlayer ? specialsFromEquip(state.char.equip) : (target.ally.specials||[]);
+  reflectSources.filter(sp=>sp.type==='reflect').forEach(sp=>{
+    const reflected = Math.max(1, Math.round(finalDmg*sp.pct));
+    enemy.hp = Math.max(0, enemy.hp-reflected);
+    log(`${sp.text||'Tu equipo'} devuelve ${reflected} de daño a ${enemy.name}.`);
+  });
 }
 
 // Guarda la vida, MP y espíritu con la que terminó cada aliado en
