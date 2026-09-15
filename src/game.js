@@ -254,19 +254,29 @@ function decadeIndexForLevel(level){ return Math.min(DECADE_BESTIARY.length-1, M
 
 const DECADE_BESTIARY = [
   // Década 0 — pisos 1-10 — Bosque Goblin
+  // Plantilla de roles (2026-09-16, pedido explícito): cada bestiario de
+  // década reparte sus 'regular' en 3 arquetipos — melee (cuerpo a cuerpo,
+  // frontline, daño físico), ranged (a distancia, daño físico igual, pero
+  // sin ocupar el frente) y mago (elemental de verdad: su golpe usa
+  // resistencia mágica/elemental del objetivo en vez de la física de
+  // siempre — antes NINGÚN enemigo hacía esto, todos pegaban 'atk' físico
+  // sin importar el move). El chamán, además, cura a otros enemigos
+  // (curar_aliado, nuevo — antes 'curar' solo existía como auto-curación de
+  // jefe). Esta década es la plantilla; el resto se replica con el mismo
+  // patrón, manteniendo la temática propia de cada una.
   {
     regular: [
-      {id:'goblin_arquero', name:'Goblin arquero', icon:'🏹', hp:0.85, atk:1.1, res:{fisico:-5,fuego:0,hielo:0,veneno:5,aturdimiento:0}, moves:['pegar','robar']},
-      {id:'goblin_guerrero', name:'Goblin guerrero', icon:'🗡️', hp:1.15, atk:1.05, res:{fisico:10,fuego:-5,hielo:0,veneno:0,aturdimiento:5}, moves:['pegar'], frontline:true},
-      {id:'goblin_saqueador', name:'Goblin saqueador', icon:'🪓', hp:1.0, atk:1.0, res:{fisico:0,fuego:0,hielo:-10,veneno:10,aturdimiento:10}, moves:['pegar','robar'], frontline:true},
-      {id:'goblin_chaman', name:'Chamán goblin', icon:'💀', hp:0.85, atk:0.95, res:{fisico:-10,fuego:15,hielo:15,veneno:25,aturdimiento:-10}, moves:['pegar','debilitar']}
+      {id:'goblin_arquero', name:'Goblin arquero', icon:'🏹', role:'ranged', hp:0.85, atk:1.1, res:{fisico:-5,fuego:0,hielo:0,veneno:5,aturdimiento:0}, moves:['pegar','robar']},
+      {id:'goblin_guerrero', name:'Goblin guerrero', icon:'🗡️', role:'melee', hp:1.15, atk:1.05, res:{fisico:10,fuego:-5,hielo:0,veneno:0,aturdimiento:5}, moves:['pegar'], frontline:true},
+      {id:'goblin_saqueador', name:'Goblin saqueador', icon:'🪓', role:'melee', hp:1.0, atk:1.0, res:{fisico:0,fuego:0,hielo:-10,veneno:10,aturdimiento:10}, moves:['pegar','robar'], frontline:true},
+      {id:'goblin_chaman', name:'Chamán goblin', icon:'💀', role:'mago', hp:0.85, atk:0.95, res:{fisico:-10,fuego:15,hielo:15,veneno:25,aturdimiento:-10}, moves:['maldicion_venenosa','curar_aliado','debilitar']}
     ],
-    elite: [{id:'jefe_goblin', name:'Jefe goblin', icon:'👹', hp:1.9, atk:1.4, res:{fisico:20,fuego:-10,hielo:5,veneno:15,aturdimiento:25}, moves:['pegar','aplastar'], elite:true, frontline:true}],
+    elite: [{id:'jefe_goblin', name:'Jefe goblin', icon:'👹', role:'melee', hp:1.9, atk:1.4, res:{fisico:20,fuego:-10,hielo:5,veneno:15,aturdimiento:25}, moves:['pegar','aplastar'], elite:true, frontline:true}],
     guardians: [
-      {id:'hobgoblin', name:'Hobgoblin', icon:'🛡️', hp:1.8, atk:1.15, res:{fisico:15,fuego:5,hielo:5,veneno:15,aturdimiento:30}, moves:['pegar','aplastar','debilitar'], boss:true, frontline:true},
-      {id:'gilgoblin', name:'Gilgoblin', icon:'🔱', hp:1.7, atk:1.2, res:{fisico:10,fuego:10,hielo:10,veneno:20,aturdimiento:20}, moves:['pegar','aplastar','debilitar'], boss:true, frontline:true}
+      {id:'hobgoblin', name:'Hobgoblin', icon:'🛡️', role:'melee', hp:1.8, atk:1.15, res:{fisico:15,fuego:5,hielo:5,veneno:15,aturdimiento:30}, moves:['pegar','aplastar','debilitar'], boss:true, frontline:true},
+      {id:'gilgoblin', name:'Gilgoblin', icon:'🔱', role:'melee', hp:1.7, atk:1.2, res:{fisico:10,fuego:10,hielo:10,veneno:20,aturdimiento:20}, moves:['pegar','aplastar','debilitar'], boss:true, frontline:true}
     ],
-    decadeBoss: {id:'ogro', name:'Ogro', icon:'👺', hp:4.2, atk:1.9, res:{fisico:25,fuego:0,hielo:0,veneno:10,aturdimiento:35}, moves:['pegar','aplastar','debilitar'], boss:true, frontline:true}
+    decadeBoss: {id:'ogro', name:'Ogro', icon:'👺', role:'melee', hp:4.2, atk:1.9, res:{fisico:25,fuego:0,hielo:0,veneno:10,aturdimiento:35}, moves:['pegar','aplastar','debilitar'], boss:true, frontline:true}
   },
   // Década 1 — pisos 11-20 — Arañas del bosque profundo (familia tarántula, veneno/Parálisis)
   {
@@ -1414,10 +1424,21 @@ function derived(){
   maxHP += equipModsSum(eq, 'maxhp_flat');
   maxSta += equipModsSum(eq, 'mp_flat');
   maxSpi += equipModsSum(eq, 'espiritu_flat');
-  const resMagica = clamp(equipModsSum(eq, 'res_magica'), -60, 80);
-  const fortalezaMental = clamp(equipModsSum(eq, 'fortaleza_mental')/100, 0, 0.9);
+  const fortalezaMentalPct = equipModsSum(eq, 'fortaleza_mental');
+  // Fortaleza mental (Accesorio) ahora también aporta un poco a Resistencia
+  // mágica (pedido explícito: "separarlas, pero que fortaleza mental
+  // también aumente un poco resistencia mágica") — a una fracción de lo que
+  // aporta Botas, para que Botas siga siendo la fuente principal.
+  const FORTALEZA_MENTAL_TO_RES_MAGICA = 0.4;
+  const resMagica = clamp(equipModsSum(eq, 'res_magica') + fortalezaMentalPct*FORTALEZA_MENTAL_TO_RES_MAGICA, -60, 80);
+  const fortalezaMental = clamp(fortalezaMentalPct/100, 0, 0.9);
   const resistenciaEstado = clamp(equipModsSum(eq, 'resistencia_estado')/100, 0, 0.9);
-  const precision = clamp(equipModsSum(eq, 'precision')/100, 0, 0.9);
+  // Precisión y Penetración: además de lo que dé el equipo, crecen solas
+  // con el nivel (pedido explícito) — sin nada de equipo, un nivel 60 ya
+  // trae ~9% de Precisión "de fábrica".
+  const PRECISION_PER_LEVEL = 0.0015, PENETRACION_PER_LEVEL = 0.001;
+  const precision = clamp(equipModsSum(eq, 'precision')/100 + state.char.level*PRECISION_PER_LEVEL, 0, 0.9);
+  const penetracionNivel = state.char.level*PENETRACION_PER_LEVEL;
   const critChance = clamp(0.05 + hab*0.006 + (race().id==='bestia'?0.15:0), 0, 0.6);
   let evasionBase = 0.04 + hab*0.005 + (race().id==='hada'?0.15:0);
   socketedStones().forEach(s=>{
@@ -1426,7 +1447,7 @@ function derived(){
   specialsFromEquip(eq).forEach(sp=>{
     if(sp.type==='evasion_flat') evasionBase += sp.value;
   });
-  return {fis,esp,hab,maxHP,maxSta,maxSpi,critChance,evasionBase,resMagica,fortalezaMental,resistenciaEstado,precision};
+  return {fis,esp,hab,maxHP,maxSta,maxSpi,critChance,evasionBase,resMagica,fortalezaMental,resistenciaEstado,precision,penetracionNivel};
 }
 
 function scaleStatValue(){
@@ -1698,6 +1719,33 @@ function numFloorsForLevel(level){
 // visual-only threat rating shown to the player, decoupled from the real stat math above
 function baseThreatForLevel(level){ return 5 + (level-1)*2; } // lvl1:5, lvl2:7, lvl3:9...
 function expectedCharLevelFor(level){ return Math.round(level * (CHAR_LEVEL_CAP/LEVEL_CAP)); } // the char level this dungeon level is "built for"
+
+// ============================================================
+// BRECHA DE NIVEL (2026-09-16, pedido explícito, estilo MIR4) — curva
+// "moderada" confirmada: ~1.5% de esquivar y ~0.8% de daño por cada nivel
+// de diferencia, con piso/techo para que nunca sea 0%/100% garantizado ni
+// un multiplicador absurdo. monsterEffectiveLevel() reusa
+// expectedCharLevelFor() (ya existía para el indicador visual de amenaza)
+// como "nivel" del monstruo — el nivel de personaje para el que esa
+// entrada al laberinto está pensada.
+const LEVEL_GAP_EVASION_PER_LEVEL = 0.015;
+const LEVEL_GAP_DAMAGE_PER_LEVEL = 0.008;
+function monsterEffectiveLevel(){ return expectedCharLevelFor((state.dungeon && state.dungeon.level) || 1); }
+// Cuánta evasión EXTRA gana el enemigo (o pierde, si es negativo) frente al
+// jugador por la diferencia de nivel — se resta cuando le toca esquivar AL
+// JUGADOR (mismo número, signo invertido: un monstruo de más nivel también
+// hace que el jugador esquive menos sus golpes).
+function levelGapEvasionBonus(monsterLevel, charLevel){
+  return (monsterLevel - charLevel) * LEVEL_GAP_EVASION_PER_LEVEL;
+}
+// Multiplicador de daño por diferencia de nivel — mismo signo para ambas
+// direcciones: le pega más fuerte a quien esté por debajo suyo, más flojo
+// a quien esté por encima. attackerLevel/defenderLevel son "nivel de
+// personaje" o "nivel de monstruo" (monsterEffectiveLevel()) según quién
+// ataca a quién.
+function levelDiffDamageMult(attackerLevel, defenderLevel){
+  return clamp(1 + (attackerLevel - defenderLevel) * LEVEL_GAP_DAMAGE_PER_LEVEL, 0.7, 1.25);
+}
 function visualThreat(level, charLevel){
   const base = baseThreatForLevel(level);
   const ratio = expectedCharLevelFor(level) / Math.max(1, charLevel||1);
@@ -3684,11 +3732,21 @@ function makeEnemy(tpl, floorIdx, level){
   }
   const res = Object.assign({}, tpl.res);
   if(tpl.boss && level===1) res.fisico = 5; // defensa física reducida solo para el guardián de nivel 1
+  // Resistencias por piso (2026-09-16, pedido explícito, "así como la
+  // evasión"): cada piso dentro de la misma década suma un poco a TODAS las
+  // resistencias del enemigo (física y elementales por igual) — un goblin
+  // del piso 9 resiste algo más que uno del piso 1, aunque sea la misma
+  // especie. Valor propio (no vino especificado), fácil de retocar.
+  const RES_PER_FLOOR = 0.8;
+  Object.keys(res).forEach(k=> res[k] += floorIdx*RES_PER_FLOOR);
   // Esquivar (2026-09-16, pedido explícito junto con Precisión en el
-  // equipo): los enemigos ahora también pueden esquivar un golpe. Valores
-  // base propios (no vinieron especificados) — bajos para que un jugador
-  // sin Precisión casi no lo note, más notorio contra élites/jefes.
-  const evasion = tpl.boss ? 0.10 : tpl.elite ? 0.08 : 0.05;
+  // equipo): los enemigos ahora también pueden esquivar un golpe. Base por
+  // tier (propia, no vino especificada) + un poco más por cada piso dentro
+  // de la década (igual criterio que las resistencias de arriba) — la
+  // brecha de nivel entre jugador y monstruo se suma aparte, en combate
+  // (ver levelGapEvasionBonus/monsterEffectiveLevel), no acá.
+  const EVASION_PER_FLOOR = 0.003;
+  const evasion = (tpl.boss ? 0.10 : tpl.elite ? 0.08 : 0.05) + floorIdx*EVASION_PER_FLOOR;
   return {
     tpl, name:tpl.name, icon:tpl.icon,
     maxHP:hp, hp:hp, atk:atk, res, evasion,
@@ -3887,11 +3945,15 @@ function livingEnemies(){ return combat.enemies.filter(e=>e.hp>0); }
 function computeCritEvasion(){
   const d = derived();
   let ev = d.evasionBase + (combat.playerPos==='retaguardia'?0.08:0);
+  // Brecha de nivel: un monstruo de más nivel que el jugador también es más
+  // difícil de esquivar (mismo número que usa el jugador para esquivarlo A
+  // ÉL, restado en vez de sumado — ver levelGapEvasionBonus).
+  ev -= levelGapEvasionBonus(monsterEffectiveLevel(), state.char.level);
   const furioso = hasStatus(combat.playerStatuses,'Furioso');
   if(furioso) ev += furioso.evasionDelta/100;
   if(combat.playerDefending) ev = Math.max(ev, 0.5);
   if(hasStatus(combat.playerStatuses,'Paralisis')) ev = 0; // indefenso: la Parálisis anula toda evasión, incluso defendiendo
-  return {crit:d.critChance, evasion:clamp(ev,0,0.6)};
+  return {crit:d.critChance, evasion:clamp(ev,0.02,0.6)};
 }
 
 // v1: los aliados no tienen Habilidad ni equipo propio todavía, solo una
@@ -3899,7 +3961,8 @@ function computeCritEvasion(){
 function computeAllyEvasion(ally){
   if(hasStatus(ally.statuses,'Paralisis')) return 0;
   const evasionFlat = (ally.specials||[]).filter(sp=>sp.type==='evasion_flat').reduce((sum,sp)=>sum+sp.value,0);
-  return 0.06 + evasionFlat;
+  const ev = 0.06 + evasionFlat - levelGapEvasionBonus(monsterEffectiveLevel(), state.char.level);
+  return clamp(ev, 0.02, 0.6);
 }
 
 // probabilidad combinada de aturdir al golpear, sumando todas las fuentes
@@ -4262,6 +4325,8 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
   const furioso = hasStatus(combat.playerStatuses,'Furioso');
   const raceObj = race();
   const ceguera = hasStatus(combat.playerStatuses,'Ceguera');
+  const monsterLevel = monsterEffectiveLevel();
+  const outgoingLevelDiffMult = levelDiffDamageMult(state.char.level, monsterLevel);
 
   targets.forEach(target=>{
     if(ceguera && chance(ceguera.procChance||0.32)){
@@ -4272,7 +4337,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
     // solo enemigos de verdad tienen tpl/evasion; un aliado hostil como
     // objetivo no esquiva por esta vía.
     if(target.tpl){
-      const dodgeChance = Math.max(0, (target.evasion||0) - d.precision);
+      const dodgeChance = clamp((target.evasion||0) + levelGapEvasionBonus(monsterLevel, state.char.level) - d.precision, 0.02, 0.85);
       if(chance(dodgeChance)){
         log(`${target.name} esquiva tu ataque.`);
         return;
@@ -4377,7 +4442,10 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
       if(sp.type==='penetracion_armadura' && resKey==='fisico') resVal -= sp.value*100;
       if(sp.type==='penetracion_magica' && resKey && resKey!=='fisico') resVal -= sp.value*100;
     });
-    let dmg = base*(1-resVal/100);
+    // Penetración por nivel (2026-09-16): además de la del equipo, todo golpe
+    // penetra un poco más a medida que subes de nivel, sin importar el tipo.
+    if(resKey) resVal -= d.penetracionNivel*100;
+    let dmg = base*(1-resVal/100)*outgoingLevelDiffMult;
     if(skill.penaltyIfFrente && combat.playerPos==='frente') dmg *= (1-skill.penaltyIfFrente);
     dmg = Math.max(1, Math.round(dmg));
     if(target.defending) dmg = Math.round(dmg*0.5);
@@ -4677,7 +4745,9 @@ function resolveOneAllyTurn(ally){
       if(sp.type==='penetracion_armadura' && resKey==='fisico') resVal -= sp.value*100;
       if(sp.type==='penetracion_magica' && resKey!=='fisico') resVal -= sp.value*100;
     });
-    dmg = Math.max(1, Math.round(dmg*(1-resVal/100)));
+    // Mismo trato de brecha de nivel que el jugador — un aliado usa el
+    // nivel DE SU DUEÑO como referencia, no tiene el suyo propio para esto.
+    dmg = Math.max(1, Math.round(dmg*(1-resVal/100)*levelDiffDamageMult(state.char.level, monsterEffectiveLevel())));
     enemyTarget.hp = Math.max(0, enemyTarget.hp - dmg);
     log(skillText
       ? `<b>${ally.name}</b> ${skillText} ${enemyTarget.name}: ${dmg} de daño.`
@@ -4813,7 +4883,7 @@ const SUMMON_TEMPLATE = {id:'criatura_menor', name:'Criatura menor invocada', ic
 
 // Nombres cortos para la burbuja de acción sobre la tarjeta del enemigo —
 // el texto narrado de más arriba (`text`) es demasiado largo para eso.
-const MOVE_LABELS = {robar:'Robo', morder:'Mordisco', debilitar:'Debilitar', aplastar:'Golpe brutal', paralizar:'Parálisis', cegar:'Cegar', atemorizar:'Atemorizar', confundir:'Confundir'};
+const MOVE_LABELS = {robar:'Robo', morder:'Mordisco', debilitar:'Debilitar', aplastar:'Golpe brutal', paralizar:'Parálisis', cegar:'Cegar', atemorizar:'Atemorizar', confundir:'Confundir', maldicion_venenosa:'Maldición venenosa', curar_aliado:'Cura a un aliado'};
 
 function enemyAct(enemy){
   if(!enemy.cooldowns) enemy.cooldowns = {};
@@ -4850,6 +4920,30 @@ function enemyAct(enemy){
     enemy.hp = Math.min(enemy.maxHP, enemy.hp+heal);
     log(`${enemy.name} se cura ${enemy.hp-before} de vida.`);
     combat.lastAction = {label:'Se cura', effects:[{targetKind:'enemy', key:enemyIdx, amount:enemy.hp-before, kind:'heal'}]};
+    return;
+  }
+  // Sanador de grupo (2026-09-16, pedido explícito: "los goblins chamanes
+  // también deberían tener capacidad de curar" — antes 'curar' solo existía
+  // como auto-curación de jefe, nunca curaba a OTRO enemigo). Cura al
+  // compañero vivo más herido; si pelea solo, se cura a sí mismo en su lugar
+  // para que el turno no se desperdicie.
+  if(move==='curar_aliado'){
+    const others = livingEnemies().filter(e=>e!==enemy);
+    const target = others.sort((a,b)=>(a.hp/a.maxHP)-(b.hp/b.maxHP))[0];
+    if(!target){
+      const heal = Math.max(1, Math.round(enemy.maxHP*0.12));
+      const before = enemy.hp;
+      enemy.hp = Math.min(enemy.maxHP, enemy.hp+heal);
+      log(`${enemy.name} se cura ${enemy.hp-before} de vida.`);
+      combat.lastAction = {label:'Se cura', effects:[{targetKind:'enemy', key:enemyIdx, amount:enemy.hp-before, kind:'heal'}]};
+      return;
+    }
+    const heal = Math.max(1, Math.round(target.maxHP*0.15));
+    const before = target.hp;
+    target.hp = Math.min(target.maxHP, target.hp+heal);
+    const targetIdx = combat.enemies.indexOf(target);
+    log(`${enemy.name} canaliza magia curativa sobre ${target.name}: recupera ${target.hp-before} de vida.`);
+    combat.lastAction = {label:'Cura a un aliado', effects:[{targetKind:'enemy', key:targetIdx, amount:target.hp-before, kind:'heal'}]};
     return;
   }
   if(move==='buff_pasivo'){
@@ -4916,11 +5010,22 @@ function enemyAct(enemy){
   if(move==='cegar'){ text='arroja algo a tus ojos'; applyToTarget({name:'Ceguera', duration:2, chance:0.5, procChance:0.32}); }
   if(move==='atemorizar'){ text='ruge y siembra el terror'; applyToTarget({name:'Miedo', duration:2, chance:0.5, procChance:0.4}); dmg = Math.round(dmg*0.7); }
   if(move==='confundir'){ text='distorsiona tu percepción'; applyToTarget({name:'Confusion', duration:2, chance:0.5, procChance:0.35}); dmg = Math.round(dmg*0.7); }
+  if(move==='maldicion_venenosa'){ text='lanza una maldición venenosa'; dmg = Math.round(dmg*1.15); }
+
+  // Enemigos "mago" (2026-09-16, pedido explícito): su golpe usa daño
+  // elemental de verdad — resistencia mágica + la resistencia elemental
+  // específica del objetivo, en vez de la física de siempre. Antes NINGÚN
+  // enemigo hacía esto (todo ataque, sin importar el move, pegaba contra
+  // totalRes('fisico')).
+  const ELEMENTAL_MOVES = {maldicion_venenosa:'veneno'};
+  const elementalType = ELEMENTAL_MOVES[move];
 
   let finalDmg;
   if(onPlayer){
     // resistance vs player
-    let resVal = totalRes('fisico') - corrosionResPenalty(combat.playerStatuses);
+    let resVal = elementalType
+      ? totalRes(elementalType) + d.resMagica
+      : totalRes('fisico') - corrosionResPenalty(combat.playerStatuses);
     finalDmg = dmg*(1-resVal/100);
     if(state.char.race==='enano') finalDmg -= 2;
     if(combat.playerDefending) finalDmg *= 0.5;
@@ -4931,15 +5036,21 @@ function enemyAct(enemy){
     specialsFromEquip(state.char.equip).forEach(sp=>{
       if(sp.type==='reduccion_dano') finalDmg *= (1-sp.value);
     });
+    // Brecha de nivel: un monstruo de más nivel pega más fuerte, uno de
+    // menos nivel pega más flojo — dirección invertida a la del jugador
+    // atacando (ver levelDiffDamageMult en playerUseSkill).
+    finalDmg *= levelDiffDamageMult(monsterEffectiveLevel(), state.char.level);
     finalDmg = Math.max(1, Math.round(finalDmg));
     dealDamageToPlayer(finalDmg);
     log(`${enemy.name} ${text}: ${finalDmg} de daño.`);
     combat.lastAction = {label:moveLabel, effects:[{targetKind:'player', amount:finalDmg, kind:'dmg'}]};
   } else {
     const ally = target.ally;
-    let allyDmg = dmg*(1-(((ally.res && ally.res.fisico)||0) - corrosionResPenalty(ally.statuses))/100);
+    const allyResKey = elementalType || 'fisico';
+    let allyDmg = dmg*(1-(((ally.res && ally.res[allyResKey])||0) - (elementalType?0:corrosionResPenalty(ally.statuses)))/100);
     if(hasStatus(ally.statuses,'Paralisis')) allyDmg *= 1.25; // indefenso: igual que al jugador
     (ally.specials||[]).forEach(sp=>{ if(sp.type==='reduccion_dano') allyDmg *= (1-sp.value); });
+    allyDmg *= levelDiffDamageMult(monsterEffectiveLevel(), state.char.level);
     finalDmg = Math.max(1, Math.round(allyDmg));
     dealDamageToAlly(ally, finalDmg);
     log(`${enemy.name} ${text} a ${ally.name}: ${finalDmg} de daño.`);
