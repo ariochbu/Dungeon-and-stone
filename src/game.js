@@ -64,7 +64,7 @@ const STYLES = {
     skills:['corte_rapido','danza_cuchillas','golpe_gracia']
   },
   tirador: {
-    id:'tirador', name:'Tirador', icon:'🏹', scaleStat:'hab',
+    id:'tirador', name:'Tirador', icon:'🏹', scaleStat:'fis',
     desc:'Distancia y precisión. Marca, retrocede, dispara.',
     skills:['disparo_certero','marca_cazador','lluvia_flechas']
   },
@@ -128,7 +128,10 @@ const ULTIMATE_COOLDOWN_TURNS = 5;
 const SKILLS = {
   ataque_basico: {
     id:'ataque_basico', name:'Ataque básico', cost:null, dmgType:'fisico', mult:0.55,
-    desc:'Un golpe simple y confiable. No cuesta recursos.', targetMode:'front'
+    desc: ()=> state && state.char && state.char.style==='tirador'
+      ? 'Un golpe simple y confiable. No cuesta recursos. +60% de daño para el Tirador — su golpe más fuerte.'
+      : 'Un golpe simple y confiable. No cuesta recursos.',
+    targetMode:'front'
   },
   defender: {
     id:'defender', name:'Defenderse', cost:null, utility:'defend',
@@ -4130,6 +4133,11 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
     // race passives affecting outgoing
     if(raceObj.id==='draconido' && skill.dmgType==='fuego') base *= 1.15;
     if(raceObj.id==='barbaro' && state.char.curHP/d.maxHP < 0.3) base *= 1.2;
+    // Rework del Arquero (2026-09-16): su ataque básico pasa a ser su golpe
+    // más fuerte, por encima incluso de Disparo certero — pedido explícito,
+    // "+60%" es mi elección (no vino con un número exacto), fácil de ajustar
+    // acá si en la práctica queda muy arriba o muy abajo del resto del kit.
+    if(state.char.style==='tirador' && skillId==='ataque_basico') base *= 1.6;
     if(furioso) base *= (furioso.dmgMult||1);
     if(hasStatus(combat.playerStatuses,'Debilitado')) base *= 0.85; // te drenaron la fuerza: -15% de daño mientras dure
     socketedStones().forEach(s=>{
