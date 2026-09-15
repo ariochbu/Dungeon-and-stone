@@ -752,6 +752,86 @@ function buySelloGear(slot, rarity, name){
   renderAll(); save();
 }
 
+/* ============================================================
+   PROGRESIÓN AUTOMÁTICA DE EQUIPO — Sacerdote (pedido 2026-09-15)
+   ============================================================
+   Sacerdote quedó fuera del pool de botín aleatorio del laberinto (nunca
+   lo puede equipar el jugador, así que "desperdiciaba" tiradas — ver
+   WEAPON_STYLE_IDS). En su lugar, el aliado Sacerdote desbloquea equipo
+   completo solo en 3 hitos: nivel de aliado 10 (Raro), nivel 20 (Único), y
+   al derrotar al jefe de la década 30 (Épico) — este último no depende del
+   nivel del aliado. El arma 1 nunca se toca acá (queda a criterio del
+   jugador, comprada aparte). El arma 2 el jugador la elige una sola vez
+   (Grimorio de plegarias / Tomo sagrado) y esa elección se recuerda y se
+   reaplica sola, al rango más alto, en cada hito siguiente. */
+const AUTO_GEAR_LEVEL = {raro:10, rango_b:20}; // rango_a no depende del nivel, ver el jefe de década 30
+// RARITIES[x].name dice "Rango B"/"Rango A" (nombre interno) — en el resto
+// de la interfaz esos dos rangos siempre se muestran como "Único"/"Épico"
+// (ver el tag de makeSelloShopItem), así que la progresión automática usa
+// la misma etiqueta para no decir una cosa distinta al resto de la tienda.
+const AUTO_GEAR_TIER_LABEL = {raro:'Raro', rango_b:'Único', rango_a:'Épico'};
+function makeAutoGearItem(slot, rarity){
+  if(rarity==='raro'){
+    const name = pick(COMUN_GEAR_NAMES[slot]);
+    const bonus = slot==='amuleto'
+      ? {res: pick(['fisico','fuego','hielo','veneno','aturdimiento']), value: RARO_RES_PCT}
+      : {stat: GUARDIAN_SLOT_STAT[slot] || 'maxhp', value: shopGearValueRaro(slot)};
+    return {kind:'equip', slot, name, bonus, rarity:'raro'};
+  }
+  return makeSelloShopItem(slot, rarity); // rango_b/rango_a — sin styleId, no es un arma
+}
+async function saveAllyAutoGear(row){
+  const { error } = await supabase.from('character_allies').update({
+    equip: row.equip||{},
+    auto_gear_tier: row.auto_gear_tier||'none',
+    auto_gear_pending: !!row.auto_gear_pending,
+    auto_gear_arma2_name: row.auto_gear_arma2_name||null
+  }).eq('id', row.id);
+  if(error) console.error('No se pudo guardar el equipo automático del aliado:', error.message);
+}
+async function grantAllyAutoGear(row, tier){
+  if(!row.equip) row.equip = {};
+  ['armadura','casco','botas','guantes','amuleto'].forEach(slot=>{
+    const prior = row.equip[slot];
+    row.equip[slot] = makeAutoGearItem(slot, tier);
+    if(prior) state.char.inventory.push(prior);
+  });
+  if(row.auto_gear_arma2_name){
+    const prior = row.equip.arma2;
+    row.equip.arma2 = makeWeaponItem('arma2', 'sacerdote', tier, row.auto_gear_arma2_name);
+    if(prior) state.char.inventory.push(prior);
+    row.auto_gear_pending = false;
+  } else {
+    row.auto_gear_pending = true;
+  }
+  row.auto_gear_tier = tier;
+  log(`<b>${row.name}</b> desbloquea su equipo ${AUTO_GEAR_TIER_LABEL[tier]}${row.auto_gear_pending ? ' — elige su arma2 en la Taberna' : ''}.`);
+  await saveAllyAutoGear(row);
+  if(invOpen) renderInventory();
+}
+// Llamada tras cada subida de nivel de aliado (ver advanceAllyXp) — solo
+// Sacerdote tiene esta progresión; el resto de sendas ya consigue equipo
+// por botín normal.
+async function checkAllyAutoGearByLevel(row){
+  if(row.role!=='sacerdote') return;
+  const tier = row.auto_gear_tier || 'none';
+  if(tier==='none' && row.level>=AUTO_GEAR_LEVEL.raro) await grantAllyAutoGear(row,'raro');
+  else if(tier==='raro' && row.level>=AUTO_GEAR_LEVEL.rango_b) await grantAllyAutoGear(row,'rango_b');
+}
+function chooseAllyAutoGearArma2(allyId, name){
+  const row = (state.char.allies||[]).find(a=>a.id===allyId);
+  if(!row || !row.auto_gear_pending) return;
+  row.auto_gear_arma2_name = name;
+  if(!row.equip) row.equip = {};
+  const prior = row.equip.arma2;
+  row.equip.arma2 = makeWeaponItem('arma2', 'sacerdote', row.auto_gear_tier, name);
+  if(prior) state.char.inventory.push(prior);
+  row.auto_gear_pending = false;
+  log(`<b>${row.name}</b> equipa <b>${name}</b>.`);
+  saveAllyAutoGear(row);
+  renderAll();
+}
+
 function buyPotion(potionId){
   const price = SHOP_POTION_PRICES[potionId] || 15;
   if(state.char.gold < price){ log('No tienes suficiente oro para eso.'); return; }
@@ -2430,6 +2510,7 @@ async function advanceAllyXp(xpGain){
     if(leveled) log(`<b>${row.name}</b> sube a nivel ${row.level}.`);
     const { error } = await supabase.from('character_allies').update({level: row.level, xp: row.xp}).eq('id', row.id);
     if(error) console.error('No se pudo guardar el progreso del aliado:', error.message);
+    if(leveled) await checkAllyAutoGearByLevel(row);
   }
 }
 
@@ -2536,6 +2617,23 @@ function renderTaberna(){
     const xpText = a.level>=CHAR_LEVEL_CAP ? 'Nivel máximo' : `${a.xp||0} / ${needed} exp`;
     const satisfaction = a.satisfaction===undefined || a.satisfaction===null ? ALLY_SATISFACTION_DEFAULT : a.satisfaction;
     const satColor = satisfaction>=70 ? 'var(--good)' : satisfaction>=40 ? 'var(--bronze-light)' : 'var(--blood-light)';
+    // Elección de arma2 pendiente (progresión automática de equipo del
+    // Sacerdote, ver grantAllyAutoGear) — se pregunta una sola vez, la
+    // primera vez que se desbloquea algo; después se reaplica sola.
+    const autoGearPromptHTML = a.auto_gear_pending ? (()=>{
+      const tier = a.auto_gear_tier || 'raro';
+      const names = Object.keys((WEAPON_CATALOG.sacerdote||{}).arma2||{});
+      const optionsHTML = names.map(name=>{
+        const preview = makeWeaponItem('arma2', 'sacerdote', tier, name);
+        return `<button class="inv-btn" data-auto-gear-arma2="${a.id}|${name}" style="text-align:left;">
+          <b>${name}</b><br><span style="font-size:0.85em;">${preview ? itemBonusText(preview) : ''}</span>
+        </button>`;
+      }).join('');
+      return `<div class="inv-item-bonus" style="margin-top:6px; color:var(--bronze-light); border:1px solid var(--bronze); border-radius:8px; padding:8px;">
+        <b>¡Equipo ${AUTO_GEAR_TIER_LABEL[tier]} desbloqueado!</b> Elige el arma2 de ${a.name} (queda fija para los próximos rangos):
+        <div style="display:flex; flex-direction:column; gap:6px; margin-top:6px;">${optionsHTML}</div>
+      </div>`;
+    })() : '';
     return `<div class="inv-item-row">
       <div>
         <b>${tpl.icon||'⚔️'} ${a.name}</b> <span class="slot-tag">${a.role} · nivel ${a.level}</span>${a.has_totem ? ` <span class="slot-tag">${WARD_ITEM.icon} Tótem</span>` : ''} <span class="slot-tag" style="border-color:${satColor}; color:${satColor};">Satisfacción ${satisfaction}%</span>
@@ -2544,6 +2642,7 @@ function renderTaberna(){
         <div class="bar-track" style="margin-top:6px;"><div class="bar-fill xp" style="width:${xpPct}%"></div></div>
         <div style="font-size:0.7em; color:var(--text-dim); margin-top:2px;">${xpText}</div>
         <div style="font-size:0.7em; color:var(--text-dim); margin-top:2px;">Paga ${allyWage(a)} de oro cada vez que sales del laberinto. Si no te alcanza el oro, su satisfacción baja.</div>
+        ${autoGearPromptHTML}
       </div>
       <button class="inv-btn danger" data-dismiss="${a.id}">Despedir</button>
     </div>`;
@@ -2589,6 +2688,12 @@ function renderTaberna(){
   });
   document.querySelectorAll('[data-dismiss]').forEach(btn=>{
     btn.onclick = ()=> dismissAlly(btn.dataset.dismiss);
+  });
+  document.querySelectorAll('[data-auto-gear-arma2]').forEach(btn=>{
+    btn.onclick = ()=>{
+      const [allyId, name] = btn.dataset.autoGearArma2.split('|');
+      chooseAllyAutoGearArma2(allyId, name);
+    };
   });
 }
 
@@ -4866,6 +4971,13 @@ function handleVictory(){
     // a mitad de década, solo al cerrarla.
     if(isDecadeFinal){
       state.char.checkpointLevel = Math.max(state.char.checkpointLevel||1, clearedLevel+1);
+    }
+    // Jefe de la década 30: el Sacerdote desbloquea su equipo Épico (A)
+    // completo, sin importar su propio nivel — a diferencia de Raro/Único,
+    // que sí dependen del nivel del aliado (ver checkAllyAutoGearByLevel).
+    if(isDecadeFinal && clearedLevel===30){
+      (state.char.allies||[]).filter(a=>a.role==='sacerdote' && (a.auto_gear_tier||'none')!=='rango_a')
+        .forEach(a=> grantAllyAutoGear(a,'rango_a'));
     }
     log(`Derrotas al guardián del nivel ${clearedLevel}.`);
 
