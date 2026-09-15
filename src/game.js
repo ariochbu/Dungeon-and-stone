@@ -1401,12 +1401,28 @@ function totalRes(key){
   return clamp(v, -60, 80);
 }
 
+// Vida máxima (2026-09-16, pedido explícito): Físico deja de alimentar la
+// vida — ahora esa estadística solo importa para daño/otras cosas, y la
+// "Vida máxima" es un stat propio del equipo (Casco, ver GEAR_CATALOG).
+// Lo que SÍ debe subir la vida es el nivel, y con más fuerza que antes: a
+// nivel 16 un Asesino no llegaba ni a 230 HP, que se sentía injusto contra
+// jefes de ~10 mil HP — la meta que dio ariochbu fue ~700-800 HP a nivel 20
+// para Asesino y ~1000-1100 para Guerrero. HP_PER_LEVEL variaría por senda
+// (el Guerrero es más resistente por diseño, no por su Físico) — Tirador y
+// Mago no vinieron con una meta explícita, los ubiqué por criterio propio
+// entre ambos extremos (Tirador cerca de Asesino, Mago el más frágil).
+const HP_BASE = 40;
+const HP_PER_LEVEL = {pesada:50, tirador:38, doblefilo:35, mago:30, sacerdote:30};
 function derived(){
   const fis = baseStat('fis'), esp = baseStat('esp'), hab = baseStat('hab');
-  let maxHP = Math.round(40 + fis*8 + state.char.level*5);
+  let maxHP = Math.round(HP_BASE + state.char.level * (HP_PER_LEVEL[state.char.style]||40));
   let maxSta = Math.round(20 + fis*3 + hab*2);
   let maxSpi = Math.round(20 + esp*4);
   const eq = state.char.equip;
+  // El viejo bono bonus.stat==='maxhp' (×8) ya no lo otorga ningún equipo
+  // nuevo (Armadura ahora da resistencia física, no vida) — se deja este
+  // bucle solo por compatibilidad con piedras de alma/objetos viejos que
+  // todavía puedan traerlo, no por diseño actual.
   EQUIP_SLOTS.forEach(slot=>{
     const it = eq[slot];
     if(it && it.bonus && it.bonus.stat === 'maxhp') maxHP += it.bonus.value*8;
@@ -3839,7 +3855,11 @@ const ALLY_EQUIP_SLOTS = ['arma','arma2','armadura','amuleto','casco','botas','g
 function allyMaxHP(row){
   const tpl = ALLY_ROSTER.find(t=>t.templateId===row.template_id);
   const lvl = row.level || 1;
-  let maxHP = Math.round(40 + lvl*7 + (tpl.frontline ? lvl*3 : 0));
+  // Mismo criterio nuevo que el jugador (HP_BASE/HP_PER_LEVEL, ver
+  // derived()): el aliado sube de vida por NIVEL y por su rol, con un
+  // plus si es de frontline (encaja golpes por el resto del equipo).
+  const hpPerLevel = HP_PER_LEVEL[ALLY_ROLE_TO_WEAPON_STYLE[tpl.role]] || 35;
+  let maxHP = Math.round(HP_BASE + lvl*hpPerLevel + (tpl.frontline ? lvl*8 : 0));
   const equip = row.equip || {};
   ALLY_EQUIP_SLOTS.forEach(slot=>{
     const it = equip[slot];
