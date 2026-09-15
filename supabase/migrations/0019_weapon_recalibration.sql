@@ -24,12 +24,12 @@
 begin;
 
 -- 0a) La columna style tiene un check constraint que solo admite los 4 ids
--- viejos (0001_init.sql) - hay que dejar pasar 'mago' antes de poder poner
--- ese valor en ninguna fila. 'canalizador' se saca del permitido: después
--- del paso 0b ninguna fila lo usa, y game.js ya no lo entiende.
+-- viejos (0001_init.sql). Se saca ahora (sin ponerlo de vuelta todavía) para
+-- poder escribir 'mago' en el paso 0c - si se agregara la versión nueva del
+-- constraint ACÁ, fallaría de inmediato: seguiría habiendo filas en
+-- 'canalizador' hasta que 0c corra, y Postgres valida un constraint nuevo
+-- contra todas las filas existentes en el momento de agregarlo.
 alter table public.characters drop constraint if exists characters_style_check;
-alter table public.characters add constraint characters_style_check
-  check (style in ('pesada','doblefilo','tirador','mago'));
 
 -- 0b) create_character() valida la senda contra la misma lista vieja - se
 -- actualiza para que un personaje nuevo pueda crearse con 'mago'.
@@ -83,6 +83,12 @@ $$;
 alter table public.characters disable trigger trg_validate_character_update;
 update public.characters set style = 'mago' where style = 'canalizador';
 alter table public.characters enable trigger trg_validate_character_update;
+
+-- 0d) Recién ahora, con todas las filas ya en 'mago', se puede agregar la
+-- versión nueva y más estricta del constraint sin que falle contra datos
+-- viejos.
+alter table public.characters add constraint characters_style_check
+  check (style in ('pesada','doblefilo','tirador','mago'));
 
 -- 1) Función temporal (pg_temp: vive solo durante esta sesión del SQL
 -- Editor, desaparece sola al cerrar la pestaña — no queda nada instalado en
