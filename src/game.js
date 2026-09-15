@@ -680,11 +680,24 @@ function guantesTiers(stat, penType, penText){
     {rank:'rango_a', bonus:{stat, value:20}, specials:[{type:'aumento_dano', value:0.12, text:'de aumento de daño'},{type:penType, value:0.05, text:penText}]},
   ];
 }
-const GEAR_CLASS_STAT = {pesada:'fis', tirador:'fis', doblefilo:'hab', mago:'hab', sacerdote:'hab'};
+// 2026-09-16: corregido tras revisar qué stat/penetración de verdad usa
+// cada senda para hacer daño (ariochbu preguntó "¿Habilidad aumenta el
+// daño mágico?" y la respuesta destapó dos desajustes):
+// - Mago/Sacerdote escalan su daño con ESPÍRITU, no Habilidad — sus
+//   guantes daban Habilidad (útil solo para crítico/evasión/MP, no para
+//   pegar más fuerte). Ahora dan Espíritu, como Guerrero/Arquero dan
+//   Físico (su propio stat de daño).
+// - Asesino sigue dando Habilidad en sus guantes (mismo criterio que ya
+//   usa su arma — su fórmula real es un promedio Físico+Habilidad, no se
+//   puede repartir un bono entre dos stats) PERO su daño es 100% físico
+//   (dmgType 'fisico' en sus 3 habilidades) — su penetración de guantes
+//   debía ser de armadura física, no de resistencia mágica (que para
+//   Asesino no hacía nada, nunca golpea con resKey!=='fisico').
+const GEAR_CLASS_STAT = {pesada:'fis', tirador:'fis', doblefilo:'hab', mago:'esp', sacerdote:'esp'};
 const GEAR_PENETRATION = {
   pesada:['penetracion_armadura','de penetración de armadura física'],
   tirador:['penetracion_armadura','de penetración de armadura física'],
-  doblefilo:['penetracion_magica','de penetración de resistencia mágica'],
+  doblefilo:['penetracion_armadura','de penetración de armadura física'],
   mago:['penetracion_magica','de penetración de resistencia mágica'],
   sacerdote:['penetracion_magica','de penetración de resistencia mágica'],
 };
