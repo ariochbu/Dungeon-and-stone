@@ -3127,7 +3127,14 @@ function enterNode(f,n){
     state.char.curHP = d.maxHP;
     state.char.curSta = Math.min(d.maxSta, state.char.curSta + Math.round(d.maxSta*0.5));
     state.char.curSpi = Math.min(d.maxSpi, state.char.curSpi + Math.round(d.maxSpi*0.5));
-    log('Una hoguera olvidada. Vida restaurada, MP y espíritu recuperados a medias.');
+    // Antes la hoguera solo curaba al jugador - state.dungeon.allyHP (la vida
+    // con la que cada aliado sigue entre combates de un mismo nivel, ver
+    // syncAllyHPToDungeon) nunca se tocaba, así que un aliado herido o caído
+    // seguía igual después de descansar. Ahora revive y cura a todo el
+    // equipo a vida completa, igual que al jugador.
+    if(!state.dungeon.allyHP) state.dungeon.allyHP = {};
+    (state.char.allies||[]).forEach(row=>{ state.dungeon.allyHP[row.id] = allyMaxHP(row); });
+    log('Una hoguera olvidada. Vida restaurada, MP y espíritu recuperados a medias. Tu equipo también se recupera por completo.');
     node.done = true;
     advanceMissionsFor('rest_bonfires', 1);
     renderAll();
@@ -3371,17 +3378,32 @@ function markAllyHostile(allyId){
 // Estadísticas de combate del aliado, derivadas de su nivel — v1 no tiene
 // equipo ni piedras de alma propias todavía, solo la curva base por rol.
 const ALLY_EQUIP_SLOTS = ['arma','arma2','armadura','amuleto','casco','botas','guantes'];
-function makeCombatAlly(row){
+// Vida máxima de un aliado a partir de su fila (nivel + equipo) - extraído de
+// makeCombatAlly() para que la hoguera de descanso (que cura a todo el
+// equipo sin que haya combate de por medio) calcule el mismo número, en vez
+// de reimplementar la fórmula por separado y arriesgarse a que diverjan.
+function allyMaxHP(row){
   const tpl = ALLY_ROSTER.find(t=>t.templateId===row.template_id);
   const lvl = row.level || 1;
   let maxHP = Math.round(40 + lvl*7 + (tpl.frontline ? lvl*3 : 0));
+  const equip = row.equip || {};
+  ALLY_EQUIP_SLOTS.forEach(slot=>{
+    const it = equip[slot];
+    if(it && it.bonus && it.bonus.stat==='maxhp') maxHP += it.bonus.value*8;
+  });
+  return maxHP;
+}
+function makeCombatAlly(row){
+  const tpl = ALLY_ROSTER.find(t=>t.templateId===row.template_id);
+  const lvl = row.level || 1;
+  const maxHP = allyMaxHP(row);
   let atk = Math.round(6 + lvl*1.7);
   const res = {fisico:0, fuego:0, hielo:0, veneno:0, aturdimiento:0};
   const equip = row.equip || {};
   ALLY_EQUIP_SLOTS.forEach(slot=>{
     const it = equip[slot];
     if(!it || !it.bonus) return;
-    if(it.bonus.stat==='maxhp') maxHP += it.bonus.value*8;
+    if(it.bonus.stat==='maxhp') return; // ya sumado en allyMaxHP()
     else if(it.bonus.stat) atk += it.bonus.value; // arma/casco/botas/guantes: bono plano al ataque, más simple que el modelo de stats del jugador
     else if(it.bonus.res) res[it.bonus.res] = (res[it.bonus.res]||0) + it.bonus.value;
   });
