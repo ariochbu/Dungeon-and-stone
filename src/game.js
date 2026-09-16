@@ -1734,6 +1734,29 @@ function levelMult(level){
   return base * (1 + (level-10)*0.06);
 }
 
+// Curvas de VIDA (2026-09-16, pedido explícito) para mob regular y élite —
+// separadas de levelMult (que sigue igual, y sigue alimentando el ataque de
+// todos y el HP de guardianes/jefes de década, sin cambios). Mismo molde que
+// levelMult (compuesto hasta nivel 10, lineal después), pero con su propia
+// tasa para que la vida de estos dos golpee los objetivos pedidos:
+//   Regular (base 55-65): ~500-600 en nivel 20, ~1200-1300 en nivel 40,
+//   ~1700-1800 en nivel 60 (no hay una tasa que caiga exacta en las 3 a la
+//   vez — R=1.16/S=0.14 da 502-593 / 1088-1285 / 1673-1978, la más cercana).
+//   Élite (base sube de 100-110 a 125-135): incremento de nivel 1 a 2 pasa
+//   de ~14-15 a ~20-25, y nivel 20/40/60 caen EXACTOS en 1000/2000/3000.
+function regularHPMult(level){
+  const R = 1.16, S = 0.14;
+  const base = Math.pow(R, Math.max(0, Math.min(level,10)-1));
+  if(level<=10) return base;
+  return base * (1 + (level-10)*S);
+}
+function eliteHPMult(level){
+  const R = Math.pow(50/13, 1/9), S = 0.1; // R^9 = 50/13 exacto -> nivel 20/40/60 = 1000/2000/3000
+  const base = Math.pow(R, Math.max(0, Math.min(level,10)-1));
+  if(level<=10) return base;
+  return base * (1 + (level-10)*S);
+}
+
 // Incremento de dificultad por piso dentro de un mismo nivel. Se repite cada
 // decena para cuando el laberinto crezca a 100 niveles: los que terminan en
 // 1-5 (1,2,3,4,5,11,12,13,14,15,21...) suben +0.05 por piso, los que terminan
@@ -3766,17 +3789,18 @@ function makeEnemy(tpl, floorIdx, level){
       atk = Math.round(26 * tpl.atk * lvlMult);
     }
   } else if(tpl.elite){
-    // elite: level 1 baseline ~100-110 HP, tpl.hp/tpl.atk dan la variante por
-    // especie (antes se ignoraban aquí igual que en los jefes — todo élite
-    // de cualquier década caía en el mismo valor plano sin importar su
-    // propio hp/atk de diseño).
-    hp = Math.round(rnd(100,110) * tpl.hp * floorMult * lvlMult);
+    // elite: 2026-09-16, pedido explícito — base sube de 100-110 a 125-135,
+    // y su curva de vida ya no usa lvlMult (crecía muy lento a nivel alto)
+    // sino eliteHPMult, calibrada para nivel 20/40/60 = 1000/2000/3000.
+    // El ataque no cambia: sigue con lvlMult, igual que siempre.
+    hp = Math.round(rnd(125,135) * tpl.hp * floorMult * eliteHPMult(level||1));
     atk = Math.round(16 * tpl.atk * floorMult * lvlMult);
   } else {
-    // regular mob: 2026-09-16, pedido explícito, subido de 40-50 a 55-65 —
-    // un poco más de peligro sin acercarse al piso de un élite (100-110).
-    // tpl.hp/tpl.atk dan la variante por especie.
-    hp = Math.round(rnd(55,65) * tpl.hp * floorMult * lvlMult);
+    // regular mob: 2026-09-16, pedido explícito — además del piso de 40-50 a
+    // 55-65, la curva de vida usa regularHPMult (no lvlMult) para llegar a
+    // ~500-600 en nivel 20, ~1200-1300 en 40, ~1700-1800 en 60. El ataque no
+    // cambia: sigue con lvlMult, igual que siempre.
+    hp = Math.round(rnd(55,65) * tpl.hp * floorMult * regularHPMult(level||1));
     atk = Math.round(9 * tpl.atk * floorMult * lvlMult);
   }
   const res = Object.assign({}, tpl.res);
