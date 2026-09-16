@@ -3595,7 +3595,16 @@ function enterNode(f,n){
       }
     } else if(node.type==='elite'){
       templates = bestiary.elite;
-      count = 1;
+      // 2026-09-16, pedido explícito ("me olvidé de pedirlo, jaja"): más
+      // élites juntos a medida que avanzan las décadas — igual criterio que
+      // ya se usa para los mobs regulares. Década 1-2 (Bosque Goblin/Arañas,
+      // decadeIndex 0-1) = 1, década 3-4 (Bestias-Riakis/Usurpador,
+      // decadeIndex 2-3) = 2, década 5-6 (Isla Paraíso/El Mar, decadeIndex
+      // 4-5) = 3. Se repite la misma plantilla de élite (cada década solo
+      // tiene una definida en el bestiario), igual que ya hace pick() con
+      // los regulares.
+      const decIdx = decadeIndexForLevel(dg.level);
+      count = decIdx<=1 ? 1 : decIdx<=3 ? 2 : 3;
     } else {
       templates = bestiary.regular;
       // 2026-09-16, pedido explícito: el laberinto se sentía muy fácil salvo
