@@ -1425,7 +1425,10 @@ function totalRes(key){
 // Mago no vinieron con una meta explícita, los ubiqué por criterio propio
 // entre ambos extremos (Tirador cerca de Asesino, Mago el más frágil).
 const HP_BASE = 40;
-const HP_PER_LEVEL = {pesada:50, tirador:38, doblefilo:35, mago:30, sacerdote:30};
+// 2026-09-16, pedido explícito: se achica la brecha entre sendas — el
+// Guerrero sigue siendo el único con una vida por nivel más alta (tanque),
+// las otras 4 (Arquero/Asesino/Mago/Sacerdote) quedan todas iguales entre sí.
+const HP_PER_LEVEL = {pesada:35, tirador:25, doblefilo:25, mago:25, sacerdote:25};
 function derived(){
   const fis = baseStat('fis'), esp = baseStat('esp'), hab = baseStat('hab');
   let maxHP = Math.round(HP_BASE + state.char.level * (HP_PER_LEVEL[state.char.style]||40));
