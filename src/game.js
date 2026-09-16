@@ -281,10 +281,10 @@ const DECADE_BESTIARY = [
   // Década 1 — pisos 11-20 — Arañas del bosque profundo (familia tarántula, veneno/Parálisis)
   {
     regular: [
-      {id:'tarantula_cazadora', name:'Tarántula cazadora', icon:'🕷️', hp:1.1, atk:1.05, res:{fisico:5,fuego:-5,hielo:0,veneno:20,aturdimiento:0}, moves:['pegar'], frontline:true},
-      {id:'tarantula_saltarina', name:'Tarántula saltarina', icon:'🕷️', hp:0.9, atk:1.15, res:{fisico:0,fuego:-10,hielo:0,veneno:20,aturdimiento:0}, moves:['pegar','paralizar'], frontline:true},
-      {id:'tarantula_tejedora', name:'Tarántula tejedora', icon:'🕸️', hp:0.8, atk:0.95, res:{fisico:-5,fuego:-10,hielo:10,veneno:25,aturdimiento:0}, moves:['pegar','paralizar']},
-      {id:'viuda_venenosa', name:'Viuda venenosa', icon:'🕸️', hp:0.75, atk:1.0, res:{fisico:-10,fuego:-10,hielo:5,veneno:30,aturdimiento:0}, moves:['paralizar','pegar']}
+      {id:'tarantula_cazadora', name:'Tarántula cazadora', icon:'🕷️', hp:1.1, atk:1.05, res:{fisico:5,fuego:-5,hielo:0,veneno:20,aturdimiento:0}, moves:['pegar','picar'], frontline:true},
+      {id:'tarantula_saltarina', name:'Tarántula saltarina', icon:'🕷️', hp:0.9, atk:1.15, res:{fisico:0,fuego:-10,hielo:0,veneno:20,aturdimiento:0}, moves:['pegar','paralizar','picar'], frontline:true},
+      {id:'tarantula_tejedora', name:'Tarántula tejedora', icon:'🕸️', hp:0.8, atk:0.95, res:{fisico:-5,fuego:-10,hielo:10,veneno:25,aturdimiento:0}, moves:['pegar','paralizar','picar']},
+      {id:'viuda_venenosa', name:'Viuda venenosa', icon:'🕸️', hp:0.75, atk:1.0, res:{fisico:-10,fuego:-10,hielo:5,veneno:30,aturdimiento:0}, moves:['paralizar','pegar','picar']}
     ],
     elite: [{id:'matriarca_telaranha', name:'Matriarca telaraña', icon:'🕷️', hp:2.0, atk:1.35, res:{fisico:10,fuego:-15,hielo:5,veneno:35,aturdimiento:0}, moves:['pegar','paralizar'], elite:true, frontline:true}],
     guardians: [
@@ -296,10 +296,10 @@ const DECADE_BESTIARY = [
   // Década 2 — pisos 21-30 — Guaridas de bestias, con Riakis
   {
     regular: [
-      {id:'loba_acantilado', name:'Loba de acantilado', icon:'🐺', hp:1.1, atk:1.1, res:{fisico:10,fuego:0,hielo:5,veneno:0,aturdimiento:0}, moves:['pegar'], frontline:true},
-      {id:'oso_cuevas', name:'Oso de las cuevas', icon:'🐻', hp:1.3, atk:1.15, res:{fisico:15,fuego:0,hielo:5,veneno:0,aturdimiento:5}, moves:['pegar','aplastar'], frontline:true},
-      {id:'buitre_corrupto', name:'Buitre corrupto', icon:'🦅', hp:0.8, atk:1.0, res:{fisico:-5,fuego:0,hielo:0,veneno:10,aturdimiento:0}, moves:['pegar','cegar']},
-      {id:'lince_sombrio', name:'Lince sombrío', icon:'🐈‍⬛', hp:0.9, atk:1.1, res:{fisico:5,fuego:0,hielo:0,veneno:0,aturdimiento:0}, moves:['pegar','atemorizar']}
+      {id:'loba_acantilado', name:'Loba de acantilado', icon:'🐺', hp:1.1, atk:1.1, res:{fisico:10,fuego:0,hielo:5,veneno:0,aturdimiento:0}, moves:['pegar','morder'], frontline:true},
+      {id:'oso_cuevas', name:'Oso de las cuevas', icon:'🐻', hp:1.3, atk:1.15, res:{fisico:15,fuego:0,hielo:5,veneno:0,aturdimiento:5}, moves:['pegar','aplastar','morder'], frontline:true},
+      {id:'buitre_corrupto', name:'Buitre corrupto', icon:'🦅', hp:0.8, atk:1.0, res:{fisico:-5,fuego:0,hielo:0,veneno:10,aturdimiento:0}, moves:['pegar','cegar','morder']},
+      {id:'lince_sombrio', name:'Lince sombrío', icon:'🐈‍⬛', hp:0.9, atk:1.1, res:{fisico:5,fuego:0,hielo:0,veneno:0,aturdimiento:0}, moves:['pegar','atemorizar','morder']}
     ],
     elite: [{id:'alfa_manada', name:'Alfa de la manada', icon:'🐺', hp:2.1, atk:1.4, res:{fisico:15,fuego:0,hielo:5,veneno:0,aturdimiento:5}, moves:['pegar','atemorizar'], elite:true, frontline:true}],
     guardians: [
@@ -3575,7 +3575,11 @@ function enterNode(f,n){
       count = 1;
     } else {
       templates = bestiary.regular;
-      count = rnd(1,2);
+      // 2026-09-16, pedido explícito: el laberinto se sentía muy fácil salvo
+      // por élites/guardianes — los combates normales ahora traen más
+      // enemigos a la vez a medida que se avanza (nunca más que el tope de
+      // 6 que ya usa invocar()).
+      count = dg.level>=40 ? rnd(5,6) : dg.level>=20 ? rnd(3,4) : rnd(1,2);
     }
     const group = [];
     for(let i=0;i<count;i++) group.push(makeEnemy(pick(templates), f, dg.level));
@@ -3769,8 +3773,10 @@ function makeEnemy(tpl, floorIdx, level){
     hp = Math.round(rnd(100,110) * tpl.hp * floorMult * lvlMult);
     atk = Math.round(16 * tpl.atk * floorMult * lvlMult);
   } else {
-    // regular mob: level 1 baseline ~40-50 HP, tpl.hp/tpl.atk give per-species variance
-    hp = Math.round(rnd(40,50) * tpl.hp * floorMult * lvlMult);
+    // regular mob: 2026-09-16, pedido explícito, subido de 40-50 a 55-65 —
+    // un poco más de peligro sin acercarse al piso de un élite (100-110).
+    // tpl.hp/tpl.atk dan la variante por especie.
+    hp = Math.round(rnd(55,65) * tpl.hp * floorMult * lvlMult);
     atk = Math.round(9 * tpl.atk * floorMult * lvlMult);
   }
   const res = Object.assign({}, tpl.res);
@@ -4068,6 +4074,7 @@ const STATUS_INFO = {
   Furioso:      {buff:true,  desc:'+30% daño físico y -20% daño recibido, a cambio de -10% evasión.'},
   Inspirado:    {buff:true,  desc:'+daño gracias al Grito de guerra de tu compañero.'},
   Sangrado:     {buff:false, desc:'Sufre daño por turno. Se acumula hasta x3.'},
+  Veneno:       {buff:false, desc:'Sufre daño de veneno por turno. Se acumula hasta x3.'},
   Marcado:      {buff:false, desc:'Recibe +20% de todo el daño mientras dura.'},
   Quemadura:    {buff:false, desc:'Sufre daño de fuego por turno.'},
   Ralentizado:  {buff:false, desc:'-20% evasión y actúa después que el resto.'},
@@ -4852,6 +4859,11 @@ function tickStatuses(list, ownerName, target){
       if(target){ target.hp = Math.max(0, target.hp-dmg); log(`${ownerName} sangra por ${dmg}.`); }
       else { dealDamageToPlayer(dmg); log(`Sangras por ${dmg}.`); }
     }
+    if(st.name==='Veneno'){
+      const dmg = Math.max(1, Math.round(skillBaseDamage()*0.06*(st.stacks||1)));
+      if(target){ target.hp = Math.max(0, target.hp-dmg); log(`${ownerName} sufre el veneno por ${dmg}.`); }
+      else { dealDamageToPlayer(dmg); log(`El veneno te quita ${dmg} de vida.`); }
+    }
     if(st.name==='Quemadura'){
       const dmg = Math.max(1, Math.round(skillBaseDamage()*0.22));
       if(target){ target.hp = Math.max(0, target.hp-dmg); log(`${ownerName} arde por ${dmg}.`); }
@@ -4930,7 +4942,7 @@ const SUMMON_TEMPLATE = {id:'criatura_menor', name:'Criatura menor invocada', ic
 
 // Nombres cortos para la burbuja de acción sobre la tarjeta del enemigo —
 // el texto narrado de más arriba (`text`) es demasiado largo para eso.
-const MOVE_LABELS = {robar:'Robo', morder:'Mordisco', debilitar:'Debilitar', aplastar:'Golpe brutal', paralizar:'Parálisis', cegar:'Cegar', atemorizar:'Atemorizar', confundir:'Confundir', maldicion_venenosa:'Maldición venenosa', curar_aliado:'Cura a un aliado'};
+const MOVE_LABELS = {robar:'Robo', morder:'Mordisco', picar:'Picadura', debilitar:'Debilitar', aplastar:'Golpe brutal', paralizar:'Parálisis', cegar:'Cegar', atemorizar:'Atemorizar', confundir:'Confundir', maldicion_venenosa:'Maldición venenosa', curar_aliado:'Cura a un aliado'};
 
 function enemyAct(enemy){
   if(!enemy.cooldowns) enemy.cooldowns = {};
@@ -5050,7 +5062,8 @@ function enemyAct(enemy){
   const onPlayer = target.kind==='player';
   const applyToTarget = (statusDef)=> onPlayer ? applyStatus(null, statusDef, true) : applyStatus(target.ally, statusDef, false);
   if(move==='robar'){ text='intenta robar tu oro'; dmg = Math.round(dmg*0.6); }
-  if(move==='morder'){ text='muerde, veneno en los colmillos'; applyToTarget({name:'Sangrado', duration:2, stack:true, maxStack:3}); }
+  if(move==='morder'){ text='muerde y desgarra, dejando una herida sangrante'; applyToTarget({name:'Sangrado', duration:2, stack:true, maxStack:3}); }
+  if(move==='picar'){ text='clava un aguijón cargado de veneno'; applyToTarget({name:'Veneno', duration:2, stack:true, maxStack:3}); }
   if(move==='debilitar'){ text='drena tu fuerza'; applyToTarget({name:'Debilitado', duration:2}); dmg = Math.round(dmg*0.6); }
   if(move==='aplastar'){ text='golpea con fuerza brutal'; dmg = Math.round(dmg*1.4); }
   if(move==='paralizar'){ text='muerde y paraliza'; applyToTarget({name:'Paralisis', duration:2, chance:0.5}); }
