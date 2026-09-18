@@ -273,6 +273,19 @@
   }
   .action-card button:hover:not(:disabled){background:var(--stone-light);}
 
+  /* Selector de checkpoint al entrar al laberinto — un botón por cada
+     década ya superada (nivel 1, 11, 21, 31...), al estilo del elevador de
+     las minas de Stardew Valley: todos quedan visibles y clickeables, no
+     solo el más profundo. */
+  .checkpoint-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(58px, 1fr)); gap:7px; margin-top:4px;}
+  .checkpoint-btn{
+    background:var(--stone); border:1px solid var(--border); color:var(--text);
+    padding:9px 4px; border-radius:3px; font-size:0.85em; font-weight:600;
+    font-variant-numeric:tabular-nums; cursor:pointer;
+  }
+  .checkpoint-btn:hover{background:var(--stone-light); border-color:var(--bronze);}
+  .checkpoint-btn.current{border-color:var(--bronze); color:var(--bronze-light);}
+
   /* ---------- dungeon map ---------- */
   .map-wrap{overflow-x:auto; padding:10px 4px 4px;}
   .map-track{display:flex; align-items:center; min-width:max-content; padding:6px 4px 18px;}

@@ -2,8 +2,8 @@
 
 import { supabase } from './supabaseClient.js';
 import * as auth from './auth.js';
-import { syncBattleStage, playBattleAnim } from './battleStage.js?v=56';
-import { CLASS_SPRITES, ENEMY_SPRITES } from './battleSprites.js?v=56';
+import { syncBattleStage, playBattleAnim } from './battleStage.js?v=57';
+import { CLASS_SPRITES, ENEMY_SPRITES } from './battleSprites.js?v=57';
 
 /* ============================================================
    DATA
@@ -1706,6 +1706,17 @@ function describeRecord(){
   if(r.floorIdx >= total-1) return `Nivel ${r.level} · Guardián`;
   return `Nivel ${r.level} · Piso ${r.floorIdx}`;
 }
+// Selector de checkpoint (pedido explícito, 2026-09-18, al estilo del
+// elevador de las minas de Stardew Valley): como los checkpoints solo se
+// liberan al cerrar una década (ver checkpointLevel en handleVictory) y el
+// laberinto no se puede saltear de década, cada década por debajo de
+// checkpointLevel quedó necesariamente superada también — no hace falta
+// guardar la lista entera, alcanza con reconstruirla desde ese único número.
+function checkpointLevelsUnlocked(){
+  const levels = [];
+  for(let lvl=1; lvl<=(state.char.checkpointLevel||1); lvl+=10) levels.push(lvl);
+  return levels;
+}
 
 // real (mechanical) difficulty multiplier: compounds ~14% per level, as requested
 // La curva original (1.14 compuesto) se pensó para 10 pisos; compuesta hasta
@@ -2003,7 +2014,7 @@ function renderSheet(){
       <span class="res-chip pos">Evasión ${Math.round(d.evasionBase*100)}%</span>
       <span class="res-chip ${stunChance>0?'pos':''}">Aturdir al golpear ${Math.round(stunChance*100)}%</span>
     </div>
-    <div class="sheet-hint">Evasión mostrada fuera de combate; en combate sube +8% en Retaguardia. Aturdir al golpear depende del arma y las piedras de alma que lleves equipadas.</div>
+    <div class="sheet-hint">Evasión mostrada fuera de combate; en combate varía según el nivel del enemigo y tus efectos activos. Aturdir al golpear depende del arma y las piedras de alma que lleves equipadas.</div>
 
     <div class="section-label">Resistencias</div>
     <div class="res-list">${resHTML}</div>
@@ -2404,10 +2415,11 @@ function renderCity(){
       <div class="action-card">
         <h3>Entrar al laberinto</h3>
         <p>${state.char.checkpointLevel>1
-          ? `Ya liberaste un checkpoint en el nivel ${state.char.checkpointLevel} (venciste al jefe del piso ${state.char.checkpointLevel-1}). Puedes reanudar ahí o volver a empezar desde el nivel 1.`
+          ? 'Elige desde qué checkpoint entrar — se libera uno nuevo cada vez que derrotas al jefe de una década.'
           : 'Siempre se entra desde el nivel 1, piso 1.'}</p>
-        <button id="btn-enter-dungeon" data-level="1">Entrar (Nivel 1)</button>
-        ${state.char.checkpointLevel>1 ? `<button id="btn-enter-checkpoint" data-level="${state.char.checkpointLevel}" style="margin-top:6px;">Entrar desde el checkpoint (Nivel ${state.char.checkpointLevel})</button>` : ''}
+        <div class="checkpoint-grid">
+          ${checkpointLevelsUnlocked().map(lvl=>`<button class="checkpoint-btn ${lvl===state.char.checkpointLevel?'current':''}" data-level="${lvl}">${lvl}</button>`).join('')}
+        </div>
       </div>
       <div class="action-card">
         <h3>Hogar</h3>
@@ -2460,9 +2472,9 @@ function renderCity(){
       }
     );
   };
-  document.getElementById('btn-enter-dungeon').onclick = ()=> enterDungeonAt(1);
-  const btnCheckpoint = document.getElementById('btn-enter-checkpoint');
-  if(btnCheckpoint) btnCheckpoint.onclick = ()=> enterDungeonAt(state.char.checkpointLevel);
+  document.querySelectorAll('.checkpoint-btn').forEach(btn=>{
+    btn.onclick = ()=> enterDungeonAt(parseInt(btn.dataset.level, 10));
+  });
   document.getElementById('btn-open-home').onclick = ()=>{
     invOpen = false; homeOpen = true; shopOpen = false; rankingOpen = false; adminOpen = false;
     renderAll();
@@ -4045,7 +4057,7 @@ function livingEnemies(){ return combat.enemies.filter(e=>e.hp>0); }
 
 function computeCritEvasion(){
   const d = derived();
-  let ev = d.evasionBase + (combat.playerPos==='retaguardia'?0.08:0);
+  let ev = d.evasionBase;
   // Brecha de nivel: un monstruo de más nivel que el jugador también es más
   // difícil de esquivar (mismo número que usa el jugador para esquivarlo A
   // ÉL, restado en vez de sumado — ver levelGapEvasionBonus).
@@ -5471,7 +5483,7 @@ const TUTORIAL_SLIDES = [
   {title:'La Taberna', body:'Desde nivel 10, recluta aliados — guerrero, arquero, asesino, mago o sacerdote — pagando oro. Pelean junto a ti de forma automática: el que tiene rol de tanque ocupa el Frente y absorbe los golpes por ti. Los sacerdotes solo existen como aliados, nunca como senda de combate propia: cuidan a quien pelea, no bajan a pelear ellos mismos.'},
   {title:'Mantener a tus aliados', body:'Cada aliado te cobra un salario cada vez que sales del laberinto. Pagarlo sube un poco su satisfacción; no poder pagarlo la baja bastante, cada vez más si se repite. Si su satisfacción cae demasiado, deserta y lo pierdes para siempre — no vuelve a estar disponible, ni siquiera despidiéndolo tú antes.'},
   {title:'Ranking', body:'Tu récord personal (el piso más profundo que has alcanzado) y el top 10 de todos los jugadores.'},
-  {title:'Combate por turnos', body:'Cada turno eliges una habilidad o acción. Frente y Retaguardia son tus dos posiciones: la mayoría de golpes físicos fuertes exigen estar en el Frente; la Retaguardia da +8% de evasión y favorece las habilidades a distancia.'},
+  {title:'Combate por turnos', body:'Cada turno eliges una habilidad o acción. Frente y Retaguardia son tus dos posiciones: la mayoría de golpes físicos fuertes exigen estar en el Frente; la Retaguardia favorece las habilidades a distancia.'},
   {title:'MP y Espíritu', body:'El MP paga tus habilidades físicas. El Espíritu paga las mágicas y de utilidad, y también aumenta tu daño mágico. Reposicionarte cambia entre Frente y Retaguardia, y ocupa tu turno.'},
   {title:'Frente y Retaguardia, con aliados', body:'Cuando tengas un aliado tanque en el Frente, los enemigos no podrán llegar hasta tu Retaguardia sin pasar por él primero — igual que tú no puedes golpear al enemigo de atrás sin resolver primero al de adelante. Posicionarte bien pesará tanto como golpear fuerte.'},
   {title:'Defenderse', body:'Te da al menos 50% de probabilidad de esquivar el próximo golpe, y si aun así te alcanzan, el daño se reduce a la mitad. Es una opción real cuando la pelea se pone difícil, no solo un último recurso.'},
@@ -5645,7 +5657,7 @@ function renderCombat(){
       <span class="pos-pill ${combat.playerPos==='frente'?'active':''}">Frente</span>
       <span class="pos-pill ${combat.playerPos==='retaguardia'?'active':''}">Retaguardia</span>
     </div>
-    <div class="pos-hint" style="font-size:0.7em; color:var(--text-dim); margin:2px 0 8px;">Frente: exige la mayoría de habilidades físicas de golpe. Retaguardia: +8% evasión y mejor para habilidades a distancia.</div>
+    <div class="pos-hint" style="font-size:0.7em; color:var(--text-dim); margin:2px 0 8px;">Frente: exige la mayoría de habilidades físicas de golpe. Retaguardia: mejor para habilidades a distancia.</div>
     <div class="phud-wrap">
       <div class="phud">
         <div class="phud-portrait">${playerSprite ? `<img src="${playerSprite}" alt="">` : `<span class="phud-emoji">${race().icon}</span>`}</div>
