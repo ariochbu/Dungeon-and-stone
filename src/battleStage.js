@@ -13,11 +13,11 @@
 // combat.enemies/combat.allies/combat.lastActor/combat.lastAction y dibuja.
 // No aplica daño, no decide turnos, no cambia HP.
 
-import { CLASS_SPRITES, ALLY_SPRITES, ENEMY_SPRITES } from './battleSprites.js?v=50';
+import { CLASS_SPRITES, ALLY_SPRITES, ENEMY_SPRITES } from './battleSprites.js?v=51';
 
 const TILE = 16;
-const SCALE = 2.2;
-const SIZE = TILE * SCALE; // ~35px por actor a escala base
+const SCALE = 2.5;
+const SIZE = TILE * SCALE; // ~40px por actor a escala base
 
 // --- estado de módulo: el canvas se crea UNA vez y se reinserta en cada
 // sync (renderCombat() destruye su contenedor con innerHTML= en cada
@@ -37,7 +37,7 @@ let currentTheme = null;
 // propia senda es esa, se ven idénticos. Cuando coinciden, se le aplica un
 // tinte de color al aliado (ver drawActor) para poder distinguirlos.
 let playerSpriteRef = null;
-// El canvas tiene una resolución interna fija (480x220) pero su tamaño en
+// El canvas tiene una resolución interna fija (480x300) pero su tamaño en
 // pantalla se achica en celulares/tablets (CSS width:100%) - sin esto, el
 // texto (nombres, números flotantes) se ve fijo en píxeles internos y
 // termina diminuto en pantallas angostas. uiScale compensa para que el
@@ -156,9 +156,14 @@ function drawBackground(theme){
 function ensureCanvas(container){
   if(!canvas){
     canvas = document.createElement('canvas');
-    canvas.width = 480; canvas.height = 220;
+    // Más alto que antes (220->300) a propósito: con el menú Pokémon-style
+    // y el HUD de HP/MP/Espíritu en HTML (ver renderCombat en game.js)
+    // sobraba espacio abajo que antes ocupaban las tarjetas viejas — se usa
+    // ese espacio para agrandar la escena en vez de dejarlo vacío.
+    canvas.width = 480; canvas.height = 300;
     canvas.style.width = '100%';
-    canvas.style.maxWidth = '560px';
+    canvas.style.maxWidth = '640px';
+    canvas.style.height = 'auto';
     canvas.style.display = 'block';
     canvas.style.margin = '0 auto';
     canvas.style.background = '#14110f'; // fallback hasta el primer draw(); el tema real lo pinta drawBackground()
@@ -212,7 +217,7 @@ function layoutRow(count, baseY, spanX, rowOffset){
     const rowCount = Math.min(perRow, count - row*perRow);
     const gap = spanX / (rowCount+1);
     const x = 240 + gap*(inRow+1) - spanX/2; // 240 = centro horizontal del canvas (480px)
-    const y = baseY + row*(rowOffset||34);
+    const y = baseY + row*(rowOffset||40);
     positions.push({x, y, gap}); // gap = ancho disponible para el nombre antes de pisar al vecino
   }
   return positions;
@@ -265,7 +270,7 @@ function syncBattleStage(container, combat, playerInfo, onTargetClick){
   const playerSlot = { isPlayer:true, pos: playerInfo.pos };
   const party = [...allies.slice(0, Math.ceil(allies.length/2)), playerSlot, ...allies.slice(Math.ceil(allies.length/2))];
   const playerPartyIdx = party.indexOf(playerSlot);
-  const partyPos = layoutByDepth(party, p=> p.isPlayer ? p.pos==='frente' : p.pos==='frente', 140, 168, 260);
+  const partyPos = layoutByDepth(party, p=> p.isPlayer ? p.pos==='frente' : p.pos==='frente', 165, 205, 260);
 
   // jugador: su Y también refleja su formación real (Frente/Retaguardia, el
   // mismo botón "Reposicionarse" de siempre) en vez de quedar siempre fijo
@@ -308,7 +313,7 @@ function syncBattleStage(container, combat, playerInfo, onTargetClick){
 
   // enemigos: los de línea frontal (tanques/melee, tpl.frontline) se dibujan
   // más cerca del grupo del jugador; los de soporte/distancia quedan atrás.
-  const enemyPos = layoutByDepth(combat.enemies||[], e=> !!(e.tpl && e.tpl.frontline), 64, 48, 340);
+  const enemyPos = layoutByDepth(combat.enemies||[], e=> !!(e.tpl && e.tpl.frontline), 100, 50, 340);
   (combat.enemies||[]).forEach((en, i)=>{
     const k = keyFor('enemy', en, i);
     seen.add(k);
@@ -495,22 +500,24 @@ function drawActor(a){
   }
 
   // barras
-  let by = cy+6;
+  let by = cy+7;
   ctx.save();
-  ctx.font = `${Math.round(9*uiScale)}px monospace`; ctx.textAlign='center'; ctx.fillStyle='#e8dfcf';
-  ctx.fillText(fitText(a.name||'', a.nameMaxW), cx, by-8);
+  ctx.font = `${Math.round(12*uiScale)}px monospace`; ctx.textAlign='center'; ctx.fillStyle='#e8dfcf';
+  ctx.fillText(fitText(a.name||'', a.nameMaxW), cx, by-10);
   ctx.restore();
-  drawBar(cx-18, by, 36, 4, (a.hp||0)/(a.maxHP||1), (a.hp/a.maxHP)<0.3 ? '#b24444' : '#8c2f2f');
+  drawBar(cx-22, by, 44, 5, (a.hp||0)/(a.maxHP||1), (a.hp/a.maxHP)<0.3 ? '#b24444' : '#8c2f2f');
   if(a.showResources){
-    drawBar(cx-18, by+5, 36, 3, (a.mp||0)/(a.maxMP||1), '#b8934a');
-    drawBar(cx-18, by+9, 36, 3, (a.spirit||0)/(a.maxSpirit||1), '#5d8aa8');
+    drawBar(cx-22, by+6, 44, 4, (a.mp||0)/(a.maxMP||1), '#b8934a');
+    drawBar(cx-22, by+11, 44, 4, (a.spirit||0)/(a.maxSpirit||1), '#5d8aa8');
   }
-  drawStatusChips(a, cx, by + (a.showResources?14:9));
+  drawStatusChips(a, cx, by + (a.showResources?21:13));
 }
 
 // Chips de estado cerca del actor (antes solo había puntos genéricos que no
 // decían qué efecto era — ni el jugador ni el resto podían saber qué le
 // pasaba a un enemigo con Sangrado, Veneno, etc. sin abrir la mochila).
+// Se agrandó la letra (7px -> 11px base) porque se reportó ilegible; con
+// el canvas más alto ahora hay margen de sobra para el tamaño más grande.
 // Como mucho 3 visibles + un "+N" si hay más, apilados justo debajo de sus
 // barras — la sección "cercana al enemigo" pedida en vez de un contador arriba.
 function drawStatusChips(a, cx, topY){
@@ -518,21 +525,21 @@ function drawStatusChips(a, cx, topY){
   if(!list.length) return;
   const shown = list.slice(0,3);
   ctx.save();
-  ctx.font = `${Math.round(7*uiScale)}px monospace`;
+  ctx.font = `bold ${Math.round(11*uiScale)}px monospace`;
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   shown.forEach((st, i)=>{
     const buff = BUFF_STATUS_NAMES.has(st.name);
-    const label = st.name.slice(0,4) + (st.duration!=null ? String(st.duration) : '');
-    const w = Math.max(20, ctx.measureText(label).width + 5);
-    const y = topY + i*9;
-    ctx.fillStyle = buff ? 'rgba(60,120,70,0.9)' : 'rgba(120,50,50,0.9)';
-    ctx.fillRect(cx-w/2, y-4, w, 8);
+    const label = st.name.slice(0,5) + (st.duration!=null ? String(st.duration) : '');
+    const w = Math.max(30, ctx.measureText(label).width + 8);
+    const y = topY + i*14;
+    ctx.fillStyle = buff ? 'rgba(60,120,70,0.92)' : 'rgba(120,50,50,0.92)';
+    ctx.fillRect(cx-w/2, y-6, w, 12);
     ctx.fillStyle = buff ? '#d7ffe0' : '#ffdede';
     ctx.fillText(label, cx, y+1);
   });
   if(list.length > shown.length){
     ctx.fillStyle = '#d9b76b';
-    ctx.fillText('+'+(list.length-shown.length), cx, topY + shown.length*9 + 1);
+    ctx.fillText('+'+(list.length-shown.length), cx, topY + shown.length*14 + 1);
   }
   ctx.restore();
 }
@@ -599,7 +606,7 @@ function draw(){
   effects.healGlows.forEach(g=> g.life -= 0.02);
   effects.healGlows = effects.healGlows.filter(g=>g.life>0);
 
-  ctx.textAlign='center'; ctx.font=`bold ${Math.round(11*uiScale)}px monospace`;
+  ctx.textAlign='center'; ctx.font=`bold ${Math.round(14*uiScale)}px monospace`;
   effects.floats.forEach(f=>{
     ctx.globalAlpha = Math.max(0,f.life);
     ctx.fillStyle=f.color; ctx.strokeStyle='#000'; ctx.lineWidth=2;

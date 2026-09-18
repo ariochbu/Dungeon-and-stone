@@ -132,6 +132,27 @@
     color:var(--text); box-shadow:0 4px 12px rgba(0,0,0,0.35);
   }
 
+  /* Panel de HP/MP/Espíritu de tu personaje y del enemigo objetivo arriba
+     del canvas de combate, igual que en el prototipo — números y barras en
+     HTML normal (siempre legible) en vez de dibujados en canvas a un
+     tamaño fijo de píxeles, que es lo que se volvía ilegible en pantallas
+     angostas o con zoom. */
+  .combat-hud{display:flex; gap:8px; margin-bottom:8px; flex-wrap:wrap;}
+  .combat-stat-card{
+    flex:1 1 200px; display:flex; gap:9px; align-items:flex-start;
+    background:var(--panel-2); border:1px solid var(--border); border-radius:6px; padding:8px 10px;
+  }
+  .combat-stat-card.enemy{border-color:rgba(178,68,68,0.45);}
+  .combat-stat-card .sheet-emblem{width:34px; height:34px; font-size:1.15em; flex-shrink:0;}
+  .combat-stat-card .ccard-body{flex:1; min-width:0;}
+  .combat-stat-card .ccard-name{
+    font-size:0.82em; color:var(--bronze-light); margin-bottom:5px;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .combat-stat-card .bar-row{margin-bottom:5px;}
+  .combat-stat-card .bar-row:last-child{margin-bottom:0;}
+  .combat-stat-card .ccard-statuses{margin-top:5px;}
+
   /* ---------- inventory / equipment ---------- */
   .inv-slot{
     background:var(--bg-2); border:1px solid var(--border); border-radius:4px; padding:9px 11px; margin-bottom:8px;

@@ -2,7 +2,7 @@
 
 import { supabase } from './supabaseClient.js';
 import * as auth from './auth.js';
-import { syncBattleStage, playBattleAnim } from './battleStage.js?v=50';
+import { syncBattleStage, playBattleAnim } from './battleStage.js?v=51';
 
 /* ============================================================
    DATA
@@ -5641,6 +5641,26 @@ function renderCombat(){
   }).join('') : `<p class="inv-empty-msg">No tienes pociones para usar.</p>`;
 
   const combatSpeed = getCombatSpeed();
+  const hpPct = Math.max(0, state.char.curHP/d.maxHP*100);
+  const stPct = Math.max(0, state.char.curSta/d.maxSta*100);
+  const spPct = Math.max(0, state.char.curSpi/d.maxSpi*100);
+  // El "objetivo" que se muestra es el mismo que recibiría un golpe básico
+  // ahora mismo: el enemigo de línea frontal vivo, o si no hay ninguno, el
+  // primero que quede — no es necesariamente a quién le pegaste último.
+  const targetEnemy = (combat.enemies||[]).find(e=>e.hp>0 && e.tpl && e.tpl.frontline)
+    || (combat.enemies||[]).find(e=>e.hp>0);
+  const enemyHUD = targetEnemy ? `
+    <div class="combat-stat-card enemy">
+      <div class="sheet-emblem">${targetEnemy.icon}</div>
+      <div class="ccard-body">
+        <div class="ccard-name">${targetEnemy.name}</div>
+        <div class="bar-row">
+          <div class="bar-label"><span>Vida</span><span>${Math.max(0,targetEnemy.hp)} / ${targetEnemy.maxHP}</span></div>
+          <div class="bar-track"><div class="bar-fill hp" style="width:${Math.max(0,targetEnemy.hp/targetEnemy.maxHP*100)}%"></div></div>
+        </div>
+        ${targetEnemy.statuses && targetEnemy.statuses.length ? `<div class="ccard-statuses">${renderStatusChips(targetEnemy.statuses)}</div>` : ''}
+      </div>
+    </div>` : '';
   document.getElementById('main-panel').innerHTML = `
     <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px;">
       <h3 style="color:var(--bronze-light); margin:0;">Combate</h3>
@@ -5654,11 +5674,29 @@ function renderCombat(){
       <span class="pos-pill ${combat.playerPos==='retaguardia'?'active':''}">Retaguardia</span>
     </div>
     <div class="pos-hint" style="font-size:0.7em; color:var(--text-dim); margin:2px 0 8px;">Frente: exige la mayoría de habilidades físicas de golpe. Retaguardia: +8% evasión y mejor para habilidades a distancia.</div>
-    <div id="battle-stage-mount" style="margin-bottom:6px;"></div>
-    <div style="font-size:0.7em; color:var(--text-dim); text-align:center; margin-bottom:10px;">
-      ${state.char.curHP}/${d.maxHP} HP · ${state.char.curSta}/${d.maxSta} MP · ${state.char.curSpi}/${d.maxSpi} Espíritu
-      ${playerStatusChips ? ` · ${playerStatusChips}` : ''}
+    <div class="combat-hud">
+      <div class="combat-stat-card">
+        <div class="sheet-emblem">${race().icon}</div>
+        <div class="ccard-body">
+          <div class="ccard-name">${state.char.nickname || s.name}</div>
+          <div class="bar-row">
+            <div class="bar-label"><span>Vida</span><span>${state.char.curHP} / ${d.maxHP}</span></div>
+            <div class="bar-track"><div class="bar-fill hp" style="width:${hpPct}%"></div></div>
+          </div>
+          <div class="bar-row">
+            <div class="bar-label"><span>MP</span><span>${state.char.curSta} / ${d.maxSta}</span></div>
+            <div class="bar-track"><div class="bar-fill st" style="width:${stPct}%"></div></div>
+          </div>
+          <div class="bar-row">
+            <div class="bar-label"><span>Espíritu</span><span>${state.char.curSpi} / ${d.maxSpi}</span></div>
+            <div class="bar-track"><div class="bar-fill sp" style="width:${spPct}%"></div></div>
+          </div>
+          ${playerStatusChips ? `<div class="ccard-statuses">${playerStatusChips}</div>` : ''}
+        </div>
+      </div>
+      ${enemyHUD}
     </div>
+    <div id="battle-stage-mount" style="margin-bottom:6px;"></div>
 
     <div class="battle-menu" id="battle-menu">
       <div class="battle-menu-grid" id="battle-menu-grid">
