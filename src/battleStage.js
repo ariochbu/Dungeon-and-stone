@@ -13,7 +13,7 @@
 // combat.enemies/combat.allies/combat.lastActor/combat.lastAction y dibuja.
 // No aplica daño, no decide turnos, no cambia HP.
 
-import { CLASS_SPRITES, ALLY_SPRITES, ENEMY_SPRITES } from './battleSprites.js?v=46';
+import { CLASS_SPRITES, ALLY_SPRITES, ENEMY_SPRITES } from './battleSprites.js?v=47';
 
 const TILE = 16;
 const SCALE = 2.2;
@@ -245,12 +245,18 @@ function syncBattleStage(container, combat, playerInfo, onTargetClick){
 
   // jugador: centrado en X, pero su Y también refleja su formación real
   // (Frente/Retaguardia, el mismo botón "Reposicionarse" de siempre) en vez
-  // de quedar siempre fijo — igual que los aliados y los enemigos.
+  // de quedar siempre fijo — igual que los aliados y los enemigos. El
+  // desplazamiento es chico a propósito (~12-16px, no ~40-50 como en el
+  // primer intento): con solo 220px de alto en el canvas, una separación
+  // más grande hacía que el nombre/las barras de un actor "de atrás" se
+  // pisaran con el sprite del que tiene justo delante en la misma columna
+  // (típicamente un único enemigo de línea frontal justo arriba del
+  // jugador en Frente) — se veía roto en cualquier tamaño de pantalla.
   {
     const k = 'player';
     seen.add(k);
     let a = actors.get(k);
-    const playerY = playerInfo.pos==='frente' ? 140 : 175;
+    const playerY = playerInfo.pos==='frente' ? 163 : 175;
     if(!a){ a = makeActor(k); actors.set(k, a); }
     a.baseX = 240; a.baseY = playerY; a.x = a.baseX; a.y = a.baseY;
     playerSpriteRef = spriteFor('player', null, playerInfo.style);
@@ -266,7 +272,7 @@ function syncBattleStage(container, combat, playerInfo, onTargetClick){
 
   // aliados: los que están en el frente (pos==='frente') se dibujan más
   // cerca de los enemigos que los de retaguardia, siguiendo su formación real.
-  const allyPos = layoutByDepth(combat.allies||[], a=>a.pos==='frente', 118, 156, 220);
+  const allyPos = layoutByDepth(combat.allies||[], a=>a.pos==='frente', 140, 154, 220);
   (combat.allies||[]).forEach((ally, i)=>{
     const k = keyFor('ally', ally);
     seen.add(k);
@@ -284,7 +290,7 @@ function syncBattleStage(container, combat, playerInfo, onTargetClick){
 
   // enemigos: los de línea frontal (tanques/melee, tpl.frontline) se dibujan
   // más cerca del grupo del jugador; los de soporte/distancia quedan atrás.
-  const enemyPos = layoutByDepth(combat.enemies||[], e=> !!(e.tpl && e.tpl.frontline), 90, 45, 340);
+  const enemyPos = layoutByDepth(combat.enemies||[], e=> !!(e.tpl && e.tpl.frontline), 64, 48, 340);
   (combat.enemies||[]).forEach((en, i)=>{
     const k = keyFor('enemy', en, i);
     seen.add(k);

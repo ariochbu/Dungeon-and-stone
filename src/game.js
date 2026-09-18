@@ -2,7 +2,7 @@
 
 import { supabase } from './supabaseClient.js';
 import * as auth from './auth.js';
-import { syncBattleStage, playBattleAnim } from './battleStage.js?v=46';
+import { syncBattleStage, playBattleAnim } from './battleStage.js?v=47';
 
 /* ============================================================
    DATA
