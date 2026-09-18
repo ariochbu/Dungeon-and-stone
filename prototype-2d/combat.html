@@ -1,0 +1,1445 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Dungeon & Stone — Prototipo combate 2D</title>
+<style>
+  :root{
+    --bg:#1a1410; --panel:#241b15; --panel-border:#4a3728;
+    --hp:#4caf50; --hp-low:#c0392b; --mp:#3d8bcf; --spi:#a860d1;
+    --text:#e8dcc8; --text-dim:#a89478; --accent:#c9a24a; --dmg:#ff5252;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; min-height:100vh; background:var(--bg); color:var(--text);
+    font-family:'Courier New',monospace; display:flex; flex-direction:column;
+    align-items:center; padding:20px 16px; gap:14px;
+  }
+  h1{font-size:1.1em; letter-spacing:2px; color:var(--accent); margin:0; text-transform:uppercase;}
+  .stage-wrap{
+    width:100%; max-width:560px; border:3px solid var(--panel-border); border-radius:6px;
+    overflow:hidden; background:var(--panel); box-shadow:0 0 0 4px #0d0906;
+  }
+  canvas{display:block; width:100%; height:auto; image-rendering:pixelated;}
+  .controls{display:flex; gap:10px; flex-wrap:wrap; justify-content:center; max-width:560px;}
+  button{
+    font-family:inherit; background:var(--panel); color:var(--text); border:2px solid var(--panel-border);
+    padding:9px 20px; border-radius:4px; cursor:pointer; font-size:0.85em; letter-spacing:0.5px;
+  }
+  button:hover:not(:disabled){border-color:var(--accent); color:var(--accent);}
+  select{
+    font-family:inherit; background:var(--panel); color:var(--text); border:2px solid var(--panel-border);
+    padding:9px 14px; border-radius:4px; cursor:pointer; font-size:0.85em; letter-spacing:0.5px; width:100%; max-width:400px;
+  }
+  button:disabled{opacity:0.4; cursor:default;}
+  .log{
+    width:100%; max-width:560px; height:130px; background:var(--panel); border:2px solid var(--panel-border);
+    border-radius:4px; padding:8px 10px; font-size:0.76em; color:var(--text-dim); overflow-y:auto;
+  }
+  .log div{margin-bottom:3px;}
+  .log div.hit{color:var(--dmg);}
+  .log div.info{color:var(--accent);}
+  .note{font-size:0.72em; color:var(--text-dim); max-width:560px; text-align:center; line-height:1.5;}
+  .phud-wrap{display:flex; gap:12px; width:100%; max-width:560px; flex-wrap:wrap;}
+  .phud{
+    flex:1; min-width:240px; display:flex; gap:10px; padding:10px 12px 10px 10px;
+    background:linear-gradient(180deg,#2f2318,#1a130d); border:2px solid var(--accent);
+    clip-path:polygon(7px 0,calc(100% - 7px) 0,100% 7px,100% calc(100% - 7px),calc(100% - 7px) 100%,7px 100%,0 calc(100% - 7px),0 7px);
+    box-shadow:inset 0 0 0 1px #0d0906;
+  }
+  .phud.enemy{border-color:#8a3a3a;}
+  .phud-portrait{
+    flex-shrink:0; width:40px; height:40px; background:#0d0906;
+    box-shadow:0 0 0 1px var(--accent); image-rendering:pixelated;
+  }
+  .phud.enemy .phud-portrait{box-shadow:0 0 0 1px #8a3a3a;}
+  .phud-body{flex:1; min-width:0; display:flex; flex-direction:column; justify-content:center; gap:5px;}
+  .phud-name{font-size:0.78em; color:var(--accent); text-transform:uppercase; letter-spacing:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .phud.enemy .phud-name{color:var(--dmg);}
+  .phud-row{display:flex; align-items:center; gap:6px;}
+  .phud-icon{display:flex; flex-shrink:0;}
+  .phud-bar{
+    position:relative; flex:1; height:14px; background:#0a0704; border:1px solid #0d0906;
+    box-shadow:inset 0 0 0 1px #000, inset 0 1px 2px rgba(0,0,0,0.6); overflow:hidden;
+  }
+  .phud-fill{height:100%; position:relative; transition:width 0.3s ease;}
+  .phud-fill::after{content:''; position:absolute; inset:0; background:repeating-linear-gradient(90deg, rgba(0,0,0,0.22) 0 3px, transparent 3px 6px); pointer-events:none;}
+  .phud-fill.hp{background:linear-gradient(180deg,#8de290,var(--hp) 55%,#2f7a34);}
+  .phud-fill.hp.low{background:linear-gradient(180deg,#e88579,var(--hp-low) 55%,#7a2418); animation:pulse-low 1s ease-in-out infinite;}
+  .phud-fill.mp{background:linear-gradient(180deg,#7fc0ee,var(--mp) 55%,#204b6e);}
+  .phud-fill.spi{background:linear-gradient(180deg,#cf9ae8,var(--spi) 55%,#5c2b76);}
+  @keyframes pulse-low{0%,100%{filter:brightness(1);} 50%{filter:brightness(1.35);}}
+  @media (prefers-reduced-motion: reduce){ .phud-fill.hp.low{animation:none;} }
+  .phud-num{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    font-size:0.66em; color:#f4ecdb; text-shadow:0 1px 1px #000, 0 0 3px #000;
+    font-variant-numeric:tabular-nums; letter-spacing:0.5px;
+  }
+  .battle-menu{
+    width:100%; max-width:560px; display:none; gap:12px;
+    background:linear-gradient(180deg,#2f2318,#1a130d); border:3px solid var(--accent);
+    border-radius:6px; padding:12px 14px; box-shadow:inset 0 0 0 1px #0d0906;
+  }
+  .battle-menu-grid{
+    flex:1; display:grid; grid-template-columns:1fr 1fr; gap:8px; min-width:0;
+  }
+  .battle-submenu{ flex:1; display:flex; flex-direction:column; gap:8px; min-width:0; width:100%; }
+  .menu-btn{
+    font-family:inherit; background:var(--panel); color:var(--text); border:2px solid var(--panel-border);
+    border-radius:4px; padding:9px 8px; font-size:0.8em; cursor:pointer; letter-spacing:0.5px;
+  }
+  .menu-btn:hover:not(:disabled){border-color:var(--accent); color:var(--accent);}
+  .menu-btn.wide{grid-column:1 / -1;}
+  .submenu-list{
+    display:grid; grid-template-columns:1fr 1fr; gap:8px; max-height:none; overflow-y:visible;
+  }
+  .submenu-item{
+    display:flex; flex-direction:column; gap:4px; padding:8px 10px; background:var(--panel);
+    border:2px solid var(--panel-border); border-radius:4px; cursor:pointer; font-size:0.74em;
+  }
+  .submenu-item:hover{border-color:var(--accent); color:var(--accent);}
+  .submenu-item.disabled{opacity:0.4; cursor:default; pointer-events:none;}
+  .submenu-item .item-name{color:var(--accent); font-weight:bold;}
+</style>
+</head>
+<body>
+
+<h1>Prototipo — combate 2D con turnos reales</h1>
+
+<div class="phud-wrap">
+  <div class="phud" id="phud">
+    <canvas class="phud-portrait" id="phud-portrait" width="40" height="40"></canvas>
+    <div class="phud-body">
+      <div class="phud-name" id="phud-name">Guerrero (vos)</div>
+      <div class="phud-row">
+        <span class="phud-icon" style="color:var(--hp)"><svg viewBox="0 0 16 16" width="12" height="12"><path fill="currentColor" d="M8 14C8 14 2 9.6 2 5.9 2 3.7 3.8 2 5.9 2 7 2 8 2.7 8 2.7S9 2 10.1 2C12.2 2 14 3.7 14 5.9 14 9.6 8 14 8 14Z"/></svg></span>
+        <div class="phud-bar"><div class="phud-fill hp" id="phud-hp"></div><span class="phud-num" id="phud-hp-num">— / —</span></div>
+      </div>
+      <div class="phud-row">
+        <span class="phud-icon" style="color:var(--mp)"><svg viewBox="0 0 16 16" width="12" height="12"><path fill="currentColor" d="M8 1C8 1 3 7.3 3 10.3 3 12.7 5.2 14.6 8 14.6S13 12.7 13 10.3C13 7.3 8 1 8 1Z"/></svg></span>
+        <div class="phud-bar"><div class="phud-fill mp" id="phud-mp"></div><span class="phud-num" id="phud-mp-num">— / —</span></div>
+      </div>
+      <div class="phud-row">
+        <span class="phud-icon" style="color:var(--spi)"><svg viewBox="0 0 16 16" width="12" height="12"><path fill="currentColor" d="M8 1 9.6 6.4 15 8 9.6 9.6 8 15 6.4 9.6 1 8 6.4 6.4Z"/></svg></span>
+        <div class="phud-bar"><div class="phud-fill spi" id="phud-spi"></div><span class="phud-num" id="phud-spi-num">— / —</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="phud enemy" id="phud-enemy-panel">
+    <canvas class="phud-portrait" id="phud-enemy-portrait" width="40" height="40"></canvas>
+    <div class="phud-body">
+      <div class="phud-name" id="phud-enemy-name">—</div>
+      <div class="phud-row">
+        <span class="phud-icon" style="color:var(--dmg)"><svg viewBox="0 0 16 16" width="12" height="12"><path fill="currentColor" d="M8 14C8 14 2 9.6 2 5.9 2 3.7 3.8 2 5.9 2 7 2 8 2.7 8 2.7S9 2 10.1 2C12.2 2 14 3.7 14 5.9 14 9.6 8 14 8 14Z"/></svg></span>
+        <div class="phud-bar"><div class="phud-fill hp" id="phud-enemy-hp"></div><span class="phud-num" id="phud-enemy-hp-num">— / —</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="stage-wrap">
+  <canvas id="stage" width="480" height="310"></canvas>
+</div>
+
+<div class="controls">
+  <select id="decade-select"></select>
+  <button id="btn-reset">↺ Reiniciar combate</button>
+</div>
+
+<div class="battle-menu" id="battle-menu">
+  <div class="battle-menu-grid" id="battle-menu-grid">
+    <button class="menu-btn" id="menu-basico">⚔ Básico</button>
+    <button class="menu-btn" id="menu-mochila">🎒 Mochila</button>
+    <button class="menu-btn" id="menu-habilidades">💥 Habilidades</button>
+    <button class="menu-btn" id="menu-defensa">🛡 Defensa</button>
+  </div>
+  <div class="battle-submenu" id="battle-submenu" style="display:none;">
+    <div class="submenu-list" id="battle-submenu-list"></div>
+    <button class="menu-btn" id="menu-back">← Volver</button>
+  </div>
+</div>
+
+<div class="log" id="log"></div>
+
+<p class="note">
+  El menú estilo Pokémon controla al Guerrero (vos) cada turno: Básico ataca, Mochila usa un ítem,
+  Habilidades usa Golpe bruto/Machacar/Grito de guerra/Furia del Titán (las mismas de <code>game.js</code>,
+  con Tambaleo y Aturdido reales), Defensa reduce el daño que recibís este turno. Después ataca cada aliado vivo, y al final cada
+  enemigo vivo ataca por turno — todos apuntan al objetivo del frente. Las 5 sendas tienen HP, MP
+  Y Espíritu a la vez (como en <code>game.js</code>: cada habilidad gasta uno u otro según su costo,
+  pero los dos recursos siempre están ahí). Arquero/Mago/Sacerdote atacan a distancia con proyectil
+  propio (el Mago tira fuego o hielo al azar); el Asesino es cuerpo a cuerpo — dash veloz con estela
+  fantasma y ráfaga de 3 golpes rápidos, estilo Taijutsu combo de Ninja Saga. Sprites:
+  pack "Tiny Dungeon" de Kenney.nl (CC0), uno propio por rol. Sigue fuera del juego real.
+</p>
+
+<script>
+const canvas = document.getElementById('stage');
+const ctx = canvas.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+
+const TILE = 16;
+const SCALE = 2.5;
+const SIZE = TILE*SCALE;
+
+const playerImg = new Image(); playerImg.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAVnSURBVFhH7Zd7TFNnGMYPTuntnFMKcim0VNpSoIUC4yY45GatgoBYFbEobMJQLkEqgtxKLxtSRIxDjZo4cZuXqYjO6VSWiXNTFmPM5iXDuC2aGV1EzDLvt2entln21xKh+89f8ubkfO/7PHm/70u+8x3iDW94w2swjiZoT4LgC+zhzaK1CpJuFbqT9fZ3EZfWyinKytSNd5T/Dygo8lyUB3U3jCLvJntRKPCnUBtJQuPLuxvLpxHIpq8QBCeApu2NEuMcqjEiJIRcGY+yxAh45gQv8vxiCYVlCgqL5CR25HDQN5eLvgJ3WOK5KI3kDCcJyOEwmrooIAR8p8VYEXLDKGogV0SjREaiO42Lnlk8bJnGw558FnZmUjii5+DoYjZ6F7KR7ktjEpfa4BS7Bj6LHxRG0S9KFCS2zWajMZGH3To2LLE8DFa740QxB3tyeaiL4kEXQGKKF/U0gMVPc8rHjh+Hjkv1oXqXKXjPUyZSWJfJwbtSN5SEsVAZzUaPbgK6p3OwOJDETF/ycQhNdok5HH+n3DV4vsXS+LixHmWKSKyMYKMgNQnJ4gBEczmI5XGxNNodJUoSivETngeT3FKnzHVo1er2toW5WCAeh7xAT9wbPIyfjm7H6tJ87GtvRkVWFsqC3LC6MBMJqug2p8x1zNFo6m58tQ3z48ORMTkVXc2rgBun8fDKCWy0tmKpvhiVGZF4cPJj5E6bzpwNrodfPT93oF6nRU1DC6ybP8Pz62eA38/CtPETtHd24NOGEuhSU04xtR4OieugskJUn4dL1MORIimu7e0Cfv0WuDn4Kl5cG8Cfx7eiRpsBuThiOEseuteucUjHjts8b2/TwHob6g0rUVtRB+McHQ5UF+G4qQbHzQYcNLwHi06HlcsMqHq/Eic3dEIjCzLbtQ6LMTBDTrDqvPxu7dVMR0uzEVt7dmHwh0EsL7Yvtwbz0rSo0hfio842dHd1w9pkxJ3ve2EumHmbkbMdLmMg2ttvxmbRpCdnfUTYH5+MLWVVOLhvB278dgl/3LqOb47swun+A1j7gRn1K4zQ5xZgaIsBO5fmPVFQE2c6bUZPkad/+4A0FJcVKlySyPGjRIbehHfQ1tyIUycOY72tEx+2NMHabEaRfjkS1VMeXFhf+Wzk6x6kRSXYnDajp9MvsPVKsBIX5GE4z8TPgTL0xSSgtakZa6wWWBpMsDDL3rjCikX5lXAj+D3dZXN/we0haFO0JqfN6OlgGrjobOCSLBTHxDI06cthsdiY/TbBWG9Gy0orqspaMDVpFpQi6f2BTS3P7p87hIyICNc0cFmhxJBciTPMFqQwKxA/JQulhdVYXtaAaiYK55VBk6ZD4YJyGA11GPruS4z0b0dCgLDDaTN62vzEHVeDVTirUqNhchwmhkZBogiHXK6CXKqEyF/KPCOQm63Dqtom5OUsgaHSBHNx0VMlLZjhtBk91V6+qeuEElOsn8Q2K1H9sDg9BnEhwZjApW+yeR5bszOzH29Y0wGbsRmV+bMRJ5U/ypymt8nUWVqnhetIDxbfadTIsOBtMaqWLLmwr2f71U0dtqc5msy/0hUi1KQGQRsiHnaWuxq592SR50jt7GT0H+vH/l27X66oMAwkxefYLx7GGJEAJXG+SJYJ7xGE1MehcR1uch+RsSBS+LImOwnm8nLERyZ3OnOExEto0qn9mQYCUBgT+FLhI2plhsd+DP8LQV6c8sHawiRUJImQHUxBSHr988kN8hY3zI30R9XUSVirTwRT+5B4dYV3HZx0VeghXbxyJC1EPBIe4HuQzw9k/g8c8PkSD5W/b589p4tjasJDv2CGuY6sS7HPSvkfM7PnXmfmBPE3Qt1SegkxEzQAAAAASUVORK5CYII=';
+const enemyImg = new Image(); enemyImg.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQBAMAAADt3eJSAAAABGdBTUEAALGPC/xhBQAAAB5QTFRFAAAAqrfM6EU3i5u0djs298KC6qVswMvcvWxKPyYxmozc2AAAAAF0Uk5TAEDm2GYAAABkSURBVAjXTc2xEYAwCAXQtGyiG+gIDpAVvLO0Ik4gdClyyt9WSBp/9Q4OfkoE1BQBhggiQMDaEMFE1Jdku0cdjwJ2xCSgHTOmQNOXbYt/umLxK2RhLhk/iDFf0nGf6vBSLl7xAcJoOIwl8JTnAAAAAElFTkSuQmCC';
+// Bestiario real de la Década 0 (Bosque Goblin) — pack "Tiny Creatures" de
+// Kenney/Clint Bellanger (CC0, compatible con Tiny Dungeon). Reemplaza al
+// placeholder genérico "Criatura" con sprites propios por especie.
+const gobGuerreroImg = new Image(); gobGuerreroImg.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAATYSURBVFhH7Zfdb1N1HMYPjjAYo91Ze9rTnp6eduf0/Y226/vajq1l7di61Y4NkTBeBIUswgZsjuE2IA6GRImJYAQREdDMjTFQwBiCxgsvvCDEf8AbjRdogi8BpvHxrJwrr8xWvOKTPPmdnDzP80t+ye97coinPOUp8yVICDI5QZBzyhDVMun1k2ctYV9iUNLDOj/zg3tT8GePKDag/ZGvVLRLlicLa1BfViZVcJ1MIPv1tqKcp5KgozQMBu2kZHsymCvorC5jgGHEB9/Z1aibyhflP9sE/ZAHTAMLE8k0S/bSw9PMuG0kjMh0O/znMgh93FJU7fks/BezMO50gKc1xyR76XAT7uVzq5nmen1vpRC9WkB0uoDwJ62ITrUhdqUDock2WEYisHJ835zXTlCVc2tJMBm5o4KZvcnadZ/5zqxGUty4aaIbicn1CH7QjszkZiQmWmAdi4IV1NcFq/6GYDSW7iQEo7ZF6LSB220HfyqF8dvNuHs+jI4jWdS/4MZ3l2IYv5UFMxaD/mU7hC4bLEZtqxQvDaaoZdpzMA7+eAStnxdw7ttWrHsnh8z+ED68k0fLjTx0+z3wjMZhqbNNSbHSYvPa3lXF1Pf0g15YP8ph1ZVNcL3eCNP5NeCGfFCHVKjRs1/ZCWKJFCkdZQRRL1tMDOvkim/IkAL6PS54307Bc6IebK8Tcj8Jg40Bt4a/p6iRT4iRFY+TJWAxQcSNreZH8fcK8LyWgCqtA9Wpg304BsdIDMq8Fkwzh9jFNnTc3Yfg8QyWLSs7KEYXPW5YGEuqTStup2c2ovNOP+LXO7DydAqazQKM/V4Y+sQB1C2IsyCDuk8LCJzOwPFmAgpH1U9idunjioWhVYWoB+6Tq+B8I47wRE6893kExEFk3OUqKnihGXFxc8/pNMi8BpptApgU+4gsK8tKHfNHQS4d4Hpcf7N7XZCF5TAMeJCY6cSqa+tQN/NsUfXic/JaF3R7najUloNZbwI/EoSKlo1LNfPHaGMPpa9uhH6r7dcVy8vGZGHyN/5wWBxCXeLma4uKT3WBfzUEjVMDemklarY7YT4SAcXKR6Wa+aMT6JGGy8+BzRrui3crt9JBfR8UZ37dhTa0zGwpqu5SHt4tFuQEFgWvC74jabhPJFAlK1/4NCQV5Yf8J5tQ+34W+hCDLR7tn0PtLuzp9OLQtgAOi9rX6cS6qAW7Nr2IHakkUl4B6rR+tqKMyEg186dy8TODzuEwXGcawdRr0WRi0dPkQH+zDUN5Dw7k7dgQNaNv527k0jlQFeSXvIIZlRHlTVLFgqmivcppbq3pF9pEPUhwJCIchYiBfujnuWNOmvqit2cQPRu7EKCrwVHcK1Ku5FQb5bqj9RYNcs4qJAXVrKZKE6dk3M5CyIvulTS6/exfgordLflLD6tk+9JWBht8ajRaVQ85SpfhlXrfajP1x44Ig0aT6iEl05Ts6P9FeJmX1d58KaLHjjCL7loWvJo9TFfTtpRZ8/vWgBbtdhI2qvrWnFcKlRI52WA1zg60+LAr7USbg50108ZAjUp7YHvEiP6MA70NPMJ65SxB+JVSqKQssuv4jIvjR+eko3TFo+aVzP6t4hUcez6JgdZauBntfYLQk8XE/wEn56pManZQ1ChPMaNkhfif8p+/ggTxDzpw3R9J92QKAAAAAElFTkSuQmCC';
+const gobEliteImg = new Image(); gobEliteImg.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAATsSURBVFhH7ZdbbBRVAIYHi2CX2t3Z28zOZWd3Z+/Xdu/dbbulXdpdaLut0JZwK7agQCJyC9AWum25FkWMRstFK2IEUgslgCCJRJGoMZAQw4O++qAvImgCERqS322ZJ59Mu/jEl/yZZPL//5k5OedMhnjGM54xVcKEuVhOEOSEUoSyWLr99GkhnLMMarqXC7C/eleG//DlxIeY38QiVZNkebrwBuqsOqGF5/1KpK+vnpR7KAE6RsNgYEYl29PBKqPTXMoAQ9YP/3Atys80TyowXAd9jw9sNQ8Lyc6X7PlHpNlBRzaKsrEmBI6nEDldP6ngiTQCn6ZhXOeCSOsOSPb84SW8cyauVlrY6H8nidj5hYiNLUT0swbEzmQQP7cIkdEMbNky2AVx04TXSWiKJq55wWIU9put/Be8k/vc/0EtErmB60baUTm6BOGPm5AafRmVI/Ww742BN1OXzHb9ZbPRmL+ZMBuZenOrA8IGJ8ShJAa/mo8fT0SxaF8aVau8uH0yjsGrabB749Cvd8Lc5oDNyDRI8fxgidnGfP0VEN8sQ8OVhTh+owGLDzci1R3BJ7eaUX+5GVyXD75sBWwVzhEpll8cpY6j2jh1R99VCvupRsw9txKeN2pgObEAQo8f2jIKJoG/llswWimSP3KlVcUziV5OofqejKig3+xB6XtJ+N6uAr/RDYWfBOfRgc+Y7rCV3C8vFhQ05mIznqSnSSFBNFDV7KOyoxl4+suhrqahaeXg7I3DlY1D1awDneJQdboFTTc2oPHb10BHdPdy0ReeNEyD3JtTcm/xn5Vji7Hsdi9S5zsQPJKCrtMK49YSGDb7oFthQvz0S6i/tgaxDzNw7o+CbxMfkWpZWqqZOsWyWdstqzzwD81Dybs18B+qQcv1zWi8tA72TWEIr7ow/+JqtP2wFSXH6qBq41B2JAPfWwkwFvWgVDN1BBs7ED6YQt2FDqRHOsCvc2DBl2uw9EYPkhfbER5uxLKbO1F3pRPcegeUNjkqDjfDva8ClJHsk2qmDmNSZ90HE4gMZ+Bq9H+nKJX/bsuGUH6yFZ4DFXD0hhH7qBn2XREoo8p7qjmzb/m64wgeTkOuKZz+A2gNxdmas0vg6I/ieYI4REW0P5l2h+A+VAF3Twyu3EJ09ERg2FEKRUTxiKsT7oZOLUBJbncoimZP/zQkVYUDwaFaVF5ogyai+VudYR8bB4Kw7Y7Csye3CwbLYe8OwbgrBN1yE5QeBez9YRhazeMygkhJNVOnaOZzXa6dYfiO1YAup8GF9bmBbKA6TBDWu2DY4gW10gB9Ngi2xQ1KqfxaJ6r6yIKCOqli2ijoEvWYuMJxl7fTSPIk/BYteHfuLKDkNxVi0V1dmEVplQVzTQLMKtN2KZd3lFwBnUpYtQ+aXAokRe1jTqbawirIn5d5Baz26dAe4B+btfwGyZ9/5DK9P2ll7i8PUKixaR8KGi6lJ5lYrZ15sDbGocaieagp1uVt6v9FtLCEY75ZGxOwNsqjPchDpPgBRs1Yk1bd/c4QgyYnCYdGeXXCK4XyiZysthvHt9X78fo8NzIuftxKG0MmLbPjlTIjtqZc2FgtIqpXjxNEQC2F8soMJyemPILYNyFOw01OtahmuztjNuxdmsC2hiC8LPMXQejJycT/gSAXFBaK78qpT9SwfaQs95/ynz/DBPEPU/nhy041T5AAAAAASUVORK5CYII=';
+const ogroImg = new Image(); ogroImg.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAEeUlEQVR4AeyWfUxbVRjGnxLKpAy6ysZAEIp8C3PB4cYyGW1kbHPWicZtmW4mRKImaoa6qDGz7VwmiyDJSGbispmQhRGMWcyGZmXaFkSBbdJQEGyB0FLGd8voB2s7dj3nGhoWoPSSGP+hue+5556v5/e+973nNAj/828VYDUCqxFYcQTSo8WK+bbSr3lFALKUDHX5+/vlt346x1rtJwfk7+3MZQiQhCsIZwAiovj8jTxJzuZU8MOFrEXGrEPp0Z3Ytyle/Z8D7EqNliflPoO16zcAHiecpr8QlZWD2O0FOJSfDgrIBYJzBGLEUQiLSQB/7TpWh9bZCikoGLlxujgBUO/ePipbVMDrmEJfy03IjxTIX99dyCw6aJFGTgDTD1w4U3MD2qZ29PYNwKKvZ5dkxRsb2ahszYqDc2KcbQ+k4AQQESRAbnIn4meH4bj/PR7PyWY1powdYPgChDzCh3XwDrqHbEq2I4CCEwBZT9NreRpx+UXIjC0B436MNIF4LoTby4dZb4RWZ9b0jAwo2I4AiqAAxswfIinMSoZn0kJE/01C57AJTXVaXLr6C4790IZvf+vRklwJeD/gBEA9O3jyO83l81ega+zGiGkC8pMX4HF7ULJ/CxrOlaK17rT8rdwUdaAQnABoKMg+IBmyWxEbPg6bQYc4wRpk785B2islEIlT6BDIDhchb3OCnH1YpuAMEE32AVFiGqpVHajvmUTppVokvVAMr/UOvB4vHMMDcA12obKqQpJKzotl9MEZYGRgDO+8eQgH9+bh+KlTvvVtRh1UdbXYmHcAosRUOHtv+vr8VTgDqIwjmurTZcTjIXjM7bB1NmO0qQ5e+xQuN/ZAVXMR9rExeGaD/en6+pYDeCibaWJtXx8hGXS6yXacCNvQEPj3bRCJk8keEIJZ+z3NB+U1ysj0bISF+jT8VhYA7CqQqp+T5jM7tm1lPv6oVB0ZGUlPOMWmzEz1Uzuy1eINoRjun2Aj4JgYw9SAER77XTjuOmCYnsHX5JgOixCguqGDvl+NX3XSuQCg4YZam5GUAtnze2HuNyE6Kkry1ZdfyMlY/Fyv0qSKhLSKzhYDeK5x1vOxv7vw47V2tj09Pg70mB7t6QL5bLkD0FVcMzNobmmDiYRYtm8Pjn96Qqnv6pLa7zmlimaD8o+Jac2jsbF4ouhdMMIEVvyizgQeA+U31VdRXlaFK639UrrWcrYgAjlbsuV/6jswabXCNeNCWXmlkiyiIMZeBrLNMgy0T774EkZvq/FgloGF5ERhSjTrcYWqkffZhVpeIN7TBRcA3LrdztN16Hm/t7Yqg/lsJvvE6YQ5C+F5MdlnRPGHFXh5WxJrsrQM9Vx/oPcFAPMmKijMvGdfNU0Yms9fEwxzpwEWl5ucflaEiwQQbxQ+9NX4Jvip+ANYdNprewqZyhPFrNCzR14FDT39D9DWacF1wwh9XYvOW6qRM4CAcWuu6c2gyUaNih4+26A8+2u3lObHUkJLtXMGOH9dKz12popHjSYbFaW2VNItJTzX/g8AAAD//3LZwLUAAAAGSURBVAMAkTC7UPuvLrgAAAAASUVORK5CYII=';
+const gobChamanImg = new Image(); gobChamanImg.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAATTSURBVFhH7ZfbbxR1HMUHW1pa9zZ7m92ZnZ2dnZ29X9qd7XZvbddtpbtlW1powQtYLkJoi0AhCi3a3VatFHwwRoEYQhDjJdhaYqJgDEHjgw8+EOM/4IvGB8TgJUA1HqftPPlk2sUnPsnJ75eZc84v+SYzkyEe8IAHrJQ44dJoCYJcVJ7Qa5TL958Bwl/jMFombBLzQ3hH/OeILLaJ/lFQGXoVy/2FdVAfGdvMCJ1uReGrPUsKnmmDJWWBw0HPKrb7g7veUrDlHXCUooieX4/MXN+SpPOdsB+PgMmxEEmmS7FXHsHCzPhKCSTneyFdyKP5g+KSYhcLkN4tgB8OQLBYTyr2yhEmwg8vrm4LNxp9vQOpjzcjNb8ZiQ+7kZrbiPTlfjTPboSnlISXEw4vev2ESbW4VgSR50643OxV1m/7JHpuPdrkgzsvDaJ19gnE3+5FfnYnWi8V4Z1OgXVRn7q89isunq/cJFw8XXRt8YE75IdwpgMz17vw7cUE+l8pIPt0GN+9l8bMtQKY6TTsB/xwbfXBw9PdSrwyiCnPfGSyBcKrSXR/thkXvunGY2d7kB9vxjs3+lC80gfbeAThcgaejG9OiVUWT9z9lrmVumkfa4T3/R48cnkHQqfaIV7cAO54FFSGAhdgvpStNcuJClJF1GZ1hHHCoiK/1mZIcEdCaHyzA5HXsmBHg1BntHCoaUh1mZuMWrwkR9TLyQpQTVS3xMzZe7uEw8jqe0BxJhh2MvBPpBEopWEYtMLAGdBr2o6ZhtN4nN8H7VrDpBxds9ywOmqMdez1A94XMNP4Boa5SfSbh+DMRmCbDoKZ8sOTbMBWy34Myfe2sCPotO4ApRJ+krPrlitWB21Ve+5soHcjLxfvYo9hLzuBbdZRxL05NPlyeIo5gmH7JAasI6DJOBz6Foga6Z6xRl1QOlaOdZ31aNLQ/XeU7IJO50Pc2IMRfgLPOMvYRy9rv7wfcU4gZiiCrLNDqsoiu64PzFp2RqlZOSFtYOpZ18uQVOt/Vdcap/Vq929pagBDwjiG+RKGnaWlfZrqh7He8wtl0N9wbwpDLERgIg1lpWblOFSOUtG1CR5D4Lb8bPWQ9ebv5fFiO7MfB+WDDwpjGLQdQlDbCvUazT22wN2KzXUhfLYNOs3a1b8NtWTtVOBUC2LnOsEmbGAYx5/uQAh+PoKmYFpWBn4uAo87DDNlhcqnge+lZvBbxIV6gsgrNStHVf3QWGgqifD5dtBZBk6KhxiMQmxoRCDWhGC8Ge5oFF6pGazDD1Kv/YIRDWWyqqpTqVg1OkujcZ4bEG/RHvOdDl4HyW4GR7N3a2trT6rUms9dTg8ivAM5kYPb5Dym5CqOXlulPdEimtEb0qHDbVrwWfkWXkcPb2tgsSdGY1Bi/3KZ2UOKv/LUVKsP50QrtksU2r3mu5zJlheM9minl/5jKGVDu2i6a9JYKzb6f5Gok+zM1aEUh6EEi8EYC4FiX7ToLb4Ot/X33U00ev0kfCb9tUWvEqokWjLn5ReOFqM4+GgQGwPsgtvCNznN9PN7kzyeywcwmhOQsBsXCEIyKqGKssZvE/IhTigvymayLY1aMDLju1MeTD/ZhqPdMYQZ+jZB2MmlxP8Bp+V0IsWOySoLJqZM1sv/Kf/5K0gQ/wAzn8T/aQoi3wAAAABJRU5ErkJggg==';
+const gobSaqueadorImg = new Image(); gobSaqueadorImg.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAATUSURBVFhH7ZfbbxRVHMcHS6CFdrfTvc3OZWenM3u/sbvde7e79EJ3S29LywJKuEOUEIGirS2kLSUWigSNiWAEERGU1EIpKmAMQeODDz4Q4j/gi8YHxOAlQDV+nV3mySfTLj7xSb45Jye/7/ckJ+f8JkM85SlPmSthQlKpCYIsKEPUqJTlJ89qwrnIrKWG2SDzg3dT+GefLC5E/yhWarqVkicLZzZc1qb08JxoQPbr7UW5T6ZAxSmYzfSUUvZksC6hsmzGDPNIAIEzK1B/KVdU8EwrTPt9YBo5WEimTSkvPSLFTDhGoohNdyN4NoPIxfai6s5lEbyQhbDTBZEyHlXKS4eX8C4tjFaK3xt4sxnxqz2IT/cg+nEH4pe6kLjSi8hUF2wjMdh5sa9Q6yR0lYWxJFgE/ohk5W5wTvazwOkVSMkbt05uRMPUswi/343M1GY0TLbDPh4HJxmuSXbTdUkQSncSkkC3S3kH+D1OiCebMXGrDXfORdF7OIv0Ni+++zCBiZtZMOMJmF50QlrjgE2gOxR7abDEbdO+g0mIx2Lo+LwHZ7/twNq3O5EZiuCD2zm0X8+BHfLBN5qErd5xSbGVFoff8Y4+YbhrGvTD/lEnll/ZBM9rTbCcWwl+fwCGiB61Ju4rJ0EsUiylo4wg0qqFxDCr1nxDRjQw7fPA/1YzfG+kwe11Qx0kYXYw4FeKdzW16knZUvXYWQIWEkRS6LA+Sr7bA9+rDdC3sNDlWTiHE3CNJKDN0WDaeCQudKH3zssIH8ugoqLsoGxd8DhhfiyqsVTdapnZgPztfiSv9WLZqWYYN0sQ+v0w98kNaKMk94IM6j/tQehUBq7XG6BxVf8ke8sfR8wPWh/RPfCeWA738SSik53yu88hJDciYbenqPD5NiTlzX2nWkDmjDBul8A0c4/IsrKskjF3NGT5AL/L8zf3kgeqqBrmAR8aZvJY/sla1M+sKiotz1NX14CX74WKLgezzgJxJAw9pZpQYuaO4ODGWq5ugGmr49eqpWXjqij5m3goKjehNfLmq4sqzCV5rSpR84u2ovy2ZYcX1vEYdJx6VImZO6xEjTReXgcua74vv63OZS7d92G559ef70L7zJaikue7UViz1ZKPmIxwr+5iG3zHU6iuXDz/bkhqFo8FT7Si7r0sTBEGW3z0n/u7PdiX92Nsewhj20Loyy/DYJcL690cKL8B1rEwhLxldglBZJSYuVO58JlB93AUntNNYNI0Wi0cdrW60N/mwFDOhwM5Nw50OjC4yofOoHz5jMYvDSI5Kl/AViVi3lRTfu00v9pyj7LoHjTwJGK8DjEz9dAvcEfjIvNFd0BCi8uEtIUHr+FfUXwlp0ZQs0fSNiM63dVISfpZbaUxyVbzO/NeHpuCNDYEub8kPbdHqS89nJbra7EzWB8woMmuf8jr2IxJawqssNN/7IyzaLLoHupUxpId/b+IVvg5+sbzMRNeiHLYWMdBNHCHqBrK0Ww1/r41RKPbScKhq7lZqFVMpURNNtqF2YH2AHa3uNHl4matlBCq1dMHdsQE9Gdc2NsoImrSzhJEUKuYSsoCJytmPLw4WhCrY4tHLWqZoa1xG8afS2Ggow5ehr5PECay6Pg/4NV8tcXADcoaFXXMKLlE/k/5z19BgvgHRAnaza+8huYAAAAASUVORK5CYII=';
+const gobArqueroImg = new Image(); gobArqueroImg.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAATUSURBVFhH7ZfbbxRVHMcHS6CFdrfTvc3OZWenM3u/sbvde7e79EJ3S29LywJKuEOUEIGirS2kLSUWigSNiWAEERGU1EIpKmAMQeODDz4Q4j/gi8YHxOAlQDV+nV3mySfTLj7xSb45Jye/7/ckJ+f8JkM85SlPmSthQlKpCYIsKEPUqJTlJ89qwrnIrKWG2SDzg3dT+GefLC5E/yhWarqVkicLZzZc1qb08JxoQPbr7UW5T6ZAxSmYzfSUUvZksC6hsmzGDPNIAIEzK1B/KVdU8EwrTPt9YBo5WEimTSkvPSLFTDhGoohNdyN4NoPIxfai6s5lEbyQhbDTBZEyHlXKS4eX8C4tjFaK3xt4sxnxqz2IT/cg+nEH4pe6kLjSi8hUF2wjMdh5sa9Q6yR0lYWxJFgE/ohk5W5wTvazwOkVSMkbt05uRMPUswi/343M1GY0TLbDPh4HJxmuSXbTdUkQSncSkkC3S3kH+D1OiCebMXGrDXfORdF7OIv0Ni+++zCBiZtZMOMJmF50QlrjgE2gOxR7abDEbdO+g0mIx2Lo+LwHZ7/twNq3O5EZiuCD2zm0X8+BHfLBN5qErd5xSbGVFoff8Y4+YbhrGvTD/lEnll/ZBM9rTbCcWwl+fwCGiB61Ju4rJ0EsUiylo4wg0qqFxDCr1nxDRjQw7fPA/1YzfG+kwe11Qx0kYXYw4FeKdzW16knZUvXYWQIWEkRS6LA+Sr7bA9+rDdC3sNDlWTiHE3CNJKDN0WDaeCQudKH3zssIH8ugoqLsoGxd8DhhfiyqsVTdapnZgPztfiSv9WLZqWYYN0sQ+v0w98kNaKMk94IM6j/tQehUBq7XG6BxVf8ke8sfR8wPWh/RPfCeWA738SSik53yu88hJDciYbenqPD5NiTlzX2nWkDmjDBul8A0c4/IsrKskjF3NGT5AL/L8zf3kgeqqBrmAR8aZvJY/sla1M+sKiotz1NX14CX74WKLgezzgJxJAw9pZpQYuaO4ODGWq5ugGmr49eqpWXjqij5m3goKjehNfLmq4sqzCV5rSpR84u2ovy2ZYcX1vEYdJx6VImZO6xEjTReXgcua74vv63OZS7d92G559ef70L7zJaikue7UViz1ZKPmIxwr+5iG3zHU6iuXDz/bkhqFo8FT7Si7r0sTBEGW3z0n/u7PdiX92Nsewhj20Loyy/DYJcL690cKL8B1rEwhLxldglBZJSYuVO58JlB93AUntNNYNI0Wi0cdrW60N/mwFDOhwM5Nw50OjC4yofOoHz5jMYvDSI5Kl/AViVi3lRTfu00v9pyj7LoHjTwJGK8DjEz9dAvcEfjIvNFd0BCi8uEtIUHr+FfUXwlp0ZQs0fSNiM63dVISfpZbaUxyVbzO/NeHpuCNDYEub8kPbdHqS89nJbra7EzWB8woMmuf8jr2IxJawqssNN/7IyzaLLoHupUxpId/b+IVvg5+sbzMRNeiHLYWMdBNHCHqBrK0Ww1/r41RKPbScKhq7lZqFVMpURNNtqF2YH2AHa3uNHl4matlBCq1dMHdsQE9Gdc2NsoImrSzhJEUKuYSsoCJytmPLw4WhCrY4tHLWqZoa1xG8afS2Ggow5ehr5PECay6Pg/4NV8tcXADcoaFXXMKLlE/k/5z19BgvgHRAnaza+8huYAAAAASUVORK5CYII=';
+// Bestiario real de la Década 1 (Arañas del bosque profundo) — pack
+// "Spider Pixel Art Pack 16x16" de Camacebra Games (CC0), 4 variantes de
+// color reales (no tinte por CSS).
+const spiderOrangeImg = new Image(); spiderOrangeImg.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAAXNSR0IArs4c6QAAAbRJREFUOI2tk8GK01AUhr/E1EQ7Kh1o6+Cqg6TddLIZmdkMuOgTOC8hvkJcKJh9V+LWBxhfYMoQcOPAbJJuNDQZhmEWbdAg0tKQ0riY3tvEjRU8cOFy7n/+e/7/ngv/M/Z2rfxfMWrxwGmoErC3a+XFJXKDrl4i0YpsB80KDhk2Vm6m0/LVq+LzcVZKa0Xm3jBl0NUxr39g1lscH84BOPliQHzJ+VjFnixxGio2Vu5HniIlCOZXF+vinU6NnU6N48M5Zr3Fx+tfslPpgdB+msz+5p+Md19/IrzQ/MhTbKwcjBLICxdAUtivw80M3GFKSYLTUBl0dQkaxVt44QIvXDCKt2R+0NVxGrJs/QoHzcqtifvb9K8giC8JYnEaY9ZbvN/flkYzSQFQih642a0MM53Svhnx4uURAJ8+fObbk6cEehWA55U5rzuP6A1TVD/yFHuyxM2MUnvPCprFXsh0M4PeyoM7AONk/LZZe/ymTY49WfJdu8vN/Qc81O4xTpacpAaBXuVsmtMm52ya40eeAqtRFoMkntKPPCXQq/TDGf1wRqBXZcFpMuPPcUaQbPqZNsFtHL8BiRzLXgmA1p0AAAAASUVORK5CYII=';
+const spiderOrange2Img = new Image(); spiderOrange2Img.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAAXNSR0IArs4c6QAAAXBJREFUOI2tk8tKw0AUhr+EBAVty7R2YZFCA0ZxkawEEXwBl/YlfCR3PoEufQE3btOFSO0FilIhpqOOgpJgXNgJSb1QwbMa5vxnzj/fnIH/DM/x079qjO8SnUFgzApn9zqDwACw8qJqUzAZSTzHT923l2LrabHWFBx4jp9WmwKlFKVSiZXrG9x6i/bOKwAnF4t0wyH362uZZjKSdAaBkTlQShHLBIVid1q8uikAaCM5uWgxVJNMo8P0HD+1hUUURQC07h5/BKhzURRhCwvP8VOzMwiMWCaUzQrVpsjEQT9hfCUZX0mCflLgVDYrxDIpXkEzYH0N9wF64TLwDOg1GYM8yG8ZQJVuOKQb6myIW2/NaKavkGdQNisAuG8vbNz2ODjcA+D06JzjRoOVxToAT++P1Go1YpnwhYEtPk1t5+DptS2sLwwKk2gLi1gmmYv9rc+OZ5ch3YWl7BBdDLlByl/jt1HO29eHZA7m/Uzz6OaOD11R1fvqCtS0AAAAAElFTkSuQmCC';
+const spiderPurpleImg = new Image(); spiderPurpleImg.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAAXNSR0IArs4c6QAAAZFJREFUOI2tkzFLQlEUx38vFBttEME3CBGii0GQU48gIaQv0CAE0WdoeuAQOLm7Bm3tFSG8IGwIi0CXxMR6kNHTQUct4zXouTxzyKAzHe45557z/91z4T8tubzq/jXH5w1E4hkAt9aqaj8T5SyazgOmW2tVtakLAPy6QWTsuuFAcKZzNJ3ns12eOl/wBm3LxK8bhANBYqEUB9kzDrJnxEIpwoEgn+0yb/VLIvGMkqImkJsHNwVioRTGdo6txMckmoPSEY3nWzUp9csxA9HecZq/8VPWfjhGWPgmMGbovzcuuGJH+V4b9ZrYlkmtVdWUhEg8g183GNwUAHh6uVcFXl9Avk0kLEjArxvYlsnixiEAjW6F87si53dFGt0KAIsbhwq0mOZlMOqNOYQDQVKP14T2TgHonuxSSWziDPtjcEsr6Gv72JbJFAMZ7+v5lnXgZdJlHah4ZNqWqRhoMopMItpkF0SOdJcc2cSpRZKnrLWqmjPsU34tUX4t4Qz7qqDjNImm87P/Jrm86s77mebJm9u+AQRyxk03yThRAAAAAElFTkSuQmCC';
+const spiderPurple2Img = new Image(); spiderPurple2Img.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAAXNSR0IArs4c6QAAAXFJREFUOI2tkzFLw0AUx38JSStoW9MaCh06ZCi4JJPFpUsHv4KbH6VDv4jg5hfo0KEgLlJc2qUQoUgnS0mjHgiaYBzqHUlbpYJvOu79383dvf9/uP4Xr+Ml/9Vo2xLj6UhbF67vjacjDcBIi8p1i+UsxHW8pJo/nHqz1GQcuI6XlOsWQggKhQLmPKFhN2mddWid/fhbO9Dvcp8Y1jK+VYbrPQwmOZ78XoZTUS8RhXG2BcWgWoBPeHi8V4fkWjJIg9zKgH3wF0P8xVAVadjNrEa+QppBUS8BUM0f0pzcYF9cA7C4OueyVuNozwbg9fOFSqVCFMZsMDCtlamTFDy5Ni1jg0FmEk3LIApj5aJhN4FVO/P3Z1VEHobUIKXb+G2U0/ZlEeVg18+0i27n+AJXV81CNUatJgAAAABJRU5ErkJggg==';
+// Bestiario real de la Década 2 (Guaridas de bestias, con Riakis) — mismo
+// pack Tiny Creatures.
+const riakisImg = new Image(); riakisImg.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQBAMAAADt3eJSAAAAMFBMVEUAAAA/JjF2Oza9bEqLm7TAy9zqpWwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAC7HnG/AAAACXBIWXMAAC4jAAAuIwF4pT92AAAAV0lEQVQI103MwQGAMAgDQLqBgAsQJqjZQJ1A99/F0n7M6x5JRHRGpC1s0gwwxAIWyGQvpNPjD03yGCvd8fIJFb3PsToKF5AFcASFKk+M6yjQwoIF796pH7qpDuUOu+IPAAAAAElFTkSuQmCC';
+const loboImg = new Image(); loboImg.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQBAMAAADt3eJSAAAAMFBMVEUAAAA/JjHAy9xSYHyLm7TqpWwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB2bKsIAAAACXBIWXMAAC4jAAAuIwF4pT92AAAAXklEQVQI10XMwRHAIAgEQNJBTtMAxAaMNqDSf005zCPAY2eAE/kLiBE5EHUSSZF0o/vauMxtEMhXG5XXmMm1gE/GlUVEe3A3QvNCr4E+W2Eg3Kd94K3Ht2fHBmBseQEWkA1JfNe5ygAAAABJRU5ErkJggg==';
+const osoImg = new Image(); osoImg.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQBAMAAADt3eJSAAAAMFBMVEUAAAA/JjG9bEp2OzbhmmVSYHzqpWwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB+9p64AAAACXBIWXMAAC4jAAAuIwF4pT92AAAAWElEQVQI103N0Q2AQAgDUNzAEhcAXEBwARNXcP9VLHcfSvh4SQkVEaBXZEHPSqhBbSA9jBnUOQ2P7Urw1uO8iU72hxH8Q7rbQFQdM6riwz8ysqExwU4Nlr5rZQ3RF8SW6gAAAABJRU5ErkJggg==';
+const buitreImg = new Image(); buitreImg.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQBAMAAADt3eJSAAAAMFBMVEUAAAA/JjH3woK9bErhmmV2Ozb////+rjRSYHzqpWwAAAAAAAAAAAAAAAAAAAAAAADraalJAAAACXBIWXMAAC4jAAAuIwF4pT92AAAAbElEQVQI1yXNwQ2AIBAEQOjADdE/xg4WKMDYACEW4OdasAA/lO2iHI/J3h04D0y6zuE/wroiUBHSHnNVhHDEbIIXynIJSLHYrdacNjMlOEkzExpZPgRKY3jm2XIb67mGyh/EM96hqo9fuwp4ATozFOUprihSAAAAAElFTkSuQmCC';
+const alfaImg = new Image(); alfaImg.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQBAMAAADt3eJSAAAAMFBMVEUAAAA/JjHAy9xSYHyLm7T////qpWwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADFasrMAAAACXBIWXMAAC4jAAAuIwF4pT92AAAAZUlEQVQI1x3NwRGAMAhEUdJBEBoQsQCMDYCpwP6LcSPzD++wMxA17oiI+L8FY7RweF0/ysuBxqEpWDc9Nd8ENvOyHZCxbyM6scxATHzfx/U8wFSznIBpedqCjBELLCGBr401Nbl/l3EOjNFEtUUAAAAASUVORK5CYII=';
+const linceImg = new Image(); linceImg.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQBAMAAADt3eJSAAAAMFBMVEUAAAA/JjH/cG12OzboRTf+52HqpWwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA0TQerAAAACXBIWXMAAC4jAAAuIwF4pT92AAAAYklEQVQI10XMwRGAMAgEQOzAS2wgGAvQpAETbMCx/1o84kPgsTPAifwF+IhM8JqJkBDSQLU+sKjpSSA+5dp5jXbblsGnxlX2iHJgLUSKHXV31FYyA2HW9ANvzb8tGgYAZcsLSu4N8wTALO4AAAAASUVORK5CYII=';
+// Bestiario real de la Década 3 (El Usurpador Sin Nombre) — mismo pack.
+const usurpadorImg = new Image(); usurpadorImg.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAExklEQVR4AeyVa0wcVRTH/zuzDygLrLS8F1heu8WilADhkS0MtRArbdFIfRKtxKRtIolGUx9RWb7YNCTV1KT9UEuqmDSmqUl9W6o72JamqVUqTwlZwIV2KY99P4Fd944sWQ3dnU1K/NKbnHvPzL33f35z7pkZCv9zuw9wPwMhM1BZXFmz3jUaEkC9rYh9vfWAdj0hQgKYTYuo27GNqdpa1bZeECEB7ha0bmuh9vmaUt8T5Q/5avIyfJXZab7C9FStXCaP+MhCAgz8Mazp+3UQzS81aQIwlfl52orcDYxMYEEibYMyVYxk6SLSoq1MZpyFjRSCCgiHGt0eCzdNnnxfvZIRURQSZLFQZMtR+rAKWSlJEEkkiIsWIFKIkAC9fb3tuskZpG2MxZacQl+1SsocP3cVn7PjOH1pFjYPBYfLDafdgRiRELRQCKnYC1AUA56N4rkO8XFxmisjRohlmWh/6yAOv7kPk3fscLo8nIR9cQmLbjcomoZU5Lx3AKQOxsfnsbtRrdnoT/tOphQN28uwt0HNBZ6ensEdq43zKZrGjE0MaRR97wCw0lw2B+dFRYkhEYugHxjjrmdNZix6vdwRJG9KgHd5ibvPtwt7BIE6yMlK5s7b6w9GxJ/qOIfY9HzQknikJsigUshhNJqwsBhLpnlbWIBgpXETzZrn57hbLzZV49mmx3B5zIWczDToDbPQm4WIptyIpPECIHVwe9aJxl1q5sz31zUHDx3F/MQk2ts7UF8Yj77BUdyaW1hN//LSMm8GXgABNauTgs/nZqZ1N9FzsRuMcgNcDiNMNju3JDtRiPxEGk6vGHIZv68iL4DgOvBhiYkXLyE3iYbQX4wZKYnIl6dBkZSIzQo5CrKTUJFFQxazvPr15Oju0vECCN6bmSqFOEmFGzozBqec0FtomHxxGDJGcfVw2yaE2RePJS/F61WkgsX/67/cWKx9bf8B7YNyeVueaJRd1v3ELVEpErDnUTVyslMhkUrgFQngo52wuI2gvDT70dutaGveibwURdifU0iAKA/NFKeOM8/sVmisLjET44nlAAzzVm50uj0g5iCfY+L7x65L12o7z3yJ+l0M/OJhs+Bfw2mt2V3sNzAffDLIvH/isiCKjkFB+gMoSd6IBYtt1Uhw/cw/r6bV4dSQpy4rUkK6KQkvNJSHrYOQACNTUz3ECJ3NbINkgwiTt5zs1f5R9saIDkPjUxjS6WG1OzFn4rLC+gUZVWYGIIqBfW6WbA1pVMjZoMmz13TMc8e6Nd/8OVxbKEtDZ2szujs7cLqlEW9s3oLtKdkwmFw9/n8he+Kzr9Fx5BjIniCJNV3eAGOGiZ5Rw0Q7SfHjVUomt7oG+t9v4uT531CyowB1yhQoUxRtZN3RC78I3j31hYD4a0YNuskbILDHv4GpeUQNj9WEd059B73DDavRDlVJFsrzk8MWXUAnMPr1Ai6/URkfzWQWF+H62a8wPGVkJ+1u5tMfBrjNLRW5DMkCd8Gziwjglaef1H74Xgv3lGV798AHsOrEOJakn2ThwqgBpAZ4xuaWRQTgNs3h2/6/QIqMGAnWO2vRtF8Z1ezv6tUcPv8zr3PnIq90EQGc/LGn9tUjHwuIHTrexQUjhRmwFc1/DeEu/gYAAP//4vqSvQAAAAZJREFUAwCJfeJQfTmpRgAAAABJRU5ErkJggg==';
+const sombraImg = new Image(); sombraImg.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAD8UlEQVR4AexUbWhTVxh+btIkNWnTpDZp2tz1A7toW1m7kSFu63qLdOicY2OCuknHcN8fIoWNyQZeoSLzx2SOscEYbN3+DNwHopDZH712Yx+1pXWVtUtqm9bYpl8maYy3SXMT77kSwT96TkH805DnnHPf8573fc7znnN0uM+/VQKrCqwqsCIFeBvfzBdXHLoNqm0lN5qZAEm+s4mX3t5WKe59fK0oVC2LXrcsVlgXpY3usm5WEkwEcsmzS3GM+scRjydQV1sDh80Ke6EBpcaIsKHUwUSCmgCvStzWuk5S5AgSaR2SZhceqq/BmnwjOCUDg06HfLMFFYWyQEpDqwQ1ARIwGArj1wEZUyk7JqMcei7OEjMMRoPWK+k0dHq9NqZtqAmEoqFzcsaIbYIXXx55B2e+FbUcM7NXEVuMYzmTQUZRkEjp4Vgj35zUPO7cUBMgYcz5JvBlJXA57DBZbMSE8NwCIsmUVoKiIisW5Sz0efQqMBEgGfX6m0sOvnsQ15eSxKShfK0NRvUcyIpR+6ZtdLSOxG9sKiplVKnJuCdbjhfeaMe/M3kQHqkHUWdy/jrkjIlMU4OJwF+B0Za+3gFpeHgUvo7dCJz/Q0sUvByGf/KKJn+xIa7ZaBsmAiRof2BG2v3eETz89H6E/uvFEzX5CISmkJBlGEwmkBIoaYW4UoGZAIn6WLUBLdUK1vE2LMavwVZgwQOlTmyqtqKymIOcvoeH0JgH9I/FsLSc0h6hhvoHUVjkhM1RDre7FE5rHlJZ+nNArcDmxqZuAo7jhO4fjuHR1l1I22uR5pvx8muv45nt2zERTKGx+TlsalxPhKICNYHLwXFx35svCXva9ginT57F/leexas7W7HL68L6giVsKEjCxds1u8dOHRbUniH1JRQ/7BBGhgal4ekFwGCBuaIOJiWG8xf8+LSzB3t3bMG1+Vn0D05IVNtXnXQqqP+ExEmfr2VoZFpKXb0CRMaRmJ/DhUszOHr8Y5TV1aHz+HcYid2jpzjH1B+Tpd5fujA30IOFcBSBgSBS8Sgk32/44u+AMBoOnsv53q1nUoAEq3FVNe9rrBT7VNkXpqNwbvSiwG6G9/kPcODEKabkJB4zAXWBsOVJDwrVpO1fdWnJjx5rB282gWXnJDmBGo909MgAUsfPfZgam8fmEqtWc7L6/a0N8LiqDpExC5gJkF1eDEUEokCteu1OD01iWPoT9U0NLHlv+TITICu3elwSKUMokcRbbTtg592wlDjxlMclknkWrIjAWX9YfPFEl/jN4IT4/yU/zqgqfPb1T4hls9T3P0dyRQT84eDhHD7qPMUd+ORz7vCPPu773/9pyQXO9XfrbwAAAP//OXFLHAAAAAZJREFUAwDmmGtQWxR/WgAAAABJRU5ErkJggg==';
+const dobleImg = new Image(); dobleImg.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAD5klEQVR4AeyUf2hbVRTHv0mapEva9DW/22RpZ6Ozm7SdbsxSde8pDmZBx6QVwe0PWcE5hn+IqGOShFEEdftj+ANxilD1H6ebyEBx2Df7h2brVhnSzpfaNl1S0sa1a2Pyktj36ru3FBwMdl9h7J8+3rnvvnPPPedzzz33GnGXnzWAtQysZWBVGQi6g3zQGYreJJpuNSdaNwAJ3tUe7H95V0Nkb4crwjcuRrYF5EjIlut/IBDo1wuhC2AluFrMYVQax0Iuj03NTXBzNaitroDPcp1v9nl0QTADkOD7hKb+RXkOecWEks2Pls1h2CotMCgKLEYjKm12rK+W6fawZoIZgDhMpjM4MyRjqsRh8oYBv/wxQ9QwW8z0qyiLMFaYaJ+1YQZI/Z0SZcWCXfxWfNR7EGc/j9IY0zOzmF/4B2VVhbqoIF82wWOTI3SQoWEGIL7WVVoRrHPD76mFtYojKmSys5grlegW1NQ4sFBYgsnEngVdACSiybQ85fDBNyEXS0RFpc7FUQhZtdJ/1sbIakjsxqZuiKqWatI/j3o8+9KruDJtAv/gZq0YrZi8XgDZJjLOKroAfk2MCpcuDolXR0bxw9HnIV0YoHEmrmUgTU7R9DvNOapjbZgByK1HnA5K0+efO9SLLU8dQmr4AjrClUikppCXCzBbrSBboGjHktiyCDPAM3t2R9rbHqWXTMcGM4R7FDQFOeS0y4irsiPk82H7BgcaagH53ztQhN+d+Vbo6n6CDzasjwyOzaNYLmv7bkGrdhlV13jBeeoQCPjgdVSgvMReiMwZIPfA8eMnhfp6BzpfPICMbRPOpdZRuTxXgbQlhItjJbTt2I3tbRtZsk9tmAGINYGQ/romkr6ds6HloRYq4Y1hZGezaA05caDrMbzVvQP3+RujYHh0ARB/lkKelyQJxWKR/EKWZaTTadofGBxHOTcPf6OX/rM0ugEuT44bXC4XvF4vEokE4vE43t+/Ez1OM/z3NsBetywswYmNbgAy6eezP4rOch5PbwvjsyM94NQChtNz8KvLWZkZSxIzJtENcL+/kX+F38q/+8Y+dHcKKEoj+PqbOE5NZAUpmRVPfNiHw++cFKXMxJ2pARXgH9/5CGD34crpU4h+8RM+HUrGrmYmxO//HBFe+6DP0DcQF5iWrxnpzgBZ2eu9H4vvHX0bdrcH0ReehMGACMmM5k/3qxuARCArvfR7UrRUcQhtaUW724ElDYKM6ZVVAZAzfmT/Ht7Z3IavPjmNdo8DGgSvNzixXxWANknce+zL2MOdPbET5wZjx4ZTsd+yC8z7TgKviOZrpcv+JQVHauH/QnS38nA73X8AAAD//1xV4ekAAAAGSURBVAMAwl1hUBnP+xIAAAAASUVORK5CYII=';
+const farsanteImg = new Image(); farsanteImg.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAD4UlEQVR4AeyWXWxTZRjH/z3tOd1n1xa6jrV2q6vKHB/qpgbYslNkmBE/MJKMqECQ4LdgjKIkKEdlicbEeKO7wAvjHYkxmk1dXAhniJgMGghfg3aBspXRbYx27bqznfZ0nPcsJYELeA/Zws1O+ryfz/s8v/yfnrdlcJ+feYB5BeYVuCcF3FZ3o9vu2XuLqWv38kbrBiDJNzS4xXeaK4TXVi0Q+Mq0UOeSBI8lIS5xLTqkF0IXQC759GQSfcFLSCZTeLTaB4fVAlsxCycX4xc7HbogqAHcqsSbm6pERYohlWEwVVCGZTU+5OdxMChZsAyDvIJCeIolnpSGVglqABIwHIni9xMSBmUb+uMGHD4zTJbBcqzWK5kMGKNRG9M21ACReKRbynJo5uvQ1vou/vxZ0HIMDV/HWCKJdDaLrKIgJRvhyJdmNjWPOzfUACRMQZ4Z7kULUeawwVxoJUuIjowiNiVrJSgpsSAhTcNooldBFwDJaDTOHNn93m5MTE6RJc3KF1jBqd8DSeG0OW3D0DoSv4uDcTGrSk3Gh6fL8fKbH+LUkAn8EzUg6vRfm4CUNZNtatMF8H+oz3+854TY29uHzn0bETp2REsUHogi2H9Fk9/OJrU12kYXAAkaCA2JG99vxePrdiByrgf1vjyEIoNISRJYsxmkBEpGIa5UphuARF3pZeH3KqhyW5FIjsNaVIgHnKV42mtBhd0AKQMRlI9uAM4EBC6OYTIta5fQ8pqHUFxSCqujHC6XE6UWE8bT+bMPsOKxhkPEDAYD33PwAJ5sakGmtE6zLdvfgH1hBaaLKuCrWQkCSSkAqBUYCF8Str31Kr+2eTXf29WFt19pxuZn67Cp3gOvKQHp+gh2bH0BS70eMAwz+wpE1JtQ+HQfPxK9Kv70279g7S5V9hJkYlfxzY/taPHXgiu24uh/PeiLhrtnXQESkED82tnpH49NAKmZ34H97cex6+PXUb1uPYgyHaf6BeJLawytY87PV1bZuHrVI5CTcQyfPobL5wbhfLASqdER7GnrEIPR8Bc5X5peN4B6gH9qqQtXAkfxWesBFNkK0PZLOz7/5GsExyTq2ufg1Hi5ob5enpS1A19+9xW2vdSgjbPA3AMYAH58LIW/u87impwWR8+fRDwcwpa1y7DEbZtbgIfLKvfu9FfzUJ+BiSl0XOj1P/fRD2L7H0eweM0aLK9yqjv6PtQlIMkPfr9deP7FenBm9maWpsZabNq5FbL6nyBw8vLcKUDq+8wH+wViG779S+gMRjUl/ukOiLXrdwkrWvYIRJGbZJQDagXI5UJesZyROcmRm5OezG+3u81vAAAA///6g0iIAAAABklEQVQDAKw0blACqJdCAAAAAElFTkSuQmCC';
+
+/*BYTE_COMPARE_CHECK*/
+const impostorImg = new Image(); impostorImg.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAExklEQVR4AeyVa0wcVRTH/zuzDygLrLS8F1heu8WilADhkS0MtRArbdFIfRKtxKRtIolGUx9RWb7YNCTV1KT9UEuqmDSmqUl9W6o72JamqVUqTwlZwIV2KY99P4Fd944sWQ3dnU1K/NKbnHvPzL33f35z7pkZCv9zuw9wPwMhM1BZXFmz3jUaEkC9rYh9vfWAdj0hQgKYTYuo27GNqdpa1bZeECEB7ha0bmuh9vmaUt8T5Q/5avIyfJXZab7C9FStXCaP+MhCAgz8Mazp+3UQzS81aQIwlfl52orcDYxMYEEibYMyVYxk6SLSoq1MZpyFjRSCCgiHGt0eCzdNnnxfvZIRURQSZLFQZMtR+rAKWSlJEEkkiIsWIFKIkAC9fb3tuskZpG2MxZacQl+1SsocP3cVn7PjOH1pFjYPBYfLDafdgRiRELRQCKnYC1AUA56N4rkO8XFxmisjRohlmWh/6yAOv7kPk3fscLo8nIR9cQmLbjcomoZU5Lx3AKQOxsfnsbtRrdnoT/tOphQN28uwt0HNBZ6ensEdq43zKZrGjE0MaRR97wCw0lw2B+dFRYkhEYugHxjjrmdNZix6vdwRJG9KgHd5ibvPtwt7BIE6yMlK5s7b6w9GxJ/qOIfY9HzQknikJsigUshhNJqwsBhLpnlbWIBgpXETzZrn57hbLzZV49mmx3B5zIWczDToDbPQm4WIptyIpPECIHVwe9aJxl1q5sz31zUHDx3F/MQk2ts7UF8Yj77BUdyaW1hN//LSMm8GXgABNauTgs/nZqZ1N9FzsRuMcgNcDiNMNju3JDtRiPxEGk6vGHIZv68iL4DgOvBhiYkXLyE3iYbQX4wZKYnIl6dBkZSIzQo5CrKTUJFFQxazvPr15Oju0vECCN6bmSqFOEmFGzozBqec0FtomHxxGDJGcfVw2yaE2RePJS/F61WkgsX/67/cWKx9bf8B7YNyeVueaJRd1v3ELVEpErDnUTVyslMhkUrgFQngo52wuI2gvDT70dutaGveibwURdifU0iAKA/NFKeOM8/sVmisLjET44nlAAzzVm50uj0g5iCfY+L7x65L12o7z3yJ+l0M/OJhs+Bfw2mt2V3sNzAffDLIvH/isiCKjkFB+gMoSd6IBYtt1Uhw/cw/r6bV4dSQpy4rUkK6KQkvNJSHrYOQACNTUz3ECJ3NbINkgwiTt5zs1f5R9saIDkPjUxjS6WG1OzFn4rLC+gUZVWYGIIqBfW6WbA1pVMjZoMmz13TMc8e6Nd/8OVxbKEtDZ2szujs7cLqlEW9s3oLtKdkwmFw9/n8he+Kzr9Fx5BjIniCJNV3eAGOGiZ5Rw0Q7SfHjVUomt7oG+t9v4uT531CyowB1yhQoUxRtZN3RC78I3j31hYD4a0YNuskbILDHv4GpeUQNj9WEd059B73DDavRDlVJFsrzk8MWXUAnMPr1Ai6/URkfzWQWF+H62a8wPGVkJ+1u5tMfBrjNLRW5DMkCd8Gziwjglaef1H74Xgv3lGV798AHsOrEOJakn2ThwqgBpAZ4xuaWRQTgNs3h2/6/QIqMGAnWO2vRtF8Z1ezv6tUcPv8zr3PnIq90EQGc/LGn9tUjHwuIHTrexQUjhRmwFc1/DeEu/gYAAP//4vqSvQAAAAZJREFUAwCJfeJQfTmpRgAAAABJRU5ErkJggg==';
+const espejoImg = new Image(); espejoImg.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAEiElEQVR4AeyVbUxbZRTH/30dUKAtUCi0KzDehhWFybbIML3NRAdRYjITl6kk7ovxjSzLjJlRdzHOuCxCMj8QsywxfluMcUaZE0x6IZsTGIOAk6VlBWqBshdaWtpLS1/scwkLjq7eu5jsC03Ouec5z3PO+fXcc+8V4xH/NgE2O7DZgYfqgF6lN+mzDMf/JXHfwzzRggFI8Zef0TNvNxbSr+3JpqmiFbpWx9KGTC/zuC7fIhRCEMBa8diyDxPWSfh8fjxWWQqNKhPqDBny5G5qe55GEARvAH28xS0NJUyEdcMfFiOYpsUTxlKkpsghikQhE4uRkqaAIYOlyK3h2wneACThlNOF88MsZkNqODwi9P15i7ghk8u4ayQchlgi4Wy+ijeA0+PsZaNyNFK16DzxDrq+obka87cWsOj1YSUaRTQSgT8kgSaVXd3kTiRXvAFImrSULdDn50CrUWOLQkVccN2+C3cwxN0CpTITXjYGiZR/FwQBkIoSyWrIsXePIbAcJC5OCrJVkMfngI3IuTVfJeZ7kJyzz3qYaLzVxO6LFWD/m0cwOi8FtcMI0h3HnQDY6BayzVsEAVyxTZivDgwz4+MTuPjZAdgGL3GFpv52weqY4dqfJfNxPr5KEABJOmSbZw68dwI1Ta1w/jWA+tIU2Jyz8LMsMlNFCIrS4A3EyFFeIhiAZK0rlsFcHEGJXgWvbwmqdAWylUqU5KVjb4UChVki8H0XiElCISKXAkP2RSyvhLiX0JPGMlQby5GhzIVKUwCdLg+5mfFDPJMKBpDGJ/3S+a+xs+EVhNWVCOfWQmaow/adJkjEORi8GUS16SVUZaVRfBgEA4gA6ufvu9H6RjPeOtiIludr8Xq9AS31hUhPCUMnF3N71caC/wXAtP5flGqLTE9rMqlRqx2QKSDTlkMW9iDsnsPK0iKGRqaZbquL9s9NI12Zvj70gbb4/p2GZ82WvWZTrG73rtgHRw8z2Wo1+bodrzJWWnbsqWEKNamYs99BaGEGcE8i4JrmUkzfcMK2yKK9tZmWpSuhyC/k/P+lNgD0/GZhKkvK0Ny0D9N2B7RaLXXq809pkuhCVzdTrlYSEwM/9GCSucDZpPgvPdc5u8KwFfIsHeZvrK45ZxIlTrQXiD/Tl/8YhGNmBi/GQd7/8BN67Pq4eWnZb267bKWv3PYy8vhnuJhqQjAixZkfr2HEs8REALrz259w6uRpfNdvpxLlvt+3AaD2qRr62tgo7i4sIMAG8MWXHeTft60FWl1TbfHXDJO1tQAhnwcdZy+ioVyLojwlNeGa6m3v7hN9dPaciNhrMcmuGwCuDg2LRkbHRL/399NSmZTE3itOFmuSna/CzXiXemwuFGzLwf7d2/BCRSWZl7UjvK4bANZFtRGYdet7ZrkylVIXleGcZYjzjTvdyFAruC5wDgEqGUDCNK/uey7W8fEh7v4ePXIIDWVa7KrSY2DMCfIIJgxK4hQMkBYLMl1jDnTGh40IKXrwdA/dbhmnyHwkqZVwSzDAmV97zYdPfiUiQoaNFCXyoKFLWHWd8x8AAAD//0kY59kAAAAGSURBVAMAr06YUAudkxEAAAAASUVORK5CYII=';
+// Bestiario real de la Década 4 (Isla Paraíso) — mismo pack.
+const custodioImg = new Image(); custodioImg.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAEX0lEQVR4AexVe0xbZRT/FcZLwDH3oDigEGwBhQ1FBAXhdgIucU4SHf7jMEMnurFoFjMXnO7yF9lIFDU+IkJEnI8Qt2xGxUngImMLGbAxOh7lMRhllraUlrb0gVvtd7FNWUjvvcZkWcJNznfP951zz+/3ne+c7/rhDj+rBFYzsJqBuy8DD4jj8nYkJrcdfXG7s+adA87j+3Y7y3OznDJx3NH/cqUIygAB358lZRq+fJeqeP8g3ih5Fm/u342q4wdxoryQJsSEkhBEIGltCP3q4b0Ik6RAFJnqwQoMj0BSfj6K5SkUIekx8FAEEUhPk1AEDA4LnOaZZeHJes6j8XAFpJYZOCYufw4PL/O6OOnSbNECWDRLutcY4bZ7rXGpflwO3naHyQCzToOZoaveyx49IGytR+erCCIwNz0NraIboRs2wjDSB0JorGcAU4pRD15EEOiygrS2B6OjeXWFIAJNXeNU67lhDxhReqkSFFf/RFTUnepAxb40bMsUU2WF8XROgqSNNfgYBBEYVU+017QN0l9V1XpCPr84gpdfyGXnJCN2jRE3FGo4bt5CtDiMsyB5EyDtRfrcdnOWhmMRo91LdeBnM6KUSsYPX3yLK4o+KK/qMKa2wu504sqkkWaZ+Rh4E9i5JZY52dlKjVzswMT6MHTPWVD+2hHX7l/H3j2HwVzuhxU2pMoT8EiOBM2d08yASlXpA5s18SJArtlXip9e6n1X+0liNiMqKQapuVsg35WL7KInId+eAb3JCbvJhvpTw8y5sUk5i8Ax8CJQKBPTsSlSjP3WhBMffYr+y5fQ3NwF9awJJr0ZkaH+CAkKhNXuQLtCj+zHojjP3s2LkwA5++zMFOjVBlR918LUtHRhQmNgwfTzZhjNdvSPajE0fJ2NOatZQF5GFP63NnQxpAp3UKj//iQaO7rkVpudBV/49012TZBJNsi7IDEBF3rmicpLXPF9+5U8k0mHbdiEjK0ykGyYFqxsZU/N6EBIkCy4JT1yPZI3r0OwfygGVNwFSJA5CVh0WiAgFImxMe4fDaMzuM7eYsXA+BQGrqnQMzSOC/1KZvKGlQm6JwBmo5nE5iV+XF5Nrtuv+tjH+Pybn3ELYNQGW/s2cTzeTnoIX5c+hz/qq1F/4CWkRNyPEPEaHGpoBfmGK67bzkmA3H5H6n4UfXD2TxHRSUsWyMRIz09G7eleTF3qQ0JuHoqekFHh/n7UniIpAtf8TbkBuN6cBG4PkCmNpBLTJTC5LqKpBTsq6n5lf0p5T+VAMWbEX+OzeDzxPrZObv92pbkgAmT3pVkJ7O4amhWYtNipQdUcc7HpDGIf3opNwSHMmV4NExQevBLWimuCCJAaOKtUs7snx5Cz8V7G6aqLjF072eAfvldKxUlllHJYy875DIIIkBqoOt0qKms8T1d2Kunz2nmakCIFSuSX/usIcTqYlsFrIj7gxEcQAfIBEaV6otIthNShzxpFbx37hJXa39uX/QOIvy/5BwAA//+llmiHAAAABklEQVQDAOJUw1AqHbHIAAAAAElFTkSuQmCC';
+const exploradorImg = new Image(); exploradorImg.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAD40lEQVR4AeyVf2xTVRTHv0/cWN2argzXdltHbdgYRoSpEQ2ib0EGRtMEFDXOvwbEfwgS8BdG41uiMUDSGYwhgewf/MNMgkpUAiOkb2Ob7ejIYM5JW8oozdaWHxtbf9AN9njnLhv8M/rusoR/1vSce9+5553zeefde95jeMS/OYC5CsxVYMYVKDfbvnlQFpttr83kRHMDUKJtr76k/P7tVqnzj71S9+mDUkvDp9IXbyyX31qy1MULwQ3geLZU/n7vTix+/U1kLyhm+Yy2Mrz3UQ2+27JGpKowo0bFBUDBN7+7Dtn6fAh5JiA7dyoN2ayVy1FdbpamjBomXAAUr/SZMhqgRLuBRIzNJ1VWngEWW+HkpaaRG4CedLrID1ub7h5ugKlAWWr5SVTD6MgQgq0ywt52jKZHVYv2PxfAOCC3t3aw6Lu37cY+Vw8SA1eQjFyB/RURiesxBPsHZeagUXEBBCJ9zeeDURa6RSnCx5scyFLf+1j8FloPH8GXB13yz2c8VcxBo+ICoJg9XRfkuPqkbT/UInvgAjsRyuM6eM/7MJAzH3RSyE+raAYoyS9hnc4bG5Y+2+VEx6/H0HW8mY2Nv7hwNjmO+s+3iMcP1Ek8DUkzgOOdjfLLK1a7BEEQ7SsWodiai2KLgHjOOH67lsSu7TVY+UIlSldXo8axSqSOqaUKmgESiQFZXLNKTCdHxYiuBCcigLOtH0cvjUFRFDy31I5E6D+kA2dQJVZCDSzOKsDpkx7Zbi3E3bE7ol6vh8cfRY7RjMLCicZTuWkHvOeC+OtoE4xqay436GYXIHwzVOdt74TJZGEPFovd74I6nY7ZGjqDaPP8y+bLKiyzC1BhetJ19XIQT43cgM/nQyqVYoloLCgoAEEYjUa5yReRqDfkGfLYeialvqpMLhPr8fR86WKoX9640g5KaDKZ4Pf74Xa7sb5iITY8bUNfbwDO7Q6JekOuZdHEjRm0ZoDwULh5niDII4NJpNz/YPPzdpb4p63rUKGkcNsXwuWLASwptbLPdPT/ngypJ5Y1A5C7L9JXV9fmkzzRYVmXGMaH72+AYR5w6Ng5dA3F5buAdODwn9i3Zz+OeIIi3ZNJuAAoGEEo6jdhgbUI9BGqbziBteVm2EwGMaC2amdTi/BVQ6NAc/LPJNwAkwELLPm45D6LU/4IiuwL8ba6N3g64GScGQHQGTeqZ73R1cni9IYHoTfmsiowA4fiBqhZX63Uf13L3u8nO2uxtsyMF5eVoKM7DDqCHLmZKzfAE0pa/rs7BNpsJJT0g/2nJKerV6T9waJyKG6AQyebq3bs+VEgoc1GSUmm23SZWO4BAAD//5kUHhEAAAAGSURBVAMAtYxpUKu1tjgAAAAASUVORK5CYII=';
+const mercenarioImg = new Image(); mercenarioImg.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAEh0lEQVR4AeyVa0wUVxTH/zwW1y6KUmCXLexScRe20SIlBESEIQptU8E2Pmis0pY20VZNHyS1MVaGfii1VmtoUpoAJkhT2mIx9mmtskMREqMgCMgbRGi6FKjLG3ap27l3MxQTnZn9QPziZu65Z+aex2/vnHvGHQ/49xDg4Q6I7sDayLWJC12jogDx6yO4rP17zAsJIQowYrUjeeN6Jm5NXPZCQYgC3C+pUROSvS8h1vHJm7scJw7sd2SnP+PYFGYyr9SEuPzKRAGarrew9VebsfPVrawAQxJ99/429lj+h3hr7y68kZGKg4ffRX7OTmZvrIFzFUIUQEg6YxulKgn+Uto6xpScDDf1akAVQJ8TEbA6GjteSUG4z+I5WPJcaogC1NTX5HT3DkD76BLE8XXAGzNJTCSN6RgfAGwTVBeEwnsZotboGeFezszHlGP2v83yEIPzZuJvwH43gCpQD69FXs51mVISgNRBT88wUjfHi27tQGszxod4KJmJBTNJAMFwenySqrYxK537mjrRVXsD5N7a0QCVnz8Gm65ifGScrssVkgBCHazQq+Gn0aLoTBWNvf3o96hjMqguiIpLbSi73L2wNUD+MUn48tYEbLF3EJWOwtwCnDC3sJ2Wm5X0gUwhuQMkDqmDvwankLzhKbawvIr95suvkMmY4D49QpbRyfcKu82B+LhwlvQJclzpggwhC0CIMzblDm+tLxq6+1BdchrVJ0/hStkP+NTchr4gLfKPf4zy6gom7UkdJ/hIzbIA5teBJzxZD60WClMoHI8Ho3xgEpY7QN6BTIA/mqQ/vLb9aZB2LZWcrMsCIIbCsNtsUPjrcbFrFKX1g1iqC6dLPb1/4vqZ0+j6tQy6VQakGDWix5Y68UIU4PXNkeZ3du8xPxEUlL1S0c79230RGk/ei7+utXYjIMDZihUKBbKLz+FYvRW5X1/g/rFYsS5mFeTUgiiA0ubBRAb2MC+mhrBj016MyrYEzxoDMTw8jNnZWR7DeanVajQ2NmKZny9XUnU56WRpOVI2MeCDSx5J3sYZ5F7yQqOF+aiwmTmcf8lN6aGC6bHlCPT0oAC+vr6YmppCR0cH9D4KJJhWwGBwfg2jI4zw9gtAxnMxkq9BFKC1v7+SDAJHOtyiRxQoru3ilEolF6z0mkueHuKN6fZbyMrKyuEDMmG6YEChwsTQIHEVHe6iq/MWSYfbkfc7+1NbS5L1Si0yY3UoPZSBFzReqKu4MWd5B+DyT/2Io0fyZHVF2QCkw7VbbuaQwno+zsiEJiSi71oDCs7WIWqjCclGDT16xO74+T/cDhV960b0ObL7KLIBBH/egUncEE8/QgeLfkHf5AzGbk8gLEqPGINasuiEOMLMxxNUebPRZzGji4ygHbCl/zbXOzHDFJ9ros6ZsaGM3AZEHXjhEsC+9C3mzz7IpP8yelsaHPz7jvdfypHtJ7twvt0CUgN8XNmXSwAz1iH83HgLpMjIIMlqBkfZnOp2dndJDZt7tkLWe59P5xJAwW+VSW8f+dyNjPe+KKHJSGEKY35gQZea/wMAAP//lvKQKAAAAAZJREFUAwCVlrNQYeESNQAAAABJRU5ErkJggg==';
+const cazarrecompensasImg = new Image(); cazarrecompensasImg.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAE4klEQVR4AexWC1BUVRj+dpUVfLGKKCSKPINYEQbCgHG5NIJOY0xZWCk+sjImURCGZAjwUilCVmOhaYVjPHKg4RH4gmS4LPIMQ0SQeEVwmUByeYOxyca5zTLbsBd3k5mmGe/M///nfuec///O/5855wjxH3+PCfz/MmBnZub1lJnZkdnaOjpnwMnJlZ6t4MSP1gTIqmPCI5Sbn/ejdr+1jcydFdGKwCvukqJ9O1zotoZaHP8ghgrY5w9rkzVetiZrjqjLv2E0IwFS73e3S5X+O1yoclkrk3rpiqCRZYsLk/PoaH8pI0sKp+sKv6Rv5CTQGRH+dJD0GSUhpgsRXgIkeLC/I+PmYYGo44VUevltb+KYrHjT5vV49cDbWOLgSSCIFolh7+OD6NCX4Oe4muFALRUvgY1rTRhjK2MuOFm1yp+vrQktWmgIiBZAsHCFCuas2GYdXpPawXayNByghdJIgGy4bS9I8F3aDUY9OPG3WmJDDDByF8qeur/banqqXw2bqamRgGpCXWf/tHSSdKv6NVm9hWJNMC82I4G1q8QU70zSsWA50Zyw1WVou85g5Pe73L+2SiOBBpaNTbnciLlzhdMIlF2vQllpFU7EJyJsVyCOvf8JTp5KQWZlKzKrWpFfcpOZAKZlDjyfkAeHqS2Fl4NiYGdqXqS+qWrbemC5fAUCtm5BXEIoImNCEbx/J4JDAhF++CCsXD0oO0MDrU9LXgKCjpswrMpBVkwA9cOZSDrUV6rkiCjBLDUVY56eAv3tzeitkXEy0tGAcXkXPDzd4L7eZlrm+BbKS+Deb/1YbGSA/PwqCO/3Iu7TKNRV5NCpQb7U+UvliIg4i+ij6YiKz+UkKfsaBlpugRBp7xl49BL0LjJlvmkV4WxlExN5KpfJOp+BvvpSlA4JMEekh4jAZ/HhYT9O5tiuxIXyZgwPDCMr7SKKan999BIsE4uovu42YM4DOqWk0js65RolfeMjOj+/EhYW9jh08Wd06pshNLcJesbmkxt2Lg7k1GNAIqVbutuLoeWnsQTkGHazm4BC3jl1EBGnTd3tsT1CIbc6Z2dnxCVfhrW1NRdKX18fXV1dCAsLi+UALZVQ07hJkCJ3gKaDSKlUMuPjgxgaGpqaamBgwGXAy1Oqde1VkydjqZr/tCPyEWg6iGpqaorlcjk3WCKRcJZlWZjP10ffPfnsEGhg2diM7Drs3+NKvfmiZxEXRU2NjY1BoVCA2IqKCpgb6mHnk0vxU1mV2ijtmrwZyJW1URk5txG43YkibwJyQalcbnVejXWLFbAfbIO/qwVCKEs8YblM1a2T5SVAbsHEK9WCXYe+p4nH6D0u9MdHjylVRDbZGuHP0XEM3mqBsbMUS1auBLmqyVhdhJeAykkDy8YmfCsTnMmsZzp+YZF47hydcCKH637aYRUKmrvRUv4j5puYw8hUzOG6qIcSUDkrvtPiffLr04J39u6lusbuY6hvFEYmYnSO/EF/kZwHxfAAdvs46vQYIb61JkAGE9ngYEW/7m4Gyw1SiPRFBEJBUzd9hynl/nUtg84ERgXzqI6JxUjKLsFXedUQANTBja6045bnYGjtODtPMm5ZPCrtaoEgJP5zTmLTrwoeAPSAcJwj9NnpVFyQNWJW3gM88afBLZPn/nvJuRwhYhNlFQKCqQY+zP4FAAD//1EP5YMAAAAGSURBVAMA0ZfRUCOevk0AAAAASUVORK5CYII=';
+const supervivienteImg = new Image(); supervivienteImg.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAD40lEQVR4AeyVf2xTVRTHv0/cWN2argzXdltHbdgYRoSpEQ2ib0EGRtMEFDXOvwbEfwgS8BdG41uiMUDSGYwhgewf/MNMgkpUAiOkb2Ob7ejIYM5JW8oozdaWHxtbf9AN9njnLhv8M/rusoR/1vSce9+5553zeefde95jeMS/OYC5CsxVYMYVKDfbvnlQFpttr83kRHMDUKJtr76k/P7tVqnzj71S9+mDUkvDp9IXbyyX31qy1MULwQ3geLZU/n7vTix+/U1kLyhm+Yy2Mrz3UQ2+27JGpKowo0bFBUDBN7+7Dtn6fAh5JiA7dyoN2ayVy1FdbpamjBomXAAUr/SZMhqgRLuBRIzNJ1VWngEWW+HkpaaRG4CedLrID1ub7h5ugKlAWWr5SVTD6MgQgq0ywt52jKZHVYv2PxfAOCC3t3aw6Lu37cY+Vw8SA1eQjFyB/RURiesxBPsHZeagUXEBBCJ9zeeDURa6RSnCx5scyFLf+1j8FloPH8GXB13yz2c8VcxBo+ICoJg9XRfkuPqkbT/UInvgAjsRyuM6eM/7MJAzH3RSyE+raAYoyS9hnc4bG5Y+2+VEx6/H0HW8mY2Nv7hwNjmO+s+3iMcP1Ek8DUkzgOOdjfLLK1a7BEEQ7SsWodiai2KLgHjOOH67lsSu7TVY+UIlSldXo8axSqSOqaUKmgESiQFZXLNKTCdHxYiuBCcigLOtH0cvjUFRFDy31I5E6D+kA2dQJVZCDSzOKsDpkx7Zbi3E3bE7ol6vh8cfRY7RjMLCicZTuWkHvOeC+OtoE4xqay436GYXIHwzVOdt74TJZGEPFovd74I6nY7ZGjqDaPP8y+bLKiyzC1BhetJ19XIQT43cgM/nQyqVYoloLCgoAEEYjUa5yReRqDfkGfLYeialvqpMLhPr8fR86WKoX9640g5KaDKZ4Pf74Xa7sb5iITY8bUNfbwDO7Q6JekOuZdHEjRm0ZoDwULh5niDII4NJpNz/YPPzdpb4p63rUKGkcNsXwuWLASwptbLPdPT/ngypJ5Y1A5C7L9JXV9fmkzzRYVmXGMaH72+AYR5w6Ng5dA3F5buAdODwn9i3Zz+OeIIi3ZNJuAAoGEEo6jdhgbUI9BGqbziBteVm2EwGMaC2amdTi/BVQ6NAc/LPJNwAkwELLPm45D6LU/4IiuwL8ba6N3g64GScGQHQGTeqZ73R1cni9IYHoTfmsiowA4fiBqhZX63Uf13L3u8nO2uxtsyMF5eVoKM7DDqCHLmZKzfAE0pa/rs7BNpsJJT0g/2nJKerV6T9waJyKG6AQyebq3bs+VEgoc1GSUmm23SZWO4BAAD//5kUHhEAAAAGSURBVAMAtYxpUKu1tjgAAAAASUVORK5CYII=';
+// Bestiario real de la Década 5 (El Mar) — mismo pack. Tritón/Sirena
+// reusan sprites ya cargados (caballero, bruja, sirena) con otro tinte;
+// Cangrejo/Guardia/Storm Gush son nuevos (tiburón/medusa del pack).
+const stormGushImg = new Image(); stormGushImg.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAESElEQVR4AeyWbUxbZRTH/x22DG5ZWxhQAXnZSnkZiK/oIuluQyASl+lYMCp+cS5o5gjLotMZcXcf/LAtujkTTVD2ASUqmM1FoiJZuFRggb3wKmO8lBbrWmihDFoiRVb7PLwEkq29d8myLzy5z7nPfc7JOb977rnn3g14wGMdYD0D6xm4pwxo1Ik7tOrEo6vnvb7NogF2pqQ1lhfpeEPle1zPxQru6s8nuJoPirgDume9BEwsiCgAcscnDhayr5S+BdW252gsWZgSaXl5KD+0B7sejefppgghCiBfq+a26nYAMgYSefSaMMrkLLyqSwWBXKMIcCEKID4jedGdexzesZ7F9Sq5ol+1F2gpCoCk259DqVzpT31HnSgAp2kQliutMDbz8MxMLTqUMgCZvivm4QSfFHdsEGNuvOnk3Y5xbMlhMWszw20142TjXzhy4Ah109rcjtsALcT0uLijEDBEAXz7Z5v+w4pGvrmqFvOuW5DKFSgr2gWDN4aG6jKOITMqiM/XJnkL0iK4nK0JjVThR4gCWK7wK10D8D4UAlITMms3Wk7vhcuXmUstbXhnXxb2v5mF3IItKN6pZQNlQjAAaUANZz/hKk+Vss/nZsJQ24T2mgvo/HXxfOrw5+g22jA66oKj34YbhhEESyWIC5VyfhIAQQCkw72sz2AjNClg4rchtbgMuXtfREZBPhKTlYiMkuKN/S8gVxMDlTwIVqsb81IpJuxuhEeG+osvDCBVEcLpd++GpeE7uMy9cPa2IPyZQjCabCizX4I0PBZxecXQbH8aTtcCNqeoKUBrhw2d5lusPwJBGdAmRLJMkBvRT+pp4KHLffB6XNSvRCaHXMFg3jZAX011DIPqugG+2jDKne8elvRbLE3U8C5CEECEWglZ/ONwmXrxcUkJNm10+bJRjclr9fD4Arvs4zj3zVnU17fDYXZicm6B77NYjt0l5pptQQCDHSb6yn35/UWcb+3hHTenEZWSDsmsHZMjN6jD6/84sX3zJhg6Zui1UCEIQJOdBjhHoNc9gQWAO3d5iPYBz78euB12GstqdOARJhiRKsVKM6KKAEIQAA3ia7dJ0dGkalmXcxaWrg7INsogj0nChHUKf8/OgYwZny7Qcyd2y1MQQG2bkT15/Ay+qvqF3l2rfZqruHANntsyMBGRSC98HTlPJeHTPgv3+4CNhYghCGDIZmr6qPJHyWd/GCRkrVWEsMq5BfxUVed7FFOYs/bTH5QBm+kY0YuITzIqxhwgTekxpZzNzoxF1/AY6n+ogSxYhrGrjeIcLVkLysCSLT2l+ppSri4ZYapQXHJM47p1gu6XlezB6fdLvcvfC7opQIgGSIxWsGEqBqTYDqXFQRUbSz9KqsRkxAf/R2tEQNwVE9EApMheO9PAvVvXyZGiGxwe5Ulx7nu7nD9c8Rt732uABCDFtjy/rm/SHzz+hYT8KxDdyq0tLQKd/gcAAP//34FwkAAAAAZJREFUAwB1MZpQL++HAwAAAABJRU5ErkJggg==';
+const cangrejoImg = new Image(); cangrejoImg.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQBAMAAADt3eJSAAAAMFBMVEUAAAA/JjFSYHz////qpWwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACICIR1AAAACXBIWXMAAC4jAAAuIwF4pT92AAAAUElEQVQI1zWO0RVAMQRD0w0aG9AJXu2/2wttfXBPEACACtzKiUFahBNdIwTK3lDCygv5VWvtTG0JsgRB0nweCB4oO4Gt3cqg/Grm3Sypv/gBPnoLRQl67P8AAAAASUVORK5CYII=';
+const guardiaProfImg = new Image(); guardiaProfImg.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAEbklEQVR4AexVa0xTZxh+CqODUcZtymUDm2phSybIroqghyG4Ky6bzjiWkaELZHE63Zbo3OZhN6MmaNwPEydZ4vbHkWVzbk5xrgcEZhFjARmsQgukoa3IFGhlbRndeb/sJEJLT2uM/rHp+37nvNfne77LCcNt/t0BcIcBHwYW5Sxaeiv3pQ+AvPxs4d23K3W3CoQPgJGrHhQty+dyF+RuDwQiI1m9/XqZl6y+IeZ8AFxo7+INrZ147Y2VvD8A1Gj9koXeHz57kz/34y6+49QBvqHmfX7LM9nC85kP6fzlBLL5AGg2NFeZ+u3QqJOQ64eFkqx0YceuzZi37DkoE+5ntePVWqyuKMXn6wo5YoUZg1Q+AChPYmFVafEUFqj42leWQxkTB4UqCVBGUzgTsqXlZKM4I3lKDnMGUH4BSCykJsb4sJD+sJaV89o7AOcl9iypCFUsUtSzpdegRr8AKJNYMJuH8cKKvCkzopmS358E8vmLJ9uMACQWNHP87wVEiPSTiFXcY1dhahRgaW2G2+UWLcH/ZwRAJSQWigofYSxMAkJzYwu5sHX9VuzWdcJp7cc1Wz80eRycly/BNHhFYAFBqoAAprPQY+urbzPZWekGbyo2ripBhLjuHscIGg/V4oMDOuGb0/oCFhCkCgiAahAL1qFxSCx0GtoFhzjTpr3lUFrb2Ynw3hWF1jYj/hq9DDoplBesyAKYzsJRvV4oe+sTtHx3BIZj9Wz8qVaHbuco1pat5o7tr+JDuZBkAdBMJBYW5j7Gq1OT+PSMJOw4IWDj19+i+vdGzOKykPn4AmwqX4P0/GKUlizm6MakXDkJkwsg//UsRN2txEsvFqByzVP4dMNKLM7Wos9spTA4B/6Eq+c0CrgciIU5ZpRRYpxMxP9uYsHhcGJcPGbmrl4YL1rRcMYI8+Awzrf34NdTDaj4eC9+/r4O8WotMmKjbi4AYqHpjzYGx2AcxIjDxZ7/HnWwcezaOAx9g2jSX2Dv8x9MuTkA1q3I0W2qqNTROFc1hDivgrFAXaTmA7YheoXn30mhzmjj6W5QxaqYTU7JLkGkO5zLSTGz2RzX24Vns+ai12JDjygEgJrTsrjcHkxMKFC9oYSnuyE6ZY5cb+aXBfBbh4374mAnd/DI+YJJr0JInAhH2kQEVCLl2tkxKMzS4NFZCYj3KhERFonM9DT2mbZ3d7IGckoWQLfFUk9ChYy2vqqqJiN/dvgf4fWipdi2bQvKli+BZywMcVH3CuHhkfz+Q0exe+c+1OpNjDXKCyRhgZz+fATCK34TEtJSQR+hPTXHUZSRDHVSLEdXdXVdg+LDmsMKevaXP90WMgCpQGJKHHrPnMXJizakau7Dy09qEMoNKNW5IQB0xuPFs35Yd47V6bJcQUx8NGOBGUJQIQMofbrYu+ejcra+720uR5E2GU/MfwAtHRbQEQyhNwsNGcA9XpfwS8cAaLORUNNX953kq3VdHO0PVjUEFTKAr07UF7yz80sFCW02akoy06aTw/IfAAAA//9qqTICAAAABklEQVQDAP+y2lC+ATuAAAAAAElFTkSuQmCC';
+// Sprites propios por rol (mismo pack Kenney Tiny Dungeon) — antes los 4
+// aliados reusaban el sprite del Guerrero con un tinte de color.
+const magoImg = new Image(); magoImg.src = 'data:image/png;base64,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';
+const sacerdoteImg = new Image(); sacerdoteImg.src = 'data:image/png;base64,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';
+const arqueroImg = new Image(); arqueroImg.src = 'data:image/png;base64,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';
+const asesinoImg = new Image(); asesinoImg.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAATLSURBVFhH7ZZrbFNlGMe79rSn3daul9P79fT09LQ9va3r2l06tsFgg7EFI+AGBnEEongjDJCBY3UKERIhhvBF4/yimBAD8cOMOi8TDV5CjJ80hMSgRkKcgOCFOZf8fc9pP/qB0OInfsmT9D19n5P3fS7/5yjucY97VIipbAZ59T/S62ND74jJzNVoovFqNJ6+bDYzE+S5rfT33UMfYEOn27uWY2DtRqxZvwm9g+vQ038fmtu7YHd5rqhUmoHy3upTbzAc6OzpR3fvAJpalyCeyRHLwxPgIKayEDPNcPvZeZ1ON0i215S8qoRer18tprM3+HgSoVgSkXQzHKwAlg2ioU6LQJCXDxAIC7DY7L8RF6k2qkKNxWYbzOQL8/mOpYg1NoMNx5DL5bB76wa8uPcRPDrUDzGRBBeLg3E6YbHKB9CV3CvHyPGR66lsCxibAwIfwvHiDsx9dRr46RwWL36MiSc2k6gkwLhccAdYBELCXxqNZmXZv2IsoXBskdbWgvzG8R3DwI9fABfPYvHb94FLn2JqchSuQAg+PozGfLtsKrX6cMm9cnR8RHw7JIjyAV4Z24QT+5/GwV2juPXde/j7wgyeH98LpVIFxu5ErtCNkJiAmqaPlNyrA+3y+KZJ72PN0hbsGz+AI6+dwuIP54Ar53Fs6g35cGpKLd/e4nBeVqlUPSXXKkFpqP3S7ex+HiuX5HF+egqY+xr4/iz2bB2Cvr4eQVKcdo8Haq32I+KiLnlWh45cW9e1rhUDiDflSb45BFkf9mwbRl8hCxNjQzLbSrojIncBG46itrZeUsaqYAzy0dm1G0bQ3t2LcDwNX4iHh+NBwgKqth5uogVS/8dSTeDiKVhIlHQm202FStFbfsedQ2m1Y0JjK4RMO7l9C8KJNLwcB7PNCoPZDIfPB1aIgBeTcJJOSPt9KA73YLAtDVqlq7wQWbtzcnT9coze3wkvyS8pMLnaLXYHjBZGUj04vX7ZdAYD6igVPnh2C+beLKIzmiiWX3Pn9BVWTODnb/DlsaduekymQ4zb8zsvpiA25hDgBXiDIfn2wUgMfncAbpMN04d34Ze3DmJZQqz8AD25wsTixc9xdNsDN8hy0GS1XhLJEEo1t0nTjyhgHEny2xsWUeD9GGpK4JOTJ3B95lW0er2Vp6DAsZO/zr5OpPcMHlrdB73Z9o8Ubn9IgKQLHn8Q7iAHX0DA4w9vx8jSVgznUzg6MrwQM1j7yq+5c+JG89iFky8Bn53C5LpB1BmtsJGbM6QWBNIRrBAFwziwe/uTWNXdDaVCORu1eoseg7XyDpBoIG342KqeMy+PbrnWmxBu6UnPN1gsIKmYV9O6IyaDdWZs5zg2P7gRWiJGCoVyb9m16piJvcA4HWTo8JLgLJB1h0Vn2Z5J50hKIkQfwouURrND3n2X2CmFnovGSBpc80TvpRxnTDb7n9KHCmnNebKuTuj/A11dQ8O7PJl0kkniQw7wHHkeZZyuP7iYCJc/ALVG86G0V/aoMiaz1b4QS2eJHKfg8HgXKIpqVlLUM1xURILMiFhjFnqjUUoNU3KpLjU0TfcRK9K0ThIYOdSUUrlPGkItHcvIQGpBXb1e0ouqfQ/eDkYSibEalapIq+mi1WCS6uI2v4gVin8BtuvSF9pljz4AAAAASUVORK5CYII=';
+const ROLE_IMG = { pesada: playerImg, tirador: arqueroImg, doblefilo: asesinoImg, mago: magoImg, sacerdote: sacerdoteImg };
+const floorImg = new Image(); floorImg.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQAgMAAABinRfyAAAABGdBTUEAALGPC/xhBQAAAAlQTFRFUmB8wMvci5u0dJKLrgAAACRJREFUCNdjWAUEDKuygETo1NBQBjCAiIGI0FA0sZUgsTDc6gCCvxqR9qEgxgAAAABJRU5ErkJggg==';
+const wallImg = new Image(); wallImg.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQAgMAAABinRfyAAAABGdBTUEAALGPC/xhBQAAAAxQTFRFi5u0wMvcPyYxdjs2+rEOaAAAAB1JREFUCNdj+A8EDMQT/1YBiV9gQhREhMKJADABALguO1woLYvNAAAAAElFTkSuQmCC';
+
+// ============================================================
+// Formulas reales portadas de game.js (derived(), HP_PER_LEVEL post-nerf,
+// baseStat, critChance, evasionBase) — nivel fijo 20, raza Humano, SIN
+// equipo (el catalogo de armas/objetos no esta portado a este prototipo
+// todavia). scaleStat/base de dano es el mismo usado en las simulaciones
+// de balance de esta sesion (8 + scaleStat*2.2 + nivel*1.5).
+// ============================================================
+const LEVEL = 20;
+const RACE = {fis:5, esp:5, hab:6};
+const HP_PER_LEVEL = {pesada:20, tirador:10, doblefilo:10, mago:10, sacerdote:10};
+const STYLE_STAT = {pesada:'fis', tirador:'fis', doblefilo:'hab', mago:'esp', sacerdote:'esp'};
+
+function classDerived(styleId){
+  const fis = RACE.fis + (LEVEL-1);
+  const esp = RACE.esp + (LEVEL-1);
+  const hab = RACE.hab + (LEVEL-1);
+  const maxHP = Math.round(40 + LEVEL*HP_PER_LEVEL[styleId]);
+  // Las 5 sendas tienen MP (maxSta) Y Espíritu (maxSpi) a la vez en game.js
+  // (derived() siempre calcula ambos) — lo que varía por senda es qué
+  // habilidad gasta cuál, no si el recurso existe.
+  const maxMP = Math.round(20+fis*3+hab*2);
+  const maxSpirit = Math.round(20+esp*4);
+  const usesSpirit = styleId==='mago' || styleId==='sacerdote';
+  const scaleStat = styleId==='doblefilo' ? (fis+hab)/2 : (usesSpirit ? esp : fis);
+  const crit = Math.min(0.6, Math.max(0, 0.05+hab*0.006));
+  const evasion = Math.min(0.6, Math.max(0.02, 0.04+hab*0.005));
+  const baseDmg = 8 + scaleStat*2.2 + LEVEL*1.5;
+  return {fis,esp,hab,maxHP,maxMP,maxSpirit,scaleStat,crit,evasion,baseDmg};
+}
+
+// Formación estilo Pokémon (2026-09-18, pedido explícito: los sprites LPC
+// son de frente a cámara, no de perfil — en la formación anterior lado a
+// lado se "daban la espalda" porque nunca hubo un ángulo de perfil real.
+// Solución: enemigos arriba, grupo abajo, todos mirando al jugador/pantalla,
+// como en Pokémon. Los nombres de las constantes NO cambiaron (para no
+// tocar los ~40 makeEnemy/makeAlly de las 6 décadas) pero su SIGNIFICADO
+// se invirtió a propósito en makeAlly/makeEnemy: ROW_Y ahora son las 3
+// COLUMNAS en X (compartidas por ambos bandos), y PARTY_COL_X/ENEMY_COL_X
+// ahora son la profundidad en Y de cada bando (front = más cerca del
+// centro de la pantalla, back = más lejos).
+const ROW_Y = [110, 240, 370];
+const PARTY_COL_X = { front:215, back:270 };
+const ENEMY_COL_X = { front:140, back:85 };
+const PARTY_RES_FISICO = 8; // sin armadura todavia: resistencia base pareja para los 5
+
+function makeAlly(name, styleId, colDepth, rowSlot){
+  // ver comentario junto a ROW_Y: los argumentos llegan en el orden viejo
+  // (columna, fila) pero ahora representan (profundidad en Y, columna en X)
+  const x = rowSlot, y = colDepth;
+  const d = classDerived(styleId);
+  return {
+    kind:'party', name, styleId, x, y, baseX:x, baseY:y, img:ROLE_IMG[styleId], hue:0,
+    maxHP:d.maxHP, hp:d.maxHP, maxMP:d.maxMP, mp:d.maxMP, maxSpirit:d.maxSpirit, spirit:d.maxSpirit,
+    scaleStat:d.scaleStat, crit:d.crit, evasion:d.evasion, baseDmg:d.baseDmg, resFisico:PARTY_RES_FISICO,
+    bob:Math.random()*6, flash:0, scale:1, baseScale:1, squashY:1, opacity:1, alive:true,
+  };
+}
+// style: 'melee' (embiste, como el Guerrero) | 'ranged' (dispara flecha/
+// orbe sin moverse, como Arquero/Mago) | 'assassin' (dash + ráfaga, como
+// el Asesino) — mismo criterio que el 'role' de DECADE_BESTIARY en
+// game.js (melee/ranged/mago), más 'assassin' para cuando el bestiario
+// tenga algo con esa temática (ej. década 3, sombras/dobles).
+function makeEnemy(name, img, maxHP, atk, resFisico, colDepth, rowSlot, baseScale, style, projKind, projColor, hue){
+  const x = rowSlot, y = colDepth;
+  return {
+    kind:'enemy', name, img, x, y, baseX:x, baseY:y, hue:hue||0,
+    maxHP, hp:maxHP, atk, resFisico, style:style||'melee',
+    projKind:projKind||'arrow', projColor:projColor||'#8fce6a',
+    evasion: 0.08 + Math.random()*0.05,
+    bob:Math.random()*6, flash:0, scale:baseScale||1, baseScale:baseScale||1, squashY:1, opacity:1, alive:true,
+  };
+}
+
+// Las 6 décadas del bestiario real (DECADE_BESTIARY en game.js), cada una
+// con su tema de fondo (2026-09-16, pedido explícito): bosque para
+// Goblin/Arañas, cueva para Riakis, mar para Isla Paraíso/Storm Gush. La
+// década 3 (Usurpador) no se pidió — se queda con el fondo original.
+// build() se llama de nuevo cada vez que se entra a la década para que los
+// enemigos salgan siempre con HP/posición fresca (makeEnemy crea objetos
+// nuevos, no reusa los ya peleados).
+const DECADES = [
+  { name:'Década 0 — Bosque Goblin', bg:'forest', build: ()=>[
+    makeEnemy('Ogro', ogroImg, 220, 22, 18, ENEMY_COL_X.front, ROW_Y[1], 1.55, 'melee', 'arrow', '#8fce6a', 110),
+    makeEnemy('Goblin guerrero', gobGuerreroImg, 70, 12, 10, ENEMY_COL_X.front, ROW_Y[0], 1, 'melee', 'arrow', '#8fce6a', 0),
+    makeEnemy('Goblin saqueador', gobSaqueadorImg, 65, 12, 8, ENEMY_COL_X.front, ROW_Y[2], 1, 'melee', 'arrow', '#8fce6a', 0),
+    makeEnemy('Goblin arquero', gobArqueroImg, 55, 13, 6, ENEMY_COL_X.back, ROW_Y[0], 1, 'ranged', 'arrow', '#8fce6a', 0),
+    makeEnemy('Jefe goblin', gobEliteImg, 120, 17, 14, ENEMY_COL_X.back, ROW_Y[1], 1.25, 'melee', 'arrow', '#8fce6a', 0),
+    makeEnemy('Chamán goblin', gobChamanImg, 50, 10, 5, ENEMY_COL_X.back, ROW_Y[2], 1, 'ranged', 'orb', '#7ed957', 0),
+  ]},
+  { name:'Década 1 — Arañas del bosque profundo', bg:'forest', build: ()=>[
+    makeEnemy('Matriarca escarlata', spiderOrangeImg, 210, 21, 20, ENEMY_COL_X.front, ROW_Y[1], 1.5, 'melee'),
+    makeEnemy('Tarántula cazadora', spiderOrangeImg, 65, 12, 8, ENEMY_COL_X.front, ROW_Y[0], 1, 'melee'),
+    makeEnemy('Tarántula saltarina', spiderOrange2Img, 55, 13, 6, ENEMY_COL_X.front, ROW_Y[2], 1, 'melee'),
+    makeEnemy('Tarántula tejedora', spiderPurple2Img, 50, 11, 5, ENEMY_COL_X.back, ROW_Y[0], 1, 'melee'),
+    makeEnemy('Reina telaraña', spiderPurpleImg, 115, 16, 15, ENEMY_COL_X.back, ROW_Y[1], 1.25, 'melee'),
+    makeEnemy('Viuda venenosa', spiderPurpleImg, 45, 12, 4, ENEMY_COL_X.back, ROW_Y[2], 1, 'melee'),
+  ]},
+  { name:'Década 2 — Guaridas de bestias (Riakis)', bg:'cave', build: ()=>[
+    makeEnemy('Riakis, Señor del Caos', riakisImg, 230, 23, 22, ENEMY_COL_X.front, ROW_Y[1], 1.5, 'melee', null, null, 265),
+    makeEnemy('Loba de acantilado', loboImg, 60, 12, 8, ENEMY_COL_X.front, ROW_Y[0], 1, 'melee'),
+    makeEnemy('Oso de las cuevas', osoImg, 75, 14, 10, ENEMY_COL_X.front, ROW_Y[2], 1, 'melee'),
+    makeEnemy('Buitre corrupto', buitreImg, 45, 11, 4, ENEMY_COL_X.back, ROW_Y[0], 1, 'melee', null, null, 200),
+    makeEnemy('Alfa de la manada', loboImg, 120, 17, 14, ENEMY_COL_X.back, ROW_Y[1], 1.25, 'melee', null, null, 320),
+    makeEnemy('Lince sombrío', linceImg, 50, 13, 5, ENEMY_COL_X.back, ROW_Y[2], 1, 'melee', null, null, 210),
+  ]},
+  { name:'Década 3 — El Usurpador Sin Nombre', bg:'cult', build: ()=>[
+    makeEnemy('El Usurpador Sin Nombre', usurpadorImg, 235, 23, 20, ENEMY_COL_X.front, ROW_Y[1], 1.5, 'assassin', null, null, 280),
+    makeEnemy('Sombra mimética', sombraImg, 55, 12, 6, ENEMY_COL_X.front, ROW_Y[0], 1, 'assassin', null, null, 280),
+    makeEnemy('Doble corrupto', dobleImg, 65, 13, 9, ENEMY_COL_X.front, ROW_Y[2], 1, 'melee', null, null, 280),
+    makeEnemy('Farsante menor', farsanteImg, 45, 11, 4, ENEMY_COL_X.back, ROW_Y[0], 1, 'melee', null, null, 280),
+    makeEnemy('Impostor mayor', impostorImg, 120, 17, 13, ENEMY_COL_X.back, ROW_Y[1], 1.25, 'melee', null, null, 280),
+    makeEnemy('Espejo viviente', espejoImg, 50, 12, 5, ENEMY_COL_X.back, ROW_Y[2], 1, 'melee', null, null, 280),
+  ]},
+  { name:'Década 4 — Isla Paraíso', bg:'sea', build: ()=>[
+    makeEnemy('Custodio de la Isla', custodioImg, 200, 18, 16, ENEMY_COL_X.front, ROW_Y[1], 1.4, 'ranged', 'orb', '#ffe066'),
+    makeEnemy('Explorador rival', exploradorImg, 55, 12, 7, ENEMY_COL_X.front, ROW_Y[0], 1, 'melee'),
+    makeEnemy('Mercenario desertor', mercenarioImg, 60, 13, 8, ENEMY_COL_X.front, ROW_Y[2], 1, 'melee'),
+    makeEnemy('Cazarrecompensas', cazarrecompensasImg, 45, 12, 5, ENEMY_COL_X.back, ROW_Y[0], 1, 'ranged', 'arrow'),
+    makeEnemy('Superviviente despiadado', mercenarioImg, 115, 16, 12, ENEMY_COL_X.back, ROW_Y[1], 1.25, 'melee', null, null, 280),
+    makeEnemy('Superviviente curtido', supervivienteImg, 50, 13, 6, ENEMY_COL_X.back, ROW_Y[2], 1, 'melee'),
+  ]},
+  { name:'Década 5 — El Mar (Storm Gush)', bg:'sea', build: ()=>[
+    makeEnemy('Storm Gush, Tetrasea', stormGushImg, 240, 24, 22, ENEMY_COL_X.front, ROW_Y[1], 1.5, 'ranged', 'orb', '#4db6ff', 195),
+    makeEnemy('Tritón guerrero', exploradorImg, 60, 13, 9, ENEMY_COL_X.front, ROW_Y[0], 1, 'melee', null, null, 190),
+    makeEnemy('Cangrejo gigante', cangrejoImg, 70, 12, 13, ENEMY_COL_X.front, ROW_Y[2], 1, 'melee', null, null, 350),
+    makeEnemy('Tritón hechicero', impostorImg, 50, 12, 6, ENEMY_COL_X.back, ROW_Y[0], 1, 'ranged', 'orb', '#4db6ff', 190),
+    makeEnemy('Guardia de las profundidades', guardiaProfImg, 120, 17, 14, ENEMY_COL_X.back, ROW_Y[1], 1.25, 'melee', null, null, 190),
+    makeEnemy('Sirena corrupta', supervivienteImg, 45, 11, 5, ENEMY_COL_X.back, ROW_Y[2], 1, 'melee', null, null, 260),
+  ]},
+];
+
+const state = {
+  party: [
+    makeAlly('Guerrero (vos)', 'pesada', PARTY_COL_X.front, ROW_Y[1]),
+    makeAlly('Arquero', 'tirador', PARTY_COL_X.front, ROW_Y[0]),
+    makeAlly('Asesino', 'doblefilo', PARTY_COL_X.front, ROW_Y[2]),
+    makeAlly('Mago', 'mago', PARTY_COL_X.back, ROW_Y[0]),
+    makeAlly('Sacerdote', 'sacerdote', PARTY_COL_X.back, ROW_Y[1]),
+  ],
+  enemies: [],
+  decadeIndex: 0, bgTheme: 'forest',
+  floats: [], bursts: [], projectiles: [], trails: [], shake: 0, busy: false, round: 1,
+  playerDefending: false, items: [], particles: [], screenFlash: 0, lights: [], healGlows: [],
+};
+const ITEM_DEFS = [
+  { id:'pocion', name:'Poción menor', desc:'Cura 80 HP', count:2 },
+  { id:'elixir', name:'Elixir menor', desc:'Restaura 40 MP', count:1 },
+];
+const player = state.party[0];
+
+function partyFrontlineTarget(){
+  const inFrontCol = state.party.filter(a=> a.alive && a.baseY===PARTY_COL_X.front);
+  if(inFrontCol.length) return inFrontCol[0];
+  return state.party.find(a=>a.alive) || null;
+}
+function enemyFrontlineTarget(){
+  const inFrontCol = state.enemies.filter(a=> a.alive && a.baseY===ENEMY_COL_X.front);
+  if(inFrontCol.length) return inFrontCol[0];
+  return state.enemies.find(a=>a.alive) || null;
+}
+
+function log(text, cls){
+  const el = document.getElementById('log');
+  const line = document.createElement('div');
+  if(cls) line.className = cls;
+  line.textContent = text;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+function addFloat(x, y, text, color){ state.floats.push({x,y,text,color,life:1}); }
+
+// Panel de arriba: HP, MP y Espíritu del jugador, siempre los 3 juntos
+// (igual que game.js: derived() calcula maxSta y maxSpi para cualquier
+// senda). Las barras chiquitas en la escena muestran lo mismo por unidad;
+// este panel es la versión grande y con números para "cuánto tengo".
+function drawPortrait(canvasEl, img, hue){
+  const pctx = canvasEl.getContext('2d');
+  pctx.imageSmoothingEnabled = false;
+  pctx.clearRect(0,0,canvasEl.width,canvasEl.height);
+  if(!img || !img.complete || img.naturalWidth===0) return;
+  const cw=canvasEl.width, ch=canvasEl.height, iw=img.naturalWidth, ih=img.naturalHeight;
+  const scale = Math.min(cw/iw, ch/ih) * 0.92;
+  const w=iw*scale, h=ih*scale;
+  pctx.save();
+  if(hue) pctx.filter = `hue-rotate(${hue}deg)`;
+  pctx.drawImage(img, (cw-w)/2, (ch-h)/2, w, h);
+  pctx.restore();
+}
+function updatePlayerHUD(){
+  document.getElementById('phud-name').textContent = player.name + ' — ' +
+    ({pesada:'Guerrero', tirador:'Arquero', doblefilo:'Asesino', mago:'Mago', sacerdote:'Sacerdote'})[player.styleId];
+  drawPortrait(document.getElementById('phud-portrait'), player.img, player.hue);
+  const hpPct = Math.max(0, player.hp/player.maxHP);
+  const hpFill = document.getElementById('phud-hp');
+  hpFill.style.width = (hpPct*100)+'%';
+  hpFill.classList.toggle('low', hpPct<0.3);
+  document.getElementById('phud-hp-num').textContent = `${Math.max(0,player.hp)} / ${player.maxHP}`;
+
+  document.getElementById('phud-mp').style.width = Math.max(0, player.mp/player.maxMP*100)+'%';
+  document.getElementById('phud-mp-num').textContent = `${player.mp} / ${player.maxMP}`;
+  document.getElementById('phud-spi').style.width = Math.max(0, player.spirit/player.maxSpirit*100)+'%';
+  document.getElementById('phud-spi-num').textContent = `${player.spirit} / ${player.maxSpirit}`;
+}
+// Panel del enemigo del frente — mismo criterio que el del jugador, pero
+// solo HP (los enemigos no tienen MP/Espíritu). Sigue al objetivo real
+// (enemyFrontlineTarget), así que cambia solo si el de adelante muere.
+function updateEnemyHUD(){
+  const target = enemyFrontlineTarget();
+  const panel = document.getElementById('phud-enemy-panel');
+  if(!target){
+    document.getElementById('phud-enemy-name').textContent = '— sin objetivo —';
+    document.getElementById('phud-enemy-hp').style.width = '0%';
+    document.getElementById('phud-enemy-hp-num').textContent = '— / —';
+    drawPortrait(document.getElementById('phud-enemy-portrait'), null, 0);
+    return;
+  }
+  document.getElementById('phud-enemy-name').textContent = target.name;
+  drawPortrait(document.getElementById('phud-enemy-portrait'), target.img, target.hue);
+  const hpPct = Math.max(0, target.hp/target.maxHP);
+  const hpFill = document.getElementById('phud-enemy-hp');
+  hpFill.style.width = (hpPct*100)+'%';
+  hpFill.classList.toggle('low', hpPct<0.3);
+  document.getElementById('phud-enemy-hp-num').textContent = `${Math.max(0,target.hp)} / ${target.maxHP}`;
+}
+function triggerShake(a){ state.shake = a; }
+function addBurst(x,y,lightColor){ state.bursts.push({x,y,life:1}); addLight(x,y,lightColor); }
+
+// Brillo verde de curación: un halo pulsante + chispas ascendentes sobre el
+// personaje curado (mismo lenguaje visual que drawBurst, pero "hacia arriba"
+// en vez de "hacia afuera", para que se lea como sanación y no como golpe.
+function addHealGlow(x,y){ state.healGlows.push({x,y,life:1}); }
+function drawHealGlow(g){
+  const t = 1-g.life;
+  ctx.save();
+  ctx.globalAlpha = Math.max(0,g.life)*0.85;
+  const grad = ctx.createRadialGradient(g.x, g.y, 0, g.x, g.y, 24);
+  grad.addColorStop(0, 'rgba(170,255,180,0.55)');
+  grad.addColorStop(1, 'rgba(120,230,140,0)');
+  ctx.fillStyle = grad;
+  ctx.beginPath(); ctx.arc(g.x, g.y, 24, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = 'rgba(210,255,210,0.9)';
+  for(let i=0;i<6;i++){
+    const ang = (Math.PI*2/6)*i + t*1.5;
+    const r = 9 + t*12;
+    const px = g.x + Math.cos(ang)*r*0.6;
+    const py = g.y - t*26 + Math.sin(ang)*r*0.35;
+    ctx.beginPath(); ctx.arc(px, py, 1.6, 0, Math.PI*2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+// Charco de luz que se apaga rápido en el punto de impacto/casteo — así los
+// golpes y hechizos "iluminan el entorno" (referencia: Sea of Stars, donde
+// la magia y los impactos afectan la luz de la escena) sin montar un motor
+// de luces real, solo un gradiente aditivo temporal.
+function addLight(x, y, colorTpl, r){
+  state.lights.push({ x, y, r: r||32, life:1, colorTpl: colorTpl || 'rgba(255,225,170,ALPHA)' });
+}
+function hexToRgbaTpl(hex){
+  const n = parseInt(hex.replace('#',''), 16);
+  return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},ALPHA)`;
+}
+function drawLights(){
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  state.lights.forEach(l=>{
+    const g = ctx.createRadialGradient(l.x, l.y, 0, l.x, l.y, l.r*(1.4-l.life*0.4));
+    g.addColorStop(0, l.colorTpl.replace('ALPHA', (0.55*l.life).toFixed(2)));
+    g.addColorStop(1, l.colorTpl.replace('ALPHA', '0'));
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(l.x, l.y, l.r*1.4, 0, Math.PI*2); ctx.fill();
+  });
+  ctx.restore();
+  state.lights.forEach(l=> l.life -= 0.05);
+  state.lights = state.lights.filter(l=> l.life>0);
+}
+
+function drawGroundTiles(){
+  if(!floorImg.complete || floorImg.naturalWidth===0) return;
+  for(let x=0; x<canvas.width; x+=TILE*2){
+    for(let y=95; y<canvas.height; y+=TILE*2){ ctx.drawImage(floorImg, x, y, TILE*2, TILE*2); }
+  }
+}
+function drawWallTiles(){
+  if(!wallImg.complete || wallImg.naturalWidth===0) return;
+  for(let x=0; x<canvas.width; x+=TILE*2){ ctx.drawImage(wallImg, x, 0, TILE*2, TILE*2*3); }
+}
+function drawTiledFloor(){ drawGroundTiles(); drawWallTiles(); }
+
+// Fondos temáticos por década (2026-09-16, pedido explícito, ya con todos
+// los sprites de las 6 décadas puestos): 'forest' para Bosque Goblin y
+// Arañas, 'cave' para Riakis/Bestias, 'cult' (pasillo dorado y negro con
+// candelabros) para el Usurpador, 'sea' para Isla Paraíso y El Mar.
+// 'dungeon' (el ladrillo/piso original) queda de fallback sin usar. Todo
+// dibujado con canvas — sin bajar más assets.
+function drawBackground(){
+  const theme = state.bgTheme || 'dungeon';
+  const w = canvas.width;
+  if(theme==='dungeon'){ drawTiledFloor(); return; }
+
+  if(theme==='forest'){
+    const g = ctx.createLinearGradient(0,0,0,95);
+    g.addColorStop(0,'#7fb877'); g.addColorStop(1,'#3a5c38');
+    ctx.fillStyle=g; ctx.fillRect(0,0,w,95);
+    ctx.fillStyle='#2c4e29';
+    for(let x=-20;x<w+40;x+=36){ ctx.beginPath(); ctx.arc(x,26,24,0,Math.PI*2); ctx.fill(); }
+    ctx.fillStyle='#1c3a1a';
+    for(let x=-30;x<w+40;x+=50){ ctx.beginPath(); ctx.arc(x+22,58,32,0,Math.PI*2); ctx.fill(); }
+    ctx.save(); ctx.filter='hue-rotate(250deg) saturate(1.3) brightness(0.9)';
+    drawGroundTiles(); ctx.restore();
+  } else if(theme==='cave'){
+    // Segundo intento (el primero se veía como "espacio" — parches
+    // redondos parejos + puntitos sueltos leían como nebulosa/estrellas).
+    // Ahora: vetas de roca angulares (no círculos), estalactitas grandes
+    // bien definidas con su propio brillo lateral, muy pocos cristales
+    // pegados a la punta, y piso oscurecido/desaturado en vez de dejarlo
+    // azulado (que no pegaba con la paleta cálida de la roca).
+    const g = ctx.createLinearGradient(0,0,0,95);
+    g.addColorStop(0,'#241a14'); g.addColorStop(1,'#4a3626');
+    ctx.fillStyle=g; ctx.fillRect(0,0,w,95);
+    for(let i=0;i<16;i++){
+      const rx=(i*67+23)%w, ry=8+(i*17)%58;
+      ctx.fillStyle = i%2===0 ? 'rgba(0,0,0,0.24)' : 'rgba(140,105,70,0.16)';
+      ctx.beginPath();
+      ctx.moveTo(rx,ry); ctx.lineTo(rx+15,ry+6); ctx.lineTo(rx+8,ry+19); ctx.lineTo(rx-11,ry+14);
+      ctx.closePath(); ctx.fill();
+    }
+    for(let x=4;x<w;x+=30){
+      const len = 22+((x*13)%26);
+      ctx.fillStyle='#140f0b';
+      ctx.beginPath(); ctx.moveTo(x-13,0); ctx.lineTo(x+13,0); ctx.lineTo(x,len); ctx.closePath(); ctx.fill();
+      ctx.fillStyle='rgba(255,255,255,0.07)';
+      ctx.beginPath(); ctx.moveTo(x-13,0); ctx.lineTo(x-4,0); ctx.lineTo(x,len*0.6); ctx.closePath(); ctx.fill();
+    }
+    ctx.fillStyle='rgba(150,220,255,0.6)';
+    [[70,44],[330,52],[520,40]].forEach(([x,y])=>{ ctx.beginPath(); ctx.arc(x,y,2.6,0,Math.PI*2); ctx.fill(); });
+    ctx.save(); ctx.filter='saturate(0.35) brightness(0.8)';
+    drawGroundTiles(); ctx.restore();
+  } else if(theme==='cult'){
+    // Pasillo de culto: negro/morado oscuro con pilares y candelabros
+    // dorados, llama parpadeante (pedido explícito para el Usurpador).
+    const g = ctx.createLinearGradient(0,0,0,95);
+    g.addColorStop(0,'#150e1a'); g.addColorStop(1,'#241628');
+    ctx.fillStyle=g; ctx.fillRect(0,0,w,95);
+    ctx.fillStyle='rgba(190,150,70,0.28)'; ctx.fillRect(0,0,w,4);
+    const gold='#d4af5a', goldDark='#8a6a2a';
+    for(let x=20; x<w; x+=76){
+      ctx.fillStyle=goldDark; ctx.fillRect(x-2, 30, 4, 55);
+      ctx.fillStyle=gold;
+      ctx.beginPath(); ctx.moveTo(x-9,32); ctx.lineTo(x+9,32); ctx.lineTo(x,20); ctx.closePath(); ctx.fill();
+      const flick = 2+Math.sin(Date.now()/220+x)*1.3;
+      const fg = ctx.createRadialGradient(x,14,0,x,14,7+flick);
+      fg.addColorStop(0,'#fff3c4'); fg.addColorStop(0.5,'#ffb347'); fg.addColorStop(1,'rgba(255,120,40,0)');
+      ctx.fillStyle=fg;
+      ctx.beginPath(); ctx.ellipse(x,14,6,9+flick,0,0,Math.PI*2); ctx.fill();
+    }
+    ctx.save(); ctx.filter='brightness(0.5) saturate(1.15)';
+    drawGroundTiles(); ctx.restore();
+  } else if(theme==='sea'){
+    const g = ctx.createLinearGradient(0,0,0,95);
+    g.addColorStop(0,'#6fd0ea'); g.addColorStop(1,'#1f6fa8');
+    ctx.fillStyle=g; ctx.fillRect(0,0,w,95);
+    ctx.strokeStyle='rgba(255,255,255,0.4)'; ctx.lineWidth=2;
+    for(let row=0; row<3; row++){
+      const y = 18+row*24;
+      ctx.beginPath();
+      for(let x=0;x<=w;x+=14){ ctx.lineTo(x, y+Math.sin((x+row*40)/16)*4); }
+      ctx.stroke();
+    }
+    ctx.save(); ctx.filter='hue-rotate(8deg) saturate(1.25) brightness(1.05)';
+    drawGroundTiles(); ctx.restore();
+  }
+
+  // Grading ambiental sutil (matiz, no brillo — así no lava la silueta de
+  // los personajes) sobre la franja de fondo, tipo "retro plus" de Sea of
+  // Stars: un tinte de color por escena en vez de solo levantar exposición.
+  const fx = THEME_FX[theme];
+  if(fx){
+    ctx.save();
+    ctx.globalCompositeOperation = 'overlay';
+    ctx.fillStyle = fx.tint;
+    ctx.fillRect(0, 0, w, 95);
+    ctx.restore();
+  }
+}
+
+const THEME_FX = {
+  forest: { tint:'rgba(140,215,120,0.16)', particle:'rgba(210,240,160,0.6)' },
+  cave:   { tint:'rgba(120,170,255,0.14)', particle:'rgba(175,225,255,0.55)' },
+  cult:   { tint:'rgba(220,140,60,0.16)',  particle:'rgba(255,190,100,0.6)' },
+  sea:    { tint:'rgba(120,210,255,0.16)', particle:'rgba(225,248,255,0.6)' },
+};
+
+// Partículas ambientales flotando (polen/polvo/brasas/burbujas según la
+// década) — el detalle atmosférico que hace lucir "vivas" las escenas de
+// CrossCode/Eastward aunque el sprite en sí no cambie.
+function spawnParticles(){
+  const fx = THEME_FX[state.bgTheme] || THEME_FX.forest;
+  state.particles = [];
+  for(let i=0;i<14;i++){
+    state.particles.push({
+      x: Math.random()*canvas.width,
+      y: Math.random()*canvas.height,
+      r: 1+Math.random()*1.8,
+      speed: 0.12+Math.random()*0.18,
+      phase: Math.random()*Math.PI*2,
+      color: fx.particle,
+    });
+  }
+}
+function drawParticles(){
+  ctx.save();
+  state.particles.forEach(p=>{
+    p.y -= p.speed;
+    p.phase += 0.02;
+    if(p.y < -4){ p.y = canvas.height+4; p.x = Math.random()*canvas.width; }
+    ctx.globalAlpha = 0.7;
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x+Math.sin(p.phase)*6, p.y, p.r, 0, Math.PI*2);
+    ctx.fill();
+  });
+  ctx.restore();
+}
+
+function drawBar(x, y, w, h, pct, color){
+  ctx.fillStyle = '#000';
+  ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = color;
+  ctx.fillRect(x+1, y+1, Math.max(0,(w-2)*Math.max(0,pct)), h-2);
+  ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x+0.5, y+0.5, w-1, h-1);
+}
+
+function drawActorBars(actor){
+  const w = 36, x = actor.x - w/2;
+  let y = actor.y + 5;
+  if(!actor.alive){
+    ctx.save(); ctx.globalAlpha = 0.5;
+    ctx.fillStyle = '#000'; ctx.fillRect(x, y, w, 4);
+    ctx.restore();
+    return;
+  }
+  drawBar(x, y, w, 4, actor.hp/actor.maxHP, actor.hp/actor.maxHP<0.3 ? '#c0392b' : '#4caf50');
+  if(actor.kind==='party'){
+    y += 5;
+    drawBar(x, y, w, 3, actor.mp/actor.maxMP, '#3d8bcf');
+    y += 4;
+    drawBar(x, y, w, 3, actor.spirit/actor.maxSpirit, '#a860d1');
+  }
+}
+
+// Silueta de color detrás del sprite, dibujada un par de px desplazada en
+// 4 direcciones — el truco barato de "rim light" de pixel art (sin shader
+// de normales/alpha real) que usan juegos como Sea of Stars/CrossCode para
+// separar al personaje del fondo sin regenerar el arte.
+const rimCanvas = document.createElement('canvas');
+const rimCtx = rimCanvas.getContext('2d');
+const RIM_COLOR = { forest:'#cfead0', cave:'#bfe0ff', cult:'#ffd58a', sea:'#d8f6ff', dungeon:'#e8dcc8' };
+function drawRimGlow(img, dx, dy, w, h, color, alpha){
+  const rw = Math.ceil(w)+8, rh = Math.ceil(h)+8;
+  rimCanvas.width = rw; rimCanvas.height = rh;
+  rimCtx.clearRect(0,0,rw,rh);
+  rimCtx.drawImage(img, 4, 4, w, h);
+  rimCtx.globalCompositeOperation = 'source-in';
+  rimCtx.fillStyle = color;
+  rimCtx.fillRect(0,0,rw,rh);
+  ctx.save();
+  ctx.globalAlpha = alpha!=null ? alpha : 0.5;
+  [[-1.4,0],[1.4,0],[0,-1.4],[0,1.4]].forEach(([ox,oy])=> ctx.drawImage(rimCanvas, dx-4+ox, dy-4+oy));
+  ctx.restore();
+}
+
+function drawActor(img, actor, facesLeft){
+  if(!img.complete || img.naturalWidth===0) return;
+  ctx.save();
+  ctx.globalAlpha = !actor.alive ? 0.28 : (actor.opacity!=null ? actor.opacity : 1);
+  const w = SIZE*(actor.scale||1), h = SIZE*(actor.scale||1)*(actor.squashY||1);
+  const x = actor.x - w/2;
+  const y = actor.y - h + (actor.alive ? Math.sin(actor.bob)*2.5 : 0);
+  const punch = 'contrast(1.18) saturate(1.3) brightness(1.04)';
+  let filterStr;
+  if(actor.flash>0 && actor.alive){
+    filterStr = 'brightness(2) saturate(0) sepia(1) hue-rotate(-50deg) saturate(6)';
+  } else if(actor.hue){
+    filterStr = `hue-rotate(${actor.hue}deg) ${punch}`;
+  } else {
+    filterStr = punch;
+  }
+  let dx = x, dy = y;
+  if(facesLeft){ ctx.translate(x+w, y); ctx.scale(-1,1); dx = 0; dy = 0; }
+  if(actor.alive){
+    // En escenas oscuras (cueva/culto) el personaje "brilla" más contra el
+    // fondo — como en Sea of Stars, donde los héroes emiten una luz propia
+    // tenue en entornos sin luz natural, en vez de perderse en el negro.
+    const darkScene = state.bgTheme==='cave' || state.bgTheme==='cult';
+    drawRimGlow(img, dx, dy, w, h, RIM_COLOR[state.bgTheme] || RIM_COLOR.dungeon, darkScene ? 0.85 : 0.5);
+  }
+  ctx.filter = filterStr;
+  ctx.drawImage(img, dx, dy, w, h);
+  if(actor.alive){
+    // luz cenital + sombra de contacto sobre la propia silueta, para dar
+    // profundidad tipo Chrono Trigger/Metal Slug sin regenerar el arte
+    ctx.filter = 'none';
+    ctx.globalCompositeOperation = 'source-atop';
+    const lightGrad = ctx.createLinearGradient(0, dy, 0, dy+h);
+    lightGrad.addColorStop(0, 'rgba(255,255,255,0.22)');
+    lightGrad.addColorStop(0.45, 'rgba(255,255,255,0)');
+    lightGrad.addColorStop(1, 'rgba(0,0,0,0.18)');
+    ctx.fillStyle = lightGrad;
+    ctx.fillRect(dx, dy, w, h);
+  }
+  ctx.restore();
+
+  const shadowGrad = ctx.createRadialGradient(actor.x, actor.y+3, 0, actor.x, actor.y+3, SIZE*0.3);
+  shadowGrad.addColorStop(0, `rgba(0,0,0,${actor.alive?0.42:0.16})`);
+  shadowGrad.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = shadowGrad;
+  ctx.beginPath();
+  ctx.ellipse(actor.x, actor.y+3, SIZE*0.3, 6, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  drawActorBars(actor);
+}
+
+// Viñeta de pantalla completa (oscurece las esquinas) para dar sensacion de
+// foco/profundidad en la escena, como en Metal Slug/Chrono Trigger. Se
+// dibuja al final, fuera del temblor de camara, para que quede fija.
+function drawVignette(){
+  const w = canvas.width, h = canvas.height;
+  const g = ctx.createRadialGradient(w/2, h*0.42, h*0.22, w/2, h*0.42, h*0.75);
+  g.addColorStop(0, 'rgba(0,0,0,0)');
+  g.addColorStop(0.7, 'rgba(0,0,0,0)');
+  g.addColorStop(1, 'rgba(0,0,0,0.4)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, w, h);
+}
+
+function drawBurst(b){
+  const t = 1-b.life, r = 7+t*18;
+  ctx.save(); ctx.globalAlpha = Math.max(0,b.life);
+  ctx.strokeStyle = '#fff6d0'; ctx.lineWidth = 2.5;
+  for(let i=0;i<6;i++){
+    const ang = (Math.PI*2/6)*i + t*0.6;
+    ctx.beginPath();
+    ctx.moveTo(b.x+Math.cos(ang)*r*0.4, b.y+Math.sin(ang)*r*0.4*0.6);
+    ctx.lineTo(b.x+Math.cos(ang)*r, b.y+Math.sin(ang)*r*0.6);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawProjectile(p){
+  ctx.save();
+  if(p.kind==='arrow'){
+    ctx.translate(p.x, p.y);
+    ctx.rotate(p.angle);
+    ctx.strokeStyle = '#8a6a3a'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(-11,0); ctx.lineTo(7,0); ctx.stroke();
+    ctx.strokeStyle = '#e8dcc8'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(-11,0); ctx.lineTo(-15,-3); ctx.moveTo(-11,0); ctx.lineTo(-15,3); ctx.stroke();
+    ctx.fillStyle = '#d8d8d8';
+    ctx.beginPath(); ctx.moveTo(9,0); ctx.lineTo(3,-3); ctx.lineTo(3,3); ctx.closePath(); ctx.fill();
+  } else {
+    const grad = ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,9);
+    grad.addColorStop(0,'#ffffff');
+    grad.addColorStop(0.45,p.color);
+    grad.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(p.x,p.y,9,0,Math.PI*2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawTrail(t){
+  if(!t.img.complete || t.img.naturalWidth===0) return;
+  ctx.save();
+  ctx.globalAlpha = t.life*0.32;
+  if(t.hue) ctx.filter = `hue-rotate(${t.hue}deg) saturate(0.5)`;
+  const w = SIZE*t.scale, h = SIZE*t.scale*t.squashY;
+  ctx.drawImage(t.img, t.x-w/2, t.y-h, w, h);
+  ctx.restore();
+}
+
+function draw(){
+  ctx.save();
+  if(state.shake>0){
+    ctx.translate((Math.random()*2-1)*state.shake, (Math.random()*2-1)*state.shake);
+    state.shake = Math.max(0, state.shake-0.9);
+  }
+  ctx.clearRect(-10,-10,canvas.width+20,canvas.height+20);
+  drawBackground();
+  drawParticles();
+  drawLights();
+
+  state.trails.forEach(drawTrail);
+  state.trails.forEach(t=> t.life -= 0.1);
+  state.trails = state.trails.filter(t=> t.life>0);
+
+  // Ambos bandos de frente a cámara (estilo Pokémon) — el sprite base ya
+  // mira al jugador, así que ya no hace falta espejarlo para "el otro lado".
+  state.party.forEach(a=>{ if(a.alive) a.bob+=0.06; drawActor(a.img, a, false); });
+  state.enemies.forEach(a=>{ if(a.alive) a.bob+=0.06; drawActor(a.img, a, false); });
+
+  state.projectiles.forEach(drawProjectile);
+
+  state.bursts.forEach(drawBurst);
+  state.bursts.forEach(b=> b.life -= 0.07);
+  state.bursts = state.bursts.filter(b=> b.life>0);
+
+  state.healGlows.forEach(drawHealGlow);
+  state.healGlows.forEach(g=> g.life -= 0.025);
+  state.healGlows = state.healGlows.filter(g=> g.life>0);
+
+  ctx.textAlign = 'center'; ctx.font = 'bold 13px monospace';
+  state.floats.forEach(f=>{
+    ctx.globalAlpha = Math.max(0,f.life);
+    ctx.fillStyle = f.color; ctx.strokeStyle = '#000'; ctx.lineWidth = 2.5;
+    ctx.strokeText(f.text, f.x, f.y); ctx.fillText(f.text, f.x, f.y);
+    ctx.globalAlpha = 1;
+  });
+  state.floats.forEach(f=>{ f.y -= 0.5; f.life -= 0.018; });
+  state.floats = state.floats.filter(f=> f.life>0);
+
+  [...state.party, ...state.enemies].forEach(a=>{ if(a.flash>0) a.flash -= 0.06; });
+
+  if(state.screenFlash>0){
+    ctx.save();
+    ctx.globalAlpha = state.screenFlash*0.5;
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.restore();
+    state.screenFlash = Math.max(0, state.screenFlash-0.08);
+  }
+
+  ctx.restore();
+  drawVignette();
+  updatePlayerHUD();
+  updateEnemyHUD();
+  requestAnimationFrame(draw);
+}
+requestAnimationFrame(draw);
+
+function easeOutCubic(t){ return 1-Math.pow(1-t,3); }
+function easeInCubic(t){ return t*t*t; }
+function tween(duration, onUpdate){
+  return new Promise(resolve=>{
+    const start = performance.now();
+    (function step(now){
+      const t = Math.min(1,(now-start)/duration);
+      onUpdate(t);
+      if(t<1) requestAnimationFrame(step); else resolve();
+    })(start);
+  });
+}
+function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
+
+function addTrail(actor){
+  state.trails.push({
+    img:actor.img, x:actor.x, y:actor.y, hue:actor.hue||0,
+    scale:actor.scale||1, squashY:actor.squashY||1, life:1,
+  });
+}
+// Dash veloz con estela fantasma (ninja) — más rápido que attackLunge y sin
+// el "squash" de embestida pesada, deja copias semitransparentes atrás.
+// Interpola X *y* Y: si el objetivo está en otra fila (arriba/abajo), el
+// dash viaja en diagonal hasta ahí en vez de quedarse pegado a su propia
+// fila — antes el golpe de alguien de la fila de arriba/abajo se veía
+// "flotando" sobre su propia fila mientras el daño caía en el objetivo
+// real de otra fila.
+async function dashWithTrail(actor, targetX, targetY, duration, ease){
+  const startX = actor.x, startY = actor.y;
+  await tween(duration, t=>{
+    const e = ease(t);
+    actor.x = startX + (targetX-startX)*e;
+    actor.y = startY + (targetY-startY)*e;
+    if(Math.random()<0.7) addTrail(actor);
+  });
+  actor.x = targetX; actor.y = targetY;
+}
+
+// Igual que dashWithTrail: interpola X e Y hacia contactY (la fila real del
+// objetivo), no solo X — antes el atacante lucía "clavado" en su propia
+// fila aunque el golpe fuera a un objetivo de otra fila.
+async function attackLunge(actor, contactX, contactY, onImpact){
+  const startX = actor.baseX, startY = actor.baseY, base = actor.baseScale||1;
+  await tween(220, t=>{
+    const e = easeOutCubic(t);
+    actor.x = startX + (contactX-startX)*e;
+    actor.y = startY + (contactY-startY)*e;
+    actor.scale = base*(1+0.12*e); actor.squashY = 1-0.05*e;
+  });
+  if(onImpact) onImpact();
+  await tween(120, ()=>{});
+  await tween(260, t=>{
+    const e = easeInCubic(t);
+    actor.x = contactX + (startX-contactX)*e;
+    actor.y = contactY + (startY-contactY)*e;
+    actor.scale = base*(1.12-0.12*e); actor.squashY = 0.95+0.05*e;
+  });
+  actor.x = startX; actor.y = startY; actor.scale = base; actor.squashY = 1;
+}
+
+// Arquero/Mago/Sacerdote: no se mueven de su lugar — un pequeño retroceso
+// de "carga" y disparan un proyectil real (flecha u orbe) que viaja hasta
+// el objetivo. onImpact recibe el punto exacto (x,y) donde llegó, para que
+// el destello/chispazo salgan ahí y no en el cuerpo del atacante.
+async function rangedAttack(actor, defender, kind, color, onImpact){
+  await tween(150, t=>{ actor.scale = 1 - 0.1*easeOutCubic(t); });
+  await tween(110, t=>{ actor.scale = 0.9 + 0.1*easeOutCubic(t); });
+  actor.scale = 1;
+
+  const originX = actor.baseX + (actor.kind==='party' ? 22 : -22);
+  const originY = actor.baseY - 30;
+  const destX = defender.x, destY = defender.baseY - 30;
+  if(kind==='orb' && color) addLight(originX, originY, hexToRgbaTpl(color), 26);
+  const proj = { x:originX, y:originY, kind, color, angle: Math.atan2(destY-originY, destX-originX) };
+  state.projectiles.push(proj);
+  await tween(280, t=>{
+    proj.x = originX + (destX-originX)*t;
+    proj.y = originY + (destY-originY)*t;
+  });
+  state.projectiles = state.projectiles.filter(p=> p!==proj);
+  if(onImpact) onImpact(proj.x, proj.y);
+}
+
+// Estilo Ninja Saga real (revisado en su wiki de combate): un Taijutsu de
+// combo no es un solo golpe ni una teletransportación — es un DASH casi
+// instantáneo hasta el objetivo (con estela fantasma detrás, típica de
+// velocidad ninja) seguido de una RÁFAGA de golpes rápidos ("Three Combat
+// Rapid" es literalmente 3 impactos seguidos) y una retirada igual de
+// veloz. Nada de distancia ni desaparecer del mapa. Funciona para
+// cualquier bando: si algún enemigo tiene temática de asesino, usa el
+// mismo dash+ráfaga (con su propio lado de aproximación).
+async function assassinAttack(actor, defender, onImpact){
+  const startX = actor.baseX, startY = actor.baseY;
+  // party ataca hacia arriba (-1), enemigos asesinos atacan hacia abajo (+1)
+  const dir = actor.kind==='party' ? -1 : 1;
+  const contactY = defender.baseY + dir*42;
+  const burstY = contactY - dir*24;
+  await dashWithTrail(actor, defender.baseX, contactY, 100, easeOutCubic);
+  for(let i=0;i<3;i++){
+    actor.scale = 1.1; actor.squashY = 0.88;
+    triggerShake(3);
+    addBurst(defender.baseX, burstY);
+    await sleep(65);
+    actor.scale = 1; actor.squashY = 1;
+    await sleep(45);
+  }
+  if(onImpact) onImpact(defender.baseX, burstY);
+  await sleep(90);
+  await dashWithTrail(actor, startX, startY, 130, easeInCubic);
+  actor.x = startX; actor.y = startY;
+}
+
+// Salto corto hacia atrás al esquivar (estilo Ninja Saga) — se dispara sin
+// esperar (no bloquea la animación del atacante), para que ambos se vean a
+// la vez: el golpe que pasa de largo y el esquivo retrocediendo.
+async function dodgeHop(actor, awayDx){
+  const startX = actor.baseX;
+  await tween(220, t=>{ actor.x = startX + awayDx*Math.sin(t*Math.PI); });
+  actor.x = startX;
+}
+
+// Roll real de esquivar (evasion del defensor), crítico (del atacante, solo
+// aplica a golpes de la party) y daño — mismo criterio que
+// playerUseSkill()/resolveOneAllyTurn()/enemyAct() en game.js.
+function computeOutcome(attacker, defender, isEnemyAttacker, mult){
+  mult = mult || 1;
+  if(Math.random() < defender.evasion) return {dodged:true};
+  const resMult = 1 - defender.resFisico/100;
+  if(isEnemyAttacker){
+    return {dodged:false, dmg: Math.max(1, Math.round(attacker.atk*resMult))};
+  }
+  const crit = Math.random() < attacker.crit;
+  let dmg = Math.max(1, Math.round(attacker.baseDmg*resMult*mult*(crit?1.5:1)));
+  if(attacker===player && player.warBuff) dmg = Math.round(dmg*player.warBuff.dmgMult);
+  return {dodged:false, crit, dmg};
+}
+
+// Habilidades reales del Guerrero (game.js: golpe_bruto/machacar/grito_guerra
+// + la ultimate Furia del Titán) — mismos nombres, costos y efectos que en
+// el juego real, simplificados a lo que el prototipo puede resolver.
+const GUERRERO_SKILLS = [
+  { id:'golpe_bruto', name:'Golpe bruto', cost:15, pool:'mp', mult:1.0,
+    desc:'Daño físico. 70% de aplicar Tambaleo (2 turnos).' },
+  { id:'machacar', name:'Machacar', cost:20, pool:'mp', mult:0.7,
+    desc:'Si el objetivo está Tambaleante: lo aturde y hace x1.8 de daño.' },
+  { id:'grito_guerra', name:'Grito de guerra', cost:10, pool:'spirit', mult:0, self:true,
+    desc:'+30% daño físico y -20% daño recibido durante 2 turnos.' },
+  { id:'furia_titan', name:'Furia del Titán', cost:25, pool:'mp', mult:1.15, aoe:true,
+    desc:'Golpea a todos los enemigos; a los Tambaleantes los aturde y hace mucho más daño.' },
+];
+function skillAffordable(sk){
+  return sk.pool==='mp' ? player.mp>=sk.cost : player.spirit>=sk.cost;
+}
+
+// attacker (party) contra defender (enemy). La animación varía por senda:
+// Guerrero embiste cuerpo a cuerpo, Arquero/Mago/Sacerdote disparan un
+// proyectil sin moverse de su lugar, Asesino se desvanece y golpea desde
+// atrás del objetivo.
+async function partyUnitAttacks(attacker, defender, skill){
+  const outcome = {};
+  const onImpact = (hitX, hitY)=>{
+    triggerShake(attacker.styleId==='pesada' ? 4 : 3);
+    let mult = skill ? skill.mult : 1;
+    let consumedTambaleo = false;
+    if(skill && skill.id==='machacar' && defender.tambaleo>0){ mult *= 1.8; consumedTambaleo = true; }
+    Object.assign(outcome, computeOutcome(attacker, defender, false, mult));
+    if(outcome.dodged){
+      addFloat(defender.x, defender.baseY-60, 'ESQUIVA', '#ffd166');
+      dodgeHop(defender, 18);
+    } else {
+      defender.flash = 1;
+      const hitColor = outcome.elem==='fuego' ? 'rgba(255,120,60,ALPHA)'
+        : outcome.elem==='hielo' ? 'rgba(120,205,255,ALPHA)'
+        : attacker.styleId==='sacerdote' ? 'rgba(255,225,120,ALPHA)'
+        : undefined;
+      addBurst(hitX, hitY, hitColor);
+      if(outcome.crit){ triggerShake(10); state.screenFlash = 1; }
+      addFloat(defender.x, defender.baseY-60, (outcome.crit?'¡CRÍTICO! ':'')+'-'+outcome.dmg, outcome.crit?'#ff9f1c':'#ff5252');
+      if(skill && skill.id==='golpe_bruto' && Math.random()<0.7){
+        defender.tambaleo = 2;
+        addFloat(defender.x, defender.baseY-78, 'TAMBALEO', '#e0a94a');
+      }
+      if(consumedTambaleo){
+        defender.tambaleo = 0; defender.aturdido = 1;
+        addFloat(defender.x, defender.baseY-78, 'ATURDIDO', '#ff8a3d');
+      }
+    }
+  };
+
+  if(attacker.styleId==='doblefilo'){
+    await assassinAttack(attacker, defender, onImpact);
+  } else if(attacker.styleId==='tirador'){
+    await rangedAttack(attacker, defender, 'arrow', null, onImpact);
+  } else if(attacker.styleId==='mago'){
+    outcome.elem = Math.random()<0.5 ? 'fuego' : 'hielo';
+    await rangedAttack(attacker, defender, 'orb', outcome.elem==='fuego'?'#ff5533':'#4db6ff', onImpact);
+  } else if(attacker.styleId==='sacerdote'){
+    await rangedAttack(attacker, defender, 'orb', '#ffe066', onImpact);
+  } else {
+    // La party está abajo; se acerca hacia ARRIBA (Y) hasta justo antes del
+    // objetivo, en vez de cruzar por X como en la formación vieja lado a lado.
+    const contactY = defender.baseY + 30;
+    await attackLunge(attacker, defender.baseX, contactY, ()=> onImpact(defender.baseX, contactY-25));
+  }
+
+  const skillTxt = skill ? ` (${skill.name})` : '';
+  if(outcome.dodged){
+    log(`${attacker.name} ataca${skillTxt} — ${defender.name} esquiva.`);
+  } else {
+    const elemTxt = outcome.elem ? ` de ${outcome.elem}` : '';
+    log(`${attacker.name} golpea${elemTxt}${skillTxt} a ${defender.name} por ${outcome.dmg}${outcome.crit?' (crítico)':''}.`, 'hit');
+    defender.hp = Math.max(0, defender.hp - outcome.dmg);
+    if(defender.hp<=0){ defender.alive=false; log(`${defender.name} cae derrotada.`, 'info'); }
+  }
+  await sleep(180);
+}
+
+// El Sacerdote prioriza curar: si algún aliado vivo (él incluido) está por
+// debajo del umbral, en vez de atacar dispara el mismo orbe de rangedAttack
+// pero en verde y hacia un aliado, y deja un halo verde sobre quien recibe
+// la curación (el pedido puntual de "animación verde encima de un
+// personaje" cuando el Sacerdote cura).
+const HEAL_THRESHOLD = 0.75;
+function mostInjuredAlly(){
+  let best = null, bestRatio = HEAL_THRESHOLD;
+  state.party.forEach(a=>{
+    if(!a.alive) return;
+    const ratio = a.hp/a.maxHP;
+    if(ratio < bestRatio){ bestRatio = ratio; best = a; }
+  });
+  return best;
+}
+async function sacerdoteHeals(healer, target){
+  const healAmt = Math.max(1, Math.round(healer.baseDmg*1.4));
+  await rangedAttack(healer, target, 'orb', '#7ed957', (hx,hy)=>{
+    triggerShake(2);
+    target.hp = Math.min(target.maxHP, target.hp+healAmt);
+    addFloat(target.x, target.baseY-60, '+'+healAmt, '#7ed957');
+    addHealGlow(target.x, target.baseY-20);
+  });
+  log(`${healer.name} cura a ${target.name} por ${healAmt}.`, 'hit');
+  await sleep(180);
+}
+
+// Furia del Titán (ultimate, nivel 60 en el juego real): golpea a TODOS los
+// enemigos vivos de una — no encaja en el patrón de un solo attackLunge/
+// onImpact, así que resuelve su propia secuencia en vez de pasar por
+// partyUnitAttacks.
+async function furiaDelTitan(attacker){
+  triggerShake(8); state.screenFlash = 1;
+  addFloat(attacker.x, attacker.baseY-70, '¡FURIA DEL TITÁN!', '#ff9f1c');
+  await sleep(300);
+  for(const en of state.enemies){
+    if(!en.alive) continue;
+    let mult = 1.15, consumedTambaleo = false;
+    if(en.tambaleo>0){ mult *= 1.6; consumedTambaleo = true; }
+    const outcome = computeOutcome(attacker, en, false, mult);
+    if(outcome.dodged){
+      addFloat(en.x, en.baseY-60, 'ESQUIVA', '#ffd166');
+    } else {
+      en.flash = 1;
+      addBurst(en.x, en.baseY-20);
+      addFloat(en.x, en.baseY-60, '-'+outcome.dmg, outcome.crit?'#ff9f1c':'#ff5252');
+      en.hp = Math.max(0, en.hp - outcome.dmg);
+      if(consumedTambaleo){ en.tambaleo = 0; en.aturdido = 1; }
+      if(en.hp<=0){ en.alive=false; log(`${en.name} cae derrotada.`, 'info'); }
+      else if(!outcome.dodged){
+        log(`Guerrero (vos) golpea (Furia del Titán) a ${en.name} por ${outcome.dmg}.`, 'hit');
+      }
+    }
+    await sleep(140);
+  }
+}
+
+// Igual que partyUnitAttacks pero para enemigos: la animación depende de
+// attacker.style, así que un goblin arquero dispara flecha, un chamán tira
+// su orbe, y un futuro "enemigo asesino" (ej. década 3) haría el mismo
+// dash+ráfaga que el Asesino aliado — mismo set de funciones, solo cambia
+// de qué lado sale.
+async function enemyUnitAttacks(attacker, defender){
+  const outcome = {};
+  const onImpact = (hitX, hitY)=>{
+    triggerShake(attacker.style==='melee' ? 4 : 3);
+    Object.assign(outcome, computeOutcome(attacker, defender, true));
+    if(!outcome.dodged && defender===player){
+      if(state.playerDefending) outcome.dmg = Math.max(1, Math.round(outcome.dmg*0.5));
+      else if(player.warBuff) outcome.dmg = Math.max(1, Math.round(outcome.dmg*(1-player.warBuff.dmgReduction)));
+    }
+    if(outcome.dodged){
+      addFloat(defender.x, defender.baseY-60, 'ESQUIVA', '#ffd166');
+      dodgeHop(defender, -18);
+    } else {
+      defender.flash = 1;
+      const hitColor = attacker.projColor ? hexToRgbaTpl(attacker.projColor) : undefined;
+      addBurst(hitX, hitY, hitColor);
+      addFloat(defender.x, defender.baseY-60, '-'+outcome.dmg, '#ff5252');
+    }
+  };
+
+  if(attacker.style==='assassin'){
+    await assassinAttack(attacker, defender, onImpact);
+  } else if(attacker.style==='ranged'){
+    await rangedAttack(attacker, defender, attacker.projKind, attacker.projColor, onImpact);
+  } else {
+    // Los enemigos están arriba; se acercan hacia ABAJO (Y) hasta la party.
+    const contactY = defender.baseY - 30;
+    await attackLunge(attacker, defender.baseX, contactY, ()=> onImpact(defender.baseX, contactY+25));
+  }
+
+  if(outcome.dodged){
+    log(`${attacker.name} ataca — ${defender.name} esquiva.`);
+  } else {
+    log(`${attacker.name} golpea a ${defender.name} por ${outcome.dmg}.`, 'hit');
+    defender.hp = Math.max(0, defender.hp - outcome.dmg);
+    if(defender.hp<=0){ defender.alive=false; log(`${defender.name} cae en combate.`, 'info'); }
+  }
+  await sleep(180);
+}
+
+function checkVictory(){ return state.enemies.every(e=>!e.alive); }
+function checkDefeat(){ return state.party.every(a=>!a.alive); }
+
+function regenResources(){
+  state.party.forEach(a=>{
+    if(!a.alive) return;
+    a.mp = Math.min(a.maxMP, a.mp+5);
+    a.spirit = Math.min(a.maxSpirit, a.spirit+5);
+  });
+}
+
+// Menú de comando estilo Pokémon: pausa el turno del Guerrero (vos) hasta
+// que el jugador elige Básico/Mochila/Defensa — el resto de la party y los
+// enemigos siguen resolviéndose automático, como antes.
+function showBattleMenu(){
+  document.getElementById('battle-menu').style.display = 'flex';
+  document.getElementById('battle-menu-grid').style.display = 'grid';
+  document.getElementById('battle-submenu').style.display = 'none';
+}
+function hideBattleMenu(){
+  document.getElementById('battle-menu').style.display = 'none';
+}
+
+function waitForPlayerAction(){
+  return new Promise(resolve=>{
+    showBattleMenu();
+    const basico = document.getElementById('menu-basico');
+    const mochila = document.getElementById('menu-mochila');
+    const habilidades = document.getElementById('menu-habilidades');
+    const defensa = document.getElementById('menu-defensa');
+    const back = document.getElementById('menu-back');
+    const grid = document.getElementById('battle-menu-grid');
+    const submenu = document.getElementById('battle-submenu');
+
+    function cleanup(){
+      basico.onclick = null; mochila.onclick = null; habilidades.onclick = null;
+      defensa.onclick = null; back.onclick = null;
+    }
+    function renderItemList(){
+      const list = document.getElementById('battle-submenu-list');
+      list.innerHTML = '';
+      state.items.forEach(it=>{
+        const row = document.createElement('div');
+        row.className = 'submenu-item' + (it.count<=0 ? ' disabled' : '');
+        row.innerHTML = `<span class="item-name">${it.name} x${it.count}</span><span>${it.desc}</span>`;
+        row.onclick = ()=>{ cleanup(); hideBattleMenu(); resolve({type:'item', item:it}); };
+        list.appendChild(row);
+      });
+    }
+    function renderSkillList(){
+      const list = document.getElementById('battle-submenu-list');
+      list.innerHTML = '';
+      GUERRERO_SKILLS.forEach(sk=>{
+        const affordable = skillAffordable(sk);
+        const costLabel = sk.pool==='mp' ? `${sk.cost} MP` : `${sk.cost} Espíritu`;
+        const row = document.createElement('div');
+        row.className = 'submenu-item' + (affordable ? '' : ' disabled');
+        row.innerHTML = `<span class="item-name">${sk.name} (${costLabel})</span><span>${sk.desc}</span>`;
+        row.onclick = ()=>{ cleanup(); hideBattleMenu(); resolve({type:'skill', skill:sk}); };
+        list.appendChild(row);
+      });
+    }
+    basico.onclick = ()=>{ cleanup(); hideBattleMenu(); resolve({type:'attack'}); };
+    defensa.onclick = ()=>{ cleanup(); hideBattleMenu(); resolve({type:'defend'}); };
+    mochila.onclick = ()=>{
+      renderItemList();
+      grid.style.display = 'none';
+      submenu.style.display = 'flex';
+    };
+    habilidades.onclick = ()=>{
+      renderSkillList();
+      grid.style.display = 'none';
+      submenu.style.display = 'flex';
+    };
+    back.onclick = ()=>{
+      submenu.style.display = 'none';
+      grid.style.display = 'grid';
+    };
+  });
+}
+
+async function resolvePlayerAction(action, target){
+  if(action.type==='defend'){
+    state.playerDefending = true;
+    addFloat(player.x, player.baseY-60, 'DEFENSA', '#8ecae6');
+    triggerShake(2);
+    log('Guerrero (vos) se pone en guardia — recibirá menos daño este turno.', 'info');
+    await sleep(260);
+    return;
+  }
+  if(action.type==='item'){
+    if(action.item.count<=0) return;
+    action.item.count -= 1;
+    if(action.item.id==='pocion'){
+      player.hp = Math.min(player.maxHP, player.hp+80);
+      addFloat(player.x, player.baseY-60, '+80', '#8de290');
+      log(`Guerrero (vos) usa ${action.item.name}. Recupera 80 HP.`, 'info');
+    } else if(action.item.id==='elixir'){
+      player.mp = Math.min(player.maxMP, player.mp+40);
+      addFloat(player.x, player.baseY-60, '+40', '#7fc0ee');
+      log(`Guerrero (vos) usa ${action.item.name}. Recupera 40 MP.`, 'info');
+    }
+    await sleep(400);
+    return;
+  }
+  if(action.type==='skill'){
+    const sk = action.skill;
+    if(!skillAffordable(sk)) return;
+    if(sk.pool==='mp') player.mp -= sk.cost; else player.spirit -= sk.cost;
+    if(sk.id==='grito_guerra'){
+      player.warBuff = { turns:2, dmgMult:1.3, dmgReduction:0.2 };
+      addFloat(player.x, player.baseY-60, 'GRITO DE GUERRA', '#ff9f1c');
+      triggerShake(4);
+      log('Guerrero (vos) usa Grito de guerra. +30% daño, -20% daño recibido (2 turnos).', 'info');
+      await sleep(300);
+      return;
+    }
+    if(sk.aoe){
+      await furiaDelTitan(player);
+      return;
+    }
+    await partyUnitAttacks(player, target, sk);
+    return;
+  }
+  await partyUnitAttacks(player, target);
+}
+
+async function doRound(){
+  if(state.busy) return;
+  state.busy = true; setButtonsEnabled(false);
+  log(`— Turno ${state.round} —`, 'info');
+
+  let target = enemyFrontlineTarget();
+  if(player.alive && target){
+    const action = await waitForPlayerAction();
+    await resolvePlayerAction(action, target);
+  }
+
+  if(!checkVictory()){
+    for(const ally of state.party.slice(1)){
+      if(!ally.alive) continue;
+      if(ally.styleId==='sacerdote'){
+        const injured = mostInjuredAlly();
+        if(injured){
+          await sacerdoteHeals(ally, injured);
+          if(checkVictory()) break;
+          continue;
+        }
+      }
+      target = enemyFrontlineTarget();
+      if(!target) break;
+      await partyUnitAttacks(ally, target);
+      if(checkVictory()) break;
+    }
+  }
+
+  if(checkVictory()){
+    log('¡Victoria! Todas las criaturas cayeron.', 'info');
+    state.busy = false; setButtonsEnabled(false);
+    return;
+  }
+
+  for(const en of state.enemies){
+    if(!en.alive) continue;
+    if(en.aturdido>0){
+      en.aturdido -= 1;
+      log(`${en.name} está aturdido y no puede actuar.`, 'info');
+      continue;
+    }
+    const ptarget = partyFrontlineTarget();
+    if(!ptarget) break;
+    await enemyUnitAttacks(en, ptarget);
+    if(checkDefeat()) break;
+  }
+
+  state.playerDefending = false;
+  state.enemies.forEach(en=>{ if(en.tambaleo>0) en.tambaleo -= 1; });
+  if(player.warBuff){ player.warBuff.turns -= 1; if(player.warBuff.turns<=0) player.warBuff = null; }
+
+  if(checkDefeat()){
+    log('Tu grupo cayó en combate.', 'info');
+    state.busy = false; setButtonsEnabled(false);
+    return;
+  }
+
+  regenResources();
+  state.round += 1;
+  state.busy = false; setButtonsEnabled(true);
+  doRound();
+}
+
+function setButtonsEnabled(on){
+  document.getElementById('decade-select').disabled = !on;
+}
+
+function loadDecade(i){
+  state.decadeIndex = i;
+  const d = DECADES[i];
+  state.enemies = d.build();
+  state.bgTheme = d.bg;
+  const sel = document.getElementById('decade-select');
+  if(sel.value != i) sel.value = i;
+  resetCombat();
+}
+
+function resetCombat(){
+  state.busy = false;
+  hideBattleMenu();
+  state.party.forEach(a=>{
+    a.hp=a.maxHP; a.mp=a.maxMP; a.spirit=a.maxSpirit;
+    a.x=a.baseX; a.y=a.baseY; a.scale=1; a.squashY=1; a.flash=0; a.opacity=1; a.alive=true;
+  });
+  player.warBuff = null;
+  state.enemies.forEach(a=>{
+    a.hp=a.maxHP; a.x=a.baseX; a.y=a.baseY; a.scale=a.baseScale; a.squashY=1; a.flash=0; a.opacity=1; a.alive=true;
+    a.tambaleo=0; a.aturdido=0;
+  });
+  state.floats=[]; state.bursts=[]; state.projectiles=[]; state.trails=[]; state.healGlows=[]; state.shake=0; state.round=1;
+  state.playerDefending = false; state.screenFlash = 0; state.lights=[];
+  state.items = ITEM_DEFS.map(it=> ({...it}));
+  spawnParticles();
+  document.getElementById('log').innerHTML = '';
+  log('Empieza el combate.', 'info');
+  setButtonsEnabled(true);
+  doRound();
+}
+
+document.getElementById('btn-reset').onclick = resetCombat;
+
+const decadeSelect = document.getElementById('decade-select');
+DECADES.forEach((d,i)=>{
+  const opt = document.createElement('option');
+  opt.value = i; opt.textContent = d.name;
+  decadeSelect.appendChild(opt);
+});
+decadeSelect.onchange = ()=> loadDecade(parseInt(decadeSelect.value));
+
+loadDecade(0);
+</script>
+</body>
+</html>
