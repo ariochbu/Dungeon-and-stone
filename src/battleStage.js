@@ -13,7 +13,7 @@
 // combat.enemies/combat.allies/combat.lastActor/combat.lastAction y dibuja.
 // No aplica daño, no decide turnos, no cambia HP.
 
-import { CLASS_SPRITES, ALLY_SPRITES, ENEMY_SPRITES } from './battleSprites.js?v=47';
+import { CLASS_SPRITES, ALLY_SPRITES, ENEMY_SPRITES } from './battleSprites.js?v=48';
 
 const TILE = 16;
 const SCALE = 2.2;
@@ -222,15 +222,26 @@ function layoutRow(count, baseY, spanX, rowOffset){
 // su formación real de combate, en vez de una sola fila pareja — un aliado
 // en el frente (o un enemigo de línea frontal) se dibuja más cerca de la
 // otra línea que uno de retaguardia/soporte, como en el prototipo.
+//
+// El reparto en X sale de TODO el grupo junto (layoutRow con el total), no
+// de cada subgrupo por separado: si se calculara por separado, un subgrupo
+// de un solo actor (típico: un único enemigo de línea frontal, o Aldric
+// como único aliado de frente) siempre quedaría centrado en x=240 — y con
+// otro subgrupo de un solo actor (p.ej. un único enemigo de soporte atrás)
+// también centrado en x=240, los dos terminan exactamente superpuestos en
+// X, y el pequeño desplazamiento en Y no alcanza para separar sus nombres.
+// Repartiendo la X entre todos primero, cada actor cae en una columna
+// distinta y el desplazamiento de profundidad en Y ya no necesita evitar
+// esa coincidencia.
 function layoutByDepth(items, isFront, frontY, backY, spanX){
-  const frontIdx = [], backIdx = [];
-  items.forEach((it,i)=> (isFront(it) ? frontIdx : backIdx).push(i));
-  const positions = new Array(items.length);
-  const frontPos = layoutRow(frontIdx.length, frontY, spanX);
-  const backPos = layoutRow(backIdx.length, backY, spanX);
-  frontIdx.forEach((itemIdx, i)=>{ positions[itemIdx] = frontPos[i]; });
-  backIdx.forEach((itemIdx, i)=>{ positions[itemIdx] = backPos[i]; });
-  return positions;
+  const baseY = (frontY + backY) / 2;
+  const deltaFront = frontY - baseY, deltaBack = backY - baseY;
+  const base = layoutRow(items.length, baseY, spanX);
+  return items.map((it, i)=> ({
+    x: base[i].x,
+    y: base[i].y + (isFront(it) ? deltaFront : deltaBack),
+    gap: base[i].gap,
+  }));
 }
 
 function syncBattleStage(container, combat, playerInfo, onTargetClick){
