@@ -33,6 +33,13 @@ let clickHandler = null;
 let lastCombatRef = null;
 let bgParticles = [];
 let currentTheme = null;
+// El canvas tiene una resolución interna fija (480x220) pero su tamaño en
+// pantalla se achica en celulares/tablets (CSS width:100%) - sin esto, el
+// texto (nombres, números flotantes) se ve fijo en píxeles internos y
+// termina diminuto en pantallas angostas. uiScale compensa para que el
+// texto mantenga un tamaño legible en píxeles reales sin importar cuánto
+// se achique el canvas.
+let uiScale = 1;
 
 // Fondos temáticos por década, puerto de prototype-2d/combat.html
 // (drawBackground/THEME_FX) — todo dibujado en Canvas, sin assets nuevos.
@@ -420,7 +427,7 @@ function drawActor(a){
   // barras
   let by = cy+6;
   ctx.save();
-  ctx.font = '9px monospace'; ctx.textAlign='center'; ctx.fillStyle='#e8dfcf';
+  ctx.font = `${Math.round(9*uiScale)}px monospace`; ctx.textAlign='center'; ctx.fillStyle='#e8dfcf';
   ctx.fillText(a.name||'', cx, by-8);
   ctx.restore();
   drawBar(cx-18, by, 36, 4, (a.hp||0)/(a.maxHP||1), (a.hp/a.maxHP)<0.3 ? '#b24444' : '#8c2f2f');
@@ -430,7 +437,7 @@ function drawActor(a){
   }
   if(a.statusCount>0){
     ctx.save();
-    ctx.font = '8px monospace'; ctx.textAlign='center'; ctx.fillStyle='#d9b76b';
+    ctx.font = `${Math.round(8*uiScale)}px monospace`; ctx.textAlign='center'; ctx.fillStyle='#d9b76b';
     ctx.fillText('●'.repeat(Math.min(4,a.statusCount)), cx, by + (a.showResources?22:11));
     ctx.restore();
   }
@@ -471,6 +478,8 @@ function drawProjectile(p){
 
 function draw(){
   if(!ctx) return;
+  const rect = canvas.getBoundingClientRect();
+  uiScale = rect.width>0 ? canvas.width/rect.width : 1;
   ctx.save();
   if(shake>0){ ctx.translate((Math.random()*2-1)*shake, (Math.random()*2-1)*shake); shake = Math.max(0, shake-0.9); }
   ctx.clearRect(-10,-10,canvas.width+20,canvas.height+20);
@@ -496,7 +505,7 @@ function draw(){
   effects.healGlows.forEach(g=> g.life -= 0.02);
   effects.healGlows = effects.healGlows.filter(g=>g.life>0);
 
-  ctx.textAlign='center'; ctx.font='bold 11px monospace';
+  ctx.textAlign='center'; ctx.font=`bold ${Math.round(11*uiScale)}px monospace`;
   effects.floats.forEach(f=>{
     ctx.globalAlpha = Math.max(0,f.life);
     ctx.fillStyle=f.color; ctx.strokeStyle='#000'; ctx.lineWidth=2;
