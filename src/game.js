@@ -1683,6 +1683,11 @@ const CHAR_LEVEL_CAP = 60; // tope de nivel de personaje pedido
 function mobXP(level){ return level; }        // mobs normales: 1 en piso 1, 2 en piso 2...
 function eliteXP(level){ return level+1; }    // élites: siempre mob+1
 function guardianXP(level){ return 2*level+2; } // guardianes: 2×mob+2
+// La Década 0 (pisos 1-10) se sentía muy lenta para llegar a nivel de
+// personaje 10 con un personaje nuevo (pedido explícito) — el mob/elite/
+// guardián de esos pisos da poquísima xp porque la fórmula recién despega en
+// niveles más profundos. +60% de xp solo en esos primeros 10 pisos.
+function earlyXpBoost(level){ return level<=10 ? 1.6 : 1; }
 // Como siempre se entra al laberinto desde el nivel 1, sin este freno
 // convenía retirarse tras cada limpieza fácil y volver a entrar para
 // farmear el mismo nivel trivial una y otra vez - subía de personaje mucho
@@ -2311,6 +2316,14 @@ function unequipItem(slot){
   const item = state.char.equip[slot];
   if(!item) return;
   state.char.equip[slot] = null;
+  // El equipo inicial (grantStarterKit) se asigna directo a state.char.equip
+  // sin pasar por addToInventory, así que nunca recibió un uid — sin esto,
+  // el item quedaba en la mochila pero sin poder venderse ni guardarse en
+  // el Hogar (los botones dependen de it.uid para encontrarlo).
+  if(!item.uid){
+    state.char.itemCounter = (state.char.itemCounter||0) + 1;
+    item.uid = 'it'+state.char.itemCounter;
+  }
   state.char.inventory.push(item);
   log(`Desequipas <b>${item.name}</b>.`);
   renderSheet();
@@ -2351,6 +2364,10 @@ function unequipAllyItem(allyId, slot){
   const item = row.equip[slot];
   if(!item) return;
   row.equip[slot] = null;
+  if(!item.uid){
+    state.char.itemCounter = (state.char.itemCounter||0) + 1;
+    item.uid = 'it'+state.char.itemCounter;
+  }
   state.char.inventory.push(item);
   log(`Desequipas <b>${item.name}</b> de <b>${row.name}</b>.`);
   saveAllyEquip(row);
@@ -3875,12 +3892,17 @@ function startCombat(enemyGroup, node){
 
 function livingAllies(){ return (combat.allies||[]).filter(a=>a.hp>0); }
 // A quién apuntan los enemigos: si hay un aliado en el frente con vida, lo
-// intercepta a él (como un tanque real); si no, va directo al jugador. El
-// jugador nunca se pone "en el frente del grupo" en el sentido de bloquear —
-// su Frente/Retaguardia sigue siendo su propia postura de siempre.
+// intercepta a él (como un tanque real). Si no hay tanque y el jugador está
+// en Retaguardia, cae en cualquier otro aliado vivo (aunque sea de
+// retaguardia) antes que en el jugador — la Retaguardia lo saca de ser
+// blanco directo salvo que de verdad no quede nadie más vivo al lado.
 function frontlineTarget(){
   const tank = livingAllies().find(a=>a.pos==='frente');
   if(tank) return {kind:'ally', ally:tank};
+  if(combat.playerPos==='retaguardia'){
+    const others = livingAllies();
+    if(others.length) return {kind:'ally', ally: pick(others)};
+  }
   return {kind:'player'};
 }
 function dealDamageToAlly(ally, amount){
@@ -5231,7 +5253,7 @@ function handleVictory(){
   const level = state.dungeon.level || 1;
   const rewardMult = 1 + (level-1)*0.08; // los niveles más duros pagan algo mejor (solo aplica al oro)
   const perKillXP = isBoss ? guardianXP(level) : isElite ? eliteXP(level) : mobXP(level);
-  const xpGain = Math.max(1, Math.round(perKillXP * combat.enemies.length * (race().id==='humano'?1.1:1) * xpGapMultiplier()));
+  const xpGain = Math.max(1, Math.round(perKillXP * combat.enemies.length * (race().id==='humano'?1.1:1) * xpGapMultiplier() * earlyXpBoost(level)));
   const goldGain = Math.round((rnd(6,14)*combat.enemies.length + (isBoss?60:isElite?20:0)) * rewardMult);
   state.char.xp += xpGain;
   state.char.gold += goldGain;
@@ -5699,7 +5721,7 @@ function renderCombat(){
   const playerInfo = {
     name: state.char.nickname || s.name, icon: race().icon, style: state.char.style,
     hp: state.char.curHP, maxHP: d.maxHP, mp: state.char.curSta, maxMP: d.maxSta,
-    spirit: state.char.curSpi, maxSpirit: d.maxSpi, statusCount: (combat.playerStatuses||[]).length,
+    spirit: state.char.curSpi, maxSpirit: d.maxSpi, statuses: combat.playerStatuses||[],
     bgTheme: DECADE_BG_THEME[decadeIndexForLevel(state.dungeon.level)],
   };
   syncBattleStage(document.getElementById('battle-stage-mount'), combat, playerInfo, {

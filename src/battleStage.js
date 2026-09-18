@@ -45,6 +45,12 @@ let uiScale = 1;
 // (drawBackground/THEME_FX) — todo dibujado en Canvas, sin assets nuevos.
 // 'forest' Bosque Goblin/Arañas, 'cave' Riakis/bestias, 'cult' Usurpador,
 // 'sea' Isla Paraíso/El Mar.
+// Debe reflejar los mismos buff:true de STATUS_INFO en game.js — duplicado
+// acá porque importar game.js desde battleStage.js crearía un ciclo (game.js
+// ya importa este módulo). Si se agrega un status buff nuevo allá, agregarlo
+// también aquí.
+const BUFF_STATUS_NAMES = new Set(['Furioso','Inspirado','Fortalecido']);
+
 const THEME_FX = {
   forest: { tint:'rgba(140,215,120,0.16)', particle:'rgba(210,240,160,0.6)' },
   cave:   { tint:'rgba(120,170,255,0.14)', particle:'rgba(175,225,255,0.55)' },
@@ -229,7 +235,7 @@ function syncBattleStage(container, combat, playerInfo, onTargetClick){
       sprite: spriteFor('player', null, playerInfo.style), role: roleFor('player', null, playerInfo.style),
       hp: playerInfo.hp, maxHP: playerInfo.maxHP, mp: playerInfo.mp, maxMP: playerInfo.maxMP,
       spirit: playerInfo.spirit, maxSpirit: playerInfo.maxSpirit, alive: playerInfo.hp>0,
-      showResources:true, statusCount: playerInfo.statusCount||0, targetable:false,
+      showResources:true, statuses: playerInfo.statuses||[], targetable:false,
       side:'party',
     });
   }
@@ -246,7 +252,7 @@ function syncBattleStage(container, combat, playerInfo, onTargetClick){
       kind:'ally', refIdx:i, name: ally.name, icon: ally.icon, sprite: spriteFor('ally', ally),
       role: roleFor('ally', ally), hp: ally.hp, maxHP: ally.maxHP, mp: ally.mp, maxMP: ally.maxMP,
       spirit: ally.spirit, maxSpirit: ally.maxSpirit, alive: ally.hp>0, showResources:true,
-      statusCount: (ally.statuses||[]).length, targetable: hostile && ally.hp>0, side:'party',
+      statuses: ally.statuses||[], targetable: hostile && ally.hp>0, side:'party',
     });
     a.targetX = allyPos[i].x; a.targetY = allyPos[i].y;
   });
@@ -261,7 +267,7 @@ function syncBattleStage(container, combat, playerInfo, onTargetClick){
     Object.assign(a, {
       kind:'enemy', refIdx:i, name: en.name, icon: en.icon, sprite: spriteFor('enemy', en),
       role: roleFor('enemy', en), hp: en.hp, maxHP: en.maxHP, alive: en.hp>0, showResources:false,
-      statusCount: (en.statuses||[]).length, targetable: en.hp>0, side:'enemy',
+      statuses: en.statuses||[], targetable: en.hp>0, side:'enemy',
     });
     a.targetX = enemyPos[i].x; a.targetY = enemyPos[i].y;
   });
@@ -435,12 +441,36 @@ function drawActor(a){
     drawBar(cx-18, by+5, 36, 3, (a.mp||0)/(a.maxMP||1), '#b8934a');
     drawBar(cx-18, by+9, 36, 3, (a.spirit||0)/(a.maxSpirit||1), '#5d8aa8');
   }
-  if(a.statusCount>0){
-    ctx.save();
-    ctx.font = `${Math.round(8*uiScale)}px monospace`; ctx.textAlign='center'; ctx.fillStyle='#d9b76b';
-    ctx.fillText('●'.repeat(Math.min(4,a.statusCount)), cx, by + (a.showResources?22:11));
-    ctx.restore();
+  drawStatusChips(a, cx, by + (a.showResources?14:9));
+}
+
+// Chips de estado cerca del actor (antes solo había puntos genéricos que no
+// decían qué efecto era — ni el jugador ni el resto podían saber qué le
+// pasaba a un enemigo con Sangrado, Veneno, etc. sin abrir la mochila).
+// Como mucho 3 visibles + un "+N" si hay más, apilados justo debajo de sus
+// barras — la sección "cercana al enemigo" pedida en vez de un contador arriba.
+function drawStatusChips(a, cx, topY){
+  const list = a.statuses || [];
+  if(!list.length) return;
+  const shown = list.slice(0,3);
+  ctx.save();
+  ctx.font = `${Math.round(7*uiScale)}px monospace`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  shown.forEach((st, i)=>{
+    const buff = BUFF_STATUS_NAMES.has(st.name);
+    const label = st.name.slice(0,4) + (st.duration!=null ? String(st.duration) : '');
+    const w = Math.max(20, ctx.measureText(label).width + 5);
+    const y = topY + i*9;
+    ctx.fillStyle = buff ? 'rgba(60,120,70,0.9)' : 'rgba(120,50,50,0.9)';
+    ctx.fillRect(cx-w/2, y-4, w, 8);
+    ctx.fillStyle = buff ? '#d7ffe0' : '#ffdede';
+    ctx.fillText(label, cx, y+1);
+  });
+  if(list.length > shown.length){
+    ctx.fillStyle = '#d9b76b';
+    ctx.fillText('+'+(list.length-shown.length), cx, topY + shown.length*9 + 1);
   }
+  ctx.restore();
 }
 
 function drawBurst(b){
