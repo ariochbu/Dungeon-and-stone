@@ -31,6 +31,110 @@ let shake = 0;
 let rafId = null;
 let clickHandler = null;
 let lastCombatRef = null;
+let bgParticles = [];
+let currentTheme = null;
+
+// Fondos temáticos por década, puerto de prototype-2d/combat.html
+// (drawBackground/THEME_FX) — todo dibujado en Canvas, sin assets nuevos.
+// 'forest' Bosque Goblin/Arañas, 'cave' Riakis/bestias, 'cult' Usurpador,
+// 'sea' Isla Paraíso/El Mar.
+const THEME_FX = {
+  forest: { tint:'rgba(140,215,120,0.16)', particle:'rgba(210,240,160,0.6)' },
+  cave:   { tint:'rgba(120,170,255,0.14)', particle:'rgba(175,225,255,0.55)' },
+  cult:   { tint:'rgba(220,140,60,0.16)',  particle:'rgba(255,190,100,0.6)' },
+  sea:    { tint:'rgba(120,210,255,0.16)', particle:'rgba(225,248,255,0.6)' },
+};
+
+function spawnBgParticles(theme){
+  const fx = THEME_FX[theme] || THEME_FX.forest;
+  bgParticles = [];
+  for(let i=0;i<14;i++){
+    bgParticles.push({
+      x: Math.random()*canvas.width, y: Math.random()*canvas.height,
+      r: 1+Math.random()*1.8, speed: 0.12+Math.random()*0.18,
+      phase: Math.random()*Math.PI*2, color: fx.particle,
+    });
+  }
+}
+function drawBgParticles(){
+  ctx.save();
+  bgParticles.forEach(p=>{
+    p.y -= p.speed; p.phase += 0.02;
+    if(p.y < -4){ p.y = canvas.height+4; p.x = Math.random()*canvas.width; }
+    ctx.globalAlpha = 0.7; ctx.fillStyle = p.color;
+    ctx.beginPath(); ctx.arc(p.x+Math.sin(p.phase)*6, p.y, p.r, 0, Math.PI*2); ctx.fill();
+  });
+  ctx.restore();
+}
+
+function drawBackground(theme){
+  const w = canvas.width, h = canvas.height;
+  const skyH = h; // toda la escena es "cielo/ambiente" temático, sin franja de piso separada
+  if(theme==='cave'){
+    const g = ctx.createLinearGradient(0,0,0,h);
+    g.addColorStop(0,'#241a14'); g.addColorStop(1,'#4a3626');
+    ctx.fillStyle=g; ctx.fillRect(0,0,w,h);
+    for(let i=0;i<22;i++){
+      const rx=(i*67+23)%w, ry=8+(i*23)%(h-20);
+      ctx.fillStyle = i%2===0 ? 'rgba(0,0,0,0.24)' : 'rgba(140,105,70,0.16)';
+      ctx.beginPath();
+      ctx.moveTo(rx,ry); ctx.lineTo(rx+15,ry+6); ctx.lineTo(rx+8,ry+19); ctx.lineTo(rx-11,ry+14);
+      ctx.closePath(); ctx.fill();
+    }
+    for(let x=4;x<w;x+=34){
+      const len = 26+((x*13)%30);
+      ctx.fillStyle='#140f0b';
+      ctx.beginPath(); ctx.moveTo(x-13,0); ctx.lineTo(x+13,0); ctx.lineTo(x,len); ctx.closePath(); ctx.fill();
+      ctx.fillStyle='rgba(255,255,255,0.07)';
+      ctx.beginPath(); ctx.moveTo(x-13,0); ctx.lineTo(x-4,0); ctx.lineTo(x,len*0.6); ctx.closePath(); ctx.fill();
+    }
+    ctx.fillStyle='rgba(150,220,255,0.6)';
+    [[70,44],[240,60],[400,40]].forEach(([x,y])=>{ ctx.beginPath(); ctx.arc(x,y,2.6,0,Math.PI*2); ctx.fill(); });
+  } else if(theme==='cult'){
+    const g = ctx.createLinearGradient(0,0,0,h);
+    g.addColorStop(0,'#150e1a'); g.addColorStop(1,'#241628');
+    ctx.fillStyle=g; ctx.fillRect(0,0,w,h);
+    ctx.fillStyle='rgba(190,150,70,0.28)'; ctx.fillRect(0,0,w,4);
+    const gold='#d4af5a', goldDark='#8a6a2a';
+    for(let x=20; x<w; x+=76){
+      ctx.fillStyle=goldDark; ctx.fillRect(x-2, 30, 4, h-40);
+      ctx.fillStyle=gold;
+      ctx.beginPath(); ctx.moveTo(x-9,32); ctx.lineTo(x+9,32); ctx.lineTo(x,20); ctx.closePath(); ctx.fill();
+      const flick = 2+Math.sin(Date.now()/220+x)*1.3;
+      const fg = ctx.createRadialGradient(x,14,0,x,14,7+flick);
+      fg.addColorStop(0,'#fff3c4'); fg.addColorStop(0.5,'#ffb347'); fg.addColorStop(1,'rgba(255,120,40,0)');
+      ctx.fillStyle=fg;
+      ctx.beginPath(); ctx.ellipse(x,14,6,9+flick,0,0,Math.PI*2); ctx.fill();
+    }
+  } else if(theme==='sea'){
+    const g = ctx.createLinearGradient(0,0,0,h);
+    g.addColorStop(0,'#6fd0ea'); g.addColorStop(1,'#1f6fa8');
+    ctx.fillStyle=g; ctx.fillRect(0,0,w,h);
+    ctx.strokeStyle='rgba(255,255,255,0.4)'; ctx.lineWidth=2;
+    for(let row=0; row<5; row++){
+      const y = 18+row*(h/6);
+      ctx.beginPath();
+      for(let x=0;x<=w;x+=14){ ctx.lineTo(x, y+Math.sin((x+row*40)/16)*4); }
+      ctx.stroke();
+    }
+  } else { // forest (default) — Bosque Goblin, Arañas
+    const g = ctx.createLinearGradient(0,0,0,h);
+    g.addColorStop(0,'#7fb877'); g.addColorStop(1,'#3a5c38');
+    ctx.fillStyle=g; ctx.fillRect(0,0,w,h);
+    ctx.fillStyle='#2c4e29';
+    for(let x=-20;x<w+40;x+=36){ ctx.beginPath(); ctx.arc(x,26,24,0,Math.PI*2); ctx.fill(); }
+    ctx.fillStyle='#1c3a1a';
+    for(let x=-30;x<w+40;x+=50){ ctx.beginPath(); ctx.arc(x+22,58,32,0,Math.PI*2); ctx.fill(); }
+  }
+  const fx = THEME_FX[theme];
+  if(fx){
+    ctx.save();
+    ctx.globalCompositeOperation = 'overlay';
+    ctx.fillStyle = fx.tint;
+    ctx.fillRect(0, 0, w, skyH);
+    ctx.restore();
+  }
+}
 
 function ensureCanvas(container){
   if(!canvas){
@@ -40,7 +144,7 @@ function ensureCanvas(container){
     canvas.style.maxWidth = '560px';
     canvas.style.display = 'block';
     canvas.style.margin = '0 auto';
-    canvas.style.background = 'linear-gradient(180deg, #23301f, #14110f)';
+    canvas.style.background = '#14110f'; // fallback hasta el primer draw(); el tema real lo pinta drawBackground()
     canvas.style.borderRadius = '6px';
     canvas.style.border = '1px solid var(--border)';
     canvas.style.cursor = 'default';
@@ -101,6 +205,9 @@ function syncBattleStage(container, combat, playerInfo, onTargetClick){
   ensureCanvas(container);
   clickHandler = onTargetClick;
   lastCombatRef = combat;
+
+  const theme = playerInfo.bgTheme || 'forest';
+  if(theme !== currentTheme){ currentTheme = theme; spawnBgParticles(theme); }
 
   const seen = new Set();
 
@@ -367,6 +474,8 @@ function draw(){
   ctx.save();
   if(shake>0){ ctx.translate((Math.random()*2-1)*shake, (Math.random()*2-1)*shake); shake = Math.max(0, shake-0.9); }
   ctx.clearRect(-10,-10,canvas.width+20,canvas.height+20);
+  drawBackground(currentTheme || 'forest');
+  drawBgParticles();
 
   actors.forEach(a=>{
     if(a.alive!==false) a.bob += 0.05;

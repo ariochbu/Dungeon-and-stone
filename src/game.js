@@ -253,6 +253,11 @@ const SKILLS = {
 // del nivel que cierra la década: 10, 20, 30...).
 function decadeIndexForLevel(level){ return Math.min(DECADE_BESTIARY.length-1, Math.floor((level-1)/10)); }
 
+// Tema visual de fondo por década para la escena de combate (battleStage.js)
+// — mismo mapeo que prototype-2d/combat.html: forest (Bosque Goblin/Arañas),
+// cave (Riakis/bestias), cult (Usurpador), sea (Isla Paraíso/El Mar).
+const DECADE_BG_THEME = ['forest','forest','cave','cult','sea','sea'];
+
 const DECADE_BESTIARY = [
   // Década 0 — pisos 1-10 — Bosque Goblin
   // Plantilla de roles (2026-09-16, pedido explícito): cada bestiario de
@@ -5695,6 +5700,7 @@ function renderCombat(){
     name: state.char.nickname || s.name, icon: race().icon, style: state.char.style,
     hp: state.char.curHP, maxHP: d.maxHP, mp: state.char.curSta, maxMP: d.maxSta,
     spirit: state.char.curSpi, maxSpirit: d.maxSpi, statusCount: (combat.playerStatuses||[]).length,
+    bgTheme: DECADE_BG_THEME[decadeIndexForLevel(state.dungeon.level)],
   };
   syncBattleStage(document.getElementById('battle-stage-mount'), combat, playerInfo, {
     isAllyHostile,
