@@ -2,8 +2,8 @@
 
 import { supabase } from './supabaseClient.js';
 import * as auth from './auth.js';
-import { syncBattleStage, playBattleAnim } from './battleStage.js?v=54';
-import { CLASS_SPRITES, ENEMY_SPRITES } from './battleSprites.js?v=54';
+import { syncBattleStage, playBattleAnim } from './battleStage.js?v=56';
+import { CLASS_SPRITES, ENEMY_SPRITES } from './battleSprites.js?v=56';
 
 /* ============================================================
    DATA
@@ -3626,6 +3626,16 @@ function enterNode(f,n){
         if(item.kind==='equip') advanceMissionsFor('find_equipment', 1);
       }
     }
+    // Los cofres también pueden dar una piedra de alma — a diferencia del
+    // jefe de década, acá NO está asegurada (pedido explícito): es una
+    // tirada más contra la misma tabla plana (con el mismo escalado por
+    // piso), independiente del oro/objeto de arriba.
+    const stoneDrop = rollStoneDropForLevel(state.char.level, null);
+    if(stoneDrop){
+      addToInventory(stoneDrop);
+      msg += ` También encuentras una piedra de alma: <b style="color:${SOUL_TIER_COLORS[stoneDrop.tier]};">${stoneDrop.name}</b>.`;
+      advanceMissionsFor('find_soul_stones', 1);
+    }
     log(msg);
     node.done = true;
     advanceMissionsFor('open_chests', 1);
@@ -3659,8 +3669,10 @@ function enterNode(f,n){
    LOOT
    ============================================================ */
 // Tabla plana de drop: el juego es de grindeo — cada rango tiene su propia
-// probabilidad fija, independiente del piso/década (reemplaza la vieja tabla
-// por banda). Se revisa de más raro a más común, cada uno un chance()
+// probabilidad fija de base (reemplaza la vieja tabla por banda), aunque el
+// piso actual del laberinto la inclina un poco hacia los rangos altos y le
+// recorta los bajos pasado cierto punto (ver scaleLootTableForDungeon más
+// abajo). Se revisa de más raro a más común, cada uno un chance()
 // independiente; el primero que acierte gana. Si ninguno acierta, no cae
 // nada esta vez (grind real: la mayoría de combates no sueltan equipo).
 // Letra -> rango de equipo. El equipo no tiene un escalón para F: pasa
@@ -3696,6 +3708,27 @@ const FLAT_STONE_TABLE = [
 // ahí todavía por debajo del nivel 11.
 const GEAR_TIER_MIN_LEVEL = {rango_a:21, legendario:31, ss:41, rango_b:11, raro:11};
 const STONE_TIER_MIN_LEVEL = {A:21, S:31, SS:41, B:11, C:11};
+// A partir de qué nivel del laberinto ("piso") los rangos más bajos (E/F en
+// piedras, Común/Poco común en equipo) dejan de poder caer del todo — pedido
+// explícito, 2026-09-18: de ahí en adelante lo peor que puede tocar ya es un
+// escalón mejor que basura pura.
+const HIGH_FLOOR_LOOT_CUTOFF = 40;
+const LOW_LOOT_TIERS = new Set(['E','F','comun','poco_comun']);
+// Mientras más profundo el piso actual, un poco más de peso relativo ganan
+// los rangos altos frente a los bajos dentro de la misma tabla plana de
+// arriba — no cambia CUÁLES rangos existen (eso ya lo hace el filtro de
+// arriba + STONE/GEAR_TIER_MIN_LEVEL), solo inclina la balanza entre los que
+// sí pueden caer. boost va de 0 (piso 1) a 1 (piso 60); +15% de peso por
+// escalón de rareza de distancia al más común, multiplicado por boost.
+function scaleLootTableForDungeon(table){
+  const level = (state.dungeon && state.dungeon.level) || 1;
+  const filtered = level < HIGH_FLOOR_LOOT_CUTOFF
+    ? table
+    : table.filter(e => !LOW_LOOT_TIERS.has(e.rarity || e.tier));
+  const boost = Math.min(1, level/60);
+  const n = filtered.length;
+  return filtered.map((e,i)=> ({...e, chance: e.chance * (1 + boost*(n-1-i)*0.15)}));
+}
 // Contador de pity: combates sin un drop de rango A o mejor. Pity suave desde
 // PITY_SOFT (la chance de ese rango sube gradualmente en cada intento
 // fallido); pity duro en PITY_HARD (el siguiente combate lo garantiza). Se
@@ -3745,16 +3778,27 @@ function generateEquipOfRarity(rarity, floorIdx){
 // tanto por cofres/misiones (generateLoot) como por cada victoria en combate.
 // Puede devolver null: no todo combate suelta algo, así es el grindeo.
 function rollGearDropForLevel(level, floorIdx, bypassTiers){
-  const rarity = rollFlatRarity(FLAT_GEAR_TABLE, GEAR_TIER_MIN_LEVEL, level, bypassTiers, state.char.pityGear||0, GEAR_PITY_TIERS);
+  const rarity = rollFlatRarity(scaleLootTableForDungeon(FLAT_GEAR_TABLE), GEAR_TIER_MIN_LEVEL, level, bypassTiers, state.char.pityGear||0, GEAR_PITY_TIERS);
   if(!rarity) return null;
   return generateEquipOfRarity(rarity, floorIdx);
 }
 function rollStoneDropForLevel(level, bypassTiers){
-  const tier = rollFlatRarity(FLAT_STONE_TABLE, STONE_TIER_MIN_LEVEL, level, bypassTiers, state.char.pityStone||0, STONE_PITY_TIERS);
+  const tier = rollFlatRarity(scaleLootTableForDungeon(FLAT_STONE_TABLE), STONE_TIER_MIN_LEVEL, level, bypassTiers, state.char.pityStone||0, STONE_PITY_TIERS);
   if(!tier) return null;
   const pool = Object.values(SOUL_STONES).filter(s=>s.tier===tier);
   const tpl = pick(pool);
   return {kind:'soulstone', stoneId:tpl.id, family:tpl.family, name:tpl.name, tier:tpl.tier, icon:tpl.icon, desc:tpl.desc, preview:tpl.preview, bonus:tpl.bonus, special:tpl.special};
+}
+// Piedra de alma garantizada — el jefe de década (ver stonesAllowedThisFight
+// en handleVictory) siempre suelta una, respetando las mismas proporciones
+// entre rangos que cualquier otra tirada: simplemente se reintenta la misma
+// tabla hasta que salga alguna, nunca "nada" (a diferencia de un cofre o un
+// mob normal, que sí pueden no soltar ninguna). Termina siempre porque D
+// (piedras) no tiene nivel mínimo ni queda excluido por HIGH_FLOOR_LOOT_CUTOFF.
+function rollGuaranteedStoneDropForLevel(level, bypassTiers){
+  let stone = null;
+  while(!stone) stone = rollStoneDropForLevel(level, bypassTiers);
+  return stone;
 }
 function generateLoot(floorIdx, level){
   if(chance(0.4)){
@@ -5252,7 +5296,6 @@ function handleVictory(){
   // un personaje que llega ahí todavía por debajo del nivel 11.
   const bypassTiers = (isDecadeFinal && level===10) ? new Set(['raro','rango_b','C','B']) : null;
   let lootText = '';
-  let stoneDropped = false;
   let gotRareGear = false;
   let gotRareStone = false;
   for(let i=0;i<rollCount;i++){
@@ -5265,21 +5308,20 @@ function handleVictory(){
       advanceMissionsFor('find_equipment', 1);
       if(['rango_a','legendario','ss'].includes(gearDrop.rarity)) gotRareGear = true;
     }
-    // Piedras de alma: solo pueden caer del jefe de década o de un futuro
-    // jefe de Rift - ningún otro combate (mob, élite, o guardián que no
-    // cierra década) las tira, a pedido explícito.
-    if(stonesAllowedThisFight && !stoneDropped){
-      const stoneDrop = rollStoneDropForLevel(state.char.level, bypassTiers);
-      if(stoneDrop){
-        addToInventory(stoneDrop);
-        const line = `También encuentras una piedra de alma: <b style="color:${SOUL_TIER_COLORS[stoneDrop.tier]};">${stoneDrop.name}</b>.`;
-        log(line);
-        lootText += ' ' + line;
-        stoneDropped = true;
-        advanceMissionsFor('find_soul_stones', 1);
-        if(['A','S','SS'].includes(stoneDrop.tier)) gotRareStone = true;
-      }
-    }
+  }
+  // Piedras de alma: solo caen del jefe de década o de un futuro jefe de
+  // Rift - ningún otro combate (mob, élite, o guardián que no cierra década)
+  // las tira, a pedido explícito. Ahí siempre cae una (drop asegurado,
+  // pedido explícito 2026-09-18): a diferencia de un cofre, un jefe de
+  // década ya nunca sale de la pelea con las manos vacías de piedras.
+  if(stonesAllowedThisFight){
+    const stoneDrop = rollGuaranteedStoneDropForLevel(state.char.level, bypassTiers);
+    addToInventory(stoneDrop);
+    const line = `También encuentras una piedra de alma: <b style="color:${SOUL_TIER_COLORS[stoneDrop.tier]};">${stoneDrop.name}</b>.`;
+    log(line);
+    lootText += ' ' + line;
+    advanceMissionsFor('find_soul_stones', 1);
+    if(['A','S','SS'].includes(stoneDrop.tier)) gotRareStone = true;
   }
   state.char.pityGear = gotRareGear ? 0 : (state.char.pityGear||0) + 1;
   // El contador de pity de piedras solo cuenta intentos reales (peleas donde

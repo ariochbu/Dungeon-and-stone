@@ -13,7 +13,7 @@
 // combat.enemies/combat.allies/combat.lastActor/combat.lastAction y dibuja.
 // No aplica daño, no decide turnos, no cambia HP.
 
-import { CLASS_SPRITES, ALLY_SPRITES, ENEMY_SPRITES } from './battleSprites.js?v=54';
+import { CLASS_SPRITES, ALLY_SPRITES, ENEMY_SPRITES } from './battleSprites.js?v=56';
 
 const TILE = 16;
 const SCALE = 2.5;
@@ -485,7 +485,17 @@ function drawActor(a){
 
   const w = SIZE*(a.scale||1), h = SIZE*(a.scale||1)*(a.squashY||1);
   if(a.sprite){
-    if(!a._img){ a._img = new Image(); a._img.src = a.sprite; }
+    // El actor de un slot (p.ej. 'enemy:0') sobrevive entre peleas distintas
+    // que reusan el mismo índice — sin comparar contra la fuente ya
+    // cacheada, un Goblin guerrero en el slot 0 de una pelea deja su imagen
+    // "pegada" ahí para siempre, y el Hobgoblin/Gilgoblin/Ogro que ocupe ese
+    // mismo slot en peleas futuras se sigue viendo como aquel primer Goblin
+    // aunque el resto de sus datos (nombre, HP) sí estén bien actualizados.
+    if(!a._img || a._imgSrc !== a.sprite){
+      a._img = new Image();
+      a._img.src = a.sprite;
+      a._imgSrc = a.sprite;
+    }
     if(a._img.complete && a._img.naturalWidth>0){
       ctx.drawImage(a._img, cx-w/2, cy-h, w, h);
     }
