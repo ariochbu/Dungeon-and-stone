@@ -2,6 +2,7 @@
 
 import { supabase } from './supabaseClient.js';
 import * as auth from './auth.js';
+import { syncBattleStage, playBattleAnim } from './battleStage.js';
 
 /* ============================================================
    DATA
@@ -3855,8 +3856,9 @@ function startCombat(enemyGroup, node){
     playerDefending:false,
     turnLog:[],
     turnCount:0, // cuántos turnos propios ya jugaste en ESTA pelea - ver endPlayerTurn() y la alerta de posible trampa en handleVictory()
-    lastActor:null, // quién actuó justo antes del último render - ver el "temblor" (.acting) en renderCombat()
-    lastAction:null, // {label, effects:[{targetKind:'enemy'|'ally'|'player', key, amount, kind:'dmg'|'heal'}]} de ese mismo actor - ver los números flotantes en renderCombat()
+    lastActor:null, // quién actuó justo antes del último render - dispara la animación en battleStage.js
+    lastAction:null, // {label, effects:[{targetKind:'enemy'|'ally'|'player', key, amount, kind:'dmg'|'heal'}]} de ese mismo actor
+    pendingSkill:null, // skillId esperando click de objetivo en el canvas - ver syncBattleStage()
     over:false
   };
   invOpen = false;
@@ -4414,6 +4416,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
   const ceguera = hasStatus(combat.playerStatuses,'Ceguera');
   const monsterLevel = monsterEffectiveLevel();
   const outgoingLevelDiffMult = levelDiffDamageMult(state.char.level, monsterLevel);
+  const turnEffects = []; // para animar el golpe del jugador (ver playBattleAnim más abajo)
 
   targets.forEach(target=>{
     if(ceguera && chance(ceguera.procChance||0.32)){
@@ -4537,6 +4540,9 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
     dmg = Math.max(1, Math.round(dmg));
     if(target.defending) dmg = Math.round(dmg*0.5);
     target.hp = Math.max(0, target.hp - dmg);
+    turnEffects.push(target.tpl
+      ? {targetKind:'enemy', key: combat.enemies.indexOf(target), amount:dmg, kind:'dmg'}
+      : {targetKind:'ally', key: target.id, amount:dmg, kind:'dmg'});
     if(skill.selfHealPctOfDmg){
       const selfHeal = Math.max(1, Math.round(dmg*skill.selfHealPctOfDmg));
       const beforeHeal = state.char.curHP;
@@ -4574,6 +4580,14 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
       await playerUseSkill(skillId, targetIdx, true);
       return;
     }
+  }
+
+  if(getCombatSpeed()===1 && targets.length){
+    combat.lastActor = {kind:'player'};
+    combat.lastAction = {label: skill.name, effects: turnEffects};
+    renderCombat();
+    await playBattleAnim(combat.lastActor, combat.lastAction);
+    combat.lastActor = null; combat.lastAction = null;
   }
 
   await endPlayerTurn();
@@ -4685,7 +4699,7 @@ async function resolveAllyTurns(){
     combat.lastAction = null;
     resolveOneAllyTurn(ally);
     if(!combat || combat.over) break;
-    if(stepDelay>0){ renderCombat(); combat.lastActor = null; combat.lastAction = null; await sleep(stepDelay); }
+    if(stepDelay>0){ renderCombat(); await playBattleAnim(combat.lastActor, combat.lastAction); combat.lastActor = null; combat.lastAction = null; }
   }
 }
 
@@ -4935,7 +4949,7 @@ async function processEnemyTurns(){
     combat.lastAction = null;
     if(stunFlags.get(enemy)){ log(`${enemy.name} está aturdido y pierde su turno.`); combat.lastAction = {label:'Aturdido', effects:[]}; }
     else enemyAct(enemy);
-    if(stepDelay>0){ renderCombat(); combat.lastActor = null; combat.lastAction = null; await sleep(stepDelay); }
+    if(stepDelay>0){ renderCombat(); await playBattleAnim(combat.lastActor, combat.lastAction); combat.lastActor = null; combat.lastAction = null; }
   }
   if(!combat || combat.over) return;
 
@@ -5551,64 +5565,19 @@ function renderCombat(){
   const s = style();
   const skillIds = s.skills.concat(state.char.level>=LEVEL_60_MILESTONE ? [ULTIMATE_BY_STYLE[s.id]] : []);
 
-  const lastActor = combat.lastActor;
-  // Indicador de "quién hace qué": la Crónica queda muy abajo como para
-  // seguir el combate ahí, así que la acción del turno se repite encima de
-  // la tarjeta que actúa (burbuja con el nombre de la habilidad) y encima de
-  // cada objetivo que recibe algo (número flotante de daño o cura). Solo a
-  // velocidad x1 - a x2 no hay pausa entre pasos para llegar a leerlo.
-  const showActionFX = getCombatSpeed()===1;
-  const lastAction = showActionFX ? combat.lastAction : null;
-  const floatNumsFor = (targetKind, key)=> !lastAction ? '' : lastAction.effects
-    .filter(ef=> ef.targetKind===targetKind && ef.key===key)
-    .map(ef=> `<div class="float-num ${ef.kind}">${ef.kind==='heal'?'+':'-'}${ef.amount}</div>`).join('');
-  const actionCaptionHTML = (acting)=> acting && lastAction ? `<div class="action-caption">${lastAction.label}</div>` : '';
-
-  const enemyHTML = combat.enemies.map((e,i)=>{
-    const dead = e.hp<=0;
-    const slotTag = i===0 ? 'Frente' : (i===1?'Medio':'Fondo');
-    const statusChips = renderStatusChips(e.statuses);
-    const hpPct = clamp(e.hp/e.maxHP*100,0,100);
-    const canTargetAny = livingEnemies().length>0;
-    const acting = showActionFX && lastActor && lastActor.kind==='enemy' && lastActor.idx===i;
-    return `<div class="enemy-card ${dead?'dead':''} ${!dead && canTargetAny?'targetable':''} ${acting?'acting':''}" data-idx="${i}">
-      <div class="ei">${e.icon}${floatNumsFor('enemy', i)}</div>
-      <div class="einfo">
-        <div class="ename"><span>${e.name}</span><span class="slot-tag">${slotTag}</span></div>
-        ${actionCaptionHTML(acting)}
-        <div class="bar-track" style="margin-top:4px;"><div class="bar-fill hp" style="width:${hpPct}%"></div></div>
-        <div style="font-size:0.7em; color:var(--text-dim); margin-top:2px;">${e.hp}/${e.maxHP} HP</div>
-        <div>${statusChips}</div>
-      </div>
-    </div>`;
-  }).join('');
-
+  // La visualización de enemigos/aliados/jugador ahora la dibuja
+  // battleStage.js sobre un <canvas> (sprite si existe, ícono si no, en la
+  // misma escena) en vez de tarjetas HTML — ver syncBattleStage() más abajo.
+  // combat.lastActor/combat.lastAction se siguen usando para animar (ver
+  // resolveAllyTurns/processEnemyTurns/playerUseSkill), solo que ya no
+  // arman HTML acá.
   const playerStatusChips = renderStatusChips(combat.playerStatuses);
 
-  const allyHTML = (combat.allies||[]).map((a,i)=>{
-    const dead = a.hp<=0;
-    const hostile = isAllyHostile(a.id);
-    const hpPct = clamp(a.hp/a.maxHP*100, 0, 100);
-    const statusChips = renderStatusChips(a.statuses);
-    const acting = showActionFX && lastActor && lastActor.kind==='ally' && lastActor.id===a.id;
-    const mpPct = clamp(a.mp/a.maxMP*100, 0, 100);
-    const spPct = clamp(a.spirit/a.maxSpirit*100, 0, 100);
-    return `<div class="enemy-card ${dead?'dead':''} ${!dead && hostile?'targetable':''} ${acting?'acting':''}" ${!dead && hostile ? `data-ally-idx="${i}"` : ''}>
-      <div class="ei">${a.icon}${floatNumsFor('ally', a.id)}</div>
-      <div class="einfo">
-        <div class="ename"><span>${a.name}</span><span class="slot-tag">${a.pos==='frente'?'Frente':'Retaguardia'}</span>${hostile ? '<span class="slot-tag" style="border-color:var(--blood-light); color:var(--blood-light);">¡Traidor!</span>' : ''}</div>
-        ${actionCaptionHTML(acting)}
-        <div class="bar-track" style="margin-top:4px;"><div class="bar-fill hp" style="width:${hpPct}%"></div></div>
-        <div style="font-size:0.7em; color:var(--text-dim); margin-top:2px;">${a.hp}/${a.maxHP} HP</div>
-        <div class="bar-track" style="margin-top:3px; height:5px;"><div class="bar-fill st" style="width:${mpPct}%"></div></div>
-        <div class="bar-track" style="margin-top:2px; height:5px;"><div class="bar-fill sp" style="width:${spPct}%"></div></div>
-        <div style="font-size:0.65em; color:var(--text-dim); margin-top:2px;">${a.mp}/${a.maxMP} MP · ${a.spirit}/${a.maxSpirit} Espíritu</div>
-        <div>${statusChips}</div>
-      </div>
-    </div>`;
-  }).join('');
-
-  const skillButtons = skillIds.map(sid=>{
+  // Metadata compartida por el botón de arriba (Habilidades) y por cada
+  // ítem del submenú — mismo cálculo de costo/deshabilitado que antes,
+  // solo que ahora también lo usa el botón superior para saber si mostrar
+  // el submenú deshabilitado (sin habilidades usables) o no.
+  function skillMeta(sid){
     const sk = SKILLS[sid];
     let disabled = !!combat.turnBusy;
     if(sk.cost){
@@ -5617,40 +5586,31 @@ function renderCombat(){
     }
     if(sk.requiresPos && combat.playerPos!==sk.requiresPos && !sk.penaltyIfFrente) disabled = true;
     let costText = sk.cost ? `${sk.cost.valor} ${COST_LABELS[sk.cost.tipo] || sk.cost.tipo}` : 'Gratis';
-    let btnClass = 'skill-btn';
     if(sk.ultimate){
-      btnClass += ' ultimate-btn';
       const usesLeft = ULTIMATE_MAX_USES - (state.dungeon.ultimateUses||0);
       const cooldown = state.dungeon.ultimateCooldown||0;
       if(usesLeft<=0 || cooldown>0) disabled = true;
       costText = cooldown>0 ? `Enfriando (${cooldown} turno${cooldown===1?'':'s'})` : `${usesLeft}/${ULTIMATE_MAX_USES} usos`;
     }
-    const descText = typeof sk.desc==='function' ? sk.desc() : sk.desc;
-    return `<button class="${btnClass}" data-skill="${sid}" ${disabled?'disabled':''}>
-      <span class="sname">${sk.ultimate?'⚡ ':''}${sk.name}</span>
-      <span class="scost">${costText}${sk.requiresPos?(' · requiere '+ (sk.requiresPos==='frente'?'Frente':'Retaguardia')):''}</span>
-      <span class="sdesc">${descText}</span>
-    </button>`;
-  }).join('');
+    return {sk, disabled, costText};
+  }
 
-  const utilButtons = ['ataque_basico','defender','reposicionar'].map(sid=>{
-    const sk = SKILLS[sid];
+  const skillSubmenuHTML = skillIds.map(sid=>{
+    const {sk, disabled, costText} = skillMeta(sid);
     const descText = typeof sk.desc==='function' ? sk.desc() : sk.desc;
-    return `<button class="skill-btn" data-skill="${sid}" ${combat.turnBusy?'disabled':''}>
-      <span class="sname">${sk.name}</span>
-      <span class="scost">Gratis</span>
-      <span class="sdesc">${descText}</span>
-    </button>`;
+    return `<div class="submenu-item ${disabled?'disabled':''} ${sk.ultimate?'ultimate-btn':''}" data-skill="${sid}">
+      <span class="item-name">${sk.ultimate?'⚡ ':''}${sk.name} — ${costText}${sk.requiresPos?(' · requiere '+ (sk.requiresPos==='frente'?'Frente':'Retaguardia')):''}</span>
+      <span>${descText}</span>
+    </div>`;
   }).join('');
 
   const potionItems = state.char.inventory.filter(i=>i.kind==='potion');
-  const potionButtons = potionItems.length ? potionItems.map(it=>{
+  const potionSubmenuHTML = potionItems.length ? potionItems.map(it=>{
     const tpl = POTION_TEMPLATES[it.potionId];
-    return `<button class="skill-btn potion-btn" data-potion="${it.potionId}" ${combat.turnBusy?'disabled':''}>
-      <span class="sname">${tpl.icon} ${tpl.name} <span class="slot-tag">x${it.qty}</span></span>
-      <span class="scost">Gratis · consume tu turno</span>
-      <span class="sdesc">${tpl.desc}</span>
-    </button>`;
+    return `<div class="submenu-item ${combat.turnBusy?'disabled':''}" data-potion="${it.potionId}">
+      <span class="item-name">${tpl.icon} ${tpl.name} x${it.qty}</span>
+      <span>${tpl.desc}</span>
+    </div>`;
   }).join('') : `<p class="inv-empty-msg">No tienes pociones para usar.</p>`;
 
   const combatSpeed = getCombatSpeed();
@@ -5662,72 +5622,88 @@ function renderCombat(){
         <span class="pos-pill ${combatSpeed===2?'active':''}" data-speed="2">x2</span>
       </div>
     </div>
-    <div class="combat-grid">
-      <div class="combat-side">
-        <h4>Tú</h4>
-        <div class="pos-toggle">
-          <span class="pos-pill ${combat.playerPos==='frente'?'active':''}">Frente</span>
-          <span class="pos-pill ${combat.playerPos==='retaguardia'?'active':''}">Retaguardia</span>
-        </div>
-        <div class="pos-hint" style="font-size:0.7em; color:var(--text-dim); margin:2px 0 6px;">Frente: exige la mayoría de habilidades físicas de golpe. Retaguardia: +8% evasión y mejor para habilidades a distancia.</div>
-        <div class="player-card">
-          <div class="pc-icon">${race().icon}${floatNumsFor('player', undefined)}</div>
-          <div style="margin-top:6px; font-size:0.85em;">${state.char.curHP} / ${d.maxHP} HP</div>
-          <div style="margin-top:3px; font-size:0.75em; color:var(--text-dim);">${state.char.curSta} / ${d.maxSta} MP · ${state.char.curSpi} / ${d.maxSpi} Espíritu</div>
-          <div style="margin-top:2px; font-size:0.7em; color:var(--text-dim);">${state.char.level>=CHAR_LEVEL_CAP ? 'Nivel máximo' : `Nivel ${state.char.level} · ${state.char.xp}/${xpNeededForLevel(state.char.level)} XP`}</div>
-          <div style="margin-top:6px;">${playerStatusChips || '<span style="color:var(--text-dim); font-size:0.75em;">Sin efectos activos</span>'}</div>
-        </div>
-      </div>
-      ${allyHTML ? `<div class="combat-side">
-        <h4>Tu equipo</h4>
-        <div class="enemy-slots">${allyHTML}</div>
-      </div>` : ''}
-      <div class="combat-side">
-        <h4>Enemigos</h4>
-        <div class="enemy-slots">${enemyHTML}</div>
-      </div>
+    <div class="pos-toggle" style="margin-bottom:2px;">
+      <span class="pos-pill ${combat.playerPos==='frente'?'active':''}">Frente</span>
+      <span class="pos-pill ${combat.playerPos==='retaguardia'?'active':''}">Retaguardia</span>
+    </div>
+    <div class="pos-hint" style="font-size:0.7em; color:var(--text-dim); margin:2px 0 8px;">Frente: exige la mayoría de habilidades físicas de golpe. Retaguardia: +8% evasión y mejor para habilidades a distancia.</div>
+    <div id="battle-stage-mount" style="margin-bottom:6px;"></div>
+    <div style="font-size:0.7em; color:var(--text-dim); text-align:center; margin-bottom:10px;">
+      ${state.char.curHP}/${d.maxHP} HP · ${state.char.curSta}/${d.maxSta} MP · ${state.char.curSpi}/${d.maxSpi} Espíritu
+      ${playerStatusChips ? ` · ${playerStatusChips}` : ''}
     </div>
 
-    <div class="section-label" style="margin-top:4px;">Habilidades de ${s.name}</div>
-    <div class="skills-bar">${skillButtons}</div>
-    <div class="section-label">Acciones generales</div>
-    <div class="skills-bar">${utilButtons}</div>
-    <div class="section-label">Pociones</div>
-    <p class="inv-combat-note">Beber una poción ocupa tu turno, igual que una habilidad.</p>
-    <div class="skills-bar">${potionButtons}</div>
+    <div class="battle-menu" id="battle-menu">
+      <div class="battle-menu-grid" id="battle-menu-grid">
+        <button class="menu-btn" id="menu-basico" ${combat.turnBusy?'disabled':''}>⚔ Básico</button>
+        <button class="menu-btn" id="menu-habilidades" ${combat.turnBusy?'disabled':''}>💥 Habilidades</button>
+        <button class="menu-btn" id="menu-mochila" ${combat.turnBusy?'disabled':''}>🎒 Mochila</button>
+        <button class="menu-btn" id="menu-defensa" ${combat.turnBusy?'disabled':''}>🛡 Defensa</button>
+        <button class="menu-btn wide" id="menu-reposicionar" ${combat.turnBusy?'disabled':''}>↔ Reposicionarse (${combat.playerPos==='frente'?'a Retaguardia':'al Frente'})</button>
+      </div>
+      <div class="battle-submenu" id="battle-submenu" style="display:none;">
+        <div class="submenu-list" id="battle-submenu-list"></div>
+        <button class="menu-btn" id="menu-back">← Volver</button>
+      </div>
+    </div>
   `;
 
-  let pendingSkill = null;
-  document.querySelectorAll('.skill-btn[data-skill]').forEach(btn=>{
-    btn.onclick = ()=>{
-      const sid = btn.dataset.skill;
-      const sk = SKILLS[sid];
-      if(sk.targetMode==='any'){
-        pendingSkill = sid;
-        log(`Elige un objetivo para ${sk.name}.`);
-        document.querySelectorAll('.enemy-card.targetable').forEach(card=>{
-          card.onclick = ()=>{
-            if(card.dataset.allyIdx !== undefined){
-              guardedPlayerUseSkill(sid, 'ally:'+card.dataset.allyIdx);
-            } else {
-              const idx = parseInt(card.dataset.idx);
-              guardedPlayerUseSkill(sid, idx);
-            }
-          };
-        });
-      } else {
-        guardedPlayerUseSkill(sid, null);
-      }
-    };
-  });
-  document.querySelectorAll('.skill-btn[data-potion]').forEach(btn=>{
-    btn.onclick = ()=> guardedUsePotionInCombat(btn.dataset.potion);
-  });
+  // El objetivo pendiente vive en combat.pendingSkill (no en una variable
+  // local del closure) para que el click en el canvas de battleStage.js
+  // -que se registra una sola vez, no en cada render- pueda leer el valor
+  // vigente en el momento del click.
+  const useSkillFromMenu = (sid)=>{
+    const sk = SKILLS[sid];
+    combat.pendingSkill = null;
+    if(sk.targetMode==='any'){
+      combat.pendingSkill = sid;
+      log(`Elige un objetivo para ${sk.name}.`);
+    } else {
+      guardedPlayerUseSkill(sid, null);
+    }
+  };
+  const grid = document.getElementById('battle-menu-grid');
+  const submenu = document.getElementById('battle-submenu');
+  document.getElementById('menu-basico').onclick = ()=> useSkillFromMenu('ataque_basico');
+  document.getElementById('menu-defensa').onclick = ()=> useSkillFromMenu('defender');
+  document.getElementById('menu-reposicionar').onclick = ()=> useSkillFromMenu('reposicionar');
+  document.getElementById('menu-habilidades').onclick = ()=>{
+    document.getElementById('battle-submenu-list').innerHTML = skillSubmenuHTML;
+    document.querySelectorAll('#battle-submenu-list .submenu-item[data-skill]').forEach(el=>{
+      el.onclick = ()=>{ useSkillFromMenu(el.dataset.skill); };
+    });
+    grid.style.display = 'none'; submenu.style.display = 'flex';
+  };
+  document.getElementById('menu-mochila').onclick = ()=>{
+    document.getElementById('battle-submenu-list').innerHTML = potionSubmenuHTML;
+    document.querySelectorAll('#battle-submenu-list .submenu-item[data-potion]').forEach(el=>{
+      el.onclick = ()=>{ combat.pendingSkill = null; guardedUsePotionInCombat(el.dataset.potion); };
+    });
+    grid.style.display = 'none'; submenu.style.display = 'flex';
+  };
+  document.getElementById('menu-back').onclick = ()=>{
+    submenu.style.display = 'none'; grid.style.display = 'grid';
+  };
   document.querySelectorAll('#combat-speed-toggle [data-speed]').forEach(el=>{
     el.onclick = ()=>{
       setCombatSpeed(parseInt(el.dataset.speed,10));
       renderCombat();
     };
+  });
+
+  const playerInfo = {
+    name: state.char.nickname || s.name, icon: race().icon, style: state.char.style,
+    hp: state.char.curHP, maxHP: d.maxHP, mp: state.char.curSta, maxMP: d.maxSta,
+    spirit: state.char.curSpi, maxSpirit: d.maxSpi, statusCount: (combat.playerStatuses||[]).length,
+  };
+  syncBattleStage(document.getElementById('battle-stage-mount'), combat, playerInfo, {
+    isAllyHostile,
+    onTarget: (idx)=>{
+      if(!combat.pendingSkill) return;
+      const sid = combat.pendingSkill;
+      combat.pendingSkill = null;
+      guardedPlayerUseSkill(sid, idx);
+    },
   });
 }
 

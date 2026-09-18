@@ -340,6 +340,36 @@
   .skill-btn.ultimate-btn .sname{color:var(--bronze-light); font-weight:700;}
   .skill-btn.ultimate-btn:disabled{opacity:0.55;}
 
+  /* ---------- menú de combate estilo Pokémon (Básico/Habilidades/Mochila/
+     Defensa/Reposicionarse, con submenú) — mismo patrón que
+     prototype-2d/combat.html, adaptado a las variables de este juego. ---------- */
+  .battle-menu{
+    width:100%; display:flex; gap:12px; margin-top:10px;
+    background:linear-gradient(180deg, var(--panel-2), var(--panel)); border:2px solid var(--bronze);
+    border-radius:6px; padding:12px 14px;
+  }
+  .battle-menu-grid{
+    flex:1; display:grid; grid-template-columns:1fr 1fr; gap:8px; min-width:0;
+  }
+  .battle-submenu{ flex:1; display:flex; flex-direction:column; gap:8px; min-width:0; width:100%; }
+  .menu-btn{
+    font-family:inherit; background:var(--panel-2); color:var(--text); border:2px solid var(--border);
+    border-radius:4px; padding:9px 8px; font-size:0.85em; cursor:pointer; letter-spacing:0.3px;
+  }
+  .menu-btn:hover:not(:disabled){border-color:var(--bronze); color:var(--bronze-light);}
+  .menu-btn.wide{grid-column:1 / -1;}
+  .submenu-list{display:grid; grid-template-columns:1fr 1fr; gap:8px;}
+  .submenu-item{
+    display:flex; flex-direction:column; gap:4px; padding:8px 10px; background:var(--panel-2);
+    border:2px solid var(--border); border-radius:4px; cursor:pointer; font-size:0.78em;
+  }
+  .submenu-item:hover{border-color:var(--bronze); color:var(--bronze-light);}
+  .submenu-item.disabled{opacity:0.4; cursor:default; pointer-events:none;}
+  .submenu-item .item-name{color:var(--bronze-light); font-weight:700;}
+  @media (max-width:480px){
+    .submenu-list, .battle-menu-grid{grid-template-columns:1fr;}
+  }
+
   .screen{display:none;}
   .screen.active{display:block;}
 
