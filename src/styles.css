@@ -133,25 +133,58 @@
   }
 
   /* Panel de HP/MP/Espíritu de tu personaje y del enemigo objetivo arriba
-     del canvas de combate, igual que en el prototipo — números y barras en
-     HTML normal (siempre legible) en vez de dibujados en canvas a un
-     tamaño fijo de píxeles, que es lo que se volvía ilegible en pantallas
-     angostas o con zoom. */
-  .combat-hud{display:flex; gap:8px; margin-bottom:8px; flex-wrap:wrap;}
-  .combat-stat-card{
-    flex:1 1 200px; display:flex; gap:9px; align-items:flex-start;
-    background:var(--panel-2); border:1px solid var(--border); border-radius:6px; padding:8px 10px;
+     del canvas de combate — puerto directo del panel "phud" de
+     prototype-2d/combat.html (retrato + nombre + barras con el número
+     superpuesto adentro), con la paleta bronce/sangre/hielo del resto del
+     juego en vez de los verde/azul/violeta propios del prototipo. HTML
+     normal (siempre legible) en vez de dibujado en canvas a un tamaño fijo
+     de píxeles, que es lo que se volvía ilegible en pantallas angostas. */
+  .phud-wrap{display:flex; gap:10px; margin-bottom:8px; flex-wrap:wrap;}
+  .phud{
+    flex:1 1 220px; display:flex; gap:10px; padding:9px 11px 9px 9px;
+    background:linear-gradient(180deg, var(--panel-2), var(--bg-2));
+    border:2px solid var(--bronze);
+    clip-path:polygon(7px 0,calc(100% - 7px) 0,100% 7px,100% calc(100% - 7px),calc(100% - 7px) 100%,7px 100%,0 calc(100% - 7px),0 7px);
+    box-shadow:inset 0 0 0 1px var(--bg-2);
   }
-  .combat-stat-card.enemy{border-color:rgba(178,68,68,0.45);}
-  .combat-stat-card .sheet-emblem{width:34px; height:34px; font-size:1.15em; flex-shrink:0;}
-  .combat-stat-card .ccard-body{flex:1; min-width:0;}
-  .combat-stat-card .ccard-name{
-    font-size:0.82em; color:var(--bronze-light); margin-bottom:5px;
+  .phud.enemy{border-color:var(--blood-light);}
+  .phud-portrait{
+    flex-shrink:0; width:40px; height:40px; background:var(--bg-2);
+    box-shadow:0 0 0 1px var(--bronze); display:flex; align-items:center; justify-content:center;
+  }
+  .phud.enemy .phud-portrait{box-shadow:0 0 0 1px var(--blood-light);}
+  .phud-portrait img{width:100%; height:100%; object-fit:contain; image-rendering:pixelated;}
+  .phud-emoji{font-size:1.3em;}
+  .phud-body{flex:1; min-width:0; display:flex; flex-direction:column; justify-content:center; gap:5px;}
+  .phud-name{
+    font-size:0.78em; color:var(--bronze-light); text-transform:uppercase; letter-spacing:1px;
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
   }
-  .combat-stat-card .bar-row{margin-bottom:5px;}
-  .combat-stat-card .bar-row:last-child{margin-bottom:0;}
-  .combat-stat-card .ccard-statuses{margin-top:5px;}
+  .phud.enemy .phud-name{color:var(--blood-light);}
+  .phud-row{display:flex; align-items:center; gap:6px;}
+  .phud-icon{display:flex; flex-shrink:0;}
+  .phud-icon.hp{color:var(--blood-light);}
+  .phud-icon.st{color:var(--bronze);}
+  .phud-icon.sp{color:var(--ice);}
+  .phud-bar{
+    position:relative; flex:1; height:15px; background:var(--bg-2); border:1px solid var(--border);
+    border-radius:2px; box-shadow:inset 0 1px 2px rgba(0,0,0,0.5); overflow:hidden;
+  }
+  .phud-fill{height:100%; position:relative; transition:width 0.35s ease;}
+  .phud-fill::after{content:''; position:absolute; inset:0; pointer-events:none;
+    background:repeating-linear-gradient(90deg, rgba(0,0,0,0.22) 0 3px, transparent 3px 6px);}
+  .phud-fill.hp{background:linear-gradient(180deg,var(--blood-light),var(--blood) 55%,#5c1f1f);}
+  .phud-fill.hp.low{background:linear-gradient(180deg,#e88579,var(--blood) 55%,#7a2418); animation:phud-pulse-low 1s ease-in-out infinite;}
+  .phud-fill.st{background:linear-gradient(180deg,#e2c47c,var(--bronze) 55%,#7a6a3a);}
+  .phud-fill.sp{background:linear-gradient(180deg,#8fbcd8,var(--ice) 55%,#2f4d63);}
+  @keyframes phud-pulse-low{0%,100%{filter:brightness(1);} 50%{filter:brightness(1.35);}}
+  @media (prefers-reduced-motion: reduce){ .phud-fill.hp.low{animation:none;} }
+  .phud-num{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    font-size:0.7em; color:#f4ecdb; text-shadow:0 1px 1px #000, 0 0 3px #000;
+    font-variant-numeric:tabular-nums; letter-spacing:0.5px;
+  }
+  .phud-statuses{margin-top:2px;}
 
   /* ---------- inventory / equipment ---------- */
   .inv-slot{

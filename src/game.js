@@ -2,7 +2,8 @@
 
 import { supabase } from './supabaseClient.js';
 import * as auth from './auth.js';
-import { syncBattleStage, playBattleAnim } from './battleStage.js?v=52';
+import { syncBattleStage, playBattleAnim } from './battleStage.js?v=53';
+import { CLASS_SPRITES, ENEMY_SPRITES } from './battleSprites.js?v=53';
 
 /* ============================================================
    DATA
@@ -5649,16 +5650,25 @@ function renderCombat(){
   // primero que quede — no es necesariamente a quién le pegaste último.
   const targetEnemy = (combat.enemies||[]).find(e=>e.hp>0 && e.tpl && e.tpl.frontline)
     || (combat.enemies||[]).find(e=>e.hp>0);
+  // Íconos SVG del panel — puerto exacto de phud-icon en prototype-2d/combat.html.
+  const PHUD_ICON_HP = `<svg viewBox="0 0 16 16" width="12" height="12"><path fill="currentColor" d="M8 14C8 14 2 9.6 2 5.9 2 3.7 3.8 2 5.9 2 7 2 8 2.7 8 2.7S9 2 10.1 2C12.2 2 14 3.7 14 5.9 14 9.6 8 14 8 14Z"/></svg>`;
+  const PHUD_ICON_MP = `<svg viewBox="0 0 16 16" width="12" height="12"><path fill="currentColor" d="M8 1C8 1 3 7.3 3 10.3 3 12.7 5.2 14.6 8 14.6S13 12.7 13 10.3C13 7.3 8 1 8 1Z"/></svg>`;
+  const PHUD_ICON_SPI = `<svg viewBox="0 0 16 16" width="12" height="12"><path fill="currentColor" d="M8 1 9.6 6.4 15 8 9.6 9.6 8 15 6.4 9.6 1 8 6.4 6.4Z"/></svg>`;
+  const playerSprite = CLASS_SPRITES[state.char.style];
+  const enemySprite = targetEnemy && targetEnemy.tpl ? ENEMY_SPRITES[targetEnemy.tpl.id] : null;
   const enemyHUD = targetEnemy ? `
-    <div class="combat-stat-card enemy">
-      <div class="sheet-emblem">${targetEnemy.icon}</div>
-      <div class="ccard-body">
-        <div class="ccard-name">${targetEnemy.name}</div>
-        <div class="bar-row">
-          <div class="bar-label"><span>Vida</span><span>${Math.max(0,targetEnemy.hp)} / ${targetEnemy.maxHP}</span></div>
-          <div class="bar-track"><div class="bar-fill hp" style="width:${Math.max(0,targetEnemy.hp/targetEnemy.maxHP*100)}%"></div></div>
+    <div class="phud enemy">
+      <div class="phud-portrait">${enemySprite ? `<img src="${enemySprite}" alt="">` : `<span class="phud-emoji">${targetEnemy.icon}</span>`}</div>
+      <div class="phud-body">
+        <div class="phud-name">${targetEnemy.name}</div>
+        <div class="phud-row">
+          <span class="phud-icon hp">${PHUD_ICON_HP}</span>
+          <div class="phud-bar">
+            <div class="phud-fill hp ${(targetEnemy.hp/targetEnemy.maxHP)<0.3?'low':''}" style="width:${Math.max(0,targetEnemy.hp/targetEnemy.maxHP*100)}%"></div>
+            <span class="phud-num">${Math.max(0,targetEnemy.hp)} / ${targetEnemy.maxHP}</span>
+          </div>
         </div>
-        ${targetEnemy.statuses && targetEnemy.statuses.length ? `<div class="ccard-statuses">${renderStatusChips(targetEnemy.statuses)}</div>` : ''}
+        ${targetEnemy.statuses && targetEnemy.statuses.length ? `<div class="phud-statuses">${renderStatusChips(targetEnemy.statuses)}</div>` : ''}
       </div>
     </div>` : '';
   document.getElementById('main-panel').innerHTML = `
@@ -5674,24 +5684,33 @@ function renderCombat(){
       <span class="pos-pill ${combat.playerPos==='retaguardia'?'active':''}">Retaguardia</span>
     </div>
     <div class="pos-hint" style="font-size:0.7em; color:var(--text-dim); margin:2px 0 8px;">Frente: exige la mayoría de habilidades físicas de golpe. Retaguardia: +8% evasión y mejor para habilidades a distancia.</div>
-    <div class="combat-hud">
-      <div class="combat-stat-card">
-        <div class="sheet-emblem">${race().icon}</div>
-        <div class="ccard-body">
-          <div class="ccard-name">${state.char.nickname || s.name}</div>
-          <div class="bar-row">
-            <div class="bar-label"><span>Vida</span><span>${state.char.curHP} / ${d.maxHP}</span></div>
-            <div class="bar-track"><div class="bar-fill hp" style="width:${hpPct}%"></div></div>
+    <div class="phud-wrap">
+      <div class="phud">
+        <div class="phud-portrait">${playerSprite ? `<img src="${playerSprite}" alt="">` : `<span class="phud-emoji">${race().icon}</span>`}</div>
+        <div class="phud-body">
+          <div class="phud-name">${state.char.nickname || s.name} — ${s.name}</div>
+          <div class="phud-row">
+            <span class="phud-icon hp">${PHUD_ICON_HP}</span>
+            <div class="phud-bar">
+              <div class="phud-fill hp ${hpPct<30?'low':''}" style="width:${hpPct}%"></div>
+              <span class="phud-num">${state.char.curHP} / ${d.maxHP}</span>
+            </div>
           </div>
-          <div class="bar-row">
-            <div class="bar-label"><span>MP</span><span>${state.char.curSta} / ${d.maxSta}</span></div>
-            <div class="bar-track"><div class="bar-fill st" style="width:${stPct}%"></div></div>
+          <div class="phud-row">
+            <span class="phud-icon st">${PHUD_ICON_MP}</span>
+            <div class="phud-bar">
+              <div class="phud-fill st" style="width:${stPct}%"></div>
+              <span class="phud-num">${state.char.curSta} / ${d.maxSta}</span>
+            </div>
           </div>
-          <div class="bar-row">
-            <div class="bar-label"><span>Espíritu</span><span>${state.char.curSpi} / ${d.maxSpi}</span></div>
-            <div class="bar-track"><div class="bar-fill sp" style="width:${spPct}%"></div></div>
+          <div class="phud-row">
+            <span class="phud-icon sp">${PHUD_ICON_SPI}</span>
+            <div class="phud-bar">
+              <div class="phud-fill sp" style="width:${spPct}%"></div>
+              <span class="phud-num">${state.char.curSpi} / ${d.maxSpi}</span>
+            </div>
           </div>
-          ${playerStatusChips ? `<div class="ccard-statuses">${playerStatusChips}</div>` : ''}
+          ${playerStatusChips ? `<div class="phud-statuses">${playerStatusChips}</div>` : ''}
         </div>
       </div>
       ${enemyHUD}
