@@ -209,7 +209,7 @@ function layoutPositions(count, baseY, spanX){
     const gap = spanX / (rowCount+1);
     const x = 240 + gap*(inRow+1) - spanX/2; // 240 = centro horizontal del canvas (480px)
     const y = baseY + row*34;
-    positions.push({x, y});
+    positions.push({x, y, gap}); // gap = ancho disponible para el nombre antes de pisar al vecino
   }
   return positions;
 }
@@ -231,7 +231,7 @@ function syncBattleStage(container, combat, playerInfo, onTargetClick){
     let a = actors.get(k);
     if(!a){ a = makeActor(k); a.baseX = 240; a.baseY = 175; actors.set(k, a); }
     Object.assign(a, {
-      kind:'player', name: playerInfo.name, icon: playerInfo.icon,
+      kind:'player', name: playerInfo.name, icon: playerInfo.icon, nameMaxW: 100,
       sprite: spriteFor('player', null, playerInfo.style), role: roleFor('player', null, playerInfo.style),
       hp: playerInfo.hp, maxHP: playerInfo.maxHP, mp: playerInfo.mp, maxMP: playerInfo.maxMP,
       spirit: playerInfo.spirit, maxSpirit: playerInfo.maxSpirit, alive: playerInfo.hp>0,
@@ -249,7 +249,7 @@ function syncBattleStage(container, combat, playerInfo, onTargetClick){
     if(!a){ a = makeActor(k); a.baseX = allyPos[i].x; a.baseY = allyPos[i].y; actors.set(k, a); }
     const hostile = typeof clickHandler.isAllyHostile==='function' && clickHandler.isAllyHostile(ally.id);
     Object.assign(a, {
-      kind:'ally', refIdx:i, name: ally.name, icon: ally.icon, sprite: spriteFor('ally', ally),
+      kind:'ally', refIdx:i, name: ally.name, icon: ally.icon, nameMaxW: allyPos[i].gap, sprite: spriteFor('ally', ally),
       role: roleFor('ally', ally), hp: ally.hp, maxHP: ally.maxHP, mp: ally.mp, maxMP: ally.maxMP,
       spirit: ally.spirit, maxSpirit: ally.maxSpirit, alive: ally.hp>0, showResources:true,
       statuses: ally.statuses||[], targetable: hostile && ally.hp>0, side:'party',
@@ -265,7 +265,7 @@ function syncBattleStage(container, combat, playerInfo, onTargetClick){
     let a = actors.get(k);
     if(!a){ a = makeActor(k); a.baseX = enemyPos[i].x; a.baseY = enemyPos[i].y; actors.set(k, a); }
     Object.assign(a, {
-      kind:'enemy', refIdx:i, name: en.name, icon: en.icon, sprite: spriteFor('enemy', en),
+      kind:'enemy', refIdx:i, name: en.name, icon: en.icon, nameMaxW: enemyPos[i].gap, sprite: spriteFor('enemy', en),
       role: roleFor('enemy', en), hp: en.hp, maxHP: en.maxHP, alive: en.hp>0, showResources:false,
       statuses: en.statuses||[], targetable: en.hp>0, side:'enemy',
     });
@@ -393,6 +393,18 @@ function onCanvasClick(evt){
 
 // --- dibujo ---
 
+// Recorta el nombre con "…" si no entra en el espacio que tiene ese actor
+// antes de pisar al de al lado (a.nameMaxW, ver layoutPositions) — con 4-5
+// aliados de nombre largo ("Aldric de la Muralla") en pantallas angostas,
+// donde uiScale agranda la fuente pero el espacio entre actores no cambia,
+// los nombres se superponían y quedaban ilegibles.
+function fitText(text, maxWidth){
+  if(!maxWidth || ctx.measureText(text).width <= maxWidth) return text;
+  let t = text;
+  while(t.length>1 && ctx.measureText(t+'…').width > maxWidth){ t = t.slice(0,-1); }
+  return t + '…';
+}
+
 function drawBar(x,y,w,h,pct,color){
   ctx.fillStyle = '#000'; ctx.fillRect(x,y,w,h);
   ctx.fillStyle = color; ctx.fillRect(x+1,y+1, Math.max(0,(w-2)*Math.max(0,pct)), h-2);
@@ -434,7 +446,7 @@ function drawActor(a){
   let by = cy+6;
   ctx.save();
   ctx.font = `${Math.round(9*uiScale)}px monospace`; ctx.textAlign='center'; ctx.fillStyle='#e8dfcf';
-  ctx.fillText(a.name||'', cx, by-8);
+  ctx.fillText(fitText(a.name||'', a.nameMaxW), cx, by-8);
   ctx.restore();
   drawBar(cx-18, by, 36, 4, (a.hp||0)/(a.maxHP||1), (a.hp/a.maxHP)<0.3 ? '#b24444' : '#8c2f2f');
   if(a.showResources){
