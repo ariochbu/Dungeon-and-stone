@@ -2,8 +2,8 @@
 
 import { supabase } from './supabaseClient.js';
 import * as auth from './auth.js';
-import { syncBattleStage, playBattleAnim } from './battleStage.js?v=53';
-import { CLASS_SPRITES, ENEMY_SPRITES } from './battleSprites.js?v=53';
+import { syncBattleStage, playBattleAnim } from './battleStage.js?v=54';
+import { CLASS_SPRITES, ENEMY_SPRITES } from './battleSprites.js?v=54';
 
 /* ============================================================
    DATA
@@ -345,7 +345,7 @@ const DECADE_BESTIARY = [
       {id:'superviviente_curtido', name:'Superviviente curtido', icon:'🔪', hp:0.95, atk:1.15, res:{fisico:5,fuego:0,hielo:0,veneno:5,aturdimiento:0}, moves:['pegar','atemorizar']}
     ],
     elite: [{id:'superviviente_despiadado', name:'Superviviente despiadado', icon:'⚔️', hp:2.0, atk:1.45, res:{fisico:10,fuego:0,hielo:0,veneno:5,aturdimiento:5}, moves:['pegar','aplastar','atemorizar'], elite:true, frontline:true}],
-    guardians: [], // esta década no tiene guardianes de nivel intermedios (ver enterNode)
+    guardians: [], // sin plantilla propia de guardián — el piso 41-49 usa 5 regulares + 1 élite (ver enterNode)
     // El jefe de década llega escoltado (ver enterNode) y no busca hacer daño
     // directo: cura, se bufa solo y llama refuerzos. Débil en poder bruto
     // frente al Usurpador, pero nunca solo.
@@ -734,35 +734,8 @@ function makeGearItem(slot, styleId, rank){
 function shopWeaponPrice(isOffhand){ return isOffhand ? 40 + state.char.level*4 : 55 + state.char.level*6; }
 const SHOP_POTION_PRICES = {vida_menor:12, vida_mayor:30, estamina:12, espiritu:12, antidoto:22};
 
-// Objeto único (máx. 1 en mochila a la vez) que solo dropean los élites.
-// Bloquea, gratis y sin gastar turno, el golpe que te mataría — pero solo
-// reacciona ante el Ogro, el jefe final de las décadas (10, 20, 30...),
-// nunca ante Hobgoblin/Gilgoblin ni ningún otro jefe intermedio.
-const WARD_ITEM = {
-  name: 'Tótem de Última Guardia',
-  icon: '🧿',
-  desc: 'Bloquea, una sola vez y sin gastar tu turno, el golpe que te mataría. Solo reacciona ante el jefe final de una década del laberinto (nivel 10, 20, 30...) — contra cualquier otro enemigo se mantiene inerte. Se pierde si mueres antes de usarlo.'
-};
-const WARD_DROP_CHANCE = 0.25;
-function hasWard(){ return state.char.inventory.some(i=>i.kind==='ward'); }
-function consumeWard(){
-  const idx = state.char.inventory.findIndex(i=>i.kind==='ward');
-  if(idx>=0) state.char.inventory.splice(idx,1);
-}
-// Antes solo reconocía al Ogro por id — con el bestiario de 6 décadas esto
-// dejaba el Tótem sin efecto contra Matriarca Escarlata, Riakis, Usurpador,
-// Custodio de la Isla y Storm Gush. Ahora cualquier jefe de década (nivel
-// múltiplo de 10) cuenta, sea cual sea.
-function fightingDecadeBoss(){
-  return !!(combat && combat.active && state.dungeon && state.dungeon.level % 10 === 0 && combat.enemies.some(e=>e.tpl.boss));
-}
 function dealDamageToPlayer(amount){
   if(amount<=0) return;
-  if(amount>=state.char.curHP && fightingDecadeBoss() && hasWard()){
-    consumeWard();
-    log(`<b>${WARD_ITEM.icon} ${WARD_ITEM.name}</b> bloquea el golpe que iba a matarte, y se desvanece.`);
-    return;
-  }
   state.char.curHP = Math.max(0, state.char.curHP - amount);
 }
 
@@ -2215,18 +2188,6 @@ function renderInventory(){
     </div>`;
   }).join('') : `<p class="inv-empty-msg">No tienes piedras de alma. Las dejan caer los guardianes de nivel 4 en adelante.</p>`;
 
-  const totemHolders = [];
-  if(hasWard()) totemHolders.push('Tú');
-  allies.forEach(a=>{ if(a.has_totem) totemHolders.push(a.name); });
-  const wardHTML = totemHolders.length
-    ? `<div class="inv-item-row">
-        <div>
-          <b>${WARD_ITEM.icon} ${WARD_ITEM.name}</b> <span class="slot-tag">${totemHolders.join(', ')}</span>
-          <div class="inv-item-bonus neutral">${WARD_ITEM.desc} Cada personaje del equipo puede llevar el suyo propio.</div>
-        </div>
-      </div>`
-    : `<p class="inv-empty-msg">Nadie en tu equipo lleva un tótem protector todavía. Los élites pueden dejarlo caer, para cualquiera de ustedes.</p>`;
-
   document.getElementById('main-panel').innerHTML = `
     <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:4px;">
       <h3 style="color:var(--bronze-light);">Inventario y equipamiento</h3>
@@ -2248,9 +2209,6 @@ function renderInventory(){
     <div class="section-label">Piedras de alma</div>
     ${soulSlotsHTML}
     ${stoneBagHTML}
-
-    <div class="section-label">Reliquias</div>
-    ${wardHTML}
   `;
 
   document.getElementById('btn-close-inv').onclick = ()=>{ invOpen=false; renderAll(); };
@@ -2285,8 +2243,6 @@ function addToInventory(item){
     state.char.itemCounter = (state.char.itemCounter||0) + 1;
     item.uid = 'it'+state.char.itemCounter;
     state.char.inventory.push(item);
-  } else if(item.kind==='ward'){
-    if(!hasWard()) state.char.inventory.push({kind:'ward'});
   } else {
     state.char.itemCounter = (state.char.itemCounter||0) + 1;
     item.uid = 'it'+state.char.itemCounter;
@@ -2914,7 +2870,7 @@ function renderTaberna(){
     })() : '';
     return `<div class="inv-item-row">
       <div>
-        <b>${tpl.icon||'⚔️'} ${a.name}</b> <span class="slot-tag">${a.role} · nivel ${a.level}</span>${a.has_totem ? ` <span class="slot-tag">${WARD_ITEM.icon} Tótem</span>` : ''} <span class="slot-tag" style="border-color:${satColor}; color:${satColor};">Satisfacción ${satisfaction}%</span>
+        <b>${tpl.icon||'⚔️'} ${a.name}</b> <span class="slot-tag">${a.role} · nivel ${a.level}</span> <span class="slot-tag" style="border-color:${satColor}; color:${satColor};">Satisfacción ${satisfaction}%</span>
         <div class="inv-item-bonus neutral">${tpl.bio||''}</div>
         ${tpl.skillName ? `<div class="inv-item-bonus" style="margin-top:2px;"><b>${tpl.skillName}</b> — ${tpl.skillDesc}</div>` : ''}
         <div class="bar-track" style="margin-top:6px;"><div class="bar-fill xp" style="width:${xpPct}%"></div></div>
@@ -3602,17 +3558,19 @@ function enterNode(f,n){
     const bestiary = DECADE_BESTIARY[decadeIndexForLevel(dg.level)];
     const isDecadeFinal = dg.level % 10 === 0;
     const paraiso = isParaisoDecade(dg.level);
+    // Isla Paraíso (década 4, pisos 41-49) no tiene plantillas de guardián
+    // propias — pero el piso igual necesita un cierre que se sienta como
+    // tal (pedido explícito, 2026-09-18): en vez de un combate reforzado
+    // cualquiera, el "jefe" de estos niveles siempre es un grupo fijo de 5
+    // mobs regulares + 1 élite, para que la dificultad sea clara y pareja.
+    const paraisoGuardianFloor = node.type==='jefe' && paraiso && !isDecadeFinal;
     let templates, count;
     if(node.type==='jefe'){
       if(isDecadeFinal){
         templates = [bestiary.decadeBoss];
         count = 1;
-      } else if(paraiso){
-        // Isla Paraíso: sin guardianes intermedios — el "jefe" de los niveles
-        // que no cierran la década es solo un combate más duro, no un
-        // encuentro único.
-        templates = bestiary.regular.concat(bestiary.elite);
-        count = rnd(2,3);
+      } else if(paraisoGuardianFloor){
+        templates = null; count = 0; // se arma a mano más abajo
       } else {
         templates = bestiary.guardians;
         count = 1;
@@ -3638,7 +3596,12 @@ function enterNode(f,n){
       count = dg.level>=40 ? rnd(5,6) : dg.level>=20 ? rnd(3,4) : rnd(1,2);
     }
     const group = [];
-    for(let i=0;i<count;i++) group.push(makeEnemy(pick(templates), f, dg.level));
+    if(paraisoGuardianFloor){
+      for(let i=0;i<5;i++) group.push(makeEnemy(pick(bestiary.regular), f, dg.level));
+      group.push(makeEnemy(bestiary.elite[0], f, dg.level));
+    } else {
+      for(let i=0;i<count;i++) group.push(makeEnemy(pick(templates), f, dg.level));
+    }
     if(node.type==='jefe' && isDecadeFinal && paraiso){
       // el jefe de Isla Paraíso llega escoltado por dos élites en el frente
       // mientras él se queda atrás.
@@ -3882,6 +3845,7 @@ function startCombat(enemyGroup, node){
     lastActor:null, // quién actuó justo antes del último render - dispara la animación en battleStage.js
     lastAction:null, // {label, effects:[{targetKind:'enemy'|'ally'|'player', key, amount, kind:'dmg'|'heal'}]} de ese mismo actor
     pendingSkill:null, // skillId esperando click de objetivo en el canvas - ver syncBattleStage()
+    openSubmenu:null, // 'habilidades'|'mochila'|null — qué submenú quedó abierto entre renders (ver renderCombat); solo se cierra con "Volver" o al terminar el combate
     over:false
   };
   invOpen = false;
@@ -3908,29 +3872,7 @@ function frontlineTarget(){
 }
 function dealDamageToAlly(ally, amount){
   if(amount<=0) return;
-  if(amount>=ally.hp && fightingDecadeBoss() && ally.hasTotem){
-    ally.hasTotem = false;
-    clearAllyTotem(ally.id);
-    log(`<b>${WARD_ITEM.icon} ${WARD_ITEM.name}</b> de ${ally.name} bloquea el golpe que iba a matarlo, y se desvanece.`);
-    return;
-  }
   ally.hp = Math.max(0, ally.hp - amount);
-}
-function grantAllyTotem(row){
-  row.has_totem = true;
-  const combatAlly = combat && combat.allies ? combat.allies.find(a=>a.id===row.id) : null;
-  if(combatAlly) combatAlly.hasTotem = true;
-  supabase.from('character_allies').update({has_totem:true}).eq('id', row.id).then(({error})=>{
-    if(error) console.error('No se pudo guardar el Tótem del aliado:', error.message);
-  });
-  log(`<b>${row.name}</b> encuentra un <b>${WARD_ITEM.icon} ${WARD_ITEM.name}</b>.`);
-}
-function clearAllyTotem(allyId){
-  const row = (state.char.allies||[]).find(r=>r.id===allyId);
-  if(row) row.has_totem = false;
-  supabase.from('character_allies').update({has_totem:false}).eq('id', allyId).then(({error})=>{
-    if(error) console.error('No se pudo actualizar el Tótem del aliado:', error.message);
-  });
 }
 function isAllyHostile(allyId){ return (combat.hostileAllies||[]).includes(allyId); }
 // Reservado para cuando exista una traición real (el aliado ataca por su
@@ -4017,7 +3959,6 @@ function makeCombatAlly(row){
     // (ver allyMaybeSelfPreserve) y ya no ser el objetivo prioritario.
     pos: tpl.frontline ? 'frente' : 'retaguardia',
     maxHP, hp, maxMP, mp, maxSpirit, spirit, atk, statuses:[], skillCooldown: 1, // 1: no usan su habilidad en el primer turno
-    hasTotem: !!row.has_totem,
     res, specials, mentalResist, statusResist
   };
 }
@@ -5346,24 +5287,6 @@ function handleVictory(){
   // el umbral sin haber tenido ninguna chance real de soltar una.
   if(stonesAllowedThisFight) state.char.pityStone = gotRareStone ? 0 : (state.char.pityStone||0) + 1;
 
-  if(isElite && chance(WARD_DROP_CHANCE)){
-    // El Tótem es el único objeto que se dropea de forma individual: cada
-    // personaje (tú o un aliado) tiene el suyo propio, no uno compartido. Se
-    // sortea entre quienes todavía no tengan uno.
-    const eligible = [];
-    if(!hasWard()) eligible.push({type:'player'});
-    (state.char.allies||[]).forEach(row=>{ if(!row.has_totem) eligible.push({type:'ally', row}); });
-    if(eligible.length){
-      const target = pick(eligible);
-      if(target.type==='player'){
-        addToInventory({kind:'ward'});
-        log(`También obtienes: <b>${WARD_ITEM.icon} ${WARD_ITEM.name}</b> (guardado en la mochila).`);
-      } else {
-        grantAllyTotem(target.row);
-      }
-    }
-  }
-
   let leveled = false;
   // curva pedida: nivel 1→2 necesita 5 exp, 2→3 necesita 10, 3→4 necesita 20 (se duplica cada nivel).
   // Tope de nivel de personaje: 60.
@@ -5453,8 +5376,7 @@ function handleDefeat(){
   stopBossAudio();
   showOverlay('Caído en el laberinto', `Tu cuerpo cede y el laberinto te expulsa antes del final. Pierdes el equipo suelto que llevabas en la mochila y el ${DEFEAT_GOLD_LOSS_PCT}% de tu oro. Lo que hayas guardado en el Hogar sigue a salvo.`, ()=>{
     const lostItems = state.char.inventory.filter(i=>i.kind==='equip').length;
-    const hadWard = hasWard();
-    state.char.inventory = state.char.inventory.filter(i=>i.kind!=='equip' && i.kind!=='ward');
+    state.char.inventory = state.char.inventory.filter(i=>i.kind!=='equip');
     state.char.gold = Math.round(state.char.gold*(1-DEFEAT_GOLD_LOSS_PCT/100));
     const d = derived();
     state.char.curHP = Math.round(d.maxHP*0.5);
@@ -5464,7 +5386,6 @@ function handleDefeat(){
     payAlliesOnExit();
     playLoginAudio();
     if(lostItems>0) log(`Pierdes ${lostItems} objeto(s) de equipo que llevabas en la mochila.`);
-    if(hadWard) log(`Tu <b>${WARD_ITEM.icon} ${WARD_ITEM.name}</b> se pierde junto con el resto de tu equipo suelto.`);
     renderAll();
     save();
   });
@@ -5512,7 +5433,6 @@ const TUTORIAL_SLIDES = [
   {title:'MP y Espíritu', body:'El MP paga tus habilidades físicas. El Espíritu paga las mágicas y de utilidad, y también aumenta tu daño mágico. Reposicionarte cambia entre Frente y Retaguardia, y ocupa tu turno.'},
   {title:'Frente y Retaguardia, con aliados', body:'Cuando tengas un aliado tanque en el Frente, los enemigos no podrán llegar hasta tu Retaguardia sin pasar por él primero — igual que tú no puedes golpear al enemigo de atrás sin resolver primero al de adelante. Posicionarte bien pesará tanto como golpear fuerte.'},
   {title:'Defenderse', body:'Te da al menos 50% de probabilidad de esquivar el próximo golpe, y si aun así te alcanzan, el daño se reduce a la mitad. Es una opción real cuando la pelea se pone difícil, no solo un último recurso.'},
-  {title:'El Tótem', body:'Un objeto raro que sueltan los élites. Bloquea gratis, una sola vez y sin gastar tu turno, el golpe que te mataría — pero solo funciona contra el jefe final de una década del laberinto (piso 10, 20, 30...).'},
   {title:'Kit de habilidades', body:'Al nivel 30, las 3 habilidades de tu senda se vuelven más fuertes. Al nivel 60 desbloqueas una 4ta habilidad, tu ultimate — mucho más poderosa, pero limitada a 3 usos por cada entrada al laberinto y con 5 turnos de enfriamiento tras usarla.'},
   {title:'Buena suerte, viajero', body:'Eso es todo. El laberinto tiene 60 pisos conocidos, y cada década esconde algo distinto. A partir de aquí, el resto lo descubres jugando.'}
 ];
@@ -5718,15 +5638,15 @@ function renderCombat(){
     <div id="battle-stage-mount" style="margin-bottom:6px;"></div>
 
     <div class="battle-menu" id="battle-menu">
-      <div class="battle-menu-grid" id="battle-menu-grid">
+      <div class="battle-menu-grid" id="battle-menu-grid" style="${combat.openSubmenu?'display:none;':''}">
         <button class="menu-btn" id="menu-basico" ${combat.turnBusy?'disabled':''}>⚔ Básico</button>
         <button class="menu-btn" id="menu-habilidades" ${combat.turnBusy?'disabled':''}>💥 Habilidades</button>
         <button class="menu-btn" id="menu-mochila" ${combat.turnBusy?'disabled':''}>🎒 Mochila</button>
         <button class="menu-btn" id="menu-defensa" ${combat.turnBusy?'disabled':''}>🛡 Defensa</button>
         <button class="menu-btn wide" id="menu-reposicionar" ${combat.turnBusy?'disabled':''}>↔ Reposicionarse (${combat.playerPos==='frente'?'a Retaguardia':'al Frente'})</button>
       </div>
-      <div class="battle-submenu" id="battle-submenu" style="display:none;">
-        <div class="submenu-list" id="battle-submenu-list"></div>
+      <div class="battle-submenu" id="battle-submenu" style="display:${combat.openSubmenu?'flex':'none'};">
+        <div class="submenu-list" id="battle-submenu-list">${combat.openSubmenu==='habilidades' ? skillSubmenuHTML : combat.openSubmenu==='mochila' ? potionSubmenuHTML : ''}</div>
         <button class="menu-btn" id="menu-back">← Volver</button>
       </div>
     </div>
@@ -5751,23 +5671,41 @@ function renderCombat(){
   document.getElementById('menu-basico').onclick = ()=> useSkillFromMenu('ataque_basico');
   document.getElementById('menu-defensa').onclick = ()=> useSkillFromMenu('defender');
   document.getElementById('menu-reposicionar').onclick = ()=> useSkillFromMenu('reposicionar');
-  document.getElementById('menu-habilidades').onclick = ()=>{
-    document.getElementById('battle-submenu-list').innerHTML = skillSubmenuHTML;
+  // El submenú abierto (Habilidades/Mochila) queda guardado en
+  // combat.openSubmenu para que sobreviva a los re-renders que dispara cada
+  // paso del turno (resolveAllyTurns/processEnemyTurns llaman a
+  // renderCombat() en cada paso) — antes cada uno de esos renders volvía a
+  // armar el menú desde cero con el submenú cerrado, así que usar una
+  // habilidad te devolvía al menú principal a cada rato. Ahora solo se
+  // cierra con "Volver" o cuando termina el combate (combat pasa a null).
+  const wireSkillSubmenuItems = ()=>{
     document.querySelectorAll('#battle-submenu-list .submenu-item[data-skill]').forEach(el=>{
       el.onclick = ()=>{ useSkillFromMenu(el.dataset.skill); };
     });
-    grid.style.display = 'none'; submenu.style.display = 'flex';
   };
-  document.getElementById('menu-mochila').onclick = ()=>{
-    document.getElementById('battle-submenu-list').innerHTML = potionSubmenuHTML;
+  const wirePotionSubmenuItems = ()=>{
     document.querySelectorAll('#battle-submenu-list .submenu-item[data-potion]').forEach(el=>{
       el.onclick = ()=>{ combat.pendingSkill = null; guardedUsePotionInCombat(el.dataset.potion); };
     });
+  };
+  document.getElementById('menu-habilidades').onclick = ()=>{
+    combat.openSubmenu = 'habilidades';
+    document.getElementById('battle-submenu-list').innerHTML = skillSubmenuHTML;
+    wireSkillSubmenuItems();
+    grid.style.display = 'none'; submenu.style.display = 'flex';
+  };
+  document.getElementById('menu-mochila').onclick = ()=>{
+    combat.openSubmenu = 'mochila';
+    document.getElementById('battle-submenu-list').innerHTML = potionSubmenuHTML;
+    wirePotionSubmenuItems();
     grid.style.display = 'none'; submenu.style.display = 'flex';
   };
   document.getElementById('menu-back').onclick = ()=>{
+    combat.openSubmenu = null;
     submenu.style.display = 'none'; grid.style.display = 'grid';
   };
+  if(combat.openSubmenu==='habilidades') wireSkillSubmenuItems();
+  else if(combat.openSubmenu==='mochila') wirePotionSubmenuItems();
   document.querySelectorAll('#combat-speed-toggle [data-speed]').forEach(el=>{
     el.onclick = ()=>{
       setCombatSpeed(parseInt(el.dataset.speed,10));
