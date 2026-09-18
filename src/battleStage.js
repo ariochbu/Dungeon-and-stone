@@ -13,7 +13,7 @@
 // combat.enemies/combat.allies/combat.lastActor/combat.lastAction y dibuja.
 // No aplica daño, no decide turnos, no cambia HP.
 
-import { CLASS_SPRITES, ALLY_SPRITES, ENEMY_SPRITES } from './battleSprites.js?v=48';
+import { CLASS_SPRITES, ALLY_SPRITES, ENEMY_SPRITES } from './battleSprites.js?v=49';
 
 const TILE = 16;
 const SCALE = 2.2;
@@ -267,7 +267,7 @@ function syncBattleStage(container, combat, playerInfo, onTargetClick){
     const k = 'player';
     seen.add(k);
     let a = actors.get(k);
-    const playerY = playerInfo.pos==='frente' ? 163 : 175;
+    const playerY = playerInfo.pos==='frente' ? 168 : 178;
     if(!a){ a = makeActor(k); actors.set(k, a); }
     a.baseX = 240; a.baseY = playerY; a.x = a.baseX; a.y = a.baseY;
     playerSpriteRef = spriteFor('player', null, playerInfo.style);
