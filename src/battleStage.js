@@ -13,7 +13,7 @@
 // combat.enemies/combat.allies/combat.lastActor/combat.lastAction y dibuja.
 // No aplica daño, no decide turnos, no cambia HP.
 
-import { CLASS_SPRITES, ALLY_SPRITES, ENEMY_SPRITES } from './battleSprites.js?v=49';
+import { CLASS_SPRITES, ALLY_SPRITES, ENEMY_SPRITES } from './battleSprites.js?v=50';
 
 const TILE = 16;
 const SCALE = 2.2;
@@ -254,25 +254,32 @@ function syncBattleStage(container, combat, playerInfo, onTargetClick){
 
   const seen = new Set();
 
-  // jugador: centrado en X, pero su Y también refleja su formación real
-  // (Frente/Retaguardia, el mismo botón "Reposicionarse" de siempre) en vez
-  // de quedar siempre fijo — igual que los aliados y los enemigos. El
-  // desplazamiento es chico a propósito (~12-16px, no ~40-50 como en el
-  // primer intento): con solo 220px de alto en el canvas, una separación
-  // más grande hacía que el nombre/las barras de un actor "de atrás" se
-  // pisaran con el sprite del que tiene justo delante en la misma columna
-  // (típicamente un único enemigo de línea frontal justo arriba del
-  // jugador en Frente) — se veía roto en cualquier tamaño de pantalla.
+  // Jugador + aliados se reparten la X juntos, como un solo grupo (ver
+  // layoutByDepth): si al jugador se lo dejaba fijo en x=240 por separado,
+  // terminaba cayendo siempre en la misma columna que el aliado del medio,
+  // y ahí la Y chica de la formación no alcanzaba para separar sus nombres.
+  // Se inserta en el medio de la fila (no al principio) para que de todas
+  // formas caiga en la columna central, como siempre — si quedara primero,
+  // el reparto en X lo mandaría a la columna más a la izquierda.
+  const allies = combat.allies||[];
+  const playerSlot = { isPlayer:true, pos: playerInfo.pos };
+  const party = [...allies.slice(0, Math.ceil(allies.length/2)), playerSlot, ...allies.slice(Math.ceil(allies.length/2))];
+  const playerPartyIdx = party.indexOf(playerSlot);
+  const partyPos = layoutByDepth(party, p=> p.isPlayer ? p.pos==='frente' : p.pos==='frente', 140, 168, 260);
+
+  // jugador: su Y también refleja su formación real (Frente/Retaguardia, el
+  // mismo botón "Reposicionarse" de siempre) en vez de quedar siempre fijo
+  // — igual que los aliados y los enemigos.
   {
     const k = 'player';
     seen.add(k);
     let a = actors.get(k);
-    const playerY = playerInfo.pos==='frente' ? 168 : 178;
     if(!a){ a = makeActor(k); actors.set(k, a); }
-    a.baseX = 240; a.baseY = playerY; a.x = a.baseX; a.y = a.baseY;
+    const pp = partyPos[playerPartyIdx];
+    a.baseX = pp.x; a.baseY = pp.y; a.x = a.baseX; a.y = a.baseY;
     playerSpriteRef = spriteFor('player', null, playerInfo.style);
     Object.assign(a, {
-      kind:'player', name: playerInfo.name, icon: playerInfo.icon, nameMaxW: 100,
+      kind:'player', name: playerInfo.name, icon: playerInfo.icon, nameMaxW: pp.gap,
       sprite: playerSpriteRef, role: roleFor('player', null, playerInfo.style),
       hp: playerInfo.hp, maxHP: playerInfo.maxHP, mp: playerInfo.mp, maxMP: playerInfo.maxMP,
       spirit: playerInfo.spirit, maxSpirit: playerInfo.maxSpirit, alive: playerInfo.hp>0,
@@ -283,7 +290,7 @@ function syncBattleStage(container, combat, playerInfo, onTargetClick){
 
   // aliados: los que están en el frente (pos==='frente') se dibujan más
   // cerca de los enemigos que los de retaguardia, siguiendo su formación real.
-  const allyPos = layoutByDepth(combat.allies||[], a=>a.pos==='frente', 140, 154, 220);
+  const allyPos = [...partyPos.slice(0, playerPartyIdx), ...partyPos.slice(playerPartyIdx+1)];
   (combat.allies||[]).forEach((ally, i)=>{
     const k = keyFor('ally', ally);
     seen.add(k);
