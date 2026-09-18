@@ -13,7 +13,7 @@
 // combat.enemies/combat.allies/combat.lastActor/combat.lastAction y dibuja.
 // No aplica daño, no decide turnos, no cambia HP.
 
-import { CLASS_SPRITES, ALLY_SPRITES, ENEMY_SPRITES } from './battleSprites.js?v=51';
+import { CLASS_SPRITES, ALLY_SPRITES, ENEMY_SPRITES } from './battleSprites.js?v=52';
 
 const TILE = 16;
 const SCALE = 2.5;
@@ -218,7 +218,12 @@ function layoutRow(count, baseY, spanX, rowOffset){
     const gap = spanX / (rowCount+1);
     const x = 240 + gap*(inRow+1) - spanX/2; // 240 = centro horizontal del canvas (480px)
     const y = baseY + row*(rowOffset||40);
-    positions.push({x, y, gap}); // gap = ancho disponible para el nombre antes de pisar al vecino
+    // el nombre se recorta a un poco menos que el "gap" completo (no el
+    // 100%): dos actores vecinos maximizando su ancho justo hasta el borde
+    // de su columna terminan tocándose sin ningún margen visible entre
+    // ellos — se vio en 2 enemigos sin línea frontal (misma profundidad,
+    // columnas contiguas) con nombres largos en pantallas angostas.
+    positions.push({x, y, gap, nameMaxW: gap*0.82});
   }
   return positions;
 }
@@ -246,6 +251,7 @@ function layoutByDepth(items, isFront, frontY, backY, spanX){
     x: base[i].x,
     y: base[i].y + (isFront(it) ? deltaFront : deltaBack),
     gap: base[i].gap,
+    nameMaxW: base[i].nameMaxW,
   }));
 }
 
@@ -284,7 +290,7 @@ function syncBattleStage(container, combat, playerInfo, onTargetClick){
     a.baseX = pp.x; a.baseY = pp.y; a.x = a.baseX; a.y = a.baseY;
     playerSpriteRef = spriteFor('player', null, playerInfo.style);
     Object.assign(a, {
-      kind:'player', name: playerInfo.name, icon: playerInfo.icon, nameMaxW: pp.gap,
+      kind:'player', name: playerInfo.name, icon: playerInfo.icon, nameMaxW: pp.nameMaxW,
       sprite: playerSpriteRef, role: roleFor('player', null, playerInfo.style),
       hp: playerInfo.hp, maxHP: playerInfo.maxHP, mp: playerInfo.mp, maxMP: playerInfo.maxMP,
       spirit: playerInfo.spirit, maxSpirit: playerInfo.maxSpirit, alive: playerInfo.hp>0,
@@ -304,7 +310,7 @@ function syncBattleStage(container, combat, playerInfo, onTargetClick){
     a.baseX = allyPos[i].x; a.baseY = allyPos[i].y; a.x = a.baseX; a.y = a.baseY;
     const hostile = typeof clickHandler.isAllyHostile==='function' && clickHandler.isAllyHostile(ally.id);
     Object.assign(a, {
-      kind:'ally', refIdx:i, name: ally.name, icon: ally.icon, nameMaxW: allyPos[i].gap, sprite: spriteFor('ally', ally),
+      kind:'ally', refIdx:i, name: ally.name, icon: ally.icon, nameMaxW: allyPos[i].nameMaxW, sprite: spriteFor('ally', ally),
       role: roleFor('ally', ally), hp: ally.hp, maxHP: ally.maxHP, mp: ally.mp, maxMP: ally.maxMP,
       spirit: ally.spirit, maxSpirit: ally.maxSpirit, alive: ally.hp>0, showResources:true,
       statuses: ally.statuses||[], targetable: hostile && ally.hp>0, side:'party',
@@ -321,7 +327,7 @@ function syncBattleStage(container, combat, playerInfo, onTargetClick){
     if(!a){ a = makeActor(k); actors.set(k, a); }
     a.baseX = enemyPos[i].x; a.baseY = enemyPos[i].y; a.x = a.baseX; a.y = a.baseY;
     Object.assign(a, {
-      kind:'enemy', refIdx:i, name: en.name, icon: en.icon, nameMaxW: enemyPos[i].gap, sprite: spriteFor('enemy', en),
+      kind:'enemy', refIdx:i, name: en.name, icon: en.icon, nameMaxW: enemyPos[i].nameMaxW, sprite: spriteFor('enemy', en),
       role: roleFor('enemy', en), hp: en.hp, maxHP: en.maxHP, alive: en.hp>0, showResources:false,
       statuses: en.statuses||[], targetable: en.hp>0, side:'enemy',
     });
