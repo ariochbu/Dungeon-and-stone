@@ -13,7 +13,7 @@
 // combat.enemies/combat.allies/combat.lastActor/combat.lastAction y dibuja.
 // No aplica daño, no decide turnos, no cambia HP.
 
-import { CLASS_SPRITES, ALLY_SPRITES, ENEMY_SPRITES } from './battleSprites.js?v=44';
+import { CLASS_SPRITES, ALLY_SPRITES, ENEMY_SPRITES } from './battleSprites.js?v=45';
 
 const TILE = 16;
 const SCALE = 2.2;
@@ -197,11 +197,10 @@ function roleFor(kind, entity, playerStyle){
   return entity.tpl ? (entity.tpl.role || 'melee') : 'melee';
 }
 
-function layoutPositions(count, baseY, spanX){
+function layoutRow(count, baseY, spanX, rowOffset){
   // reparte `count` actores en una sola fila, centrados; si son muchos
   // (>4) usa dos filas para no amontonarlos horizontalmente.
   const perRow = count > 4 ? Math.ceil(count/2) : count;
-  const rows = count > 4 ? 2 : 1;
   const positions = [];
   for(let i=0;i<count;i++){
     const row = Math.floor(i/perRow);
@@ -209,9 +208,24 @@ function layoutPositions(count, baseY, spanX){
     const rowCount = Math.min(perRow, count - row*perRow);
     const gap = spanX / (rowCount+1);
     const x = 240 + gap*(inRow+1) - spanX/2; // 240 = centro horizontal del canvas (480px)
-    const y = baseY + row*34;
+    const y = baseY + row*(rowOffset||34);
     positions.push({x, y, gap}); // gap = ancho disponible para el nombre antes de pisar al vecino
   }
+  return positions;
+}
+
+// Ubica a cada actor en una de dos "profundidades" (frente/retaguardia) según
+// su formación real de combate, en vez de una sola fila pareja — un aliado
+// en el frente (o un enemigo de línea frontal) se dibuja más cerca de la
+// otra línea que uno de retaguardia/soporte, como en el prototipo.
+function layoutByDepth(items, isFront, frontY, backY, spanX){
+  const frontIdx = [], backIdx = [];
+  items.forEach((it,i)=> (isFront(it) ? frontIdx : backIdx).push(i));
+  const positions = new Array(items.length);
+  const frontPos = layoutRow(frontIdx.length, frontY, spanX);
+  const backPos = layoutRow(backIdx.length, backY, spanX);
+  frontIdx.forEach((itemIdx, i)=>{ positions[itemIdx] = frontPos[i]; });
+  backIdx.forEach((itemIdx, i)=>{ positions[itemIdx] = backPos[i]; });
   return positions;
 }
 
@@ -241,8 +255,9 @@ function syncBattleStage(container, combat, playerInfo, onTargetClick){
     });
   }
 
-  // aliados
-  const allyPos = layoutPositions((combat.allies||[]).length, 150, 220);
+  // aliados: los que están en el frente (pos==='frente') se dibujan más
+  // cerca de los enemigos que los de retaguardia, siguiendo su formación real.
+  const allyPos = layoutByDepth(combat.allies||[], a=>a.pos==='frente', 118, 156, 220);
   (combat.allies||[]).forEach((ally, i)=>{
     const k = keyFor('ally', ally);
     seen.add(k);
@@ -258,8 +273,9 @@ function syncBattleStage(container, combat, playerInfo, onTargetClick){
     a.targetX = allyPos[i].x; a.targetY = allyPos[i].y;
   });
 
-  // enemigos
-  const enemyPos = layoutPositions((combat.enemies||[]).length, 55, 340);
+  // enemigos: los de línea frontal (tanques/melee, tpl.frontline) se dibujan
+  // más cerca del grupo del jugador; los de soporte/distancia quedan atrás.
+  const enemyPos = layoutByDepth(combat.enemies||[], e=> !!(e.tpl && e.tpl.frontline), 90, 45, 340);
   (combat.enemies||[]).forEach((en, i)=>{
     const k = keyFor('enemy', en, i);
     seen.add(k);
@@ -395,7 +411,7 @@ function onCanvasClick(evt){
 // --- dibujo ---
 
 // Recorta el nombre con "…" si no entra en el espacio que tiene ese actor
-// antes de pisar al de al lado (a.nameMaxW, ver layoutPositions) — con 4-5
+// antes de pisar al de al lado (a.nameMaxW, ver layoutByDepth) — con 4-5
 // aliados de nombre largo ("Aldric de la Muralla") en pantallas angostas,
 // donde uiScale agranda la fuente pero el espacio entre actores no cambia,
 // los nombres se superponían y quedaban ilegibles.
