@@ -13,7 +13,7 @@
 // combat.enemies/combat.allies/combat.lastActor/combat.lastAction y dibuja.
 // No aplica daño, no decide turnos, no cambia HP.
 
-import { CLASS_SPRITES, ALLY_SPRITES, ENEMY_SPRITES } from './battleSprites.js?v=45';
+import { CLASS_SPRITES, ALLY_SPRITES, ENEMY_SPRITES } from './battleSprites.js?v=46';
 
 const TILE = 16;
 const SCALE = 2.2;
@@ -33,6 +33,10 @@ let clickHandler = null;
 let lastCombatRef = null;
 let bgParticles = [];
 let currentTheme = null;
+// Aldric (guerrero) usa el mismo sprite que un jugador Guerrero — si tu
+// propia senda es esa, se ven idénticos. Cuando coinciden, se le aplica un
+// tinte de color al aliado (ver drawActor) para poder distinguirlos.
+let playerSpriteRef = null;
 // El canvas tiene una resolución interna fija (480x220) pero su tamaño en
 // pantalla se achica en celulares/tablets (CSS width:100%) - sin esto, el
 // texto (nombres, números flotantes) se ve fijo en píxeles internos y
@@ -239,15 +243,20 @@ function syncBattleStage(container, combat, playerInfo, onTargetClick){
 
   const seen = new Set();
 
-  // jugador (posición fija: centro-abajo del canvas)
+  // jugador: centrado en X, pero su Y también refleja su formación real
+  // (Frente/Retaguardia, el mismo botón "Reposicionarse" de siempre) en vez
+  // de quedar siempre fijo — igual que los aliados y los enemigos.
   {
     const k = 'player';
     seen.add(k);
     let a = actors.get(k);
-    if(!a){ a = makeActor(k); a.baseX = 240; a.baseY = 175; actors.set(k, a); }
+    const playerY = playerInfo.pos==='frente' ? 140 : 175;
+    if(!a){ a = makeActor(k); actors.set(k, a); }
+    a.baseX = 240; a.baseY = playerY; a.x = a.baseX; a.y = a.baseY;
+    playerSpriteRef = spriteFor('player', null, playerInfo.style);
     Object.assign(a, {
       kind:'player', name: playerInfo.name, icon: playerInfo.icon, nameMaxW: 100,
-      sprite: spriteFor('player', null, playerInfo.style), role: roleFor('player', null, playerInfo.style),
+      sprite: playerSpriteRef, role: roleFor('player', null, playerInfo.style),
       hp: playerInfo.hp, maxHP: playerInfo.maxHP, mp: playerInfo.mp, maxMP: playerInfo.maxMP,
       spirit: playerInfo.spirit, maxSpirit: playerInfo.maxSpirit, alive: playerInfo.hp>0,
       showResources:true, statuses: playerInfo.statuses||[], targetable:false,
@@ -262,7 +271,8 @@ function syncBattleStage(container, combat, playerInfo, onTargetClick){
     const k = keyFor('ally', ally);
     seen.add(k);
     let a = actors.get(k);
-    if(!a){ a = makeActor(k); a.baseX = allyPos[i].x; a.baseY = allyPos[i].y; actors.set(k, a); }
+    if(!a){ a = makeActor(k); actors.set(k, a); }
+    a.baseX = allyPos[i].x; a.baseY = allyPos[i].y; a.x = a.baseX; a.y = a.baseY;
     const hostile = typeof clickHandler.isAllyHostile==='function' && clickHandler.isAllyHostile(ally.id);
     Object.assign(a, {
       kind:'ally', refIdx:i, name: ally.name, icon: ally.icon, nameMaxW: allyPos[i].gap, sprite: spriteFor('ally', ally),
@@ -270,7 +280,6 @@ function syncBattleStage(container, combat, playerInfo, onTargetClick){
       spirit: ally.spirit, maxSpirit: ally.maxSpirit, alive: ally.hp>0, showResources:true,
       statuses: ally.statuses||[], targetable: hostile && ally.hp>0, side:'party',
     });
-    a.targetX = allyPos[i].x; a.targetY = allyPos[i].y;
   });
 
   // enemigos: los de línea frontal (tanques/melee, tpl.frontline) se dibujan
@@ -280,13 +289,13 @@ function syncBattleStage(container, combat, playerInfo, onTargetClick){
     const k = keyFor('enemy', en, i);
     seen.add(k);
     let a = actors.get(k);
-    if(!a){ a = makeActor(k); a.baseX = enemyPos[i].x; a.baseY = enemyPos[i].y; actors.set(k, a); }
+    if(!a){ a = makeActor(k); actors.set(k, a); }
+    a.baseX = enemyPos[i].x; a.baseY = enemyPos[i].y; a.x = a.baseX; a.y = a.baseY;
     Object.assign(a, {
       kind:'enemy', refIdx:i, name: en.name, icon: en.icon, nameMaxW: enemyPos[i].gap, sprite: spriteFor('enemy', en),
       role: roleFor('enemy', en), hp: en.hp, maxHP: en.maxHP, alive: en.hp>0, showResources:false,
       statuses: en.statuses||[], targetable: en.hp>0, side:'enemy',
     });
-    a.targetX = enemyPos[i].x; a.targetY = enemyPos[i].y;
   });
 
   // limpia actores que ya no corresponden (combate terminó / se reinició)
@@ -297,7 +306,7 @@ function syncBattleStage(container, combat, playerInfo, onTargetClick){
 
 function makeActor(key){
   return {
-    key, x:0, y:0, baseX:0, baseY:0, targetX:0, targetY:0, scale:1, squashY:1,
+    key, x:0, y:0, baseX:0, baseY:0, scale:1, squashY:1,
     bob: Math.random()*6, flash:0, opacity:1,
   };
 }
@@ -434,8 +443,10 @@ function drawActor(a){
 
   ctx.save();
   ctx.globalAlpha = a.alive===false ? 0.3 : (a.opacity!=null?a.opacity:1);
+  const dupTint = a.kind==='ally' && a.sprite && a.sprite===playerSpriteRef;
   if(a.alive===false) ctx.filter = 'grayscale(1)';
   else if(a.flash>0) ctx.filter = 'brightness(1.8) saturate(0.3) sepia(1) hue-rotate(-50deg) saturate(4)';
+  else if(dupTint) ctx.filter = 'hue-rotate(210deg) saturate(1.2)';
 
   const w = SIZE*(a.scale||1), h = SIZE*(a.scale||1)*(a.squashY||1);
   if(a.sprite){

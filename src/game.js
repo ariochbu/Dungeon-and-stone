@@ -2,7 +2,7 @@
 
 import { supabase } from './supabaseClient.js';
 import * as auth from './auth.js';
-import { syncBattleStage, playBattleAnim } from './battleStage.js?v=45';
+import { syncBattleStage, playBattleAnim } from './battleStage.js?v=46';
 
 /* ============================================================
    DATA
@@ -5722,7 +5722,7 @@ function renderCombat(){
     name: state.char.nickname || s.name, icon: race().icon, style: state.char.style,
     hp: state.char.curHP, maxHP: d.maxHP, mp: state.char.curSta, maxMP: d.maxSta,
     spirit: state.char.curSpi, maxSpirit: d.maxSpi, statuses: combat.playerStatuses||[],
-    bgTheme: DECADE_BG_THEME[decadeIndexForLevel(state.dungeon.level)],
+    pos: combat.playerPos, bgTheme: DECADE_BG_THEME[decadeIndexForLevel(state.dungeon.level)],
   };
   syncBattleStage(document.getElementById('battle-stage-mount'), combat, playerInfo, {
     isAllyHostile,
