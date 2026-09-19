@@ -13,7 +13,7 @@
 // combat.enemies/combat.allies/combat.lastActor/combat.lastAction y dibuja.
 // No aplica daño, no decide turnos, no cambia HP.
 
-import { CLASS_SPRITES, ALLY_SPRITES, ENEMY_SPRITES } from './battleSprites.js?v=59';
+import { CLASS_SPRITES, ALLY_SPRITES, ENEMY_SPRITES } from './battleSprites.js?v=62';
 
 const TILE = 16;
 const SCALE = 2.5;
@@ -356,6 +356,17 @@ function actorForLastActor(lastActor){
   return null;
 }
 function actorForEffect(ef){
+  // Una acción sin efectos (esquivar, bloquear, aturdido, replegarse,
+  // Bendición Sagrada de Delyth, etc. — todas usan effects:[]) hace que
+  // playBattleAnim() pida el actor del efecto [0] de un array vacío
+  // (undefined) — sin este guard, esto tiraba una excepción no capturada
+  // a mitad de un await de resolveAllyTurns/processEnemyTurns, cortando en
+  // seco el resto de esa cadena de turnos (el resto de aliados/enemigos que
+  // todavía no actuaban, el tick de estados, el render final) mientras el
+  // finally de guardedPlayerUseSkill igual liberaba el menú — exactamente el
+  // patrón reportado hoy: "puedo atacar de nuevo, nadie más se movió" y
+  // "Sangrado no baja su duración cada turno".
+  if(!ef) return null;
   if(ef.targetKind==='player') return actors.get('player');
   if(ef.targetKind==='ally') return actors.get('ally:'+ef.key);
   if(ef.targetKind==='enemy') return actors.get('enemy:'+ef.key);

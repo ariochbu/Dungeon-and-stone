@@ -2,8 +2,8 @@
 
 import { supabase } from './supabaseClient.js';
 import * as auth from './auth.js';
-import { syncBattleStage, playBattleAnim } from './battleStage.js?v=59';
-import { CLASS_SPRITES, ENEMY_SPRITES } from './battleSprites.js?v=59';
+import { syncBattleStage, playBattleAnim } from './battleStage.js?v=62';
+import { CLASS_SPRITES, ENEMY_SPRITES } from './battleSprites.js?v=62';
 
 /* ============================================================
    DATA
