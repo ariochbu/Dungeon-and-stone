@@ -2,8 +2,8 @@
 
 import { supabase } from './supabaseClient.js';
 import * as auth from './auth.js';
-import { syncBattleStage, playBattleAnim } from './battleStage.js?v=57';
-import { CLASS_SPRITES, ENEMY_SPRITES } from './battleSprites.js?v=57';
+import { syncBattleStage, playBattleAnim } from './battleStage.js?v=58';
+import { CLASS_SPRITES, ENEMY_SPRITES } from './battleSprites.js?v=58';
 
 /* ============================================================
    DATA
@@ -1751,6 +1751,21 @@ function eliteHPMult(level){
   const base = Math.pow(R, Math.max(0, Math.min(level,10)-1));
   if(level<=10) return base;
   return base * (1 + (level-10)*S);
+}
+// Ataque de mob regular/élite (pedido explícito, 2026-09-18: "urgente" —
+// piso 41 en adelante era imposible de avanzar, el equipo entero caía desde
+// el primer combate). Misma curva que levelMult del nivel 1 al 10 (esa parte
+// nunca se reportó como problema), pero la pendiente lineal de ahí en
+// adelante baja de 0.06 a 0.025 — el mismo golpe individual que a nivel 41
+// pegaba ~22% de la vida de un Asesino ahora pega ~14%, así 5-6 mobs
+// regulares (el tamaño de grupo desde el piso 40, sin tocar) enfocando al
+// mismo objetivo ya no lo matan de un round. La resistencia y el HP de los
+// enemigos, y el ataque de los jefes, quedan exactamente igual — se pidió
+// bajar solo esto.
+function monsterAtkMult(level){
+  const base = Math.pow(1.14, Math.max(0, Math.min(level,10)-1));
+  if(level<=10) return base;
+  return base * (1 + (level-10)*0.025);
 }
 
 // Incremento de dificultad por piso dentro de un mismo nivel. Se repite cada
@@ -3844,16 +3859,21 @@ function makeEnemy(tpl, floorIdx, level){
     // elite: 2026-09-16, pedido explícito — base sube de 100-110 a 125-135,
     // y su curva de vida ya no usa lvlMult (crecía muy lento a nivel alto)
     // sino eliteHPMult, calibrada para nivel 20/40/60 = 1000/2000/3000.
-    // El ataque no cambia: sigue con lvlMult, igual que siempre.
+    // El ataque usa monsterAtkMult (ver arriba, pedido explícito 2026-09-18)
+    // en vez de lvlMult — mismo motivo que el mob regular de abajo.
     hp = Math.round(rnd(125,135) * tpl.hp * floorMult * eliteHPMult(level||1));
-    atk = Math.round(16 * tpl.atk * floorMult * lvlMult);
+    atk = Math.round(16 * tpl.atk * floorMult * monsterAtkMult(level||1));
   } else {
     // regular mob: 2026-09-16, pedido explícito — además del piso de 40-50 a
     // 55-65, la curva de vida usa regularHPMult (no lvlMult) para llegar a
-    // ~500-600 en nivel 20, ~1200-1300 en 40, ~1700-1800 en 60. El ataque no
-    // cambia: sigue con lvlMult, igual que siempre.
+    // ~500-600 en nivel 20, ~1200-1300 en 40, ~1700-1800 en 60. El ataque usa
+    // monsterAtkMult (ver arriba, pedido explícito 2026-09-18: el piso 41 en
+    // adelante deleteaba al equipo completo desde el primer combate — 5-6
+    // mobs regulares por pelea, cada uno pegando ~22% de la vida de un
+    // Asesino con lvlMult puro, es letal si dos o tres enfocan al mismo
+    // objetivo en un mismo round).
     hp = Math.round(rnd(55,65) * tpl.hp * floorMult * regularHPMult(level||1));
-    atk = Math.round(9 * tpl.atk * floorMult * lvlMult);
+    atk = Math.round(9 * tpl.atk * floorMult * monsterAtkMult(level||1));
   }
   const res = Object.assign({}, tpl.res);
   if(tpl.boss && level===1) res.fisico = 5; // defensa física reducida solo para el guardián de nivel 1
