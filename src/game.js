@@ -2,8 +2,8 @@
 
 import { supabase } from './supabaseClient.js';
 import * as auth from './auth.js';
-import { syncBattleStage, playBattleAnim } from './battleStage.js?v=58';
-import { CLASS_SPRITES, ENEMY_SPRITES } from './battleSprites.js?v=58';
+import { syncBattleStage, playBattleAnim } from './battleStage.js?v=59';
+import { CLASS_SPRITES, ENEMY_SPRITES } from './battleSprites.js?v=59';
 
 /* ============================================================
    DATA
@@ -4639,11 +4639,17 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
 }
 
 async function endPlayerTurn(){
+  // myCombat: mismo candado que resolveAllyTurns/processEnemyTurns (ver esos
+  // comentarios) — si el combate ya terminó y empezó uno nuevo durante los
+  // await de abajo, esta llamada no debe seguir resolviendo turnos sobre el
+  // combate nuevo como si fuera el que la disparó.
+  const myCombat = combat;
   combat.turnCount = (combat.turnCount||0) + 1;
   if(state.dungeon && state.dungeon.ultimateCooldown>0) state.dungeon.ultimateCooldown--;
   checkCombatEnd();
   if(!combat || combat.over) return;
   await resolveAllyTurns();
+  if(combat !== myCombat) return;
   checkCombatEnd();
   if(!combat || combat.over) return;
   await processEnemyTurns();
@@ -4738,13 +4744,25 @@ function setCombatSpeed(speed){
 }
 
 async function resolveAllyTurns(){
+  // myCombat ancla esta llamada al combate que la disparó: a velocidad x1
+  // cada aliado espera stepDelay (ver playBattleAnim) antes del siguiente,
+  // y si el combate termina y ya arrancó uno nuevo mientras ese await seguía
+  // pendiente, "combat" (variable mutable de módulo) ya apunta al combate
+  // NUEVO — sin este candado, los aliados que le faltaba actuar le seguían
+  // pegando en silencio al primer enemigo del combate siguiente (sin log
+  // propio de la acción, con el menú ya libre porque turnBusy es del combate
+  // viejo): el bug reportado de "ataco una vez y ya puedo atacar de nuevo,
+  // nadie más se mueve" — en realidad sí se movían, pero en la pelea de al lado.
+  const myCombat = combat;
   const stepDelay = COMBAT_SPEED_DELAY_MS[getCombatSpeed()] || 0;
   for(const ally of livingAllies()){
+    if(combat !== myCombat) return;
     combat.lastActor = {kind:'ally', id: ally.id};
     combat.lastAction = null;
     resolveOneAllyTurn(ally);
     if(!combat || combat.over) break;
     if(stepDelay>0){ renderCombat(); await playBattleAnim(combat.lastActor, combat.lastAction); combat.lastActor = null; combat.lastAction = null; }
+    if(combat !== myCombat) return;
   }
 }
 
@@ -4974,6 +4992,11 @@ function decrementStatuses(list){
 }
 
 async function processEnemyTurns(){
+  // myCombat: mismo candado que resolveAllyTurns (ver ese comentario) — sin
+  // esto, un enemigo que todavía no le tocaba actuar (esperando stepDelay a
+  // velocidad x1) le pegaba en silencio al jugador/aliados del combate
+  // siguiente si el combate viejo terminaba mientras ese await seguía pendiente.
+  const myCombat = combat;
   combat.playerDefending = false;
 
   // apply DOT and determine stun per enemy (does not decrement durations yet)
@@ -4988,15 +5011,16 @@ async function processEnemyTurns(){
 
   const stepDelay = COMBAT_SPEED_DELAY_MS[getCombatSpeed()] || 0;
   for(const enemy of livingEnemies()){
-    if(!combat || combat.over) break;
+    if(!combat || combat.over || combat!==myCombat) break;
     if(enemy.hp<=0) continue;
     combat.lastActor = {kind:'enemy', idx: combat.enemies.indexOf(enemy)};
     combat.lastAction = null;
     if(stunFlags.get(enemy)){ log(`${enemy.name} está aturdido y pierde su turno.`); combat.lastAction = {label:'Aturdido', effects:[]}; }
     else enemyAct(enemy);
     if(stepDelay>0){ renderCombat(); await playBattleAnim(combat.lastActor, combat.lastAction); combat.lastActor = null; combat.lastAction = null; }
+    if(combat !== myCombat) return;
   }
-  if(!combat || combat.over) return;
+  if(!combat || combat.over || combat!==myCombat) return;
 
   // decrement every status exactly once per turn cycle (enemies + player + aliados)
   // (player DOT — Sangrado/Quemadura — needs to actually tick before we decrement it away;
