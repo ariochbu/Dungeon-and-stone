@@ -3246,15 +3246,18 @@ const MISSION_RANK_REWARD = {
 // élites ya definida. Y, por ahora, solo la banda 0 (piso 1-20) tiene
 // objetos/piedras reales implementados; en bandas más altas (inalcanzables
 // hasta liberar los 100 niveles) la misión da Sellos de más en su lugar.
-// La rareza que puede tocar ahora depende de tu nivel de personaje real (los
-// rangos altos siguen gateados por GEAR_TIER_MIN_LEVEL/STONE_TIER_MIN_LEVEL),
-// no de un nivel de referencia por banda.
+// La rareza que puede tocar ahora depende del piso más profundo que ya
+// alcanzaste de verdad (state.char.maxLevelUnlocked — los rangos altos
+// siguen gateados por GEAR_TIER_MIN_LEVEL/STONE_TIER_MIN_LEVEL, ver
+// comentario ahí: 2026-09-25, fix explícito, antes gateaba por nivel de
+// PERSONAJE, que puede desincronizarse del piso real si grindeas nivel sin
+// avanzar piso), no de un nivel de referencia por banda.
 // Las piedras de alma ya no pueden venir de una misión - solo las entrega un
 // jefe de década o (a futuro) un jefe de Rift, a pedido explícito. El rango
 // de objeto que sí puede tocar sigue limitado a A (ver refresh_and_insert_missions/
 // reroll_mission en Supabase, que ya rechazan tier S/SS del lado del servidor).
 function makeMissionItemReward(){
-  return generateLoot(rnd(1,4), state.char.level);
+  return generateLoot(rnd(1,4), state.char.maxLevelUnlocked||1);
 }
 
 function generateMissionBatch(maxFloor){
@@ -4383,7 +4386,7 @@ function enterNode(f,n){
     state.char.gold += gold;
     let msg = `Encuentras un cofre. +${gold} de oro.`;
     if(chance(0.6)){
-      const item = generateLoot(f, state.char.level);
+      const item = generateLoot(f, state.char.maxLevelUnlocked||1);
       if(item){
         addToInventory(item);
         msg += item.kind==='potion'
@@ -4399,7 +4402,7 @@ function enterNode(f,n){
     // jefe de década, acá NO está asegurada (pedido explícito): es una
     // tirada más contra la misma tabla plana (con el mismo escalado por
     // piso), independiente del oro/objeto de arriba.
-    const stoneDrop = rollStoneDropForLevel(state.char.level, null);
+    const stoneDrop = rollStoneDropForLevel(state.char.maxLevelUnlocked||1, null);
     if(stoneDrop){
       addToInventory(stoneDrop);
       msg += ` También encuentras una piedra de alma: <b style="color:${SOUL_TIER_COLORS[stoneDrop.tier]};">${stoneDrop.name}</b>.`;
@@ -4470,18 +4473,28 @@ const FLAT_STONE_TABLE = [
   {tier:'F',  chance:0.10},
   {tier:'E',  chance:0.20}
 ].filter(e => LEGENDARY_TIERS_ENABLED || !['S','SS'].includes(e.tier));
-// Nivel mínimo de personaje para que un rango pueda caer — Épico y superior
-// necesitan haber avanzado de verdad; C/B piden haber pasado la primera
-// década (piso 11+); todo lo demás (E-D) no tiene tope. El jefe de década
-// del piso 10 es la única excepción a C/B (ver bypassTiers en handleVictory):
-// es el primer vistazo a esos rangos, incluso para un personaje que llega
-// ahí todavía por debajo del nivel 11.
+// Piso más profundo (state.char.maxLevelUnlocked) que ya debiste alcanzar de
+// verdad para que un rango pueda caer — Épico y superior necesitan haber
+// avanzado de verdad; C/B piden haber pasado la primera década (piso 11+);
+// todo lo demás (E-D) no tiene tope. El jefe de década del piso 10 es la
+// única excepción a C/B (ver bypassTiers en handleVictory): es el primer
+// vistazo a esos rangos, incluso para quien llega ahí todavía por debajo
+// del piso 11.
 // 2026-09-24, pedido explícito: Rango A baja a piso 20 (antes 21) para que
 // coincida con el cierre de década correspondiente. legendario/ss (Tier S/SS)
 // se dejan re-calibrados por si algún día se habilita también su drop al
 // azar (ver LEGENDARY_TIERS_ENABLED) — hoy Tier S se consigue solo con la
 // Forja Legendaria (ver TIER_S_RECIPE/buyTierSWeapon/buyTierSStone), que
 // tiene su propio candado de piso 40+ independiente de esta tabla.
+// 2026-09-25, fix explícito (ariochbu preguntó si esto ya gateaba por piso):
+// SÍ gateaba, pero contra state.char.level (nivel de personaje) en vez del
+// piso real — ambos suelen ir parejos pero pueden desincronizarse (grindear
+// nivel sin avanzar piso, o al revés), así que un rango A podía caer antes
+// de pisar el piso 20 de verdad. Todos los call-sites de rollGearDropForLevel/
+// rollStoneDropForLevel/rollGuaranteedStoneDropForLevel/generateLoot ahora
+// pasan state.char.maxLevelUnlocked (el piso más profundo ya alcanzado,
+// mismo campo que usa tierSUnlocked() para la Forja Legendaria) en vez de
+// state.char.level.
 const GEAR_TIER_MIN_LEVEL = {rango_a:20, legendario:40, ss:50, rango_b:11, raro:11};
 const STONE_TIER_MIN_LEVEL = {A:20, S:40, SS:50, B:11, C:11};
 // A partir de qué nivel del laberinto ("piso") los rangos más bajos (E/F en
@@ -6612,7 +6625,7 @@ function handleVictory(){
   let gotRareGear = false;
   let gotRareStone = false;
   for(let i=0;i<rollCount;i++){
-    const gearDrop = rollGearDropForLevel(state.char.level, state.dungeon.atFloor, bypassTiers);
+    const gearDrop = rollGearDropForLevel(state.char.maxLevelUnlocked||1, state.dungeon.atFloor, bypassTiers);
     if(gearDrop){
       addToInventory(gearDrop);
       const line = `También obtienes: <b>${itemNameHTML(gearDrop)}</b> (guardado en la mochila).`;
@@ -6631,7 +6644,7 @@ function handleVictory(){
   // pedido explícito 2026-09-18): a diferencia de un cofre, un jefe de
   // década ya nunca sale de la pelea con las manos vacías de piedras.
   if(stonesAllowedThisFight){
-    const stoneDrop = rollGuaranteedStoneDropForLevel(state.char.level, bypassTiers);
+    const stoneDrop = rollGuaranteedStoneDropForLevel(state.char.maxLevelUnlocked||1, bypassTiers);
     addToInventory(stoneDrop);
     const line = `También encuentras una piedra de alma: <b style="color:${SOUL_TIER_COLORS[stoneDrop.tier]};">${stoneDrop.name}</b>.`;
     log(line);
