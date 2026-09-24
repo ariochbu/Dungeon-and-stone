@@ -2612,13 +2612,14 @@ function weaponArtPath(it){
   return `src/assets/armas/${slug}_${it.rarity}.png`;
 }
 // Arte real de equipo general por senda (2026-09-25, pedido explícito:
-// "continúa con cascos y armadura"). A diferencia de las armas, el NOMBRE
-// del objeto cambia por rango (Casco de piedra -> ... -> Casco de vacío),
-// así que la clave acá es (senda, slot) — no el nombre — más el rango.
-// Recortado de los catálogos "Cascos - <clase>.png" / "armadura - <clase>.png"
-// en src/assets/equipo/<senda>_<slot>_<rareza>.png. Botas/Guantes/Accesorio
-// siguen sin arte propia todavía — caen al SVG genérico de siempre.
-const GEAR_ART_SLOTS = new Set(['casco','armadura']);
+// "continúa con cascos y armadura", luego "guantes y botas"). A diferencia
+// de las armas, el NOMBRE del objeto cambia por rango (Casco de piedra ->
+// ... -> Casco de vacío), así que la clave acá es (senda, slot) — no el
+// nombre — más el rango. Recortado de los catálogos "Cascos - <clase>.png" /
+// "armadura - <clase>.png" / "guantes - <clase>.png" / "botas - <clase>.png"
+// en src/assets/equipo/<senda>_<slot>_<rareza>.png. Solo Accesorio (amuleto)
+// sigue sin arte propia — cae al SVG genérico de siempre.
+const GEAR_ART_SLOTS = new Set(['casco','armadura','guantes','botas']);
 function gearArtPath(it){
   if(!GEAR_ART_SLOTS.has(it.slot) || !it.styleId || !WEAPON_ART_RARITIES.has(it.rarity)) return null;
   return `src/assets/equipo/${it.styleId}_${it.slot}_${it.rarity}.png`;
