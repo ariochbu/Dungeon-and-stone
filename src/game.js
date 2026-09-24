@@ -3844,11 +3844,8 @@ function weaponShopRows(slot, rank, rankTag, dataAttr, price){
   return Object.keys(cat[slot]).map(name=>{
     const preview = makeWeaponItem(slot, shopWeaponRole, rank, name);
     if(!preview) return '';
-    return `<div class="inv-item-row">
-      <div>
-        <b>${name}</b> ${rankTag} <span class="slot-tag" style="border-color:var(--bronze); color:var(--bronze-light);">${SHOP_ROLE_LABELS[shopWeaponRole]||shopWeaponRole}</span>
-        <div class="inv-item-bonus">${itemBonusText(preview)}</div>
-      </div>
+    return `<div class="inv-item-row" style="${rarityRowStyle(preview)}">
+      ${itemRowWithArt(preview, `${itemNameHTML(preview)}<div class="inv-item-bonus">${itemBonusText(preview)}</div>`)}
       <button class="inv-btn" data-${dataAttr}="${slot}|${name}" ${state.char.gold<price?'disabled':''}>Comprar (${price} oro)</button>
     </div>`;
   }).join('');
@@ -3877,11 +3874,8 @@ function renderShop(){
   const gearShopRow = (slot, rank, rankTag, dataAttr, price)=>{
     const preview = makeGearItem(slot, styleId, rank);
     if(!preview) return '';
-    return `<div class="inv-item-row">
-      <div>
-        <b>${preview.name}</b>${rankTag}
-        <div class="inv-item-bonus">${itemBonusText(preview)}</div>
-      </div>
+    return `<div class="inv-item-row" style="${rarityRowStyle(preview)}">
+      ${itemRowWithArt(preview, `${itemNameHTML(preview)}<div class="inv-item-bonus">${itemBonusText(preview)}</div>`)}
       <button class="inv-btn" data-${dataAttr}="${slot}" ${state.char.gold<price?'disabled':''}>Comprar (${price} oro)</button>
     </div>`;
   };
@@ -3896,7 +3890,6 @@ function renderShop(){
   const selloHTML = SELLO_SHOP_SLOTS.map(slot=>{
     return ['rango_b','rango_a'].map(rarity=>{
       const price = selloShopPrice(rarity);
-      const r = RARITIES[rarity];
       const disabled = (state.char.missionCurrency||0) < price;
       if(slot==='arma'){
         const cat = WEAPON_CATALOG[shopWeaponRole];
@@ -3904,22 +3897,16 @@ function renderShop(){
         return Object.keys(cat.arma).map(name=>{
           const preview = makeWeaponItem('arma', shopWeaponRole, rarity, name);
           if(!preview) return '';
-          return `<div class="inv-item-row">
-            <div>
-              <b>${name}</b> <span class="slot-tag" style="border-color:${r.color}; color:${r.color};">${r.name}</span> <span class="slot-tag" style="border-color:var(--bronze); color:var(--bronze-light);">${SHOP_ROLE_LABELS[shopWeaponRole]||shopWeaponRole}</span>
-              <div class="inv-item-bonus">${itemBonusText(preview)}</div>
-            </div>
+          return `<div class="inv-item-row" style="${rarityRowStyle(preview)}">
+            ${itemRowWithArt(preview, `${itemNameHTML(preview)}<div class="inv-item-bonus">${itemBonusText(preview)}</div>`)}
             <button class="inv-btn" data-buy-sello="arma|${rarity}|${name}" ${disabled?'disabled':''}>Comprar (${price} Sellos)</button>
           </div>`;
         }).join('');
       }
       const preview = makeGearItem(slot, shopWeaponRole, rarity);
       if(!preview) return '';
-      return `<div class="inv-item-row">
-        <div>
-          <b>${preview.name}</b> <span class="slot-tag" style="border-color:${r.color}; color:${r.color};">${r.name}</span>
-          <div class="inv-item-bonus">${itemBonusText(preview)}</div>
-        </div>
+      return `<div class="inv-item-row" style="${rarityRowStyle(preview)}">
+        ${itemRowWithArt(preview, `${itemNameHTML(preview)}<div class="inv-item-bonus">${itemBonusText(preview)}</div>`)}
         <button class="inv-btn" data-buy-sello="${slot}|${rarity}" ${disabled?'disabled':''}>Comprar (${price} Sellos)</button>
       </div>`;
     }).join('');
@@ -3944,11 +3931,8 @@ function renderShop(){
       const preview = makeWeaponItem(slot, shopWeaponRole, 'legendario', name);
       if(!preview) return '';
       const disabled = !hasTierSMaterials();
-      return `<div class="inv-item-row">
-        <div>
-          <b>${name}</b> <span class="slot-tag" style="border-color:${RARITIES.legendario.color}; color:${RARITIES.legendario.color};">Tier S</span> <span class="slot-tag" style="border-color:var(--bronze); color:var(--bronze-light);">${SHOP_ROLE_LABELS[shopWeaponRole]||shopWeaponRole}</span>
-          <div class="inv-item-bonus">${itemBonusText(preview)}</div>
-        </div>
+      return `<div class="inv-item-row" style="${rarityRowStyle(preview)}">
+        ${itemRowWithArt(preview, `${itemNameHTML(preview)}<div class="inv-item-bonus">${itemBonusText(preview)}</div>`)}
         <button class="inv-btn" data-buy-tiers-weapon="${slot}|${name}" ${disabled?'disabled':''}>Forjar</button>
       </div>`;
     }).join('');
