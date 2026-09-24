@@ -66,7 +66,7 @@ const STYLES = {
     skills:['corte_rapido','danza_cuchillas','golpe_gracia']
   },
   tirador: {
-    id:'tirador', name:'Tirador', icon:'🏹', scaleStat:'fis',
+    id:'tirador', name:'Arquero', icon:'🏹', scaleStat:'fis',
     desc:'Distancia y precisión. Marca, retrocede, dispara.',
     skills:['disparo_certero','marca_cazador','lluvia_flechas']
   },
@@ -131,7 +131,7 @@ const SKILLS = {
   ataque_basico: {
     id:'ataque_basico', name:'Ataque básico', cost:null, dmgType:'fisico', mult:0.55,
     desc: ()=> state && state.char && state.char.style==='tirador'
-      ? 'Un golpe simple y confiable. No cuesta recursos. +60% de daño para el Tirador — su golpe más fuerte.'
+      ? 'Un golpe simple y confiable. No cuesta recursos. +60% de daño para el Arquero — su golpe más fuerte.'
       : 'Un golpe simple y confiable. No cuesta recursos.',
     targetMode:'front'
   },
@@ -233,7 +233,7 @@ const SKILLS = {
   disparo_cazador_final: {
     id:'disparo_cazador_final', name:'Disparo del cazador final', cost:null, dmgType:'fisico', mult:1.4, ultimate:true,
     ignoreResist:1.0, bonusVsMarked:0.5, guaranteedCrit:true, targetMode:'any',
-    desc:'Ultimate del Tirador. Ignora toda la resistencia física, crítico garantizado, y +50% de daño si el objetivo está Marcado.'
+    desc:'Ultimate del Arquero. Ignora toda la resistencia física, crítico garantizado, y +50% de daño si el objetivo está Marcado.'
   },
   cataclismo_elemental: {
     id:'cataclismo_elemental', name:'Cataclismo elemental', cost:null, dmgType:'mixto', mult:1.0, ultimate:true,
@@ -531,25 +531,24 @@ const POTION_TEMPLATES = {
 /* ============================================================
    ITEM RARITY, TIENDA (SHOP) & GUARDIAN REWARDS
    ============================================================ */
-// Paleta de rareza (2026-09-25, rediseño explícito): la anterior tenía tres
-// choques de color reales — raro (#8a7fd1) y rango_b (#c17fd1) eran
-// prácticamente el mismo violeta, y rango_a (#d1a84f) y legendario
-// (#d1594f) se confundían de un vistazo con el bronce de la UI (--bronze-
-// light) y con el rojo de peligro (--blood-light) respectivamente, así que
-// un objeto raro NUNCA se sentía distinto del resto de la interfaz. Nueva
-// rampa: cada escalón es un matiz distinto (gris→verde→azul→violeta→
-// magenta→oro→naranja→rosa), eligiendo oro/naranja más saturados que el
-// bronce/sangre del tema para que sigan leyéndose como "objeto especial" y
-// no como "color de fondo del juego". Debe reflejarse en espejo en
-// SOUL_TIER_COLORS (misma escala de letras E-SS) — ver comentario ahí.
+// Paleta de rareza (actualizada 2026-09-25, pedido explícito: "implementa
+// esos colores" sobre el catálogo de referencia que pasó ariochbu —
+// F/Común gris, E/Poco común verde, C/Raro azul, B/Épico magenta, A/
+// Legendario violeta, S/Único oro, SS/Mítico rojo). Los NOMBRES de rango
+// del juego (Común/Poco común/Raro/Rango B/Rango A/Legendario/SS) no
+// cambian — solo se re-mapea el color por posición en la escala para que
+// coincida con el catálogo. Como el color se lee en vivo de esta tabla (no
+// se guarda por objeto), este cambio recolorea TODO lo que ya existe en
+// cualquier inventario sin ninguna migración. Debe reflejarse en espejo en
+// SOUL_TIER_COLORS (misma escala, con letras E-SS) — ver comentario ahí.
 const RARITIES = {
-  comun: {id:'comun', name:'Común', color:'#928c7f'},
-  poco_comun: {id:'poco_comun', name:'Poco común', color:'#58b768'},
-  raro: {id:'raro', name:'Raro', color:'#7b6fd6'}, // mismo color que SOUL_TIER_COLORS.C — mismo escalón en la misma escala de letras
-  rango_b: {id:'rango_b', name:'Rango B', color:'#b355c9'},
-  rango_a: {id:'rango_a', name:'Rango A', color:'#e0a83f'},
-  legendario: {id:'legendario', name:'Legendario', color:'#e2542f'}, // mismo color que SOUL_TIER_COLORS.S
-  ss: {id:'ss', name:'SS', color:'#ff4fa3'} // mismo color que SOUL_TIER_COLORS.SS
+  comun: {id:'comun', name:'Común', color:'#9a958c'},
+  poco_comun: {id:'poco_comun', name:'Poco común', color:'#46c168'},
+  raro: {id:'raro', name:'Raro', color:'#3b8fe0'}, // mismo color que SOUL_TIER_COLORS.C — mismo escalón en la misma escala de letras
+  rango_b: {id:'rango_b', name:'Rango B', color:'#d6409f'},
+  rango_a: {id:'rango_a', name:'Rango A', color:'#9350dd'},
+  legendario: {id:'legendario', name:'Legendario', color:'#e0b23f'}, // mismo color que SOUL_TIER_COLORS.S
+  ss: {id:'ss', name:'SS', color:'#e0393f'} // mismo color que SOUL_TIER_COLORS.SS
 };
 // ============================================================
 // CATÁLOGO DE ARMAS — recalibración 2026-09-15 (pedido explícito de
@@ -1343,8 +1342,10 @@ const GUARDIAN_SLOT_STAT = {casco:'hab', guantes:'fis', botas:'hab'}; // themed 
    (roba vida, que ya es un special genérico existente). */
 const SOUL_STONE_TIERS = ['E','F','D','C','B','A','S','SS']; // ascendente: E la más baja, SS la más alta
 // Espejo de la rampa de RARITIES (ver comentario ahí) sobre las 8 letras de
-// piedras de alma en vez de los 7 slugs de equipo.
-const SOUL_TIER_COLORS = {E:'#928c7f', F:'#58b768', D:'#4098c9', C:'#7b6fd6', B:'#b355c9', A:'#e0a83f', S:'#e2542f', SS:'#ff4fa3'};
+// piedras de alma en vez de los 7 slugs de equipo. D no tiene equivalente en
+// equipo (el equipo pasa de Poco común directo a Raro/C) — se le da un tono
+// puente propio (verde azulado) para no repetir ni C ni F.
+const SOUL_TIER_COLORS = {E:'#9a958c', F:'#46c168', D:'#2fb0a8', C:'#3b8fe0', B:'#d6409f', A:'#9350dd', S:'#e0b23f', SS:'#e0393f'};
 function soulTierIdx(tier){ return SOUL_STONE_TIERS.indexOf(tier); }
 
 // Fórmulas de escalado por familia (documentadas para cuando D-SS estén disponibles).
@@ -2548,6 +2549,117 @@ function equipIcon(it){
   if(it.slot==='arma2') return OFFHAND_STYLE_ICONS[it.styleId] || '🗡️';
   return WEAPON_STYLE_ICONS[it.styleId] || '⚔️';
 }
+
+// ============================================================
+// ARTE DE ÍTEM (2026-09-25, pedido explícito: "implementa la opción de las
+// imágenes a cada arma, arma secundaria, equipamiento, etc, sin quitar la
+// opción de las descripciones"). No generamos arte pintado/fotográfico —
+// esto son siluetas vectoriales propias (SVG, viewBox 0 0 24 24,
+// fill="currentColor"), una por arma con nombre propio y una por tipo de
+// slot de armadura, coloreadas en vivo con el mismo color de rareza que ya
+// usa el texto (RARITIES/SOUL_TIER_COLORS) — así que al recolorear esas
+// tablas (ver más arriba) el arte se recolorea sola, sin tocar nada acá.
+// El texto de nombre/descripción NO se toca: esto solo agrega un ícono al
+// costado, en vez de reemplazar nada.
+const ITEM_ART_SHAPES = {
+  hammer: '<rect x="10.5" y="10" width="3" height="12" rx="1"/><rect x="5" y="3" width="14" height="7" rx="1.5"/>',
+  mace: '<rect x="10.5" y="11" width="3" height="11" rx="1"/><circle cx="12" cy="7" r="5"/><polygon points="12,0.5 14,4 10,4"/><polygon points="4.5,7 8.5,5.5 8.5,8.5"/><polygon points="19.5,7 15.5,5.5 15.5,8.5"/>',
+  greatsword: '<polygon points="12,1 14,3 13,17 11,17 10,3"/><rect x="7" y="16" width="10" height="2" rx="1"/><rect x="10.5" y="18" width="3" height="4"/><circle cx="12" cy="22.3" r="1.5"/>',
+  shield: '<path d="M12 2 L19 5 V12 C19 17 15.5 20.5 12 22 C8.5 20.5 5 17 5 12 V5 Z"/><rect x="11" y="7.5" width="2" height="9" rx="1" fill-opacity="0.35"/>',
+  dagger: '<path d="M12 2 Q14.3 8 12.6 15 L11.4 15 Q9.7 8 12 2 Z"/><rect x="9" y="14.5" width="6" height="1.6" rx="0.8"/><rect x="10.7" y="16" width="2.6" height="5" rx="1"/><circle cx="12" cy="21.5" r="1.3"/>',
+  knife: '<polygon points="12,2 14.3,15 9.7,15"/><rect x="9" y="15" width="6" height="1.6" rx="0.8"/><rect x="10.7" y="16.6" width="2.6" height="5" rx="1"/>',
+  bow_short: '<path d="M11 6 C6 8.3 6 15.7 11 18" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="11" y1="6" x2="11" y2="18" stroke="currentColor" stroke-width="0.8"/>',
+  bow_long: '<path d="M10 2 C3.5 6.3 3.5 17.7 10 22" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="10" y1="2" x2="10" y2="22" stroke="currentColor" stroke-width="0.8"/>',
+  quiver: '<path d="M9 10 L15 10 L13.5 22 L10.5 22 Z"/><line x1="10" y1="10" x2="8" y2="2" stroke="currentColor" stroke-width="1.4"/><line x1="12" y1="10" x2="12" y2="1" stroke="currentColor" stroke-width="1.4"/><line x1="14" y1="10" x2="16" y2="2" stroke="currentColor" stroke-width="1.4"/>',
+  wand: '<rect x="10.6" y="8" width="2.6" height="15" rx="1.3" transform="rotate(25 12 15)"/><circle cx="8" cy="4.6" r="2.3"/>',
+  staff: '<rect x="10.7" y="6" width="2.6" height="17" rx="1.3"/><circle cx="12" cy="4.3" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/>',
+  orb: '<path d="M9 20 L15 20 L13.5 22 L10.5 22 Z"/><circle cx="12" cy="12.5" r="6"/><circle cx="12" cy="12.5" r="2.8" fill="none" stroke="currentColor" stroke-width="1.1" stroke-opacity="0.5"/>',
+  book: '<rect x="5" y="4" width="6.3" height="17" rx="1"/><rect x="12.7" y="4" width="6.3" height="17" rx="1"/><line x1="10.5" y1="8" x2="10.5" y2="10" stroke="currentColor" stroke-width="1.2"/><line x1="9.5" y1="9" x2="11.5" y2="9" stroke="currentColor" stroke-width="1.2"/>',
+  casco: '<path d="M4 14 C4 6 8 3 12 3 C16 3 20 6 20 14 L20 15 L4 15 Z"/><rect x="3" y="15" width="18" height="2.2" rx="1.1"/><circle cx="9" cy="10" r="1.1"/><circle cx="15" cy="10" r="1.1"/>',
+  armadura: '<path d="M6 7 L10 5 L12 7.5 L14 5 L18 7 L18 20 L6 20 Z"/><circle cx="5" cy="7" r="2"/><circle cx="19" cy="7" r="2"/>',
+  botas: '<path d="M8 3 H14 V14 H16.5 C17.8 14 19 15.2 19 16.5 V19 H8 Z"/><rect x="7" y="19" width="13" height="2" rx="1"/>',
+  guantes: '<rect x="7" y="12" width="10" height="8" rx="2.2"/><rect x="7.8" y="4" width="2.1" height="9.5" rx="1"/><rect x="10.6" y="3" width="2.1" height="10.5" rx="1"/><rect x="13.4" y="3.4" width="2.1" height="10" rx="1"/><rect x="16.1" y="4.6" width="2.1" height="8.8" rx="1"/><rect x="4.3" y="13" width="3" height="6" rx="1.5" transform="rotate(-18 5.8 16)"/>',
+  amuleto: '<path d="M6 4 C6 8 9 9 12 9 C15 9 18 8 18 4" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="9.3" r="1.3" fill="none" stroke="currentColor" stroke-width="1"/><polygon points="12,10.5 16,14.5 12,20.5 8,14.5"/>',
+  gem: '<polygon points="12,2 18,9 15,21 9,21 6,9"/><line x1="12" y1="2" x2="12" y2="21" stroke-opacity="0.3" stroke="currentColor" stroke-width="0.8"/><line x1="6" y1="9" x2="18" y2="9" stroke-opacity="0.3" stroke="currentColor" stroke-width="0.8"/>'
+};
+// Nombre de arma con nombre propio -> silueta. Daga/Cuchillo comparten forma
+// entre arma principal y secundaria (misma familia, mismo pool de stats).
+const WEAPON_NAME_SHAPE = {
+  'Martillo de guerra':'hammer', 'Maza de combate':'mace', 'Espadón pesado':'greatsword', 'Escudo de hierro':'shield',
+  'Daga curva':'dagger', 'Daga gemela':'dagger', 'Cuchillo largo':'knife', 'Cuchillo gemelo':'knife',
+  'Arco corto':'bow_short', 'Arco largo':'bow_long', 'Carcaj de cuero':'quiver',
+  'Vara arcana':'wand', 'Bastón rúnico':'staff', 'Foco arcano':'orb',
+  'Grimorio de plegarias':'book', 'Tomo sagrado':'book'
+};
+// Arte real de armas (2026-09-25, pedido explícito, catálogos por senda que
+// pasó ariochbu — Guerrero/Asesino/Arquero/Mago/Sacerdote, recortados en
+// src/assets/armas/<nombre>_<rareza>.png). El catálogo llega hasta SS pero
+// hoy ningún arma tiene ese rango en WEAPON_CATALOG (el tope real es
+// 'legendario') — se recortó igual por si se habilita a futuro, pero no se
+// referencia acá. El SVG por familia de arma (ITEM_ART_SHAPES/
+// WEAPON_NAME_SHAPE) queda de respaldo para cualquier objeto sin imagen.
+const WEAPON_NAME_SLUG = {
+  'Martillo de guerra':'martillo_de_guerra', 'Maza de combate':'maza_de_combate', 'Espadón pesado':'espadon_pesado', 'Escudo de hierro':'escudo_de_hierro',
+  'Daga curva':'daga_curva', 'Daga gemela':'daga_gemela', 'Cuchillo largo':'cuchillo_largo', 'Cuchillo gemelo':'cuchillo_gemelo',
+  'Arco corto':'arco_corto', 'Arco largo':'arco_largo', 'Carcaj de cuero':'carcaj_de_cuero',
+  'Vara arcana':'vara_arcana', 'Bastón rúnico':'baston_runico', 'Foco arcano':'foco_arcano',
+  'Grimorio de plegarias':'grimorio_de_plegarias', 'Tomo sagrado':'tomo_sagrado'
+};
+const WEAPON_ART_RARITIES = new Set(['comun','poco_comun','raro','rango_b','rango_a','legendario']);
+function weaponArtPath(it){
+  const slug = WEAPON_NAME_SLUG[it.name];
+  if(!slug || !WEAPON_ART_RARITIES.has(it.rarity)) return null;
+  return `src/assets/armas/${slug}_${it.rarity}.png`;
+}
+// Una piedra de alma SIEMPRE trae `.tier` (letra E-SS) y NUNCA `.rarity`; el
+// equipo es al revés — es el discriminante ya usado en todo el resto del
+// archivo (SOUL_TIER_COLORS[x.tier] vs RARITIES[x.rarity]). No se usa
+// `kind==='soulstone'` porque las entradas de SOUL_STONES (catálogo/plantilla,
+// ej. la Forja Legendaria) no traen `kind` — solo las instancias ya
+// guardadas en el inventario lo tienen.
+function isSoulStoneLike(it){ return it.tier !== undefined; }
+function itemArtShape(it){
+  if(isSoulStoneLike(it)) return 'gem';
+  if(EQUIP_SLOT_ICONS[it.slot]) return it.slot; // armadura/amuleto/casco/botas/guantes ya son las keys de ITEM_ART_SHAPES
+  return WEAPON_NAME_SHAPE[it.name] || null;
+}
+// Tile de ícono (mismo lenguaje visual que el retrato del HUD de combate,
+// .phud-portrait: caja con anillo de color). El SVG cae al emoji de
+// equipIcon() si el objeto no tiene silueta propia todavía (pociones,
+// fragmentos, objetos futuros) — nunca deja el tile vacío.
+// Arte real de piedras de alma (2026-09-25, pedido explícito): recortado del
+// catálogo que pasó ariochbu (Assets/fuente/...png) — una imagen genérica
+// por RANGO (F/E/D/C/B/A/S/SS), compartida entre las 7 familias (el
+// catálogo no ilustra una piedra distinta por familia, solo por rango). Va
+// en src/assets/piedras/<tier>.png; el SVG del diamante genérico queda como
+// respaldo para cualquier tier que falte.
+const SOUL_STONE_ART = {};
+['F','E','D','C','B','A','S','SS'].forEach(t=> SOUL_STONE_ART[t] = `src/assets/piedras/${t}.png`);
+function itemArtTileHTML(it, px){
+  px = px || 36;
+  const isStone = isSoulStoneLike(it);
+  const color = isStone ? (SOUL_TIER_COLORS[it.tier]||'#9a958c') : RARITIES[it.rarity||'comun'].color;
+  const isHighTier = isStone ? ['A','S','SS'].includes(it.tier) : ['rango_a','legendario','ss'].includes(it.rarity);
+  const glow = isHighTier ? `, 0 0 10px ${color}66` : '';
+  const artImg = isStone ? SOUL_STONE_ART[it.tier] : weaponArtPath(it);
+  const shape = itemArtShape(it);
+  let inner;
+  if(artImg){
+    const fallbackIcon = isStone ? '💎' : equipIcon(it);
+    inner = `<img src="${artImg}" alt="" style="width:100%; height:100%; object-fit:contain;" onerror="this.replaceWith(Object.assign(document.createElement('span'),{style:'font-size:${Math.round(px*0.55)}px', textContent:'${fallbackIcon}'}))">`;
+  } else if(shape){
+    inner = `<svg viewBox="0 0 24 24" width="${Math.round(px*0.62)}" height="${Math.round(px*0.62)}" fill="currentColor">${ITEM_ART_SHAPES[shape]}</svg>`;
+  } else {
+    inner = `<span style="font-size:${Math.round(px*0.55)}px;">${equipIcon(it)}</span>`;
+  }
+  return `<div class="item-art-tile" style="width:${px}px; height:${px}px; color:${color}; box-shadow:0 0 0 2px ${color}55 inset${glow};">${inner}</div>`;
+}
+// Envuelve el tile de ícono + el bloque de texto existente (nombre/pill/
+// descripción) en una fila flex — el texto no cambia una letra, solo se le
+// suma el ícono al lado.
+function itemRowWithArt(it, textHTML, px){
+  return `<div style="display:flex; align-items:center; gap:10px; min-width:0; flex:1;">${itemArtTileHTML(it, px)}<div style="min-width:0; flex:1;">${textHTML}</div></div>`;
+}
 // Halo de color por rareza para toda la fila (no solo el nombre) — mismo
 // criterio que pedía distinguir de un vistazo un objeto Rango A/Legendario
 // del resto sin tener que leer el pill. El degradado se apaga a los ~110px
@@ -2603,7 +2715,7 @@ function itemNameHTML(it){
   // solo a veces no basta para que un objeto especial se note al lado del
   // resto de la interfaz, sobre todo en pantallas chicas.
   const glow = ['rango_a','legendario','ss'].includes(it.rarity) ? ` text-shadow:0 0 8px ${r.color}99;` : '';
-  return `<b style="color:${r.color};${glow}">${equipIcon(it)} ${it.name}</b> <span class="slot-tag" style="border-color:${r.color}; color:${r.color};">${r.name}</span>${roleTag}`;
+  return `<b style="color:${r.color};${glow}">${it.name}</b> <span class="slot-tag" style="border-color:${r.color}; color:${r.color};">${r.name}</span>${roleTag}`;
 }
 
 function renderInventory(){
@@ -2633,10 +2745,7 @@ function renderInventory(){
     return `<div class="inv-slot">
       <div class="inv-slot-label">${label}</div>
       <div class="inv-item-row" style="margin-bottom:0; ${rarityRowStyle(it)}">
-        <div>
-          ${itemNameHTML(it)}
-          <div class="inv-item-bonus">${itemBonusText(it)}</div>
-        </div>
+        ${itemRowWithArt(it, `${itemNameHTML(it)}<div class="inv-item-bonus">${itemBonusText(it)}</div>`)}
         <button class="inv-btn danger" data-unequip="${slot}">Quitar</button>
       </div>
     </div>`;
@@ -2661,10 +2770,7 @@ function renderInventory(){
     if(!items.length) return '';
     const rows = items.map(it=>`
       <div class="inv-item-row" style="${rarityRowStyle(it)}">
-        <div>
-          ${itemNameHTML(it)}
-          <div class="inv-item-bonus">${itemBonusText(it)}</div>
-        </div>
+        ${itemRowWithArt(it, `${itemNameHTML(it)}<div class="inv-item-bonus">${itemBonusText(it)}</div>`)}
         <button class="inv-btn" data-equip="${it.uid}">Equipar en ${targetName}</button>
       </div>
     `).join('');
@@ -2711,10 +2817,7 @@ function renderInventory(){
     return `<div class="inv-slot">
       <div class="inv-slot-label">Espacio de alma ${idx+1}</div>
       <div class="inv-item-row" style="margin-bottom:0;">
-        <div>
-          <b style="color:${c};">${stone.name}</b> <span class="slot-tag" style="border-color:${c}; color:${c};">${stone.tier}</span>
-          <div class="inv-item-bonus">${stone.desc}</div>
-        </div>
+        ${itemRowWithArt(stone, `<b style="color:${c};">${stone.name}</b> <span class="slot-tag" style="border-color:${c}; color:${c};">${stone.tier}</span><div class="inv-item-bonus">${stone.desc}</div>`)}
         <button class="inv-btn danger" ${unsocketAttr}>Retirar</button>
       </div>
     </div>`;
@@ -2729,10 +2832,7 @@ function renderInventory(){
     const btnLabel = sameFamily ? 'Reemplazar' : 'Engarzar';
     const socketAttr = isAllyTargetForStones ? `data-socket-ally="${it.uid}|${targetRow.id}"` : `data-socket="${it.uid}"`;
     return `<div class="inv-item-row">
-      <div>
-        <b style="color:${c};">${it.name}</b> <span class="slot-tag" style="border-color:${c}; color:${c};">${it.tier}</span>
-        <div class="inv-item-bonus">${it.desc}</div>
-      </div>
+      ${itemRowWithArt(it, `<b style="color:${c};">${it.name}</b> <span class="slot-tag" style="border-color:${c}; color:${c};">${it.tier}</span><div class="inv-item-bonus">${it.desc}</div>`)}
       <button class="inv-btn" ${socketAttr} ${blocked?'disabled':''}>${btnLabel} en ${targetName}</button>
     </div>`;
   }).join('') : `<p class="inv-empty-msg">No tienes piedras de alma. Las dejan caer los guardianes de nivel 4 en adelante.</p>`;
@@ -2973,11 +3073,6 @@ function renderCity(){
     </div>
     <div class="city-actions">
       <div class="action-card">
-        <h3>Descansar</h3>
-        <p>Recupera toda tu vida, MP y espíritu antes de partir.</p>
-        <button id="btn-rest-city">Descansar</button>
-      </div>
-      <div class="action-card">
         <h3>Entrar al laberinto</h3>
         <p>${state.char.checkpointLevel>1
           ? 'Elige desde qué checkpoint entrar — se libera uno nuevo cada vez que derrotas al jefe de una década.'
@@ -3015,12 +3110,6 @@ function renderCity(){
     <div class="section-label">Antes de partir</div>
     <p style="color:var(--text-dim); font-size:0.85em; margin-top:0;">Revisa tu 🎒 Inventario (arriba) para equipar mejor equipo o comprobar cuántas pociones llevas antes de entrar al laberinto. Si mueres dentro perderás el equipo suelto de tu mochila y el ${DEFEAT_GOLD_LOSS_PCT}% de tu oro; si te retiras tras vencer a un guardián, conservas todo.</p>
   `;
-  document.getElementById('btn-rest-city').onclick = ()=>{
-    const d = derived();
-    state.char.curHP = d.maxHP; state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi;
-    log('Descansas en la ciudad. Vida, MP y espíritu restaurados.');
-    renderSheet(); save();
-  };
   const enterDungeonAt = (startLevel)=>{
     showOverlay(
       'Antes de entrar',
@@ -3030,6 +3119,17 @@ function renderCity(){
         const d = derived();
         state.char.curHP = d.maxHP; state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi;
         state.dungeon = generateDungeon(startLevel);
+        // La "Descansar" de la ciudad se quitó por redundante (2026-09-25,
+        // pedido explícito): entrar ya curaba al jugador a full, así que en
+        // vez de un botón aparte, entrar ahora también cura a todo el
+        // equipo de aliados de una — mismo bloque que antes solo disparaba
+        // la hoguera dentro del laberinto (ver rama 'descanso' en enterNode).
+        state.dungeon.allyHP = {}; state.dungeon.allyMP = {}; state.dungeon.allySpirit = {};
+        (state.char.allies||[]).forEach(row=>{
+          state.dungeon.allyHP[row.id] = allyMaxHP(row);
+          state.dungeon.allyMP[row.id] = allyMaxMP(row);
+          state.dungeon.allySpirit[row.id] = allyMaxSpirit(row);
+        });
         log(startLevel>1
           ? `Entras al laberinto desde tu checkpoint, nivel ${startLevel}. El aire cambia; algo respira ahí dentro.`
           : 'Entras al laberinto desde el nivel 1. El aire cambia; algo respira ahí dentro.');
@@ -3858,10 +3958,7 @@ function renderShop(){
     if(!tpl) return '';
     const disabled = !hasTierSMaterials();
     return `<div class="inv-item-row">
-      <div>
-        <b style="color:${SOUL_TIER_COLORS.S};">${tpl.name}</b> <span class="slot-tag" style="border-color:${SOUL_TIER_COLORS.S}; color:${SOUL_TIER_COLORS.S};">S</span>
-        <div class="inv-item-bonus">${tpl.desc}</div>
-      </div>
+      ${itemRowWithArt(tpl, `<b style="color:${SOUL_TIER_COLORS.S};">${tpl.name}</b> <span class="slot-tag" style="border-color:${SOUL_TIER_COLORS.S}; color:${SOUL_TIER_COLORS.S};">S</span><div class="inv-item-bonus">${tpl.desc}</div>`)}
       <button class="inv-btn" data-buy-tiers-stone="${famId}" ${disabled?'disabled':''}>Forjar</button>
     </div>`;
   }).join('');
@@ -3884,9 +3981,7 @@ function renderShop(){
   const sellStones = state.char.inventory.filter(i=>i.kind==='soulstone');
   const sellRows = [
     ...sellGear.map(it=>`<div class="inv-item-row" style="${rarityRowStyle(it)}">
-      <div>${itemNameHTML(it)} <span class="slot-tag">${slotLabel(it.slot)}</span>
-        <div class="inv-item-bonus">${itemBonusText(it)}</div>
-      </div>
+      ${itemRowWithArt(it, `${itemNameHTML(it)} <span class="slot-tag">${slotLabel(it.slot)}</span><div class="inv-item-bonus">${itemBonusText(it)}</div>`)}
       <button class="inv-btn" data-sell="${it.uid}">Vender (${itemSellValue(it)} oro)</button>
     </div>`),
     ...sellPotions.map(it=>`<div class="inv-item-row">
@@ -3896,7 +3991,7 @@ function renderShop(){
     ...sellStones.map(it=>{
       const c = SOUL_TIER_COLORS[it.tier] || 'var(--text)';
       return `<div class="inv-item-row">
-        <div><b style="color:${c};">${it.name}</b> <span class="slot-tag" style="border-color:${c}; color:${c};">${it.tier}</span></div>
+        ${itemRowWithArt(it, `<b style="color:${c};">${it.name}</b> <span class="slot-tag" style="border-color:${c}; color:${c};">${it.tier}</span>`)}
         <button class="inv-btn" data-sell="${it.uid}">Vender (${itemSellValue(it)} oro)</button>
       </div>`;
     })
@@ -3999,9 +4094,7 @@ function renderHome(){
 
   const bagGearHTML = gearItems.length ? gearItems.map(it=>`
     <div class="inv-item-row" style="${rarityRowStyle(it)}">
-      <div>${itemNameHTML(it)} <span class="slot-tag">${slotLabel(it.slot)}</span>
-        <div class="inv-item-bonus">${itemBonusText(it)}</div>
-      </div>
+      ${itemRowWithArt(it, `${itemNameHTML(it)} <span class="slot-tag">${slotLabel(it.slot)}</span><div class="inv-item-bonus">${itemBonusText(it)}</div>`)}
       <button class="inv-btn" data-stash-gear="${it.uid}">Guardar en Hogar</button>
     </div>`).join('') : `<p class="inv-empty-msg">No llevas equipo suelto contigo.</p>`;
 
@@ -4015,9 +4108,7 @@ function renderHome(){
 
   const stashGearHTML = stashGear.length ? stashGear.map(it=>`
     <div class="inv-item-row" style="${rarityRowStyle(it)}">
-      <div>${itemNameHTML(it)} <span class="slot-tag">${slotLabel(it.slot)}</span>
-        <div class="inv-item-bonus">${itemBonusText(it)}</div>
-      </div>
+      ${itemRowWithArt(it, `${itemNameHTML(it)} <span class="slot-tag">${slotLabel(it.slot)}</span><div class="inv-item-bonus">${itemBonusText(it)}</div>`)}
       <button class="inv-btn" data-retrieve-gear="${it.uid}">Retirar</button>
     </div>`).join('') : `<p class="inv-empty-msg">El Hogar no guarda equipo todavía.</p>`;
 

@@ -1,2 +1,8 @@
 .DS_Store
 Thumbs.db
+
+# Catálogos fuente sin recortar (pósters completos que manda ariochbu para
+# sacar el arte de src/assets/*) — pesan varios MB cada uno y no los usa el
+# juego directamente, solo quedan como referencia local de dónde salió cada
+# recorte.
+/Assets/

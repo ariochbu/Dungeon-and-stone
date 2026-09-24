@@ -233,6 +233,13 @@
   }
   .inv-slot-label{font-size:0.68em; color:var(--text-dim); letter-spacing:0.03em; margin-bottom:4px;}
   .inv-empty{font-size:0.85em; color:var(--text-dim);}
+  /* Tile de arte por ítem (2026-09-25, pedido explícito): silueta SVG propia
+     por arma/slot, mismo lenguaje visual que el retrato del HUD de combate
+     (.phud-portrait) — caja con anillo de color de rareza. */
+  .item-art-tile{
+    flex-shrink:0; border-radius:6px; background:var(--bg-2);
+    display:flex; align-items:center; justify-content:center;
+  }
   .inv-item-row{
     display:flex; align-items:center; justify-content:space-between; gap:10px;
     background:var(--bg-2); border:1px solid var(--border); border-radius:4px; padding:9px 11px; margin-bottom:8px;
