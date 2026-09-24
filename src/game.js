@@ -2619,7 +2619,7 @@ function weaponArtPath(it){
 // "armadura - <clase>.png" / "guantes - <clase>.png" / "botas - <clase>.png"
 // en src/assets/equipo/<senda>_<slot>_<rareza>.png. Solo Accesorio (amuleto)
 // sigue sin arte propia — cae al SVG genérico de siempre.
-const GEAR_ART_SLOTS = new Set(['casco','armadura','guantes','botas']);
+const GEAR_ART_SLOTS = new Set(['casco','armadura','guantes','botas','amuleto']);
 function gearArtPath(it){
   if(!GEAR_ART_SLOTS.has(it.slot) || !it.styleId || !WEAPON_ART_RARITIES.has(it.rarity)) return null;
   return `src/assets/equipo/${it.styleId}_${it.slot}_${it.rarity}.png`;
