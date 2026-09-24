@@ -13,7 +13,7 @@
 // combat.enemies/combat.allies/combat.lastActor/combat.lastAction y dibuja.
 // No aplica daño, no decide turnos, no cambia HP.
 
-import { CLASS_SPRITES, ALLY_SPRITES, ENEMY_SPRITES } from './battleSprites.js?v=62';
+import { CLASS_SPRITES, ALLY_SPRITES, ENEMY_SPRITES } from './battleSprites.js?v=65';
 
 const TILE = 16;
 const SCALE = 2.5;
@@ -294,6 +294,7 @@ function syncBattleStage(container, combat, playerInfo, onTargetClick){
       sprite: playerSpriteRef, role: roleFor('player', null, playerInfo.style),
       hp: playerInfo.hp, maxHP: playerInfo.maxHP, mp: playerInfo.mp, maxMP: playerInfo.maxMP,
       spirit: playerInfo.spirit, maxSpirit: playerInfo.maxSpirit, alive: playerInfo.hp>0,
+      shield: playerInfo.shield||0,
       showResources:true, statuses: playerInfo.statuses||[], targetable:false,
       side:'party',
     });
@@ -312,7 +313,7 @@ function syncBattleStage(container, combat, playerInfo, onTargetClick){
     Object.assign(a, {
       kind:'ally', refIdx:i, name: ally.name, icon: ally.icon, nameMaxW: allyPos[i].nameMaxW, sprite: spriteFor('ally', ally),
       role: roleFor('ally', ally), hp: ally.hp, maxHP: ally.maxHP, mp: ally.mp, maxMP: ally.maxMP,
-      spirit: ally.spirit, maxSpirit: ally.maxSpirit, alive: ally.hp>0, showResources:true,
+      spirit: ally.spirit, maxSpirit: ally.maxSpirit, alive: ally.hp>0, shield: ally.shield||0, showResources:true,
       statuses: ally.statuses||[], targetable: hostile && ally.hp>0, side:'party',
     });
   });
@@ -329,7 +330,12 @@ function syncBattleStage(container, combat, playerInfo, onTargetClick){
     Object.assign(a, {
       kind:'enemy', refIdx:i, name: en.name, icon: en.icon, nameMaxW: enemyPos[i].nameMaxW, sprite: spriteFor('enemy', en),
       role: roleFor('enemy', en), hp: en.hp, maxHP: en.maxHP, alive: en.hp>0, showResources:false,
-      statuses: en.statuses||[], targetable: en.hp>0, side:'enemy',
+      statuses: en.statuses||[],
+      // Con pendingTargetFilter==='front' (2026-09-25: elegir a cuál de 2+
+      // enemigos del frente atacar) solo se resalta a los que de verdad son
+      // frontline — el resto sigue sin poder recibir el click (ver onTarget).
+      targetable: en.hp>0 && (combat.pendingTargetFilter!=='front' || !!(en.tpl && en.tpl.frontline)),
+      side:'enemy',
     });
   });
 
@@ -533,6 +539,11 @@ function drawActor(a){
   ctx.fillText(fitText(a.name||'', a.nameMaxW), cx, by-10);
   ctx.restore();
   drawBar(cx-22, by, 44, 5, (a.hp||0)/(a.maxHP||1), (a.hp/a.maxHP)<0.3 ? '#b24444' : '#8c2f2f');
+  // Escudo (2026-09-25, pedido explícito): franja morada pegada justo
+  // encima de la barra de vida, proporcional a escudo/maxHP (tope 100%).
+  if(a.shield>0){
+    drawBar(cx-22, by-4, 44, 3, Math.min(1, a.shield/(a.maxHP||1)), '#8a7fd1');
+  }
   if(a.showResources){
     drawBar(cx-22, by+6, 44, 4, (a.mp||0)/(a.maxMP||1), '#b8934a');
     drawBar(cx-22, by+11, 44, 4, (a.spirit||0)/(a.maxSpirit||1), '#5d8aa8');

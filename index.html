@@ -4,9 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Dungeon &amp; Stone</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%9A%94%EF%B8%8F%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./src/styles.css?v=62">
+<link rel="stylesheet" href="./src/styles.css?v=66">
 </head>
 <body>
 <div class="app">
@@ -22,9 +23,11 @@
       <div class="gold-badge" id="tier-badge" style="display:none;" title="Nivel del laberinto actual y su amenaza (ajustada visualmente a tu nivel de personaje)"><span id="tier-amount">1</span></div>
       <button class="reset-btn" id="btn-music-toggle" style="display:none;">🔊 Música</button>
       <button class="inv-toggle-btn" id="btn-inventory" style="display:none;">🎒 Inventario</button>
-      <button class="reset-btn" id="btn-switch-char" style="display:none;">Cambiar de personaje</button>
-      <button class="reset-btn" id="btn-slots" style="display:none;">Cerrar sesión</button>
-      <button class="reset-btn" id="btn-reset" style="display:none;">Borrar personaje</button>
+      <div class="acct-cluster">
+        <button class="reset-btn acct-btn" id="btn-switch-char" style="display:none;">Cambiar de personaje</button>
+        <button class="reset-btn acct-btn" id="btn-slots" style="display:none;">Cerrar sesión</button>
+        <button class="reset-btn danger-btn" id="btn-reset" style="display:none;">🗑️ Borrar personaje</button>
+      </div>
     </div>
   </header>
 
@@ -68,6 +71,9 @@
 
   <!-- ============ CREATION SCREEN ============ -->
   <div class="screen" id="screen-create">
+    <div class="create-back-row" id="create-back-row" style="display:none;">
+      <button class="reset-btn" id="btn-cancel-creation">← Volver a mis personajes</button>
+    </div>
     <div class="intro">
       <h1>Antes de la caída</h1>
       <p>Elige el cuerpo que habitarás en el mundo de Dungeon &amp; Stone. Tu raza define tus cimientos; tu senda de combate, cómo sobrevives al laberinto.</p>
@@ -111,6 +117,6 @@
   <div class="footer-note">Dungeon &amp; Stone — recreación jugable inspirada en el juego descrito en la novela «Sobreviviendo al juego siendo un bárbaro». Tu progreso se guarda automáticamente en tu cuenta.</div>
 </div>
 
-<script type="module" src="./src/game.js?v=62"></script>
+<script type="module" src="./src/game.js?v=68"></script>
 </body>
 </html>

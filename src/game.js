@@ -2,8 +2,8 @@
 
 import { supabase } from './supabaseClient.js';
 import * as auth from './auth.js';
-import { syncBattleStage, playBattleAnim } from './battleStage.js?v=62';
-import { CLASS_SPRITES, ENEMY_SPRITES } from './battleSprites.js?v=62';
+import { syncBattleStage, playBattleAnim } from './battleStage.js?v=65';
+import { CLASS_SPRITES, ENEMY_SPRITES } from './battleSprites.js?v=65';
 
 /* ============================================================
    DATA
@@ -285,20 +285,172 @@ const DECADE_BESTIARY = [
     ],
     decadeBoss: {id:'ogro', name:'Ogro', icon:'👺', role:'melee', hp:4.2, atk:1.9, res:{fisico:25,fuego:0,hielo:0,veneno:10,aturdimiento:35}, moves:['pegar','aplastar','debilitar'], boss:true, frontline:true}
   },
-  // Década 1 — pisos 11-20 — Arañas del bosque profundo (familia tarántula, veneno/Parálisis)
+  // Década 1 — pisos 11-20 — Arañas (REWORK 2026-09-25, pedido explícito,
+  // "Década 2" en la nomenclatura del PDF de diseño — el compendio la sigue
+  // llamando Década 1 por índice de array, ver DECADE_BG_THEME/etc.).
+  // Primera década en usar el sistema nuevo de IA data-driven (abilities +
+  // aiPriority + cooldowns reales) en vez del if-chain de moves — ver
+  // resolveNewStyleEnemyMove(). Simplificaciones deliberadas frente al PDF
+  // (por tiempo, no por descuido — quedan documentadas acá, no ocultas):
+  // - El motor de combate solo tiene UN objetivo posible por turno enemigo
+  //   (frontlineTarget()), así que las reglas de "priorizar objetivo con
+  //   0-1 cargas de Veneno" no aplican — se conservan los bonos de daño
+  //   condicionales (bonusVsOwnStatus) pero no la elección de blanco.
+  // - "Doble Picadura" (2 golpes) se aproxima a un solo golpe más fuerte
+  //   (mult 1.10 en vez de 2×0.65) — el motor actual no tiene multi-hit
+  //   para el sistema nuevo.
+  // - Los self-buffs de resistencia plana (Araña de Caparazón, Reina
+  //   Devoradora "por cada aliado <40% HP") se aproximan con
+  //   incomingDmgReduction/dmgMult genéricos en vez de un stat nuevo.
+  // - "Sello de Presa" reusa el estado Marcado existente (+20% de TODO el
+  //   daño que reciba, no solo el de esta Matriarca en particular).
   {
     regular: [
-      {id:'tarantula_cazadora', name:'Tarántula cazadora', icon:'🕷️', hp:1.1, atk:1.05, res:{fisico:5,fuego:-5,hielo:0,veneno:20,aturdimiento:0}, moves:['pegar','picar'], frontline:true},
-      {id:'tarantula_saltarina', name:'Tarántula saltarina', icon:'🕷️', hp:0.9, atk:1.15, res:{fisico:0,fuego:-10,hielo:0,veneno:20,aturdimiento:0}, moves:['pegar','paralizar','picar'], frontline:true},
-      {id:'tarantula_tejedora', name:'Tarántula tejedora', icon:'🕸️', hp:0.8, atk:0.95, res:{fisico:-5,fuego:-10,hielo:10,veneno:25,aturdimiento:0}, moves:['pegar','paralizar','picar']},
-      {id:'viuda_venenosa', name:'Viuda venenosa', icon:'🕸️', hp:0.75, atk:1.0, res:{fisico:-10,fuego:-10,hielo:5,veneno:30,aturdimiento:0}, moves:['paralizar','pegar','picar']}
+      {id:'tarantula_cazadora', name:'Tarántula cazadora', icon:'🕷️', hp:1.05, atk:1.00, res:{fisico:5,fuego:-5,hielo:0,veneno:25,aturdimiento:0}, frontline:true,
+        abilities:{
+          mordida:{label:'Mordida', mult:1.00},
+          picadura_venenosa:{label:'Picadura venenosa', mult:0.85, applies:{name:'Veneno', chance:0.25, duration:3, stack:true, maxStack:3}, cooldown:3},
+          acecho:{label:'Acecho', mult:1.38, cooldown:4, condition:(ctx)=>ctx.targetHpPct>0.7},
+        },
+        aiPriority:['acecho','picadura_venenosa','mordida']},
+      {id:'tarantula_saltarina', name:'Tarántula saltarina', icon:'🕷️', hp:0.85, atk:1.10, res:{fisico:0,fuego:-10,hielo:0,veneno:25,aturdimiento:0}, frontline:true,
+        abilities:{
+          mordida_veloz:{label:'Mordida veloz', mult:1.00},
+          salto_paralizante:{label:'Salto paralizante', mult:0.75, applies:{name:'Paralisis', chance:0.22, duration:1}, cooldown:3, selfBuff:{name:'Instinto Cazador', duration:2, dmgMult:1.15}},
+          picadura_rapida:{label:'Picadura rápida', mult:0.80, applies:{name:'Veneno', chance:0.15, duration:3, stack:true, maxStack:3}, cooldown:2},
+        },
+        aiPriority:['salto_paralizante','picadura_rapida','mordida_veloz']},
+      {id:'tarantula_tejedora', name:'Tarántula tejedora', icon:'🕸️', hp:0.85, atk:0.90, res:{fisico:-5,fuego:-10,hielo:10,veneno:30,aturdimiento:0},
+        abilities:{
+          mordida_tejedora:{label:'Mordida', mult:1.00},
+          telarana_inmovilizante:{label:'Telaraña inmovilizante', mult:0.50, applies:{name:'Paralisis', chance:0.20, duration:1}, cooldown:3},
+          picadura_debilitante:{label:'Picadura debilitante', mult:0.70, applies:{name:'Debilitado', chance:0.20, duration:2}, cooldown:3, condition:(ctx)=>ctx.targetStatuses.length===0},
+        },
+        aiPriority:['picadura_debilitante','telarana_inmovilizante','mordida_tejedora']},
+      {id:'viuda_venenosa', name:'Viuda venenosa', icon:'🕸️', hp:0.70, atk:0.95, res:{fisico:-10,fuego:-10,hielo:5,veneno:40,aturdimiento:0},
+        abilities:{
+          mordida_toxica:{label:'Mordida tóxica', mult:1.00, applies:{name:'Veneno', chance:0.15, duration:3, stack:true, maxStack:3}},
+          veneno_concentrado:{label:'Veneno concentrado', mult:0.65, applies:{name:'Veneno', chance:0.35, duration:3, stack:true, maxStack:3}, cooldown:3},
+          aguijon_paralizante:{label:'Aguijón paralizante', mult:0.70, applies:{name:'Paralisis', chance:0.15, duration:1}, cooldown:4},
+        },
+        bonusVsOwnStatus:{name:'Veneno', minStacks:2, mult:1.15},
+        aiPriority:['veneno_concentrado','aguijon_paralizante','mordida_toxica']},
     ],
-    elite: [{id:'matriarca_telaranha', name:'Matriarca telaraña', icon:'🕷️', hp:2.0, atk:1.35, res:{fisico:10,fuego:-15,hielo:5,veneno:35,aturdimiento:0}, moves:['pegar','paralizar'], elite:true, frontline:true}],
-    guardians: [
-      {id:'reina_telaranha', name:'Reina telaraña', icon:'👑', hp:3.4, atk:1.55, res:{fisico:15,fuego:-15,hielo:10,veneno:40,aturdimiento:5}, moves:['pegar','paralizar','aplastar'], boss:true, frontline:true},
-      {id:'devoradora_nido', name:'Devoradora de nido', icon:'🕷️', hp:3.6, atk:1.5, res:{fisico:20,fuego:-10,hielo:5,veneno:35,aturdimiento:10}, moves:['pegar','paralizar','aplastar'], boss:true, frontline:true}
+    // Acompañante de élite: la Matriarca Telaraña ya no pelea sola — trae 1
+    // araña normal sorteada por peso (ver eliteCompanions/pickWeighted en enterNode).
+    eliteCompanions:[
+      {tpl:{id:'tarantula_cazadora', name:'Tarántula cazadora', icon:'🕷️', hp:1.05, atk:1.00, res:{fisico:5,fuego:-5,hielo:0,veneno:25,aturdimiento:0}, frontline:true,
+        abilities:{mordida:{label:'Mordida', mult:1.00}, picadura_venenosa:{label:'Picadura venenosa', mult:0.85, applies:{name:'Veneno', chance:0.25, duration:3, stack:true, maxStack:3}, cooldown:3}, acecho:{label:'Acecho', mult:1.38, cooldown:4, condition:(ctx)=>ctx.targetHpPct>0.7}},
+        aiPriority:['acecho','picadura_venenosa','mordida']}, weight:0.5},
+      {tpl:{id:'tarantula_tejedora', name:'Tarántula tejedora', icon:'🕸️', hp:0.85, atk:0.90, res:{fisico:-5,fuego:-10,hielo:10,veneno:30,aturdimiento:0},
+        abilities:{mordida_tejedora:{label:'Mordida', mult:1.00}, telarana_inmovilizante:{label:'Telaraña inmovilizante', mult:0.50, applies:{name:'Paralisis', chance:0.20, duration:1}, cooldown:3}, picadura_debilitante:{label:'Picadura debilitante', mult:0.70, applies:{name:'Debilitado', chance:0.20, duration:2}, cooldown:3, condition:(ctx)=>ctx.targetStatuses.length===0}},
+        aiPriority:['picadura_debilitante','telarana_inmovilizante','mordida_tejedora']}, weight:0.3},
+      {tpl:{id:'tarantula_saltarina', name:'Tarántula saltarina', icon:'🕷️', hp:0.85, atk:1.10, res:{fisico:0,fuego:-10,hielo:0,veneno:25,aturdimiento:0}, frontline:true,
+        abilities:{mordida_veloz:{label:'Mordida veloz', mult:1.00}, salto_paralizante:{label:'Salto paralizante', mult:0.75, applies:{name:'Paralisis', chance:0.22, duration:1}, cooldown:3, selfBuff:{name:'Instinto Cazador', duration:2, dmgMult:1.15}}, picadura_rapida:{label:'Picadura rápida', mult:0.80, applies:{name:'Veneno', chance:0.15, duration:3, stack:true, maxStack:3}, cooldown:2}},
+        aiPriority:['salto_paralizante','picadura_rapida','mordida_veloz']}, weight:0.2},
     ],
-    decadeBoss: {id:'matriarca_escarlata', name:'Matriarca escarlata', icon:'🕷️', hp:4.2, atk:1.5, res:{fisico:20,fuego:-15,hielo:10,veneno:45,aturdimiento:10}, moves:['pegar','paralizar','aplastar'], boss:true, frontline:true}
+    elite: [{id:'matriarca_telaranha', name:'Matriarca telaraña', icon:'🕷️', hp:1.80, atk:1.25, res:{fisico:10,fuego:-15,hielo:5,veneno:35,aturdimiento:0}, elite:true, frontline:true,
+      abilities:{
+        mordida_matriarca:{label:'Mordida de Matriarca', mult:1.10},
+        gran_telarana:{label:'Gran Telaraña', mult:0.70, applies:{name:'Paralisis', chance:0.30, duration:1}, cooldown:3},
+        aguijon_dominante:{label:'Aguijón dominante', mult:1.00, applies:{name:'Veneno', chance:0.20, duration:3, stack:true, maxStack:3}, cooldown:3, bonusVsTargetStatus:{name:'Paralisis', mult:1.25}},
+        orden_colmena:{label:'Orden de la Colmena', utility:'buff_companion', buffCompanion:{name:'Enardecido', duration:3, dmgMult:1.15}, cooldown:5},
+      },
+      passiveWhileCompanionAlive:{reduccion:0.10},
+      aiPriority:['orden_colmena','gran_telarana','aguijon_dominante','mordida_matriarca']}],
+    // Guardián único y determinista por piso (11 a 19) — ver guardianByFloor
+    // en enterNode(). `guardians` (pool viejo, al azar) se deja vacío: ya no
+    // se usa para esta década, pero otras décadas todavía lo necesitan.
+    guardians: [],
+    guardianByFloor: {
+      1: {id:'reina_telaranha', name:'Reina telaraña', icon:'👑', hp:2.70, atk:1.25, res:{fisico:10,fuego:-10,hielo:10,veneno:30,aturdimiento:10}, boss:true, frontline:true,
+        abilities:{
+          mordida_real:{label:'Mordida Real', mult:1.10},
+          gran_telarana_r:{label:'Gran Telaraña', mult:0.75, applies:{name:'Paralisis', chance:0.30, duration:1}, cooldown:3},
+          seda_protectora:{label:'Seda Protectora', utility:'self_buff', selfBuff:{name:'Seda Protectora', duration:3, incomingDmgReduction:0.15}, cooldown:4},
+        },
+        hpThresholdBuff:{threshold:0.5, buff:{name:'Furia de Reina', duration:3, dmgMult:1.10}},
+        aiPriority:['gran_telarana_r','seda_protectora','mordida_real']},
+      2: {id:'viuda_alfa', name:'Viuda Alfa', icon:'🕸️', hp:2.85, atk:1.28, res:{fisico:-10,fuego:-5,hielo:5,veneno:45,aturdimiento:5}, boss:true, frontline:true,
+        abilities:{
+          mordida_alfa:{label:'Mordida Alfa', mult:1.05},
+          veneno_real:{label:'Veneno Real', mult:0.70, applies:{name:'Veneno', chance:0.40, duration:3, stack:true, maxStack:3}, cooldown:3},
+          aguijon_paralizante_a:{label:'Aguijón Paralizante', mult:0.80, applies:{name:'Paralisis', chance:0.20, duration:1}, cooldown:4},
+        },
+        bonusVsOwnStatus:{name:'Veneno', minStacks:2, mult:1.15},
+        aiPriority:['veneno_real','aguijon_paralizante_a','mordida_alfa']},
+      3: {id:'saltadora_alfa', name:'Saltadora Alfa', icon:'🕷️', hp:2.75, atk:1.32, res:{fisico:0,fuego:-10,hielo:10,veneno:25,aturdimiento:0}, boss:true, frontline:true,
+        abilities:{
+          mordida_veloz_a:{label:'Mordida Veloz', mult:1.05},
+          salto_paralizante_a:{label:'Salto Paralizante', mult:0.90, applies:{name:'Paralisis', chance:0.25, duration:1}, cooldown:3, selfBuff:{name:'Instinto Cazador', duration:2, dmgMult:1.15}},
+          salto_depredador:{label:'Salto Depredador', mult:1.30, cooldown:4, condition:(ctx)=>ctx.targetStatusCount('Paralisis')>=1},
+        },
+        aiPriority:['salto_depredador','salto_paralizante_a','mordida_veloz_a']},
+      4: {id:'gran_tejedora', name:'Gran Tejedora', icon:'🕸️', hp:3.00, atk:1.20, res:{fisico:10,fuego:-10,hielo:15,veneno:35,aturdimiento:5}, boss:true, frontline:true,
+        abilities:{
+          mordida_gt:{label:'Mordida', mult:1.00},
+          red_acero:{label:'Red de Acero', mult:0.60, applies:{name:'Paralisis', chance:0.30, duration:1}, cooldown:3},
+          debilitar_presa:{label:'Debilitar Presa', mult:0.80, applies:{name:'Debilitado', chance:0.25, duration:2}, cooldown:3},
+          caparazon_seda:{label:'Caparazón de Seda', utility:'self_buff', selfBuff:{name:'Caparazón de Seda', duration:3, incomingDmgReduction:0.15}, cooldown:5},
+        },
+        aiPriority:['caparazon_seda','red_acero','debilitar_presa','mordida_gt']},
+      5: {id:'devoradora_nido', name:'Devoradora de nido', icon:'🕷️', hp:3.20, atk:1.28, res:{fisico:20,fuego:-5,hielo:5,veneno:40,aturdimiento:10}, boss:true, frontline:true,
+        abilities:{
+          mandibula_brutal:{label:'Mandíbula Brutal', mult:1.25},
+          picadura_voraz:{label:'Picadura Voraz', mult:0.95, applies:{name:'Veneno', chance:0.25, duration:3, stack:true, maxStack:3}, cooldown:3},
+          golpe_brutal_dn:{label:'Golpe Brutal', mult:1.45, cooldown:4},
+        },
+        hpThresholdBuff:{threshold:0.4, buff:{name:'Frenesí Voraz', duration:3, dmgMult:1.15}},
+        aiPriority:['golpe_brutal_dn','picadura_voraz','mandibula_brutal']},
+      6: {id:'arana_caparazon', name:'Araña de Caparazón', icon:'🕷️', hp:3.50, atk:1.15, res:{fisico:35,fuego:0,hielo:10,veneno:20,aturdimiento:30}, boss:true, frontline:true,
+        abilities:{
+          golpe_patas:{label:'Golpe de Patas', mult:1.00},
+          caparazon_endurecido:{label:'Caparazón Endurecido', utility:'self_buff', selfBuff:{name:'Caparazón Endurecido', duration:3, incomingDmgReduction:0.30}, cooldown:5},
+          empuje:{label:'Empuje', mult:1.10, applies:{name:'Paralisis', chance:0.15, duration:1}, cooldown:3},
+        },
+        // Simplificado: "+10 Res Física y Aturdimiento" del PDF se aproxima
+        // con reducción de daño genérica (ver nota al inicio de la década).
+        hpThresholdBuff:{threshold:0.5, buff:{name:'Instinto de Supervivencia', duration:3, incomingDmgReduction:0.08}},
+        aiPriority:['caparazon_endurecido','empuje','golpe_patas']},
+      7: {id:'viuda_carmesi', name:'Viuda Carmesí', icon:'🕸️', hp:3.10, atk:1.32, res:{fisico:15,fuego:-10,hielo:5,veneno:50,aturdimiento:5}, boss:true, frontline:true,
+        abilities:{
+          mordida_carmesi:{label:'Mordida Carmesí', mult:1.10, applies:{name:'Veneno', chance:0.15, duration:3, stack:true, maxStack:3}},
+          sangre_venenosa:{label:'Sangre Venenosa', mult:0.85, applies:{name:'Veneno', chance:0.35, duration:3, stack:true, maxStack:3}, cooldown:3},
+          picadura_mortal:{label:'Picadura Mortal', mult:1.10, applies:{name:'Paralisis', chance:0.15, duration:1}, cooldown:4},
+        },
+        bonusVsOwnStatus:{name:'Veneno', minStacks:1, mult:1.30},
+        aiPriority:['picadura_mortal','sangre_venenosa','mordida_carmesi']},
+      8: {id:'matriarca_abisal', name:'Matriarca Abisal', icon:'🕷️', hp:3.35, atk:1.25, res:{fisico:15,fuego:0,hielo:15,veneno:45,aturdimiento:15}, boss:true, frontline:true,
+        abilities:{
+          mordida_profunda:{label:'Mordida Profunda', mult:1.15},
+          telarana_abisal:{label:'Telaraña Abisal', mult:0.70, applies:{name:'Paralisis', chance:0.35, duration:1}, cooldown:3},
+          // Simplificado: reusa Marcado (+20% de TODO el daño, no solo el propio).
+          sello_presa:{label:'Sello de Presa', mult:0.85, applies:{name:'Marcado', chance:1, duration:3}, cooldown:4},
+        },
+        aiPriority:['sello_presa','telarana_abisal','mordida_profunda']},
+      9: {id:'reina_devoradora', name:'Reina Devoradora', icon:'🕷️', hp:3.70, atk:1.35, res:{fisico:25,fuego:-10,hielo:5,veneno:55,aturdimiento:15}, boss:true, frontline:true,
+        abilities:{
+          mandibula_devastadora:{label:'Mandíbula Devastadora', mult:1.20},
+          // Simplificado: "Doble Picadura" (2×0.65) se aproxima a 1 golpe
+          // más fuerte — el motor nuevo no tiene multi-hit todavía.
+          doble_picadura:{label:'Doble Picadura', mult:1.10, applies:{name:'Veneno', chance:0.15, duration:3, stack:true, maxStack:3}, cooldown:4},
+          telarana_mortal:{label:'Telaraña Mortal', mult:0.80, applies:{name:'Paralisis', chance:0.30, duration:1}, cooldown:4},
+        },
+        // Simplificado: "por cada aliado <40% HP" se aproxima a un umbral
+        // de vida propia (ver nota al inicio de la década).
+        hpThresholdBuff:{threshold:0.5, buff:{name:'Furia de Colmena', duration:3, dmgMult:1.15}},
+        aiPriority:['mandibula_devastadora','telarana_mortal','doble_picadura']},
+    },
+    decadeBoss: {id:'matriarca_escarlata', name:'Matriarca escarlata', icon:'🕷️', hp:4.2, atk:1.5, res:{fisico:20,fuego:-15,hielo:10,veneno:45,aturdimiento:10}, boss:true, frontline:true,
+      abilities:{
+        mordida_final:{label:'Mordida', mult:1.00},
+        paralisis_matriarca:{label:'Parálisis', mult:0.90, applies:{name:'Paralisis', chance:0.30, duration:1}, cooldown:3},
+        // Fase 2 (<60% HP): presión de Veneno.
+        veneno_matriarca:{label:'Veneno Corrosivo', mult:0.85, applies:{name:'Veneno', chance:0.50, duration:3, stack:true, maxStack:3}, cooldown:3, condition:(ctx)=>ctx.selfHpPct<0.6},
+        // Fase 3 (<30% HP): cadencia agresiva.
+        golpe_brutal_final:{label:'Golpe Brutal', mult:1.40, cooldown:4, condition:(ctx)=>ctx.selfHpPct<0.3},
+      },
+      aiPriority:['golpe_brutal_final','veneno_matriarca','paralisis_matriarca','mordida_final']}
   },
   // Década 2 — pisos 21-30 — Guaridas de bestias, con Riakis
   {
@@ -379,14 +531,25 @@ const POTION_TEMPLATES = {
 /* ============================================================
    ITEM RARITY, TIENDA (SHOP) & GUARDIAN REWARDS
    ============================================================ */
+// Paleta de rareza (2026-09-25, rediseño explícito): la anterior tenía tres
+// choques de color reales — raro (#8a7fd1) y rango_b (#c17fd1) eran
+// prácticamente el mismo violeta, y rango_a (#d1a84f) y legendario
+// (#d1594f) se confundían de un vistazo con el bronce de la UI (--bronze-
+// light) y con el rojo de peligro (--blood-light) respectivamente, así que
+// un objeto raro NUNCA se sentía distinto del resto de la interfaz. Nueva
+// rampa: cada escalón es un matiz distinto (gris→verde→azul→violeta→
+// magenta→oro→naranja→rosa), eligiendo oro/naranja más saturados que el
+// bronce/sangre del tema para que sigan leyéndose como "objeto especial" y
+// no como "color de fondo del juego". Debe reflejarse en espejo en
+// SOUL_TIER_COLORS (misma escala de letras E-SS) — ver comentario ahí.
 const RARITIES = {
-  comun: {id:'comun', name:'Común', color:'#a3a3a3'},
-  poco_comun: {id:'poco_comun', name:'Poco común', color:'#3ecf6e'},
-  raro: {id:'raro', name:'Raro', color:'#8a7fd1'}, // mismo color que SOUL_TIER_COLORS.C — mismo escalón en la misma escala de letras
-  rango_b: {id:'rango_b', name:'Rango B', color:'#c17fd1'},
-  rango_a: {id:'rango_a', name:'Rango A', color:'#d1a84f'},
-  legendario: {id:'legendario', name:'Legendario', color:'#d1594f'}, // mismo color que SOUL_TIER_COLORS.S
-  ss: {id:'ss', name:'SS', color:'#e23c6b'} // mismo color que SOUL_TIER_COLORS.SS
+  comun: {id:'comun', name:'Común', color:'#928c7f'},
+  poco_comun: {id:'poco_comun', name:'Poco común', color:'#58b768'},
+  raro: {id:'raro', name:'Raro', color:'#7b6fd6'}, // mismo color que SOUL_TIER_COLORS.C — mismo escalón en la misma escala de letras
+  rango_b: {id:'rango_b', name:'Rango B', color:'#b355c9'},
+  rango_a: {id:'rango_a', name:'Rango A', color:'#e0a83f'},
+  legendario: {id:'legendario', name:'Legendario', color:'#e2542f'}, // mismo color que SOUL_TIER_COLORS.S
+  ss: {id:'ss', name:'SS', color:'#ff4fa3'} // mismo color que SOUL_TIER_COLORS.SS
 };
 // ============================================================
 // CATÁLOGO DE ARMAS — recalibración 2026-09-15 (pedido explícito de
@@ -399,11 +562,22 @@ const RARITIES = {
 // rank usa los mismos ids que RARITIES (comun=E, poco_comun=F, raro=C,
 // rango_b=B, rango_a=A). "value" es el bono a WEAPON_CATALOG[styleId].stat.
 // "specials" es un array (0, 1 o 2 efectos) — ver aplicación en combate.
-function wTier(rank, value, specials){ return {rank, value, specials: specials||[]}; }
+function wTier(rank, value, specials, mods){ return {rank, value, specials: specials||[], mods: mods||undefined}; }
 
 // Arma 1 de Mago y Sacerdote es EL MISMO pool (Vara arcana / Bastón rúnico)
 // con los mismos números — se define una sola vez y ambas sendas la comparten,
 // para que nunca puedan divergir por accidente.
+//
+// TIER S (legendario), pedido explícito 2026-09-24: "libera el tier S, tanto
+// para armas como para piedras". Cada arma con nombre propio suma una
+// estadística superior MÁS una pasiva de especialización (no solo más
+// número) — filosofía documentada en el propio catálogo: el Tier A ya
+// diferencia por nombre, Tier S profundiza esa diferencia. Todas las
+// pasivas de "firma" (las que no son solo un special ya existente escalado)
+// valen 1 vez por combate y 4 turnos de duración cuando aplican un
+// buff/debuff temporal — ver fireTierSBuff() y combat.tierSFired. No se
+// vende en la Tienda de oro/Sellos normal: solo en la Forja Legendaria (ver
+// TIER_S_RECIPE/buyTierSWeapon), desde piso 40+.
 const MAGO_ARMA1 = {
   'Vara arcana': [
     wTier('comun', 13),
@@ -411,6 +585,7 @@ const MAGO_ARMA1 = {
     wTier('raro', 22, [{type:'esp_refund', chance:0.08, amount:0.5, text:'de recuperar la mitad del espíritu gastado'}]),
     wTier('rango_b', 26, [{type:'esp_refund', chance:0.12, amount:0.5, text:'de recuperar la mitad del espíritu gastado'}]),
     wTier('rango_a', 30, [{type:'esp_refund', chance:0.15, amount:0.5, text:'de recuperar la mitad del espíritu gastado'}]),
+    wTier('legendario', 43, [{type:'esp_refund', chance:0.20, amount:0.5, text:'de recuperar la mitad del espíritu gastado'}, {type:'esp_refund_on_apply', chance:0.05, tierSProc:'vara_s', text:'de recuperar todo tu Espíritu al aplicar Quemadura o Ralentizado'}]),
   ],
   'Bastón rúnico': [
     wTier('comun', 13),
@@ -418,6 +593,7 @@ const MAGO_ARMA1 = {
     wTier('raro', 22, [{type:'aumento_dano', value:0.08, text:'de aumento de daño'}]),
     wTier('rango_b', 26, [{type:'aumento_dano', value:0.10, text:'de aumento de daño'}]),
     wTier('rango_a', 30, [{type:'aumento_dano', value:0.13, text:'de aumento de daño'}]),
+    wTier('legendario', 43, [{type:'aumento_dano', value:0.18, text:'de aumento de daño'}, {type:'tier_s_passive', tierSProc:'baston_s', text:'la primera habilidad elemental de cada combate hace +15% de daño'}]),
   ],
 };
 
@@ -431,6 +607,7 @@ const WEAPON_CATALOG = {
         wTier('raro', 27, [{type:'aturdir_retardado', chance:0.14, text:'de aturdir al oponente (su próximo turno)'}]),
         wTier('rango_b', 33, [{type:'aturdir_retardado', chance:0.20, text:'de aturdir al oponente (su próximo turno)'}]),
         wTier('rango_a', 42, [{type:'aturdir_retardado', chance:0.20, text:'de aturdir al oponente (su próximo turno)'}, {type:'aumento_dano', value:0.05, text:'de aumento de daño contra monstruos'}]),
+        wTier('legendario', 50, [{type:'aturdir_retardado', chance:0.25, text:'de aturdir al oponente (su próximo turno)', tierSProc:'martillo_s'}, {type:'aumento_dano', value:0.08, text:'de aumento de daño contra monstruos'}]),
       ],
       'Maza de combate': [
         wTier('comun', 12),
@@ -438,6 +615,7 @@ const WEAPON_CATALOG = {
         wTier('raro', 26, [{type:'retroceso', chance:0.18, text:'de aplicar retroceso'}]),
         wTier('rango_b', 30, [{type:'retroceso', chance:0.22, text:'de aplicar retroceso'}]),
         wTier('rango_a', 38, [{type:'retroceso', chance:0.18, text:'de aplicar retroceso'}, {type:'reduccion_dano', value:0.05, text:'de reducción de daño recibido'}]),
+        wTier('legendario', 46, [{type:'retroceso', chance:0.25, text:'de aplicar retroceso'}, {type:'reduccion_dano', value:0.08, text:'de reducción de daño recibido'}, {type:'debilitar_enemigo', chance:0.10, tierSProc:'maza_s', text:'de reducir el ataque del enemigo un 15% durante 4 turnos'}]),
       ],
       'Espadón pesado': [
         wTier('comun', 12),
@@ -445,6 +623,7 @@ const WEAPON_CATALOG = {
         wTier('raro', 26, [{type:'bloqueo', chance:0.09, text:'de bloquear ataque'}]),
         wTier('rango_b', 30, [{type:'bloqueo', chance:0.12, text:'de bloquear ataque'}]),
         wTier('rango_a', 37, [{type:'bloqueo', chance:0.12, text:'de bloquear ataque'}, {type:'reduccion_dano', value:0.05, text:'de reducción de daño recibido'}]),
+        wTier('legendario', 45, [{type:'bloqueo', chance:0.15, text:'de bloquear ataque', tierSProc:'espadon_s'}, {type:'reduccion_dano', value:0.08, text:'de reducción de daño recibido'}]),
       ],
     },
     arma2: {
@@ -454,6 +633,7 @@ const WEAPON_CATALOG = {
         wTier('raro', 0, [{type:'bloqueo', chance:0.16, text:'de bloquear ataque'}]),
         wTier('rango_b', 0, [{type:'bloqueo', chance:0.18, text:'de bloquear ataque'}]),
         wTier('rango_a', 0, [{type:'bloqueo', chance:0.18, text:'de bloquear ataque'}, {type:'reflect', pct:0.10, text:'de devolver el daño recibido'}]),
+        wTier('legendario', 0, [{type:'bloqueo', chance:0.20, text:'de bloquear ataque'}, {type:'reflect', pct:0.15, text:'de devolver el daño recibido'}, {type:'defend_bloqueo_bonus', value:0.10, text:'de bloqueo extra mientras te Defiendes'}], {maxhp_flat:50}),
       ],
     },
   },
@@ -466,6 +646,7 @@ const WEAPON_CATALOG = {
         wTier('raro', 19, [{type:'sangrado', chance:0.15, text:'de aplicar sangrado 2 turnos'}]),
         wTier('rango_b', 24, [{type:'sangrado', chance:0.20, text:'de aplicar sangrado 2 turnos'}]),
         wTier('rango_a', 29, [{type:'sangrado', chance:0.20, text:'de aplicar sangrado 2 turnos'}, {type:'succion_hechizo', percent:0.10, text:'succión de hechizo'}]),
+        wTier('legendario', 39, [{type:'sangrado', chance:0.25, duration:4, text:'de aplicar sangrado 4 turnos', tierSProc:'daga_s'}, {type:'succion_hechizo', percent:0.15, text:'succión de hechizo'}]),
       ],
       'Cuchillo largo': [
         wTier('comun', 10),
@@ -473,6 +654,7 @@ const WEAPON_CATALOG = {
         wTier('raro', 22, [{type:'sangrado', chance:0.08, text:'de aplicar sangrado 2 turnos'}]),
         wTier('rango_b', 29, [{type:'sangrado', chance:0.12, text:'de aplicar sangrado 2 turnos'}]),
         wTier('rango_a', 34, [{type:'sangrado', chance:0.12, text:'de aplicar sangrado 2 turnos'}, {type:'silencio', chance:0.10, text:'de aplicar silencio al enemigo'}]),
+        wTier('legendario', 44, [{type:'sangrado', chance:0.15, duration:4, text:'de aplicar sangrado 4 turnos'}, {type:'silencio', chance:0.15, text:'de aplicar silencio al enemigo'}, {type:'tier_s_passive', tierSProc:'cuchillo_s', text:'objetivos por debajo del 25% de vida reciben +20% de daño'}]),
       ],
     },
     arma2: {
@@ -482,6 +664,7 @@ const WEAPON_CATALOG = {
         wTier('raro', 19, [{type:'sangrado', chance:0.15, text:'de aplicar sangrado 2 turnos'}]),
         wTier('rango_b', 24, [{type:'sangrado', chance:0.20, text:'de aplicar sangrado 2 turnos'}]),
         wTier('rango_a', 29, [{type:'sangrado', chance:0.20, text:'de aplicar sangrado 2 turnos'}, {type:'succion_hechizo', percent:0.10, text:'succión de hechizo'}]),
+        wTier('legendario', 39, [{type:'sangrado', chance:0.25, duration:4, text:'de aplicar sangrado 4 turnos', tierSProc:'daga_s'}, {type:'succion_hechizo', percent:0.15, text:'succión de hechizo'}]),
       ],
       'Cuchillo gemelo': [
         wTier('comun', 10),
@@ -489,6 +672,7 @@ const WEAPON_CATALOG = {
         wTier('raro', 22, [{type:'sangrado', chance:0.08, text:'de aplicar sangrado 2 turnos'}]),
         wTier('rango_b', 29, [{type:'sangrado', chance:0.12, text:'de aplicar sangrado 2 turnos'}]),
         wTier('rango_a', 34, [{type:'sangrado', chance:0.12, text:'de aplicar sangrado 2 turnos'}, {type:'silencio', chance:0.10, text:'de aplicar silencio al enemigo'}]),
+        wTier('legendario', 44, [{type:'sangrado', chance:0.15, duration:4, text:'de aplicar sangrado 4 turnos'}, {type:'silencio', chance:0.15, text:'de aplicar silencio al enemigo'}, {type:'tier_s_passive', tierSProc:'cuchillo_s', text:'objetivos por debajo del 25% de vida reciben +20% de daño'}]),
       ],
     },
   },
@@ -501,6 +685,7 @@ const WEAPON_CATALOG = {
         wTier('raro', 20, [{type:'robovida', percent:0.12, text:'de robo de vida'}]),
         wTier('rango_b', 25, [{type:'robovida', percent:0.15, text:'de robo de vida'}]),
         wTier('rango_a', 30, [{type:'robovida', percent:0.15, text:'de robo de vida'}, {type:'segundo_ataque_basico', chance:0.10, text:'de realizar un segundo ataque básico'}]),
+        wTier('legendario', 40, [{type:'robovida', percent:0.20, text:'de robo de vida'}, {type:'segundo_ataque_basico', chance:0.10, tierSProc:'arcocorto_s', text:'de realizar un segundo ataque básico que además cura 3% de tu vida máxima'}]),
       ],
       'Arco largo': [
         wTier('comun', 10),
@@ -508,6 +693,7 @@ const WEAPON_CATALOG = {
         wTier('raro', 23, [{type:'penetracion_armadura', value:0.12, text:'de penetración de armadura'}]),
         wTier('rango_b', 29, [{type:'penetracion_armadura', value:0.15, text:'de penetración de armadura'}]),
         wTier('rango_a', 35, [{type:'penetracion_armadura', value:0.15, text:'de penetración de armadura'}, {type:'aumento_dano', value:0.05, text:'de aumento de daño'}]),
+        wTier('legendario', 44, [{type:'penetracion_armadura', value:0.20, text:'de penetración de armadura'}, {type:'aumento_dano', value:0.08, text:'de aumento de daño'}, {type:'tier_s_passive', tierSProc:'arcolargo_s', text:'objetivos por encima del 70% de vida reciben +15% de daño'}]),
       ],
     },
     arma2: {
@@ -517,6 +703,7 @@ const WEAPON_CATALOG = {
         wTier('raro', 18, [{type:'robovida', percent:0.12, text:'de robo de vida'}]),
         wTier('rango_b', 22, [{type:'robovida', percent:0.15, text:'de robo de vida'}]),
         wTier('rango_a', 26, [{type:'robovida', percent:0.15, text:'de robo de vida'}, {type:'segundo_ataque_basico', chance:0.10, text:'de realizar un segundo ataque básico'}]),
+        wTier('legendario', 40, [{type:'robovida', percent:0.20, text:'de robo de vida'}, {type:'segundo_ataque_basico', chance:0.10, tierSProc:'carcaj_s', text:'de realizar un segundo ataque básico con 10% de probabilidad de ignorar 50% de resistencia física'}]),
       ],
     },
   },
@@ -530,6 +717,7 @@ const WEAPON_CATALOG = {
         wTier('raro', 20, [{type:'doble_encantamiento', chance:0.08, text:'de realizar doble encantamiento'}]),
         wTier('rango_b', 24, [{type:'doble_encantamiento', chance:0.12, text:'de realizar doble encantamiento'}]),
         wTier('rango_a', 28, [{type:'doble_encantamiento', chance:0.15, text:'de realizar doble encantamiento'}]),
+        wTier('legendario', 38, [{type:'doble_encantamiento', chance:0.20, text:'de realizar doble encantamiento'}, {type:'tier_s_passive', tierSProc:'foco_s', text:'cuando una habilidad consume un estado (combo), +10% de daño'}]),
       ],
     },
   },
@@ -548,6 +736,12 @@ const WEAPON_CATALOG = {
         // Ojo: el número del debuff "aumento de daño recibido" no vino especificado
         // en el pedido original — usé 10% como valor razonable por defecto.
         wTier('rango_a', 28, [{type:'bendecido_dur', text:'Aumenta la duración de Bendecido a 3 turnos'}, {type:'dano_recibido_debuff', value:0.10, text:'de aumento de daño recibido al enemigo bendecido, por 2 turnos'}]),
+        // Tier S: sube Bendecido a 4 turnos y agrega "Bendición" (2026-09-25:
+        // ya existe el buff genérico — ver fireTierSBuff/'Bendición' en
+        // resolveOneAllyTurn) — al bendecir a un enemigo, el propio Sacerdote
+        // se fortalece: +20% de resistencias y -10% de daño recibido, 4
+        // turnos, 1 vez por combate.
+        wTier('legendario', 38, [{type:'bendecido_dur', duration:4, text:'Aumenta la duración de Bendecido a 4 turnos'}, {type:'dano_recibido_debuff', value:0.15, text:'de aumento de daño recibido al enemigo bendecido, por 2 turnos'}, {type:'bendicion_propia', resBonus:20, dmgReduction:0.10, tierSProc:'grimorio_s', text:'te da +20% de resistencias y -10% de daño recibido durante 4 turnos al bendecir a un enemigo'}]),
       ],
       'Tomo sagrado': [
         wTier('comun', 10),
@@ -555,6 +749,12 @@ const WEAPON_CATALOG = {
         wTier('raro', 20, [{type:'aumento_curacion', value:0.08, text:'de aumento de curación'}]),
         wTier('rango_b', 24, [{type:'aumento_curacion', value:0.12, text:'de aumento de curación'}]),
         wTier('rango_a', 28, [{type:'aumento_curacion', value:0.12, text:'de aumento de curación'}, {type:'dano_aliado_curado', value:0.05, text:'de aumento de daño al aliado curado, por 2 turnos'}]),
+        // Tier S: sube curación y daño al curado, y agrega la pasiva de
+        // escudo (2026-09-25: ya existe un sistema genérico de escudo, ver
+        // grantShield()/combat.playerShield/ally.shield) — si cura a
+        // alguien por debajo del 40% de vida, 15% de probabilidad de darle
+        // además un escudo = 8% de su vida máxima.
+        wTier('legendario', 38, [{type:'aumento_curacion', value:0.18, text:'de aumento de curación'}, {type:'dano_aliado_curado', value:0.05, text:'de aumento de daño al aliado curado, por 2 turnos'}, {type:'escudo_en_curacion', chance:0.15, shieldPct:0.08, tierSProc:'tomo_s', text:'de aplicar un escudo = 8% de la vida máxima al curar a alguien por debajo del 40% de vida'}]),
       ],
     },
   },
@@ -578,6 +778,7 @@ function makeWeaponItem(slot, styleId, rank, name){
   if(!entry) return null;
   const item = {kind:'equip', slot, name:chosenName, bonus:{stat:cat.stat, value:entry.value}, rarity:rank, styleId};
   if(entry.specials && entry.specials.length) item.specials = entry.specials.map(s=>Object.assign({}, s));
+  if(entry.mods) item.mods = Object.assign({}, entry.mods);
   return item;
 }
 
@@ -592,65 +793,82 @@ function makeWeaponItem(slot, styleId, rank, name){
 // varía en stat: Físico para Guerrero/Arquero (pesada/tirador), Habilidad
 // para Asesino/Mago/Sacerdote (doblefilo/mago/sacerdote).
 // ============================================================
-const GEAR_RANK_ORDER = ['comun','poco_comun','raro','rango_b','rango_a'];
+// 2026-09-24: se agrega 'legendario' (Tier S) como 6to escalón — su nombre
+// de material en GEAR_NAMES es "de vacío" en las 5 sendas (el material que
+// sigue después de piedra/bronce/plata/oro/platino, sin atarlo a la lore de
+// un único jefe ya que Tier S se puede desbloquear con fragmentos de
+// cualquier década — ver TIER_S_RECIPE). Hoy este rango NO se vende en la
+// Tienda/Gremio para equipo general (solo armas y piedras, pedido explícito
+// 2026-09-24) — vive acá sobre todo para que el set del aliado Sacerdote
+// pueda llegar a Tier S al vencer a Storm Gush (ver el hook en
+// handleVictory, isDecadeFinal && clearedLevel===60).
+const GEAR_RANK_ORDER = ['comun','poco_comun','raro','rango_b','rango_a','legendario'];
 const GEAR_NAMES = {
   pesada: {
-    casco:['Casco de piedra','Casco de bronce','Casco de plata','Casco de oro','Casco de platino'],
-    armadura:['Placa de piedra','Placa de bronce','Placa de plata','Placa de oro','Placa de platino'],
-    botas:['Grevas de piedra','Grevas de bronce','Grevas de plata','Grevas de oro','Grevas de platino'],
-    guantes:['Manoplas de piedra','Manoplas de bronce','Manoplas de plata','Manoplas de oro','Manoplas de platino'],
-    amuleto:['Talismán roto','Talismán','Talismán imbuido con magia','Talismán de sangre','Talismán despertado'],
+    casco:['Casco de piedra','Casco de bronce','Casco de plata','Casco de oro','Casco de platino','Casco de vacío'],
+    armadura:['Placa de piedra','Placa de bronce','Placa de plata','Placa de oro','Placa de platino','Placa de vacío'],
+    botas:['Grevas de piedra','Grevas de bronce','Grevas de plata','Grevas de oro','Grevas de platino','Grevas de vacío'],
+    guantes:['Manoplas de piedra','Manoplas de bronce','Manoplas de plata','Manoplas de oro','Manoplas de platino','Manoplas de vacío'],
+    amuleto:['Talismán roto','Talismán','Talismán imbuido con magia','Talismán de sangre','Talismán despertado','Talismán del vacío'],
   },
   doblefilo: {
-    casco:['Máscara de piedra','Máscara de bronce','Máscara de plata','Máscara de oro','Máscara de platino'],
-    armadura:['Manto de piedra','Manto de bronce','Manto de plata','Manto de oro','Manto de platino'],
-    botas:['Zapatillas de piedra','Zapatillas de bronce','Zapatillas de plata','Zapatillas de oro','Zapatillas de platino'],
-    guantes:['Zarpas de piedra','Zarpas de bronce','Zarpas de plata','Zarpas de oro','Zarpas de platino'],
-    amuleto:['Anillo roto','Anillo','Anillo imbuido con magia','Anillo de sangre','Anillo despertado'],
+    casco:['Máscara de piedra','Máscara de bronce','Máscara de plata','Máscara de oro','Máscara de platino','Máscara de vacío'],
+    armadura:['Manto de piedra','Manto de bronce','Manto de plata','Manto de oro','Manto de platino','Manto de vacío'],
+    botas:['Zapatillas de piedra','Zapatillas de bronce','Zapatillas de plata','Zapatillas de oro','Zapatillas de platino','Zapatillas de vacío'],
+    guantes:['Zarpas de piedra','Zarpas de bronce','Zarpas de plata','Zarpas de oro','Zarpas de platino','Zarpas de vacío'],
+    amuleto:['Anillo roto','Anillo','Anillo imbuido con magia','Anillo de sangre','Anillo despertado','Anillo del vacío'],
   },
   tirador: {
-    casco:['Capucha de piedra','Capucha de bronce','Capucha de plata','Capucha de oro','Capucha de platino'],
-    armadura:['Cota de piedra','Cota de bronce','Cota de plata','Cota de oro','Cota de platino'],
-    botas:['Botas de piedra','Botas de bronce','Botas de plata','Botas de oro','Botas de platino'],
-    guantes:['Guantes de piedra','Guantes de bronce','Guantes de plata','Guantes de oro','Guantes de platino'],
-    amuleto:['Amuleto roto','Amuleto','Amuleto imbuido con magia','Amuleto de sangre','Amuleto despertado'],
+    casco:['Capucha de piedra','Capucha de bronce','Capucha de plata','Capucha de oro','Capucha de platino','Capucha de vacío'],
+    armadura:['Cota de piedra','Cota de bronce','Cota de plata','Cota de oro','Cota de platino','Cota de vacío'],
+    botas:['Botas de piedra','Botas de bronce','Botas de plata','Botas de oro','Botas de platino','Botas de vacío'],
+    guantes:['Guantes de piedra','Guantes de bronce','Guantes de plata','Guantes de oro','Guantes de platino','Guantes de vacío'],
+    amuleto:['Amuleto roto','Amuleto','Amuleto imbuido con magia','Amuleto de sangre','Amuleto despertado','Amuleto del vacío'],
   },
   mago: {
-    casco:['Diadema de piedra','Diadema de bronce','Diadema de plata','Diadema de oro','Diadema de platino'],
-    armadura:['Túnica de piedra','Túnica de bronce','Túnica de plata','Túnica de oro','Túnica de platino'],
-    botas:['Sandalias de piedra','Sandalias de bronce','Sandalias de plata','Sandalias de oro','Sandalias de platino'],
-    guantes:['Mitones de piedra','Mitones de bronce','Mitones de plata','Mitones de oro','Mitones de platino'],
-    amuleto:['Libro roto','Libro','Libro imbuido con magia','Libro de sangre','Libro despertado'],
+    casco:['Diadema de piedra','Diadema de bronce','Diadema de plata','Diadema de oro','Diadema de platino','Diadema de vacío'],
+    armadura:['Túnica de piedra','Túnica de bronce','Túnica de plata','Túnica de oro','Túnica de platino','Túnica de vacío'],
+    botas:['Sandalias de piedra','Sandalias de bronce','Sandalias de plata','Sandalias de oro','Sandalias de platino','Sandalias de vacío'],
+    guantes:['Mitones de piedra','Mitones de bronce','Mitones de plata','Mitones de oro','Mitones de platino','Mitones de vacío'],
+    amuleto:['Libro roto','Libro','Libro imbuido con magia','Libro de sangre','Libro despertado','Libro del vacío'],
   },
   // Sacerdote comparte los números de Mago (ambos escalan Habilidad) pero
   // con nombres propios — evité repetir "Libro" en el amuleto para que no
   // compita en nombre con el del Mago; le puse "Reliquia" en su lugar.
   sacerdote: {
-    casco:['Corona de piedra','Corona de bronce','Corona de plata','Corona de oro','Corona de platino'],
-    armadura:['Sotana de piedra','Sotana de bronce','Sotana de plata','Sotana de oro','Sotana de platino'],
-    botas:['Alpargatas de piedra','Alpargatas de bronce','Alpargatas de plata','Alpargatas de oro','Alpargatas de platino'],
-    guantes:['Vendas de piedra','Vendas de bronce','Vendas de plata','Vendas de oro','Vendas de platino'],
-    amuleto:['Reliquia rota','Reliquia','Reliquia imbuida con fe','Reliquia de sangre','Reliquia despertada'],
+    casco:['Corona de piedra','Corona de bronce','Corona de plata','Corona de oro','Corona de platino','Corona de vacío'],
+    armadura:['Sotana de piedra','Sotana de bronce','Sotana de plata','Sotana de oro','Sotana de platino','Sotana de vacío'],
+    botas:['Alpargatas de piedra','Alpargatas de bronce','Alpargatas de plata','Alpargatas de oro','Alpargatas de platino','Alpargatas de vacío'],
+    guantes:['Vendas de piedra','Vendas de bronce','Vendas de plata','Vendas de oro','Vendas de platino','Vendas de vacío'],
+    amuleto:['Reliquia rota','Reliquia','Reliquia imbuida con fe','Reliquia de sangre','Reliquia despertada','Reliquia del vacío'],
   },
 };
 // Casco: vida máxima (flat, SIN el ×8 que sí aplica al viejo bonus.stat==
 // 'maxhp' de Armadura — ver item.mods en derived()) + Precisión (nueva:
 // contrarresta la evasión enemiga) + a rango A, aumento de daño.
+// 2026-09-24, pedido explícito: Rango A sube su vida (35->50) y se agrega
+// Tier S (legendario) — pasiva propia: por debajo de 50% de vida, +5%
+// reducción de daño recibido (ver TIER_S_PASSIVE_EFFECTS/'casco_s').
 const CASCO_TIERS = [
   {rank:'comun', mods:{maxhp_flat:15}},
   {rank:'poco_comun', mods:{maxhp_flat:20, precision:5}},
   {rank:'raro', mods:{maxhp_flat:25, precision:10}},
   {rank:'rango_b', mods:{maxhp_flat:30, precision:15}},
-  {rank:'rango_a', mods:{maxhp_flat:35, precision:20}, specials:[{type:'aumento_dano', value:0.05, text:'de aumento de daño'}]},
+  {rank:'rango_a', mods:{maxhp_flat:50, precision:20}, specials:[{type:'aumento_dano', value:0.05, text:'de aumento de daño'}]},
+  {rank:'legendario', mods:{maxhp_flat:80, precision:25}, specials:[{type:'aumento_dano', value:0.07, text:'de aumento de daño'}, {type:'tier_s_passive', tierSProc:'casco_s', text:'por debajo del 50% de vida: +5% reducción de daño recibido'}]},
 ];
 // Armadura: resistencia física de siempre (mismo canal que raza/amuleto,
 // dmgType 'fisico') + % de reducción de daño recibido + a rango A, bloqueo.
+// 2026-09-24: Rango A gana +20 HP (antes no daba nada de vida) y se agrega
+// Tier S — pasiva propia: el primer golpe recibido en cada combate, -10%
+// de daño (ver 'armadura_s').
 const ARMADURA_TIERS = [
   {rank:'comun', bonus:{res:'fisico', value:10}},
   {rank:'poco_comun', bonus:{res:'fisico', value:15}, specials:[{type:'reduccion_dano', value:0.05, text:'de reducción de daño recibido'}]},
   {rank:'raro', bonus:{res:'fisico', value:20}, specials:[{type:'reduccion_dano', value:0.08, text:'de reducción de daño recibido'}]},
   {rank:'rango_b', bonus:{res:'fisico', value:25}, specials:[{type:'reduccion_dano', value:0.12, text:'de reducción de daño recibido'}]},
-  {rank:'rango_a', bonus:{res:'fisico', value:30}, specials:[{type:'reduccion_dano', value:0.12, text:'de reducción de daño recibido'},{type:'bloqueo', chance:0.05, text:'de bloquear ataque'}]},
+  {rank:'rango_a', bonus:{res:'fisico', value:30}, mods:{maxhp_flat:20}, specials:[{type:'reduccion_dano', value:0.12, text:'de reducción de daño recibido'},{type:'bloqueo', chance:0.05, text:'de bloquear ataque'}]},
+  {rank:'legendario', bonus:{res:'fisico', value:40}, mods:{maxhp_flat:40}, specials:[{type:'reduccion_dano', value:0.16, text:'de reducción de daño recibido'},{type:'bloqueo', chance:0.08, text:'de bloquear ataque'}, {type:'tier_s_passive', tierSProc:'armadura_s', text:'el primer golpe recibido en cada combate hace -10% de daño'}]},
 ];
 // Botas: Resistencia mágica (canal nuevo, ver derived().resMagica — listo
 // para cuando el bestiario tenga ataques elementales propios, todavía casi
@@ -658,26 +876,44 @@ const ARMADURA_TIERS = [
 // "físicos" (Sangrado/Debilitado/Parálisis/Ceguera/Ralentizado/Tambaleo -
 // Miedo/Confusión son alteraciones MENTALES, esas las cubre el amuleto) + a
 // rango A, evasión.
+// 2026-09-24: ariochbu preguntó si Botas también debería ganar vida en Rango
+// A junto con Casco/Armadura/Amuleto — decisión: no, se deja Botas sin HP a
+// propósito para conservar su identidad de única pieza "mágica/estados" (así
+// lo dice el propio punto 9 del documento de diseño: "casco vida/precisión,
+// armadura resistencia/reducción, botas magia/estados, amuleto fortaleza
+// mental/recursos" — meterle vida a las 4 piezas hace que cualquier pieza dé
+// lo mismo y el inventario deja de tener sentido). Tier S sí se agrega, con
+// la misma identidad: pasiva propia, resistir la primera alteración de
+// estado negativa de cada combate (ver 'botas_s').
 const BOTAS_TIERS = [
   {rank:'comun', mods:{res_magica:10}},
   {rank:'poco_comun', mods:{res_magica:15, resistencia_estado:5}},
   {rank:'raro', mods:{res_magica:20, resistencia_estado:8}},
   {rank:'rango_b', mods:{res_magica:25, resistencia_estado:12}},
   {rank:'rango_a', mods:{res_magica:30, resistencia_estado:12}, specials:[{type:'evasion_flat', value:0.05, text:'de evasión'}]},
+  {rank:'legendario', mods:{res_magica:40, resistencia_estado:16}, specials:[{type:'evasion_flat', value:0.07, text:'de evasión'}, {type:'tier_s_passive', tierSProc:'botas_s', text:'50% de resistir la primera alteración de estado negativa de cada combate'}]},
 ];
 // Amuleto/Accesorio: % Fortaleza mental (resiste Miedo/Confusión
 // específicamente) + MP plano + a rango A, Espíritu plano también.
+// 2026-09-24: Rango A gana +15 HP (antes no daba nada de vida) y +15
+// Espíritu (antes +5). Tier S agrega +10% de resistencia adicional a
+// efectos de control (mentales Y físicos, ver 'amuleto_s').
 const AMULETO_TIERS = [
   {rank:'comun', mods:{fortaleza_mental:5}},
   {rank:'poco_comun', mods:{fortaleza_mental:8, mp_flat:5}},
   {rank:'raro', mods:{fortaleza_mental:12, mp_flat:10}},
   {rank:'rango_b', mods:{fortaleza_mental:15, mp_flat:15}},
-  {rank:'rango_a', mods:{fortaleza_mental:18, mp_flat:15, espiritu_flat:5}},
+  {rank:'rango_a', mods:{fortaleza_mental:18, mp_flat:15, espiritu_flat:15, maxhp_flat:15}},
+  {rank:'legendario', mods:{fortaleza_mental:22, mp_flat:20, espiritu_flat:20, maxhp_flat:25}, specials:[{type:'tier_s_passive', tierSProc:'amuleto_s', text:'+10% de resistencia adicional a efectos de control'}]},
 ];
 // Guantes: la única pieza donde el stat de verdad cambia por senda. A rango
 // A penetra la defensa contraria a su propio daño — física para
 // Guerrero/Arquero, mágica para Asesino/Mago/Sacerdote (reusa
 // 'penetracion_armadura' de las armas; 'penetracion_magica' es nuevo).
+// 2026-09-24: Tier S (legendario) agrega 'proc_next_skill' — 5% de
+// probabilidad al golpear de potenciar tu siguiente habilidad (ver
+// TIER_S_PROC_EFFECTS/'guantes_s' en applyEquippedSpecials), 1 vez por
+// combate.
 function guantesTiers(stat, penType, penText){
   return [
     {rank:'comun', bonus:{stat, value:5}},
@@ -685,6 +921,7 @@ function guantesTiers(stat, penType, penText){
     {rank:'raro', bonus:{stat, value:12}, specials:[{type:'aumento_dano', value:0.08, text:'de aumento de daño'}]},
     {rank:'rango_b', bonus:{stat, value:16}, specials:[{type:'aumento_dano', value:0.12, text:'de aumento de daño'}]},
     {rank:'rango_a', bonus:{stat, value:20}, specials:[{type:'aumento_dano', value:0.12, text:'de aumento de daño'},{type:penType, value:0.05, text:penText}]},
+    {rank:'legendario', bonus:{stat, value:26}, specials:[{type:'aumento_dano', value:0.15, text:'de aumento de daño'},{type:penType, value:0.08, text:penText}, {type:'proc_chance', chance:0.05, tierSProc:'guantes_s', text:'de potenciar tu siguiente habilidad en +25% de daño durante 4 turnos'}]},
   ];
 }
 // 2026-09-16: corregido tras revisar qué stat/penetración de verdad usa
@@ -736,7 +973,40 @@ const SHOP_POTION_PRICES = {vida_menor:12, vida_mayor:30, estamina:12, espiritu:
 
 function dealDamageToPlayer(amount){
   if(amount<=0) return;
-  state.char.curHP = Math.max(0, state.char.curHP - amount);
+  if(combat && combat.playerShield>0){
+    const absorbed = Math.min(combat.playerShield, amount);
+    combat.playerShield -= absorbed;
+    amount -= absorbed;
+  }
+  if(amount>0) state.char.curHP = Math.max(0, state.char.curHP - amount);
+  checkFuriaContenidaTrigger();
+}
+// Escudo (2026-09-25, pedido explícito): un valor que se resta ANTES que la
+// vida — "750 (250)/750" significa 750 de vida intacta + 250 de escudo por
+// encima, y cualquier golpe drena primero esos 250. isPlayer=true suma a
+// combat.playerShield; si no, a ally.shield. No hay tope de acumulación (un
+// segundo escudo simplemente se suma al que ya había).
+function grantShield(isPlayer, ally, amount){
+  if(amount<=0) return;
+  if(isPlayer){ if(combat) combat.playerShield = (combat.playerShield||0) + amount; }
+  else if(ally) ally.shield = (ally.shield||0) + amount;
+}
+// Furia Contenida (REWORK 2026-09-24, ver SOUL_STONES.furia_*): se dispara
+// la primera vez que la vida cruza el umbral de la piedra engarzada, en
+// TODO el combate — no importa si te curás y volvés a bajar, no vuelve a
+// activarse (reusa combat.tierSFired, la misma bandera "1 vez por combate"
+// de las pasivas de Tier S). Único choke point de daño al jugador, así que
+// cubre cualquier fuente: enemigos, DOT, autogolpe por Confusión, etc.
+function checkFuriaContenidaTrigger(){
+  if(!combat || combat.tierSFired.has('furia_contenida')) return;
+  const stone = socketedStones().find(s=> s.special && s.special.type==='furia_v2');
+  if(!stone) return;
+  const d = derived();
+  if(d.maxHP<=0 || (state.char.curHP/d.maxHP) >= stone.special.threshold) return;
+  combat.tierSFired.add('furia_contenida');
+  applyStatus(null, {name:'Furioso', duration:stone.special.duration, dmgMult:1+stone.special.dmgBonus, incomingDmgReduction:stone.special.dmgReduction||0}, true);
+  const reducTxt = stone.special.dmgReduction ? ` y -${Math.round(stone.special.dmgReduction*100)}% de daño recibido` : '';
+  log(`<b>${stone.name}</b> se activa: +${Math.round(stone.special.dmgBonus*100)}% de daño${reducTxt} durante ${stone.special.duration} turnos.`);
 }
 
 function buyWeapon(slot, styleId, name){
@@ -867,6 +1137,62 @@ function buySelloGear(slot, rarity, name){
   renderAll(); save();
 }
 
+// ============================================================
+// FORJA LEGENDARIA (Tier S) — pedido explícito 2026-09-24. Único camino para
+// conseguir armas Tier S (WEAPON_CATALOG rango 'legendario') y piedras de
+// alma de rango S: se compran, no caen al azar (el drop al azar de
+// legendario/S sigue apagado — ver LEGENDARY_TIERS_ENABLED). Exige haber
+// llegado alguna vez al piso 40 (state.char.maxLevelUnlocked, no el piso de
+// la partida en curso) — "debe ser mucho más difícil de conseguir, atención
+// principal en esto" fue el pedido explícito, así que además de Sellos pide
+// un fragmento de CADA jefe de década (pisos 10 a 60) — no hay atajo: para
+// forjar un solo objeto Tier S hace falta haber derrotado a los 6 jefes de
+// década al menos 2 veces cada uno. Las cantidades son elección propia
+// (ariochbu pidió explícitamente "las cantidades ponlas tú").
+// ============================================================
+const TIER_S_MIN_FLOOR = 40;
+const TIER_S_RECIPE = {
+  sellos: 1500,
+  fragments: {ogro:2, matriarca_escarlata:2, riakis:2, usurpador:2, custodio_isla:2, storm_gush:2}
+};
+function tierSUnlocked(){ return (state.char.maxLevelUnlocked||1) >= TIER_S_MIN_FLOOR; }
+function fragmentQty(fragId){
+  const it = state.char.inventory.find(i=>i.kind==='fragmento' && i.fragId===fragId);
+  return it ? it.qty : 0;
+}
+function hasTierSMaterials(){
+  if((state.char.missionCurrency||0) < TIER_S_RECIPE.sellos) return false;
+  return Object.keys(TIER_S_RECIPE.fragments).every(fragId=> fragmentQty(fragId) >= TIER_S_RECIPE.fragments[fragId]);
+}
+function spendTierSMaterials(){
+  state.char.missionCurrency -= TIER_S_RECIPE.sellos;
+  Object.keys(TIER_S_RECIPE.fragments).forEach(fragId=>{
+    const it = state.char.inventory.find(i=>i.kind==='fragmento' && i.fragId===fragId);
+    if(it) it.qty -= TIER_S_RECIPE.fragments[fragId];
+  });
+  state.char.inventory = state.char.inventory.filter(i=> !(i.kind==='fragmento' && i.qty<=0));
+}
+function buyTierSWeapon(slot, name){
+  if(!tierSUnlocked()){ log(`La Forja Legendaria solo abre para quien ya llegó al piso ${TIER_S_MIN_FLOOR}.`); return; }
+  if(!hasTierSMaterials()){ log('Te faltan Sellos del Laberinto o fragmentos de jefe de década para forjar esto.'); return; }
+  const item = makeWeaponItem(slot, shopWeaponRole, 'legendario', name);
+  if(!item) return;
+  spendTierSMaterials();
+  addToInventory(item);
+  log(`La Forja Legendaria termina: <b>${item.name}</b> (Tier S).`);
+  renderAll(); save();
+}
+function buyTierSStone(family){
+  if(!tierSUnlocked()){ log(`La Forja Legendaria solo abre para quien ya llegó al piso ${TIER_S_MIN_FLOOR}.`); return; }
+  if(!hasTierSMaterials()){ log('Te faltan Sellos del Laberinto o fragmentos de jefe de década para forjar esto.'); return; }
+  const tpl = Object.values(SOUL_STONES).find(s=>s.family===family && s.tier==='S');
+  if(!tpl) return;
+  spendTierSMaterials();
+  addToInventory({kind:'soulstone', stoneId:tpl.id, family:tpl.family, name:tpl.name, tier:tpl.tier, icon:tpl.icon, desc:tpl.desc, preview:tpl.preview, bonus:tpl.bonus, special:tpl.special});
+  log(`La Forja Legendaria termina: <b>${tpl.name}</b>.`);
+  renderAll(); save();
+}
+
 /* ============================================================
    PROGRESIÓN AUTOMÁTICA DE EQUIPO — Sacerdote (pedido 2026-09-15)
    ============================================================
@@ -884,7 +1210,7 @@ const AUTO_GEAR_LEVEL = {raro:10, rango_b:20}; // rango_a no depende del nivel, 
 // de la interfaz esos dos rangos siempre se muestran como "Único"/"Épico"
 // (ver el tag de makeSelloShopItem), así que la progresión automática usa
 // la misma etiqueta para no decir una cosa distinta al resto de la tienda.
-const AUTO_GEAR_TIER_LABEL = {raro:'Raro', rango_b:'Único', rango_a:'Épico'};
+const AUTO_GEAR_TIER_LABEL = {raro:'Raro', rango_b:'Único', rango_a:'Épico', legendario:'Tier S'};
 // Siempre 'sacerdote' explícito — antes de que el equipo general tuviera
 // styleId esto daba igual (cualquier nombre/stat servía para cualquier
 // senda), pero ahora que SÍ está restringido por senda, dejar que
@@ -1016,7 +1342,9 @@ const GUARDIAN_SLOT_STAT = {casco:'hab', guantes:'fis', botas:'hab'}; // themed 
    — quedan pendientes a propósito; solo Vigor cambia de verdad en A/S/SS
    (roba vida, que ya es un special genérico existente). */
 const SOUL_STONE_TIERS = ['E','F','D','C','B','A','S','SS']; // ascendente: E la más baja, SS la más alta
-const SOUL_TIER_COLORS = {E:'#9a9a9a', F:'#6fae6f', D:'#4f9bd1', C:'#8a7fd1', B:'#c17fd1', A:'#d1a84f', S:'#d1594f', SS:'#e23c6b'};
+// Espejo de la rampa de RARITIES (ver comentario ahí) sobre las 8 letras de
+// piedras de alma en vez de los 7 slugs de equipo.
+const SOUL_TIER_COLORS = {E:'#928c7f', F:'#58b768', D:'#4098c9', C:'#7b6fd6', B:'#b355c9', A:'#e0a83f', S:'#e2542f', SS:'#ff4fa3'};
 function soulTierIdx(tier){ return SOUL_STONE_TIERS.indexOf(tier); }
 
 // Fórmulas de escalado por familia (documentadas para cuando D-SS estén disponibles).
@@ -1051,11 +1379,6 @@ function soulAdvancedValue(famId, tier){
   if(idx < 5) return 0; // 5 = rango A; antes de eso no hay efecto avanzado
   return fam.advBaseAtA + (idx-5)*0.10;
 }
-// Nerfeadas a la mitad de sus valores originales (0.10/0.18+... y
-// 0.005/0.006+...) a pedido explícito.
-function soulFuriaBase(tier){ const idx=soulTierIdx(tier); return (idx===0 ? 0.10 : 0.18 + (idx-1)*0.001) * 0.5; }
-function soulFuriaMissingScale(tier){ const idx=soulTierIdx(tier); return (idx===0 ? 0.005 : 0.006 + (idx-1)*0.001) * 0.5; }
-
 // Nerfeadas a la mitad de sus valores originales a pedido explícito: todo
 // bonus.value, y todo special que sea magnitud directa de poder (robo de
 // vida/reflejo/evasión/daño de Furia), quedó exactamente a la mitad. Las
@@ -1088,12 +1411,24 @@ const SOUL_STONES = {
   vitalidad_f: {id:'vitalidad_f', family:'vitalidad', name:'Piedra del Alma: Vitalidad (F)',        tier:'F', icon:'❤️', bonus:{stat:'maxhp', value:2},
     special:{type:'reflect', pct:0.01},
     desc:'+16 Vida máxima aprox. Devuelves el 1% del daño físico que recibes a tu atacante.', preview:'Desde A: probabilidad de recuperar el 10% de tu vida máxima.'},
-  furia_e:     {id:'furia_e',     family:'furia',     name:'Piedra del Alma: Furia Contenida (E)',  tier:'E', icon:'🔥',
-    special:{type:'lowhp_dmg_v2', threshold:0.3, base:0.05, missingScale:0.0025},
-    desc:'Por debajo del 30% de vida: +5% de daño, y +0.25% adicional por cada 1% de vida que te falte.', preview:'Desde A: probabilidad de revivir una vez por entrada al laberinto (25% en A, 50% en S, 100% en SS).'},
-  furia_f:     {id:'furia_f',     family:'furia',     name:'Piedra del Alma: Furia Contenida (F)',  tier:'F', icon:'🔥',
-    special:{type:'lowhp_dmg_v2', threshold:0.3, base:0.09, missingScale:0.003},
-    desc:'Por debajo del 30% de vida: +9% de daño, y +0.3% adicional por cada 1% de vida que te falte.', preview:'Desde A: probabilidad de revivir una vez por entrada al laberinto (25% en A, 50% en S, 100% en SS).'},
+  // Furia Contenida — REWORK 2026-09-24 (pedido explícito). Deja de ser un
+  // multiplicador pasivo recalculado en cada golpe mientras estés bajo el
+  // umbral (podía durar el combate entero, sin límite de usos) y pasa a ser
+  // una piedra de supervivencia ofensiva: al cruzar el umbral de vida por
+  // primera vez en el combate, se dispara 1 SOLA VEZ un buff de daño (+
+  // reducción de daño recibido desde D) durante un número fijo de turnos —
+  // ver checkFuriaContenidaTrigger(), enganchado en dealDamageToPlayer().
+  // Ahora también da un bono plano de Físico permanente (antes no daba
+  // ningún stat, solo el efecto de bajo HP) — misma progresión que Vigor.
+  // Sinergia con el Bárbaro (Furia de sangre, +20% daño bajo 30% de vida):
+  // esta piedra convierte esa condición racial en una build de riesgo/
+  // recompensa a propósito.
+  furia_e:     {id:'furia_e',     family:'furia',     name:'Piedra del Alma: Furia Contenida (E)',  tier:'E', icon:'🔥', bonus:{stat:'fis', value:2},
+    special:{type:'furia_v2', threshold:0.30, dmgBonus:0.05, dmgReduction:0, duration:2},
+    desc:'+2 Físico. Por debajo del 30% de vida (1 vez por combate): +5% de daño durante 2 turnos.', preview:'Desde D: también reduce el daño que recibís mientras dura.'},
+  furia_f:     {id:'furia_f',     family:'furia',     name:'Piedra del Alma: Furia Contenida (F)',  tier:'F', icon:'🔥', bonus:{stat:'fis', value:4},
+    special:{type:'furia_v2', threshold:0.35, dmgBonus:0.07, dmgReduction:0, duration:2},
+    desc:'+4 Físico. Por debajo del 35% de vida (1 vez por combate): +7% de daño durante 2 turnos.', preview:'Desde D: también reduce el daño que recibís mientras dura.'},
   sombra_e:    {id:'sombra_e',    family:'sombra',    name:'Piedra del Alma: Sombra Cazadora (E)',  tier:'E', icon:'🌑',
     special:{type:'evasion_flat', value:0.015},
     desc:'+1.5% de probabilidad de esquivar cualquier ataque.', preview:'Desde A: probabilidad de invocar una sombra que atrae el agro de los enemigos (1% en A, 5% en S, 10% en SS; máximo una sombra a la vez).'},
@@ -1174,18 +1509,18 @@ const SOUL_STONES = {
     special:{type:'reflect', pct:0.16},
     desc:'+128 Vida máxima aprox. Devuelves el 16% del daño físico que recibes a tu atacante. (La autocuración prometida en este rango todavía no está implementada.)'},
 
-  furia_d:     {id:'furia_d',     family:'furia',     name:'Piedra del Alma: Furia Contenida (D)',  tier:'D', icon:'🔥',
-    special:{type:'lowhp_dmg_v2', threshold:0.3, base:soulFuriaBase('D'), missingScale:soulFuriaMissingScale('D')},
-    desc:'Por debajo del 30% de vida: +9.05% de daño, y +0.35% adicional por cada 1% de vida que te falte.', preview:'Desde A: probabilidad de revivir una vez por entrada al laberinto (pendiente de implementar).'},
-  furia_c:     {id:'furia_c',     family:'furia',     name:'Piedra del Alma: Furia Contenida (C)',  tier:'C', icon:'🔥',
-    special:{type:'lowhp_dmg_v2', threshold:0.3, base:soulFuriaBase('C'), missingScale:soulFuriaMissingScale('C')},
-    desc:'Por debajo del 30% de vida: +9.1% de daño, y +0.4% adicional por cada 1% de vida que te falte.', preview:'Desde A: probabilidad de revivir una vez por entrada al laberinto (pendiente de implementar).'},
-  furia_b:     {id:'furia_b',     family:'furia',     name:'Piedra del Alma: Furia Contenida (B)',  tier:'B', icon:'🔥',
-    special:{type:'lowhp_dmg_v2', threshold:0.3, base:soulFuriaBase('B'), missingScale:soulFuriaMissingScale('B')},
-    desc:'Por debajo del 30% de vida: +9.15% de daño, y +0.45% adicional por cada 1% de vida que te falte.', preview:'Desde A: probabilidad de revivir una vez por entrada al laberinto (pendiente de implementar).'},
-  furia_a:     {id:'furia_a',     family:'furia',     name:'Piedra del Alma: Furia Contenida (A)',  tier:'A', icon:'🔥',
-    special:{type:'lowhp_dmg_v2', threshold:0.3, base:soulFuriaBase('A'), missingScale:soulFuriaMissingScale('A')},
-    desc:'Por debajo del 30% de vida: +9.2% de daño, y +0.5% adicional por cada 1% de vida que te falte. (Revivir una vez, prometido en este rango, todavía no está implementado.)'},
+  furia_d:     {id:'furia_d',     family:'furia',     name:'Piedra del Alma: Furia Contenida (D)',  tier:'D', icon:'🔥', bonus:{stat:'fis', value:8},
+    special:{type:'furia_v2', threshold:0.35, dmgBonus:0.10, dmgReduction:0.05, duration:2},
+    desc:'+8 Físico. Por debajo del 35% de vida (1 vez por combate): +10% de daño y -5% de daño recibido durante 2 turnos.'},
+  furia_c:     {id:'furia_c',     family:'furia',     name:'Piedra del Alma: Furia Contenida (C)',  tier:'C', icon:'🔥', bonus:{stat:'fis', value:16},
+    special:{type:'furia_v2', threshold:0.35, dmgBonus:0.12, dmgReduction:0.08, duration:2},
+    desc:'+16 Físico. Por debajo del 35% de vida (1 vez por combate): +12% de daño y -8% de daño recibido durante 2 turnos.'},
+  furia_b:     {id:'furia_b',     family:'furia',     name:'Piedra del Alma: Furia Contenida (B)',  tier:'B', icon:'🔥', bonus:{stat:'fis', value:24},
+    special:{type:'furia_v2', threshold:0.40, dmgBonus:0.15, dmgReduction:0.10, duration:2},
+    desc:'+24 Físico. Por debajo del 40% de vida (1 vez por combate): +15% de daño y -10% de daño recibido durante 2 turnos.'},
+  furia_a:     {id:'furia_a',     family:'furia',     name:'Piedra del Alma: Furia Contenida (A)',  tier:'A', icon:'🔥', bonus:{stat:'fis', value:32},
+    special:{type:'furia_v2', threshold:0.40, dmgBonus:0.18, dmgReduction:0.12, duration:2},
+    desc:'+32 Físico. Por debajo del 40% de vida (1 vez por combate): +18% de daño y -12% de daño recibido durante 2 turnos.'},
 
   sombra_d:    {id:'sombra_d',    family:'sombra',    name:'Piedra del Alma: Sombra Cazadora (D)',  tier:'D', icon:'🌑',
     special:{type:'evasion_flat', value:0.045},
@@ -1196,9 +1531,14 @@ const SOUL_STONES = {
   sombra_b:    {id:'sombra_b',    family:'sombra',    name:'Piedra del Alma: Sombra Cazadora (B)',  tier:'B', icon:'🌑',
     special:{type:'evasion_flat', value:0.08},
     desc:'+8% de probabilidad de esquivar cualquier ataque.', preview:'Desde A: invocar una sombra que atrae el agro (pendiente de implementar).'},
+  // 2026-09-25: se implementa "invocar una sombra" (ver trySummonShadow(),
+  // enganchado al inicio de cada turno propio) — 1% en A. Respeta el tope
+  // de 6 combatientes y solo se activa 1 vez por combate (recomendación
+  // propia: más simple y predecible que un cooldown en turnos, y ya de por
+  // sí es una probabilidad baja + máximo una sombra viva a la vez).
   sombra_a:    {id:'sombra_a',    family:'sombra',    name:'Piedra del Alma: Sombra Cazadora (A)',  tier:'A', icon:'🌑',
-    special:{type:'evasion_flat', value:0.10},
-    desc:'+10% de probabilidad de esquivar cualquier ataque. (Invocar una sombra, prometido en este rango, todavía no está implementado.)'},
+    specials:[{type:'evasion_flat', value:0.10}, {type:'sombra_summon', chance:0.01}],
+    desc:'+10% de probabilidad de esquivar cualquier ataque. 1% de invocar una Sombra Cazadora que se planta al frente y atrae el agro (1 vez por combate).'},
 
   // Rangos S y SS: mismas fórmulas, continuadas un escalón más. SS es el tope
   // absoluto del sistema — numerado/único mundial en espíritu, aunque todavía
@@ -1238,19 +1578,19 @@ const SOUL_STONES = {
     special:{type:'reflect', pct:0.5},
     desc:'+200 Vida máxima aprox. Devuelves el 50% del daño físico que recibes a tu atacante.'},
 
-  furia_s:     {id:'furia_s',     family:'furia',     name:'Piedra del Alma: Furia Contenida (S)',  tier:'S', icon:'🔥',
-    special:{type:'lowhp_dmg_v2', threshold:0.3, base:soulFuriaBase('S'), missingScale:soulFuriaMissingScale('S')},
-    desc:'Por debajo del 30% de vida: +9.25% de daño, y +0.55% adicional por cada 1% de vida que te falte.'},
-  furia_ss:    {id:'furia_ss',    family:'furia',     name:'Piedra del Alma: Furia Contenida (SS)', tier:'SS', icon:'🔥',
-    special:{type:'lowhp_dmg_v2', threshold:0.3, base:soulFuriaBase('SS'), missingScale:soulFuriaMissingScale('SS')},
-    desc:'Por debajo del 30% de vida: +9.3% de daño, y +0.6% adicional por cada 1% de vida que te falte.'},
+  furia_s:     {id:'furia_s',     family:'furia',     name:'Piedra del Alma: Furia Contenida (S)',  tier:'S', icon:'🔥', bonus:{stat:'fis', value:40},
+    special:{type:'furia_v2', threshold:0.45, dmgBonus:0.22, dmgReduction:0.15, duration:3},
+    desc:'+40 Físico. Por debajo del 45% de vida (1 vez por combate): +22% de daño y -15% de daño recibido durante 3 turnos.'},
+  furia_ss:    {id:'furia_ss',    family:'furia',     name:'Piedra del Alma: Furia Contenida (SS)', tier:'SS', icon:'🔥', bonus:{stat:'fis', value:50},
+    special:{type:'furia_v2', threshold:0.50, dmgBonus:0.25, dmgReduction:0.20, duration:3},
+    desc:'+50 Físico. Por debajo del 50% de vida (1 vez por combate): +25% de daño y -20% de daño recibido durante 3 turnos.'},
 
   sombra_s:    {id:'sombra_s',    family:'sombra',    name:'Piedra del Alma: Sombra Cazadora (S)',  tier:'S', icon:'🌑',
-    special:{type:'evasion_flat', value:0.12},
-    desc:'+12% de probabilidad de esquivar cualquier ataque.'},
+    specials:[{type:'evasion_flat', value:0.12}, {type:'sombra_summon', chance:0.05}],
+    desc:'+12% de probabilidad de esquivar cualquier ataque. 5% de invocar una Sombra Cazadora que se planta al frente y atrae el agro (1 vez por combate).'},
   sombra_ss:   {id:'sombra_ss',   family:'sombra',    name:'Piedra del Alma: Sombra Cazadora (SS)', tier:'SS', icon:'🌑',
-    special:{type:'evasion_flat', value:0.14},
-    desc:'+14% de probabilidad de esquivar cualquier ataque.'}
+    specials:[{type:'evasion_flat', value:0.14}, {type:'sombra_summon', chance:0.10}],
+    desc:'+14% de probabilidad de esquivar cualquier ataque. 10% de invocar una Sombra Cazadora que se planta al frente y atrae el agro (1 vez por combate).'}
 };
 
 function maxSoulSlots(level){ return Math.floor((level||1)/10); } // 1 espacio cada 10 niveles
@@ -1305,6 +1645,60 @@ function unsocketStone(slotIdx){
   save();
 }
 
+// Piedras de alma de aliado — pedido explícito 2026-09-24. Mismo criterio
+// "duro" que las del jugador (reemplazar/retirar destruye la piedra para
+// siempre, no vuelve a la mochila) para no tener dos reglas distintas en el
+// mismo juego. Se persisten aparte (character_allies.soul_slots, ver
+// migración 0009) porque el resto de saveAllyEquip solo guarda `equip`.
+async function saveAllySoulSlots(row){
+  const { error } = await supabase.from('character_allies').update({soul_slots: row.soul_slots||[]}).eq('id', row.id);
+  if(error) console.error('No se pudo guardar las piedras de alma del aliado:', error.message);
+}
+function socketStoneOnAlly(uid, allyId){
+  const row = (state.char.allies||[]).find(a=>a.id===allyId);
+  if(!row) return;
+  if(!row.soul_slots) row.soul_slots = [];
+  while(row.soul_slots.length < ALLY_SOUL_SLOTS_MAX) row.soul_slots.push(null);
+  const idx = state.char.inventory.findIndex(i=>i.kind==='soulstone' && i.uid===uid);
+  if(idx<0) return;
+  const stone = state.char.inventory[idx];
+  const sameFamilySlot = row.soul_slots.findIndex(s=>s && s.family===stone.family);
+  if(sameFamilySlot>=0){
+    const old = row.soul_slots[sameFamilySlot];
+    if(soulTierIdx(stone.tier) < soulTierIdx(old.tier)){
+      log(`${row.name} ya lleva una piedra de ${SOUL_FAMILIES[stone.family].name} de rango igual o superior (${old.tier}). No la reemplazas.`);
+      return;
+    }
+    if(!confirm(`${row.name} ya lleva engarzada "${old.name}" (rango ${old.tier}). Reemplazarla la destruye para siempre — no vuelve a tu mochila. ¿Continuar?`)) return;
+    state.char.inventory.splice(idx,1);
+    row.soul_slots[sameFamilySlot] = stone;
+    log(`La <b>${old.name}</b> de ${row.name} se destruye al ser reemplazada por <b>${stone.name}</b>.`);
+  } else {
+    const emptySlot = row.soul_slots.findIndex(s=>!s);
+    if(emptySlot<0){ log(`${row.name} no tiene espacios de alma libres (máximo ${ALLY_SOUL_SLOTS_MAX}). Retira una piedra primero.`); return; }
+    state.char.inventory.splice(idx,1);
+    row.soul_slots[emptySlot] = stone;
+    log(`Engarzas <b>${stone.name}</b> en ${row.name}.`);
+  }
+  renderSheet();
+  if(invOpen) renderInventory();
+  saveAllySoulSlots(row);
+  save();
+}
+function unsocketAllyStone(allyId, slotIdx){
+  const row = (state.char.allies||[]).find(a=>a.id===allyId);
+  if(!row || !row.soul_slots) return;
+  const stone = row.soul_slots[slotIdx];
+  if(!stone) return;
+  if(!confirm(`Retirar "${stone.name}" (rango ${stone.tier}) de ${row.name} la destruye para siempre — no vuelve a tu mochila. ¿Continuar?`)) return;
+  row.soul_slots[slotIdx] = null;
+  log(`Retiras <b>${stone.name}</b> de ${row.name} — se pierde para siempre.`);
+  renderSheet();
+  if(invOpen) renderInventory();
+  saveAllySoulSlots(row);
+  save();
+}
+
 /* ============================================================
    STATE
    ============================================================ */
@@ -1350,6 +1744,14 @@ function rnd(min,max){ return Math.floor(Math.random()*(max-min+1))+min; }
 function chance(p){ return Math.random() < p; }
 function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
 function pick(arr){ return arr[rnd(0,arr.length-1)]; }
+// Elige un elemento de [{tpl, weight}, ...] respetando su peso relativo —
+// usado por bestiary.eliteCompanions (2026-09-25, "Década 2 - Arañas").
+function pickWeighted(list){
+  const total = list.reduce((s,e)=>s+e.weight,0);
+  let r = Math.random()*total;
+  for(const e of list){ if((r-=e.weight)<=0) return e.tpl; }
+  return list[list.length-1].tpl;
+}
 
 function log(msg){
   state.log.push(msg);
@@ -1465,7 +1867,10 @@ function derived(){
   const EVASION_GEAR_HAB_WEIGHT = 0.5;
   let evasionBase = 0.04 + habNatural*0.005 + habGear*0.005*EVASION_GEAR_HAB_WEIGHT + (race().id==='hada'?0.15:0);
   socketedStones().forEach(s=>{
-    if(s.special && s.special.type==='evasion_flat') evasionBase += s.special.value;
+    // itemSpecialsArr (no solo s.special) porque Sombra Cazadora A/S/SS ya
+    // trae 2 specials a la vez (evasión + invocar sombra, ver
+    // trySummonShadow) y usa el formato en array desde el 2026-09-25.
+    itemSpecialsArr(s).forEach(sp=>{ if(sp.type==='evasion_flat') evasionBase += sp.value; });
   });
   specialsFromEquip(eq).forEach(sp=>{
     if(sp.type==='evasion_flat') evasionBase += sp.value;
@@ -1570,6 +1975,28 @@ function refreshStoneFromTemplate(stone){
     preview: tpl.preview, bonus: tpl.bonus, special: tpl.special
   });
 }
+// Mismo criterio que refreshStoneFromTemplate, pero para equipo (armas y
+// equipo general): un objeto ya dropeado quedó guardado como una copia
+// congelada de bonus/mods/specials en el momento de caer, así que un
+// rebalanceo posterior (como la subida de vida de Rango A del 2026-09-24)
+// nunca llegaba a lo que un jugador ya tenía equipado o en la mochila.
+// Se re-deriva del catálogo vigente por identidad (slot+styleId+rarity+
+// nombre), preservando uid y cualquier campo propio de la instancia.
+function refreshGearFromTemplate(item){
+  if(!item || item.kind!=='equip' || !item.styleId || !item.rarity) return item;
+  const fresh = (item.slot==='arma' || item.slot==='arma2')
+    ? makeWeaponItem(item.slot, item.styleId, item.rarity, item.name)
+    : makeGearItem(item.slot, item.styleId, item.rarity);
+  if(!fresh) return item; // esa combinación ya no existe en el catálogo - se deja como está, defensivo
+  return Object.assign({}, item, {
+    name: fresh.name, bonus: fresh.bonus, mods: fresh.mods, specials: fresh.specials
+  });
+}
+function refreshEquipObject(equip){
+  const out = Object.assign({}, equip);
+  EQUIP_SLOTS.forEach(slot=>{ if(out[slot]) out[slot] = refreshGearFromTemplate(out[slot]); });
+  return out;
+}
 
 function rowToState(row){
   return {
@@ -1580,13 +2007,13 @@ function rowToState(row){
       level: row.level, xp: row.xp, gold: row.gold, missionCurrency: row.mission_currency || 0,
       missionRerollCycle: row.mission_reroll_cycle || null, missionRerollCount: row.mission_reroll_count || 0,
       curHP: row.cur_hp, curSta: row.cur_sta, curSpi: row.cur_spi,
-      equip: row.equip || {arma:null, arma2:null, armadura:null, amuleto:null, casco:null, botas:null, guantes:null},
-      inventory: (row.inventory || []).map(refreshStoneFromTemplate),
+      equip: refreshEquipObject(row.equip || {arma:null, arma2:null, armadura:null, amuleto:null, casco:null, botas:null, guantes:null}),
+      inventory: (row.inventory || []).map(i=> i.kind==='soulstone' ? refreshStoneFromTemplate(i) : refreshGearFromTemplate(i)),
       itemCounter: row.item_counter || 0,
       maxLevelUnlocked: row.max_level_unlocked || 1,
       checkpointLevel: row.checkpoint_level || 1,
       record: {level: row.record_level || 1, floorIdx: row.record_floor_idx || 0},
-      stash: row.stash || {gold:0, items:[]},
+      stash: (()=>{ const st = row.stash || {gold:0, items:[]}; return Object.assign({}, st, {items:(st.items||[]).map(i=> i.kind==='soulstone' ? refreshStoneFromTemplate(i) : refreshGearFromTemplate(i))}); })(),
       soulSlots: (row.soul_slots || []).map(refreshStoneFromTemplate),
       pityGear: row.pity_gear || 0,
       pityStone: row.pity_stone || 0,
@@ -1655,8 +2082,16 @@ async function fetchProfile(userId){
 const LEVEL_CAP = 60;
 const CHAR_LEVEL_CAP = 60; // tope de nivel de personaje pedido
 function mobXP(level){ return level; }        // mobs normales: 1 en piso 1, 2 en piso 2...
-function eliteXP(level){ return level+1; }    // élites: siempre mob+1
-function guardianXP(level){ return 2*level+2; } // guardianes: 2×mob+2
+// 2026-09-25, pedido explícito: recalibrados para que el élite y el
+// guardián/jefe de década den más en piso 1 (7 y 12 respectivamente, antes
+// 2 y 4) — el aumento del 50% general (ver XP_GLOBAL_BOOST más abajo) se
+// calcula sobre estos nuevos valores, no sobre los viejos.
+function eliteXP(level){ return level+6; }    // élites: antes mob+1, ahora mob+6 (piso 1 = 7)
+function guardianXP(level){ return 2*level+10; } // guardianes/jefes de década: antes 2×mob+2, ahora 2×mob+10 (piso 1 = 12)
+// +50% de experiencia en TODO el juego (mobs, élites, guardianes, jefes de
+// década por igual) — pedido explícito 2026-09-25, se multiplica en
+// handleVictory() junto con el resto de bonos (raza, brecha, early boost).
+const XP_GLOBAL_BOOST = 1.5;
 // La Década 0 (pisos 1-10) se sentía muy lenta para llegar a nivel de
 // personaje 10 con un personaje nuevo (pedido explícito) — el mob/elite/
 // guardián de esos pisos da poquísima xp porque la fórmula recién despega en
@@ -1967,7 +2402,15 @@ function renderSheet(){
   const d = derived();
   const r = race(), s = style();
   const xpNeeded = xpNeededForLevel(state.char.level);
-  const hpPct = clamp(state.char.curHP/d.maxHP*100,0,100);
+  // Escudo del jugador (ver combat.playerShield / grantShield): mientras esté
+  // activo, la barra se reescala a maxHP+escudo para que el escudo siempre
+  // tenga dónde mostrarse, incluso a vida completa (750 (250)/750).
+  const playerShieldAmt = (combat && combat.playerShield) || 0;
+  const hpScale = d.maxHP + playerShieldAmt;
+  const hpPct = clamp(state.char.curHP/hpScale*100,0,100);
+  const shieldPct = clamp(playerShieldAmt/hpScale*100,0,100);
+  const hpLabel = playerShieldAmt>0 ? `${state.char.curHP} (${playerShieldAmt}) / ${d.maxHP}` : `${state.char.curHP} / ${d.maxHP}`;
+  const hpLowClass = (state.char.curHP/d.maxHP) <= 0.3 ? ' low' : '';
   const stPct = clamp(state.char.curSta/d.maxSta*100,0,100);
   const spPct = clamp(state.char.curSpi/d.maxSpi*100,0,100);
   const xpPct = clamp(state.char.xp/xpNeeded*100,0,100);
@@ -1984,7 +2427,7 @@ function renderSheet(){
     const label = slotLabel(slot);
     if(!it) return `<div class="equip-row"><span>${label}</span><b>— vacío —</b></div>`;
     const color = RARITIES[it.rarity||'comun'].color;
-    return `<div class="equip-row"><span>${label}</span><b style="color:${color};">${it.name}</b></div>`;
+    return `<div class="equip-row"><span>${label}</span><b style="color:${color};">${equipIcon(it)} ${it.name}</b></div>`;
   }).join('');
 
   const potionCount = (state.char.inventory||[]).filter(i=>i.kind==='potion').reduce((a,i)=>a+i.qty,0);
@@ -2001,8 +2444,8 @@ function renderSheet(){
     </div>
 
     <div class="bar-row">
-      <div class="bar-label"><span>Vida</span><span>${state.char.curHP} / ${d.maxHP}</span></div>
-      <div class="bar-track"><div class="bar-fill hp" style="width:${hpPct}%"></div></div>
+      <div class="bar-label"><span>Vida</span><span>${hpLabel}</span></div>
+      <div class="bar-track"><div class="bar-fill hp${hpLowClass}" style="width:${hpPct}%"></div>${playerShieldAmt>0?`<div class="bar-fill shield" style="width:${shieldPct}%; left:${hpPct}%;"></div>`:''}</div>
     </div>
     <div class="bar-row">
       <div class="bar-label"><span>MP</span><span>${state.char.curSta} / ${d.maxSta}</span></div>
@@ -2034,10 +2477,12 @@ function renderSheet(){
     <div class="section-label">Resistencias</div>
     <div class="res-list">${resHTML}</div>
 
-    <div class="section-label">Equipo</div>
-    ${equipHTML}
-    <div class="sheet-hint">${gearCount} objeto(s) y ${potionCount} poción(es) en la mochila. <button id="sheet-inv-link">Abrir inventario</button></div>
-    <div class="sheet-hint">Espacios de alma: ${socketedStones().length}/${maxSoulSlots(state.char.level)}${maxSoulSlots(state.char.level)===0 ? ' (el primero se desbloquea en nivel 10)' : ''}.</div>
+    <details class="sheet-details">
+      <summary class="section-label">Equipo</summary>
+      ${equipHTML}
+      <div class="sheet-hint">${gearCount} objeto(s) y ${potionCount} poción(es) en la mochila. <button id="sheet-inv-link">Abrir inventario</button></div>
+      <div class="sheet-hint">Espacios de alma: ${socketedStones().length}/${maxSoulSlots(state.char.level)}${maxSoulSlots(state.char.level)===0 ? ' (el primero se desbloquea en nivel 10)' : ''}.</div>
+    </details>
 
     <div class="section-label">Rasgo pasivo — ${r.passive}</div>
     <div style="font-size:0.78em; color:var(--text-dim);">${r.passiveDesc}</div>
@@ -2091,6 +2536,62 @@ function itemBonusText(item){
   specials.forEach(sp=> parts.push(specialDisplayText(sp)));
   return parts.join(', ') + (parts.length ? '.' : '');
 }
+// Ícono por tipo de slot (y, en arma/arma2, por senda del arma) — pedido
+// explícito 2026-09-25: el inventario era 100% texto, sin nada que distinga
+// de un vistazo un casco de unas botas. Aproximado, no hay arte real por
+// ítem todavía.
+const EQUIP_SLOT_ICONS = {armadura:'🧥', amuleto:'📿', casco:'🪖', botas:'👢', guantes:'🧤'};
+const WEAPON_STYLE_ICONS = {pesada:'⚔️', doblefilo:'🗡️', tirador:'🏹', mago:'🪄', sacerdote:'✨'};
+const OFFHAND_STYLE_ICONS = {pesada:'🛡️', doblefilo:'🗡️', tirador:'🏹', mago:'🔮', sacerdote:'📖'};
+function equipIcon(it){
+  if(EQUIP_SLOT_ICONS[it.slot]) return EQUIP_SLOT_ICONS[it.slot];
+  if(it.slot==='arma2') return OFFHAND_STYLE_ICONS[it.styleId] || '🗡️';
+  return WEAPON_STYLE_ICONS[it.styleId] || '⚔️';
+}
+// Halo de color por rareza para toda la fila (no solo el nombre) — mismo
+// criterio que pedía distinguir de un vistazo un objeto Rango A/Legendario
+// del resto sin tener que leer el pill. El degradado se apaga a los ~110px
+// para no teñir el botón de Equipar/Vender del otro extremo de la fila.
+function rarityRowStyle(it){
+  const r = RARITIES[it.rarity||'comun'];
+  return `border-left:3px solid ${r.color}; background:linear-gradient(90deg, ${r.color}1f, ${r.color}00 110px);`;
+}
+// Aviso visual de loot raro / subida de nivel (2026-09-25, pedido explícito):
+// antes la única señal de "te cayó algo bueno" era una línea más en la
+// Crónica, igual de discreta que cualquier otro mensaje — un objeto Rango A
+// o Legendario pasaba desapercibido hasta abrir el inventario. Un toast
+// flotante arriba de la pantalla, con el mismo lenguaje visual del resto del
+// juego (Cinzel, bronce, halo dorado), en vez de un sistema de partículas o
+// sprite nuevo — no depende de que el objeto tenga arte propio.
+function ensureFxLayer(){
+  let layer = document.getElementById('fx-toast-layer');
+  if(!layer){
+    layer = document.createElement('div');
+    layer.id = 'fx-toast-layer';
+    layer.className = 'fx-toast-layer';
+    document.body.appendChild(layer);
+  }
+  return layer;
+}
+function spawnFxToast(cls, icon, title, subtitle){
+  const layer = ensureFxLayer();
+  const el = document.createElement('div');
+  el.className = `fx-toast ${cls}`;
+  el.innerHTML = `<span class="fx-icon">${icon}</span><span class="fx-text"><b></b>${subtitle?'<span></span>':''}</span>`;
+  el.querySelector('b').textContent = title; // textContent, no innerHTML: title puede venir de un nombre de objeto
+  if(subtitle) el.querySelector('span').textContent = subtitle;
+  layer.appendChild(el);
+  const remove = ()=>{ if(el.parentNode) el.remove(); };
+  el.addEventListener('animationend', remove);
+  setTimeout(remove, 3200); // red de seguridad si prefers-reduced-motion u otra causa se salta animationend
+}
+function flashRareDrop(item, tierLabel){
+  spawnFxToast('rare', item.kind==='soulstone' ? '💎' : equipIcon(item), item.name, `¡Objeto de rango ${tierLabel}!`);
+}
+function flashLevelUp(level){
+  spawnFxToast('levelup', '⭐', `¡Subes a nivel ${level}!`, null);
+}
+
 function itemNameHTML(it){
   const r = RARITIES[it.rarity||'comun'];
   // Las armas y el equipo general comprados/generados para una senda
@@ -2098,7 +2599,11 @@ function itemNameHTML(it){
   // etiqueta aquí — el equipo de botín/cofres sí puede venir sin styleId
   // en casos viejos, en cuyo caso no se muestra ninguna etiqueta.
   const roleTag = it.styleId ? ` <span class="slot-tag" style="border-color:var(--bronze); color:var(--bronze-light);">${SHOP_ROLE_LABELS[it.styleId]||it.styleId}</span>` : '';
-  return `<b style="color:${r.color};">${it.name}</b> <span class="slot-tag" style="border-color:${r.color}; color:${r.color};">${r.name}</span>${roleTag}`;
+  // Rango A en adelante suma un halo de texto (además del color) — el color
+  // solo a veces no basta para que un objeto especial se note al lado del
+  // resto de la interfaz, sobre todo en pantallas chicas.
+  const glow = ['rango_a','legendario','ss'].includes(it.rarity) ? ` text-shadow:0 0 8px ${r.color}99;` : '';
+  return `<b style="color:${r.color};${glow}">${equipIcon(it)} ${it.name}</b> <span class="slot-tag" style="border-color:${r.color}; color:${r.color};">${r.name}</span>${roleTag}`;
 }
 
 function renderInventory(){
@@ -2127,7 +2632,7 @@ function renderInventory(){
     }
     return `<div class="inv-slot">
       <div class="inv-slot-label">${label}</div>
-      <div class="inv-item-row" style="margin-bottom:0;">
+      <div class="inv-item-row" style="margin-bottom:0; ${rarityRowStyle(it)}">
         <div>
           ${itemNameHTML(it)}
           <div class="inv-item-bonus">${itemBonusText(it)}</div>
@@ -2155,7 +2660,7 @@ function renderInventory(){
     const items = gearItems.filter(it=>it.slot===slot);
     if(!items.length) return '';
     const rows = items.map(it=>`
-      <div class="inv-item-row">
+      <div class="inv-item-row" style="${rarityRowStyle(it)}">
         <div>
           ${itemNameHTML(it)}
           <div class="inv-item-bonus">${itemBonusText(it)}</div>
@@ -2178,7 +2683,23 @@ function renderInventory(){
   }).join('') : `<p class="inv-empty-msg">No tienes pociones. Búscalas en cofres del laberinto.</p>`;
 
   ensureSoulSlots();
-  const soulSlotsHTML = state.char.soulSlots.length ? state.char.soulSlots.map((stone, idx)=>{
+  // Piedras de alma: el jugador usa state.char.soulSlots (crece con el
+  // nivel, ver maxSoulSlots); un aliado usa row.soul_slots (fijo en
+  // ALLY_SOUL_SLOTS_MAX, sin restricción de familia — pedido explícito
+  // 2026-09-24). Mismo panel para los dos, solo cambia la fuente de datos y
+  // a qué función apunta cada botón.
+  const isAllyTargetForStones = targetRow !== null;
+  let allySoulSlots = null;
+  if(isAllyTargetForStones){
+    if(!targetRow.soul_slots) targetRow.soul_slots = [];
+    while(targetRow.soul_slots.length < ALLY_SOUL_SLOTS_MAX) targetRow.soul_slots.push(null);
+    allySoulSlots = targetRow.soul_slots;
+  }
+  const soulSlotsSource = isAllyTargetForStones ? allySoulSlots : state.char.soulSlots;
+  const soulSlotsEmptyMsg = isAllyTargetForStones
+    ? `<p class="inv-empty-msg">${targetName} no tiene piedras engarzadas todavía.</p>`
+    : `<p class="inv-empty-msg">Alcanza el nivel 10 para desbloquear tu primer espacio de alma.</p>`;
+  const soulSlotsHTML = soulSlotsSource.length ? soulSlotsSource.map((stone, idx)=>{
     if(!stone){
       return `<div class="inv-slot">
         <div class="inv-slot-label">Espacio de alma ${idx+1}</div>
@@ -2186,6 +2707,7 @@ function renderInventory(){
       </div>`;
     }
     const c = SOUL_TIER_COLORS[stone.tier] || 'var(--text)';
+    const unsocketAttr = isAllyTargetForStones ? `data-unsocket-ally="${idx}|${targetRow.id}"` : `data-unsocket="${idx}"`;
     return `<div class="inv-slot">
       <div class="inv-slot-label">Espacio de alma ${idx+1}</div>
       <div class="inv-item-row" style="margin-bottom:0;">
@@ -2193,26 +2715,37 @@ function renderInventory(){
           <b style="color:${c};">${stone.name}</b> <span class="slot-tag" style="border-color:${c}; color:${c};">${stone.tier}</span>
           <div class="inv-item-bonus">${stone.desc}</div>
         </div>
-        <button class="inv-btn danger" data-unsocket="${idx}">Retirar</button>
+        <button class="inv-btn danger" ${unsocketAttr}>Retirar</button>
       </div>
     </div>`;
-  }).join('') : `<p class="inv-empty-msg">Alcanza el nivel 10 para desbloquear tu primer espacio de alma.</p>`;
+  }).join('') : soulSlotsEmptyMsg;
 
   const stoneItems = state.char.inventory.filter(i=>i.kind==='soulstone');
   const stoneBagHTML = stoneItems.length ? stoneItems.map(it=>{
     const c = SOUL_TIER_COLORS[it.tier] || 'var(--text)';
-    const sameFamily = state.char.soulSlots.find(s=>s && s.family===it.family);
-    const noRoom = state.char.soulSlots.length===0 || state.char.soulSlots.every(s=>s);
+    const sameFamily = soulSlotsSource.find(s=>s && s.family===it.family);
+    const noRoom = soulSlotsSource.length===0 || soulSlotsSource.every(s=>s);
     const blocked = sameFamily ? soulTierIdx(it.tier) < soulTierIdx(sameFamily.tier) : noRoom;
     const btnLabel = sameFamily ? 'Reemplazar' : 'Engarzar';
+    const socketAttr = isAllyTargetForStones ? `data-socket-ally="${it.uid}|${targetRow.id}"` : `data-socket="${it.uid}"`;
     return `<div class="inv-item-row">
       <div>
         <b style="color:${c};">${it.name}</b> <span class="slot-tag" style="border-color:${c}; color:${c};">${it.tier}</span>
         <div class="inv-item-bonus">${it.desc}</div>
       </div>
-      <button class="inv-btn" data-socket="${it.uid}" ${blocked?'disabled':''}>${btnLabel}</button>
+      <button class="inv-btn" ${socketAttr} ${blocked?'disabled':''}>${btnLabel} en ${targetName}</button>
     </div>`;
   }).join('') : `<p class="inv-empty-msg">No tienes piedras de alma. Las dejan caer los guardianes de nivel 4 en adelante.</p>`;
+
+  const fragmentItems = state.char.inventory.filter(i=>i.kind==='fragmento');
+  const fragmentHTML = fragmentItems.length ? `<div class="inv-item-row" style="flex-wrap:wrap; gap:8px;">
+    ${fragmentItems.map(it=>`<span class="slot-tag" style="border-color:var(--bronze); color:var(--bronze-light);">${it.icon} ${it.name} x${it.qty}</span>`).join('')}
+  </div>` : '';
+  const fragmentSection = fragmentItems.length ? `
+    <div class="section-label">Fragmentos de jefe de década</div>
+    <p style="color:var(--text-dim); font-size:0.82em; margin-top:0;">Ingredientes de la Forja Legendaria (Tienda, piso 40+). Uno garantizado por cada jefe de década derrotado.</p>
+    ${fragmentHTML}
+  ` : '';
 
   document.getElementById('main-panel').innerHTML = `
     <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:4px;">
@@ -2235,6 +2768,7 @@ function renderInventory(){
     <div class="section-label">Piedras de alma</div>
     ${soulSlotsHTML}
     ${stoneBagHTML}
+    ${fragmentSection}
   `;
 
   document.getElementById('btn-close-inv').onclick = ()=>{ invOpen=false; renderAll(); };
@@ -2258,6 +2792,18 @@ function renderInventory(){
   document.querySelectorAll('[data-unsocket]').forEach(btn=>{
     btn.onclick = ()=> unsocketStone(parseInt(btn.dataset.unsocket));
   });
+  document.querySelectorAll('[data-socket-ally]').forEach(btn=>{
+    btn.onclick = ()=>{
+      const [uid, allyId] = btn.dataset.socketAlly.split('|');
+      socketStoneOnAlly(uid, allyId);
+    };
+  });
+  document.querySelectorAll('[data-unsocket-ally]').forEach(btn=>{
+    btn.onclick = ()=>{
+      const [idx, allyId] = btn.dataset.unsocketAlly.split('|');
+      unsocketAllyStone(allyId, parseInt(idx));
+    };
+  });
 }
 
 function addToInventory(item){
@@ -2265,6 +2811,10 @@ function addToInventory(item){
     const existing = state.char.inventory.find(i=>i.kind==='potion' && i.potionId===item.potionId);
     if(existing) existing.qty += 1;
     else state.char.inventory.push({kind:'potion', potionId:item.potionId, qty:1});
+  } else if(item.kind==='fragmento'){
+    const existing = state.char.inventory.find(i=>i.kind==='fragmento' && i.fragId===item.fragId);
+    if(existing) existing.qty += 1;
+    else state.char.inventory.push({kind:'fragmento', fragId:item.fragId, name:item.name, icon:item.icon, qty:1});
   } else if(item.kind==='soulstone'){
     state.char.itemCounter = (state.char.itemCounter||0) + 1;
     item.uid = 'it'+state.char.itemCounter;
@@ -2523,18 +3073,32 @@ function renderCity(){
 /* ============================================================
    MISIONES — Gremio
    ============================================================ */
-// Banda de rango por piso más profundo desbloqueado (max_level_unlocked),
-// NO por nivel de personaje — igual patrón de década que dificultad/sendas.
-// Hoy el laberinto topa en piso 10, así que en la práctica todos caen en la
-// banda 0 (E/F) hasta que se liberen los 100 niveles.
-function missionBandForFloor(floor){
-  if(floor<=20) return 0;
-  if(floor<=40) return 1;
-  if(floor<=60) return 2;
-  if(floor<=80) return 3;
-  return 4;
+// Rangos de misión permitidos por piso más profundo desbloqueado
+// (max_level_unlocked) — DEBE ser un espejo exacto de
+// public.mission_allowed_ranks() en Supabase (migración 0007), que es quien
+// de verdad decide qué rango acepta insertar el servidor.
+//
+// BUG CORREGIDO (2026-09-24, reportado por ariochbu vía captura del Gremio
+// con "Rango de misión E no permitido para tu progreso actual"): el esquema
+// viejo (missionBandForFloor + MISSION_BAND_RANKS, band -2/-1/0) generaba el
+// tablón desplazándose entre 5 "bandas" propias de 2 rangos cada una, sin
+// relación con las listas reales del servidor (que no son parejas: 2, 4, 4,
+// 3, 2 rangos por tramo, y algunas YA NO incluyen los rangos más bajos de la
+// banda anterior — p.ej. piso 41-60 permite D/C/B/A pero no E/F). Un
+// personaje que subía de piso 40 a 41 seguía recibiendo misiones "fáciles"
+// de rango E/F (porque el esquema viejo sí las permitía ahí), el insert
+// completo fallaba del lado del servidor, y el tablón quedaba sin poder
+// cargar nunca más (ni con Reintentar: cada intento repetía el mismo
+// rango prohibido). Ahora los rangos se generan leyendo siempre de la
+// lista de permitidos real para ese piso, así que nunca se le puede pedir
+// al servidor un rango que ya rechaza.
+function missionAllowedRanks(floor){
+  if(floor<=20) return ['E','F'];
+  if(floor<=40) return ['E','F','D','C'];
+  if(floor<=60) return ['D','C','B','A'];
+  if(floor<=80) return ['B','A','S'];
+  return ['S','SS'];
 }
-const MISSION_BAND_RANKS = [['E','F'],['D','C'],['B','A'],['S'],['SS']];
 // Ampliado de 3 a 8 tipos - con solo 3, un tablón de 10 caía casi siempre en
 // las mismas 2-3 misiones repetidas sin variedad real perceptible.
 const MISSION_OBJECTIVE_TYPES = ['kill_elites','clear_floors','defeat_guardian','win_battles','open_chests','rest_bonfires','find_equipment','find_soul_stones'];
@@ -2577,18 +3141,19 @@ const MISSION_RANK_REWARD = {
 // jefe de década o (a futuro) un jefe de Rift, a pedido explícito. El rango
 // de objeto que sí puede tocar sigue limitado a A (ver refresh_and_insert_missions/
 // reroll_mission en Supabase, que ya rechazan tier S/SS del lado del servidor).
-function makeMissionItemReward(band){
+function makeMissionItemReward(){
   return generateLoot(rnd(1,4), state.char.level);
 }
 
 function generateMissionBatch(maxFloor){
-  const frontier = missionBandForFloor(maxFloor);
-  const bands = [];
-  for(let i=0;i<2;i++) bands.push(Math.max(0, frontier-2)); // fácil
-  for(let i=0;i<6;i++) bands.push(Math.max(0, frontier-1)); // núcleo
-  for(let i=0;i<2;i++) bands.push(frontier);                // reto
-  return bands.map((band, idx)=>{
-    const rank = pick(MISSION_BAND_RANKS[band]);
+  const allowed = missionAllowedRanks(maxFloor);
+  const last = allowed.length-1;
+  const idxs = [];
+  for(let i=0;i<2;i++) idxs.push(0);                 // fácil: el rango más bajo permitido ahora mismo
+  for(let i=0;i<6;i++) idxs.push(Math.min(1,last));  // núcleo: un escalón arriba si existe
+  for(let i=0;i<2;i++) idxs.push(last);              // reto: el rango más alto permitido ahora mismo
+  return idxs.map((allowedIdx, pos)=>{
+    const rank = allowed[allowedIdx];
     const objectiveType = pick(MISSION_OBJECTIVE_TYPES);
     const reward = MISSION_RANK_REWARD[rank];
     return {
@@ -2598,7 +3163,7 @@ function generateMissionBatch(maxFloor){
       reward_gold: reward.gold,
       reward_xp: reward.xp,
       reward_currency: reward.currency,
-      reward_item: idx===9 ? makeMissionItemReward(band) : null // solo 1 de las 10 trae objeto/piedra fija
+      reward_item: pos===9 ? makeMissionItemReward() : null // solo 1 de las 10 trae objeto/piedra fija
     };
   });
 }
@@ -2608,10 +3173,11 @@ function generateMissionBatch(maxFloor){
 // reto), pero nunca trae objeto/piedra fija: el "1 de 10 con recompensa fija"
 // se decide solo al armar el tablón completo, no en cada refresco suelto.
 function generateSingleMission(maxFloor){
-  const frontier = missionBandForFloor(maxFloor);
+  const allowed = missionAllowedRanks(maxFloor);
+  const last = allowed.length-1;
   const roll = Math.random();
-  const band = roll < 0.2 ? Math.max(0, frontier-2) : roll < 0.8 ? Math.max(0, frontier-1) : frontier;
-  const rank = pick(MISSION_BAND_RANKS[band]);
+  const idx = roll < 0.2 ? 0 : roll < 0.8 ? Math.min(1,last) : last;
+  const rank = allowed[idx];
   const objectiveType = pick(MISSION_OBJECTIVE_TYPES);
   const reward = MISSION_RANK_REWARD[rank];
   return {
@@ -2742,7 +3308,14 @@ async function loadAllies(){
   if(!state || !state.char) return [];
   const { data, error } = await supabase.from('character_allies').select('*').eq('character_id', state.char.id).order('created_at');
   if(error){ console.error('No se pudieron cargar los aliados:', error.message); return []; }
-  return data || [];
+  // Mismo refresco de equipo/piedras que el personaje (ver refreshGearFromTemplate/
+  // refreshStoneFromTemplate) — un aliado con equipo Rango A dropeado antes del
+  // 2026-09-24 también debe quedar con los números vigentes.
+  return (data || []).map(row=>{
+    row.equip = refreshEquipObject(row.equip || {});
+    row.soul_slots = (row.soul_slots || []).map(refreshStoneFromTemplate);
+    return row;
+  });
 }
 async function refreshAlliesState(){
   state.char.allies = await loadAllies();
@@ -3252,6 +3825,50 @@ function renderShop(){
     }).join('');
   }).join('');
 
+  // Forja Legendaria (Tier S) — armas + piedras de alma de rango S, pagadas
+  // con Sellos + fragmentos de jefe de década (ver TIER_S_RECIPE). Solo
+  // visible/comprable desde piso 40+ (tierSUnlocked()).
+  const tierSCostHTML = `<p style="color:var(--text-dim); font-size:0.82em; margin:0 0 8px;">
+    Cada objeto Tier S cuesta <b style="color:var(--bronze-light);">${TIER_S_RECIPE.sellos} Sellos</b> +
+    ${Object.entries(TIER_S_RECIPE.fragments).map(([fragId,need])=>{
+      const frag = Object.values(DECADE_BOSS_FRAGMENTS).find(f=>f.id===fragId);
+      const have = fragmentQty(fragId);
+      const ok = have>=need;
+      return `<span style="color:${ok?'var(--good)':'var(--blood-light)'};">${frag.icon} ${have}/${need}</span>`;
+    }).join(' · ')}.
+  </p>`;
+  const tierSWeaponHTML = ['arma','arma2'].map(slot=>{
+    const cat = WEAPON_CATALOG[shopWeaponRole];
+    if(!cat || !cat[slot]) return '';
+    return Object.keys(cat[slot]).map(name=>{
+      const preview = makeWeaponItem(slot, shopWeaponRole, 'legendario', name);
+      if(!preview) return '';
+      const disabled = !hasTierSMaterials();
+      return `<div class="inv-item-row">
+        <div>
+          <b>${name}</b> <span class="slot-tag" style="border-color:${RARITIES.legendario.color}; color:${RARITIES.legendario.color};">Tier S</span> <span class="slot-tag" style="border-color:var(--bronze); color:var(--bronze-light);">${SHOP_ROLE_LABELS[shopWeaponRole]||shopWeaponRole}</span>
+          <div class="inv-item-bonus">${itemBonusText(preview)}</div>
+        </div>
+        <button class="inv-btn" data-buy-tiers-weapon="${slot}|${name}" ${disabled?'disabled':''}>Forjar</button>
+      </div>`;
+    }).join('');
+  }).join('') || '<p class="inv-empty-msg">No hay armas Tier S para tu senda de combate.</p>';
+  const tierSStoneHTML = Object.keys(SOUL_FAMILIES).map(famId=>{
+    const tpl = Object.values(SOUL_STONES).find(s=>s.family===famId && s.tier==='S');
+    if(!tpl) return '';
+    const disabled = !hasTierSMaterials();
+    return `<div class="inv-item-row">
+      <div>
+        <b style="color:${SOUL_TIER_COLORS.S};">${tpl.name}</b> <span class="slot-tag" style="border-color:${SOUL_TIER_COLORS.S}; color:${SOUL_TIER_COLORS.S};">S</span>
+        <div class="inv-item-bonus">${tpl.desc}</div>
+      </div>
+      <button class="inv-btn" data-buy-tiers-stone="${famId}" ${disabled?'disabled':''}>Forjar</button>
+    </div>`;
+  }).join('');
+  const tierSHTML = tierSUnlocked()
+    ? tierSCostHTML + `<div class="section-label" style="margin-top:6px; font-size:0.85em;">Armas</div>` + tierSWeaponHTML + `<div class="section-label" style="margin-top:6px; font-size:0.85em;">Piedras del alma</div>` + tierSStoneHTML
+    : `<p class="inv-empty-msg">La Forja Legendaria abre al llegar al piso ${TIER_S_MIN_FLOOR} del laberinto (hoy: piso ${state.char.maxLevelUnlocked||1}).</p>`;
+
   const potionHTML = Object.values(POTION_TEMPLATES).filter(t=>SHOP_POTION_PRICES[t.id]).map(t=>{
     const price = SHOP_POTION_PRICES[t.id];
     return `<div class="inv-item-row">
@@ -3266,8 +3883,8 @@ function renderShop(){
   const sellPotions = state.char.inventory.filter(i=>i.kind==='potion');
   const sellStones = state.char.inventory.filter(i=>i.kind==='soulstone');
   const sellRows = [
-    ...sellGear.map(it=>`<div class="inv-item-row">
-      <div><b>${it.name}</b> <span class="slot-tag">${slotLabel(it.slot)}</span>
+    ...sellGear.map(it=>`<div class="inv-item-row" style="${rarityRowStyle(it)}">
+      <div>${itemNameHTML(it)} <span class="slot-tag">${slotLabel(it.slot)}</span>
         <div class="inv-item-bonus">${itemBonusText(it)}</div>
       </div>
       <button class="inv-btn" data-sell="${it.uid}">Vender (${itemSellValue(it)} oro)</button>
@@ -3310,6 +3927,9 @@ function renderShop(){
     <div class="section-label">Tienda del Gremio (Sellos del Laberinto: ${state.char.missionCurrency||0})</div>
     ${selloHTML}
 
+    <div class="section-label">Forja Legendaria — Tier S (piso 40+)</div>
+    ${tierSHTML}
+
     <div class="section-label">Pociones</div>
     ${potionHTML}
 
@@ -3347,6 +3967,15 @@ function renderShop(){
       buySelloGear(slot, rarity, name);
     };
   });
+  document.querySelectorAll('[data-buy-tiers-weapon]').forEach(btn=>{
+    btn.onclick = ()=>{
+      const [slot, name] = btn.dataset.buyTiersWeapon.split('|');
+      buyTierSWeapon(slot, name);
+    };
+  });
+  document.querySelectorAll('[data-buy-tiers-stone]').forEach(btn=>{
+    btn.onclick = ()=> buyTierSStone(btn.dataset.buyTiersStone);
+  });
   document.querySelectorAll('[data-buy-potion]').forEach(btn=>{
     btn.onclick = ()=> buyPotion(btn.dataset.buyPotion);
   });
@@ -3369,7 +3998,7 @@ function renderHome(){
   const stashPotions = stash.items.filter(i=>i.kind==='potion');
 
   const bagGearHTML = gearItems.length ? gearItems.map(it=>`
-    <div class="inv-item-row">
+    <div class="inv-item-row" style="${rarityRowStyle(it)}">
       <div>${itemNameHTML(it)} <span class="slot-tag">${slotLabel(it.slot)}</span>
         <div class="inv-item-bonus">${itemBonusText(it)}</div>
       </div>
@@ -3385,7 +4014,7 @@ function renderHome(){
   }).join('') : `<p class="inv-empty-msg">No llevas pociones contigo.</p>`;
 
   const stashGearHTML = stashGear.length ? stashGear.map(it=>`
-    <div class="inv-item-row">
+    <div class="inv-item-row" style="${rarityRowStyle(it)}">
       <div>${itemNameHTML(it)} <span class="slot-tag">${slotLabel(it.slot)}</span>
         <div class="inv-item-bonus">${itemBonusText(it)}</div>
       </div>
@@ -3598,6 +4227,12 @@ function enterNode(f,n){
         count = 1;
       } else if(paraisoGuardianFloor){
         templates = null; count = 0; // se arma a mano más abajo
+      } else if(bestiary.guardianByFloor && bestiary.guardianByFloor[f%10]){
+        // Guardián único y determinista por piso (2026-09-25, "Década 2 -
+        // Arañas" en adelante) — en vez de sortear entre un pool compartido
+        // de 2, cada piso 11-19 tiene su propio mini-jefe fijo.
+        templates = [bestiary.guardianByFloor[f%10]];
+        count = 1;
       } else {
         templates = bestiary.guardians;
         count = 1;
@@ -3635,6 +4270,23 @@ function enterNode(f,n){
       group.push(makeEnemy(bestiary.elite[0], f, dg.level));
       group.push(makeEnemy(bestiary.elite[0], f, dg.level));
     }
+    // Acompañante de élite (2026-09-25, "Década 2 - Arañas" en adelante): si
+    // la década define un pool de acompañantes, cada élite spawneada trae 1
+    // acompañante propio (sorteado por peso), enlazados por companionRef en
+    // ambas direcciones para la pasiva "mientras viva el acompañante"
+    // (Reina del Nido) y "fortalece a su acompañante" (Orden de la Colmena).
+    // Respeta el tope de 6 combatientes por bando enemigo (mismo tope que
+    // usa 'invocar').
+    if(node.type==='elite' && bestiary.eliteCompanions){
+      group.slice().forEach(elite=>{
+        if(!elite.tpl.elite || group.length>=6) return;
+        const companionTpl = pickWeighted(bestiary.eliteCompanions);
+        const companion = makeEnemy(companionTpl, f, dg.level);
+        group.push(companion);
+        elite.companionRef = companion;
+        companion.companionRef = elite;
+      });
+    }
     // los de línea frontal (tanques/melee) van al slot 0, el que reciben los
     // ataques 'front'; a distancia/soporte se acomodan detrás.
     group.sort((a,b)=> (b.tpl.frontline?1:0) - (a.tpl.frontline?1:0));
@@ -3650,7 +4302,10 @@ function enterNode(f,n){
         msg += item.kind==='potion'
           ? ` También hallas: <b>${POTION_TEMPLATES[item.potionId].name}</b> (guardada en la mochila).`
           : ` También hallas: <b>${item.name}</b> (guardado en la mochila).`;
-        if(item.kind==='equip') advanceMissionsFor('find_equipment', 1);
+        if(item.kind==='equip'){
+          advanceMissionsFor('find_equipment', 1);
+          if(['rango_a','legendario','ss'].includes(item.rarity)) flashRareDrop(item, RARITIES[item.rarity].name);
+        }
       }
     }
     // Los cofres también pueden dar una piedra de alma — a diferencia del
@@ -3662,6 +4317,7 @@ function enterNode(f,n){
       addToInventory(stoneDrop);
       msg += ` También encuentras una piedra de alma: <b style="color:${SOUL_TIER_COLORS[stoneDrop.tier]};">${stoneDrop.name}</b>.`;
       advanceMissionsFor('find_soul_stones', 1);
+      if(['A','S','SS'].includes(stoneDrop.tier)) flashRareDrop(stoneDrop, stoneDrop.tier);
     }
     log(msg);
     node.done = true;
@@ -3733,8 +4389,14 @@ const FLAT_STONE_TABLE = [
 // del piso 10 es la única excepción a C/B (ver bypassTiers en handleVictory):
 // es el primer vistazo a esos rangos, incluso para un personaje que llega
 // ahí todavía por debajo del nivel 11.
-const GEAR_TIER_MIN_LEVEL = {rango_a:21, legendario:31, ss:41, rango_b:11, raro:11};
-const STONE_TIER_MIN_LEVEL = {A:21, S:31, SS:41, B:11, C:11};
+// 2026-09-24, pedido explícito: Rango A baja a piso 20 (antes 21) para que
+// coincida con el cierre de década correspondiente. legendario/ss (Tier S/SS)
+// se dejan re-calibrados por si algún día se habilita también su drop al
+// azar (ver LEGENDARY_TIERS_ENABLED) — hoy Tier S se consigue solo con la
+// Forja Legendaria (ver TIER_S_RECIPE/buyTierSWeapon/buyTierSStone), que
+// tiene su propio candado de piso 40+ independiente de esta tabla.
+const GEAR_TIER_MIN_LEVEL = {rango_a:20, legendario:40, ss:50, rango_b:11, raro:11};
+const STONE_TIER_MIN_LEVEL = {A:20, S:40, SS:50, B:11, C:11};
 // A partir de qué nivel del laberinto ("piso") los rangos más bajos (E/F en
 // piedras, Común/Poco común en equipo) dejan de poder caer del todo — pedido
 // explícito, 2026-09-18: de ahí en adelante lo peor que puede tocar ya es un
@@ -3837,6 +4499,11 @@ function generateLoot(floorIdx, level){
 /* ============================================================
    ENEMY FACTORY
    ============================================================ */
+// 2026-09-24, pedido explícito: bajar "de manera leve" la dificultad de los
+// pisos 41 a 59, sin tocar ningún jefe de década (piso 40 Usurpador, piso 50
+// Custodio de la Isla, piso 60 Storm Gush quedan intactos). -8% de HP y ATQ
+// es el recorte elegido — perceptible pero no un rework de la curva.
+const FLOOR_41_59_NERF_MULT = 0.92;
 function makeEnemy(tpl, floorIdx, level){
   const lvlMult = levelMult(level||1);
   const floorMult = 1 + floorIdx * floorDifficultyStep(level||1);
@@ -3874,6 +4541,14 @@ function makeEnemy(tpl, floorIdx, level){
     // objetivo en un mismo round).
     hp = Math.round(rnd(55,65) * tpl.hp * floorMult * regularHPMult(level||1));
     atk = Math.round(9 * tpl.atk * floorMult * monsterAtkMult(level||1));
+  }
+  // Nerf leve 41-59 (ver FLOOR_41_59_NERF_MULT) — se salta el jefe exacto de
+  // década (level%10===0), que es tpl.boss también, pero el resto de jefes
+  // de piso (guardianes intermedios) SÍ lo reciben igual que mobs/élites.
+  const isDecadeBossFight = tpl.boss && (level%10===0);
+  if(level>=41 && level<=59 && !isDecadeBossFight){
+    hp = Math.round(hp * FLOOR_41_59_NERF_MULT);
+    atk = Math.round(atk * FLOOR_41_59_NERF_MULT);
   }
   const res = Object.assign({}, tpl.res);
   if(tpl.boss && level===1) res.fisico = 5; // defensa física reducida solo para el guardián de nivel 1
@@ -3921,7 +4596,19 @@ function startCombat(enemyGroup, node){
     lastActor:null, // quién actuó justo antes del último render - dispara la animación en battleStage.js
     lastAction:null, // {label, effects:[{targetKind:'enemy'|'ally'|'player', key, amount, kind:'dmg'|'heal'}]} de ese mismo actor
     pendingSkill:null, // skillId esperando click de objetivo en el canvas - ver syncBattleStage()
+    pendingTargetFilter:null, // 'front'|null — restringe el click a solo los enemigos del frente (ver useSkillFromMenu/onTarget)
     openSubmenu:null, // 'habilidades'|'mochila'|null — qué submenú quedó abierto entre renders (ver renderCombat); solo se cierra con "Volver" o al terminar el combate
+    // Marca qué pasivas de Tier S ya se activaron en ESTE combate — todas las
+    // pasivas de Tier S (armas y equipo) valen 1 vez por combate y 4 turnos
+    // de duración cuando aplican un buff/debuff temporal (pedido explícito
+    // 2026-09-24). Claves libres tipo 'martillo_s' o 'botas_s:player' — ver
+    // TIER_S_PROC_EFFECTS y hasTierSProc().
+    tierSFired: new Set(),
+    // Escudo del jugador (2026-09-25, pedido explícito): absorbe daño antes
+    // que la vida, se muestra en morado por encima de la barra de vida (ver
+    // renderSheet/renderCombat/battleStage.js). No se acumula entre
+    // combates — arranca en 0 en cada pelea nueva, igual que playerDefending.
+    playerShield: 0,
     over:false
   };
   invOpen = false;
@@ -3948,7 +4635,30 @@ function frontlineTarget(){
 }
 function dealDamageToAlly(ally, amount){
   if(amount<=0) return;
-  ally.hp = Math.max(0, ally.hp - amount);
+  if(ally.shield>0){
+    const absorbed = Math.min(ally.shield, amount);
+    ally.shield -= absorbed;
+    amount -= absorbed;
+  }
+  if(amount>0) ally.hp = Math.max(0, ally.hp - amount);
+  checkAllyFuriaContenidaTrigger(ally);
+}
+// Furia Contenida engarzada en un aliado — mismo criterio que la del
+// jugador (ver checkFuriaContenidaTrigger), pero leyendo ally.specials
+// (piedras + equipo ya aplanados, ver makeCombatAlly) y con su propia
+// bandera "1 vez por combate" por id de aliado.
+function checkAllyFuriaContenidaTrigger(ally){
+  if(!combat) return;
+  const fireKey = 'furia_contenida:'+ally.id;
+  if(combat.tierSFired.has(fireKey)) return;
+  const sp = (ally.specials||[]).find(s=>s.type==='furia_v2');
+  if(!sp || ally.maxHP<=0 || (ally.hp/ally.maxHP) >= sp.threshold) return;
+  combat.tierSFired.add(fireKey);
+  const existing = hasStatus(ally.statuses,'Furioso');
+  if(existing) existing.duration = sp.duration;
+  else ally.statuses.push({name:'Furioso', duration:sp.duration, dmgMult:1+sp.dmgBonus, incomingDmgReduction:sp.dmgReduction||0});
+  const reducTxt = sp.dmgReduction ? ` y -${Math.round(sp.dmgReduction*100)}% de daño recibido` : '';
+  log(`<b>${ally.name}</b> se llena de furia: +${Math.round(sp.dmgBonus*100)}% de daño${reducTxt} durante ${sp.duration} turnos.`);
 }
 function isAllyHostile(allyId){ return (combat.hostileAllies||[]).includes(allyId); }
 // Reservado para cuando exista una traición real (el aliado ataca por su
@@ -3962,10 +4672,19 @@ function markAllyHostile(allyId){
 // Estadísticas de combate del aliado, derivadas de su nivel — v1 no tiene
 // equipo ni piedras de alma propias todavía, solo la curva base por rol.
 const ALLY_EQUIP_SLOTS = ['arma','arma2','armadura','amuleto','casco','botas','guantes'];
-// Vida máxima de un aliado a partir de su fila (nivel + equipo) - extraído de
-// makeCombatAlly() para que la hoguera de descanso (que cura a todo el
-// equipo sin que haya combate de por medio) calcule el mismo número, en vez
-// de reimplementar la fórmula por separado y arriesgarse a que diverjan.
+// Piedras de alma de aliado — pedido explícito 2026-09-24: hasta
+// ALLY_SOUL_SLOTS_MAX cada uno (fijo, no escala con nivel como el del
+// jugador), SIN restricción de familia por rol ("no pongas limitante, cada
+// persona es libre de seguir la senda de su aliado"). Se persisten en
+// character_allies.soul_slots (ver migración 0009_ally_soul_slots.sql — hay
+// que correrla en Supabase antes de que esto funcione en producción).
+const ALLY_SOUL_SLOTS_MAX = 2;
+function allySocketedStones(row){ return (row.soul_slots||[]).filter(Boolean); }
+// Vida máxima de un aliado a partir de su fila (nivel + equipo + piedras) -
+// extraído de makeCombatAlly() para que la hoguera de descanso (que cura a
+// todo el equipo sin que haya combate de por medio) calcule el mismo
+// número, en vez de reimplementar la fórmula por separado y arriesgarse a
+// que diverjan.
 function allyMaxHP(row){
   const tpl = ALLY_ROSTER.find(t=>t.templateId===row.template_id);
   const lvl = row.level || 1;
@@ -3980,11 +4699,17 @@ function allyMaxHP(row){
     if(it && it.bonus && it.bonus.stat==='maxhp') maxHP += it.bonus.value*8;
   });
   maxHP += equipModsSum(equip, 'maxhp_flat'); // Casco (nuevo): HP real, sin el ×8 de arriba
+  allySocketedStones(row).forEach(s=>{ if(s.bonus && s.bonus.stat==='maxhp') maxHP += s.bonus.value*8; }); // Vitalidad
   return maxHP;
 }
 // MP y Espíritu de un aliado: mismo pool de nivel para los dos, más lo que
-// sume el Amuleto/Accesorio (mp_flat/espiritu_flat, ver GEAR_CATALOG).
-function allyMaxMP(row){ return Math.round(30 + (row.level||1)*5) + equipModsSum(row.equip||{}, 'mp_flat'); }
+// sume el Amuleto/Accesorio (mp_flat/espiritu_flat, ver GEAR_CATALOG) y una
+// piedra de Sabiduría engarzada (su bonus.stat==='maxsta' se reusa acá como
+// MP, ya que el aliado no tiene un pool de "estamina" separado del MP).
+function allyMaxMP(row){
+  const fromStones = allySocketedStones(row).filter(s=>s.bonus&&s.bonus.stat==='maxsta').reduce((sum,s)=>sum+s.bonus.value,0);
+  return Math.round(30 + (row.level||1)*5) + equipModsSum(row.equip||{}, 'mp_flat') + fromStones;
+}
 function allyMaxSpirit(row){ return Math.round(30 + (row.level||1)*5) + equipModsSum(row.equip||{}, 'espiritu_flat'); }
 // Costo de habilidad de aliado: guerrero/arquero/asesino gastan MP (estamina),
 // mago/sacerdote gastan espíritu — igual que el jugador. Sin recurso
@@ -4000,13 +4725,14 @@ function makeCombatAlly(row){
   let atk = Math.round(6 + lvl*1.7);
   const res = {fisico:0, fuego:0, hielo:0, veneno:0, aturdimiento:0};
   const equip = row.equip || {};
-  ALLY_EQUIP_SLOTS.forEach(slot=>{
-    const it = equip[slot];
+  const applyStatBonus = (it)=>{
     if(!it || !it.bonus) return;
-    if(it.bonus.stat==='maxhp') return; // ya sumado en allyMaxHP()
-    else if(it.bonus.stat) atk += it.bonus.value; // arma/casco/botas/guantes: bono plano al ataque, más simple que el modelo de stats del jugador
+    if(it.bonus.stat==='maxhp' || it.bonus.stat==='maxsta') return; // ya sumados en allyMaxHP()/allyMaxMP()
+    else if(it.bonus.stat) atk += it.bonus.value; // fis/esp/hab: bono plano al ataque, más simple que el modelo de stats del jugador
     else if(it.bonus.res) res[it.bonus.res] = (res[it.bonus.res]||0) + it.bonus.value;
-  });
+  };
+  ALLY_EQUIP_SLOTS.forEach(slot=> applyStatBonus(equip[slot]));
+  allySocketedStones(row).forEach(applyStatBonus);
   // Si este aliado ya peleó en el nivel actual, arranca donde quedó (herido o
   // derribado) en vez de con la vida completa - ver syncAllyHPToDungeon().
   let hp = maxHP;
@@ -4019,10 +4745,10 @@ function makeCombatAlly(row){
   if(savedMP !== undefined) mp = Math.max(0, Math.min(maxMP, savedMP));
   const savedSpirit = state.dungeon && state.dungeon.allySpirit ? state.dungeon.allySpirit[row.id] : undefined;
   if(savedSpirit !== undefined) spirit = Math.max(0, Math.min(maxSpirit, savedSpirit));
-  // Specials del arma/arma2 equipadas — mismo formato que el jugador (ver
-  // specialsFromEquip), leídos una sola vez acá para no recalcularlos cada
-  // turno de combate.
-  const specials = specialsFromEquip(equip);
+  // Specials del arma/arma2 equipadas + piedras de alma engarzadas — mismo
+  // formato que el jugador (ver specialsFromEquip/itemSpecialsArr), leídos
+  // una sola vez acá para no recalcularlos cada turno de combate.
+  const specials = specialsFromEquip(equip).concat(allySocketedStones(row).flatMap(s=>itemSpecialsArr(s)));
   // Fortaleza mental / Resistencia a efectos de estado del Amuleto/Botas —
   // ver applyStatus(), que las lee de acá cuando el objetivo es un aliado.
   const mentalResist = clamp(equipModsSum(equip,'fortaleza_mental')/100, 0, 0.9);
@@ -4034,7 +4760,7 @@ function makeCombatAlly(row){
     // aliado en peligro puede replegarse a la Retaguardia en pleno combate
     // (ver allyMaybeSelfPreserve) y ya no ser el objetivo prioritario.
     pos: tpl.frontline ? 'frente' : 'retaguardia',
-    maxHP, hp, maxMP, mp, maxSpirit, spirit, atk, statuses:[], skillCooldown: 1, // 1: no usan su habilidad en el primer turno
+    maxHP, hp, maxMP, mp, maxSpirit, spirit, atk, statuses:[], shield:0, skillCooldown: 1, // 1: no usan su habilidad en el primer turno
     res, specials, mentalResist, statusResist
   };
 }
@@ -4058,6 +4784,13 @@ function effectiveEnemyRes(enemy, resKey){
 const CORROSION_RES_PENALTY = 15;
 const CORROSION_HEAL_MULT = 0.5;
 function corrosionResPenalty(statuses){ return hasStatus(statuses, 'Corrosion') ? CORROSION_RES_PENALTY : 0; }
+// Bonificación de Frente (2026-09-25, pedido explícito): quien ocupa el
+// puesto de tanque —el jugador con playerPos==='frente', o un aliado
+// frontline con pos==='frente' (hoy solo Aldric)— recibe un -10% de daño
+// plano adicional, siempre, se suma multiplicativamente con cualquier otra
+// reducción (Armadura/Maza/Furioso/Bendición/Tier S, etc.) — no la
+// reemplaza. No aplica a Retaguardia.
+const FRONTLINE_DAMAGE_REDUCTION = 0.10;
 function healMultiplierFor(statuses){
   const c = hasStatus(statuses, 'Corrosion');
   return c ? c.healMult : 1;
@@ -4069,9 +4802,37 @@ function removeStatus(list, name){
   if(idx>=0) list.splice(idx,1);
 }
 
+// Índices de los enemigos vivos que de verdad ocupan el frente (tpl.frontline)
+// — antes frontEnemyIndex() ignoraba esto por completo y devolvía "el
+// primero vivo del array", que en la práctica coincidía casi siempre porque
+// el grupo se ordena con los frontline primero (ver enterNode) — pero si el
+// único frontline vivo no era el índice 0 (por ejemplo, murió el primero),
+// esto lo encontraba igual. Ahora también sirve para saber si hay más de
+// uno vivo al mismo tiempo, y así ofrecerle al jugador elegir cuál atacar.
+function livingFrontlineEnemyIndices(){
+  const idxs = [];
+  combat.enemies.forEach((e,i)=>{ if(e.hp>0 && e.tpl && e.tpl.frontline) idxs.push(i); });
+  return idxs;
+}
 function frontEnemyIndex(){
+  const frontIdxs = livingFrontlineEnemyIndices();
+  if(frontIdxs.length) return frontIdxs[0];
   for(let i=0;i<combat.enemies.length;i++) if(combat.enemies[i].hp>0) return i;
   return -1;
+}
+// IA de objetivo por aliado (2026-09-25, pedido explícito): un aliado de
+// Frente (frontline:true, hoy solo Aldric) sigue peleando cuerpo a cuerpo —
+// solo puede alcanzar al enemigo del frente, igual que antes. Un aliado de
+// Retaguardia (arquero/asesino/mago) puede alcanzar a CUALQUIER enemigo
+// vivo, así que en vez de limitarse al frente por comodidad, apunta al que
+// tenga menos vida restante (rematar) — así remata objetivos casi muertos
+// en vez de repartir daño parejo entre todos.
+function allyTargetEnemyIndex(ally){
+  if(ally.frontline) return frontEnemyIndex();
+  const living = livingEnemies();
+  if(!living.length) return -1;
+  const weakest = living.reduce((a,b)=> b.hp<a.hp ? b : a);
+  return combat.enemies.indexOf(weakest);
 }
 function livingEnemies(){ return combat.enemies.filter(e=>e.hp>0); }
 
@@ -4117,16 +4878,82 @@ function totalStunChance(){
 // applyStatus — los que un weapon-special pre-rolla antes de llamar acá
 // (Sangrado, Silencio, Aturdido retardado, etc.) no pasan por este filtro.
 const MENTAL_STATUSES = new Set(['Miedo','Confusion']);
+// Busca un special marcado con tierSProc==id (ver TIER_S_PASSIVE_EFFECTS) en
+// un array de specials ya aplanado (equipo del jugador o ally.specials).
+function hasTierSProc(specialsArr, id){ return (specialsArr||[]).some(sp=>sp.tierSProc===id); }
+// Dispara el buff/debuff de una pasiva "de firma" de Tier S — pedido
+// explícito 2026-09-24: todas estas pasivas valen 1 vez por combate y
+// otorgan su efecto por 4 turnos (statusDef.duration se fuerza siempre a 4
+// acá, no hace falta pasarlo). isPlayer=true aplica sobre el propio
+// jugador (target se ignora); si no, aplica sobre `target` (un enemigo o
+// un aliado). Devuelve false sin hacer nada si ese proc ya se usó este
+// combate — así cada llamada solo necesita comprobar el resultado.
+// Sombra Cazadora A/S/SS (2026-09-25, pedido explícito): invoca una sombra
+// que se planta al Frente y se lleva el agro de inmediato. Reglas acordadas:
+// - Respeta el tope de 6 combatientes por bando propio (jugador + hasta 4
+//   aliados + esta sombra).
+// - Máximo una sombra viva a la vez (si ya hay una, no se re-tira el dado).
+// - Se activa como mucho 1 vez por combate (recomendación propia frente a
+//   un cooldown en turnos: la probabilidad ya es baja de por sí —1/5/10%—
+//   y "1 vez por combate" es más simple de leer que contar 10 turnos).
+// Se llama al empezar cada turno propio del jugador (ver playerUseSkill).
+function trySummonShadow(){
+  if(!combat || combat.over) return;
+  const stone = socketedStones().find(s=> itemSpecialsArr(s).some(sp=>sp.type==='sombra_summon'));
+  if(!stone) return;
+  if(combat.tierSFired.has('sombra_summon')) return;
+  if((combat.allies||[]).some(a=>a.isShadow && a.hp>0)) return;
+  if(1 + (combat.allies||[]).length >= 6) return;
+  const sp = itemSpecialsArr(stone).find(s=>s.type==='sombra_summon');
+  if(!chance(sp.chance)) return;
+  combat.tierSFired.add('sombra_summon');
+  const d = derived();
+  const shadowMaxHP = Math.max(1, Math.round(d.maxHP*0.5));
+  const shadow = {
+    id:'shadow_'+Date.now(), templateId:'sombra_cazadora', name:'Sombra Cazadora', icon:'🌑', role:'sombra',
+    frontline:true, pos:'frente', level: state.char.level,
+    maxHP: shadowMaxHP, hp: shadowMaxHP, maxMP:0, mp:0, maxSpirit:0, spirit:0, atk:0,
+    statuses:[], shield:0, skillCooldown:999, specials:[], isShadow:true,
+    res:{fisico:10, fuego:10, hielo:10, veneno:10, aturdimiento:10},
+  };
+  combat.allies = combat.allies||[];
+  combat.allies.unshift(shadow); // primero en la lista = prioridad de "tanque" en frontlineTarget()
+  log(`<b>${stone.name}</b> invoca una <b>Sombra Cazadora</b>: se planta al Frente y atrae toda la atención enemiga.`);
+}
+function fireTierSBuff(procId, isPlayer, target, statusDef){
+  if(!combat || combat.tierSFired.has(procId)) return false;
+  combat.tierSFired.add(procId);
+  applyStatus(isPlayer ? null : target, Object.assign({}, statusDef, {duration:4}), isPlayer);
+  return true;
+}
 function applyStatus(target, statusDef, isPlayer){
   if(!statusDef) return;
   if(statusDef.chance!==undefined){
     let effChance = statusDef.chance;
     const isMental = MENTAL_STATUSES.has(statusDef.name);
+    // Quién sería el "portador" que resiste esta alteración, si es que la
+    // recibe él mismo (jugador o un aliado) — un enemigo objetivo de una
+    // habilidad del jugador (Marcado, Quemadura, etc.) no cuenta.
+    const isAllyTarget = !isPlayer && target && !target.tpl && Array.isArray(target.statuses);
+    const wearerSpecials = isPlayer ? specialsFromEquip(state.char.equip) : (isAllyTarget ? (target.specials||[]) : null);
     if(isPlayer){
       const d = derived();
       effChance *= isMental ? (1-d.fortalezaMental) : (1-d.resistenciaEstado);
-    } else if(target && (target.mentalResist || target.statusResist)){
+    } else if(target && target.tpl && (target.mentalResist || target.statusResist)){
       effChance *= isMental ? (1-(target.mentalResist||0)) : (1-(target.statusResist||0));
+    }
+    // Amuleto Tier S ('amuleto_s'): +10% de resistencia adicional a
+    // cualquier alteración de estado negativa, mental o física.
+    if(wearerSpecials && hasTierSProc(wearerSpecials,'amuleto_s')) effChance *= 0.9;
+    // Botas Tier S ('botas_s'): la primera alteración de estado negativa que
+    // reciba el portador en todo el combate tiene 50% de resistirse por
+    // completo — una vez por combate y por portador (ver combat.tierSFired).
+    if(wearerSpecials && hasTierSProc(wearerSpecials,'botas_s') && combat){
+      const fireKey = 'botas_s:' + (isPlayer ? 'player' : target.id);
+      if(!combat.tierSFired.has(fireKey)){
+        combat.tierSFired.add(fireKey);
+        if(chance(0.5)) return;
+      }
     }
     if(!chance(effChance)) return;
   }
@@ -4159,6 +4986,7 @@ const STATUS_INFO = {
   Quemadura:    {buff:false, desc:'Sufre daño de fuego por turno.'},
   Ralentizado:  {buff:false, desc:'-20% evasión y actúa después que el resto.'},
   Bendecido:    {buff:false, desc:'Sus resistencias caen -20 en todos los elementos mientras dura.'},
+  'Bendición':  {buff:true,  desc:'+resistencias y -daño recibido mientras dura (Grimorio de plegarias Tier S).'},
   Fortalecido:  {buff:true,  desc:'Se fortalece con cada turno que pasa: sus estadísticas suben por carga.'},
   Corrosion:    {buff:false, desc:'-15% resistencia física y solo recibe la mitad de cualquier curación.'},
   Debilitado:   {buff:false, desc:'Su daño cae un 15%.'},
@@ -4269,11 +5097,25 @@ function applyEquippedSpecials(target, dmgDealt, skill){
       if(chance(sp.chance)){
         target.pendingStun = true;
         log(`<b>${it.name}</b> deja tambaleando a ${target.name} — quedará aturdido su próximo turno.`);
+        // Martillo de guerra Tier S ('martillo_s'): si aturde, +15% de daño
+        // propio durante 4 turnos, 1 vez por combate.
+        if(sp.tierSProc && fireTierSBuff(sp.tierSProc, true, null, {name:'Furioso', dmgMult:1.15})){
+          log(`<b>${it.name}</b> te llena de ímpetu: +15% de daño durante 4 turnos.`);
+        }
       }
     } else if(sp.type==='sangrado'){
       if(chance(sp.chance)){
-        applyStatus(target, {name:'Sangrado', duration:2, stack:true, maxStack:3}, false);
+        applyStatus(target, {name:'Sangrado', duration:sp.duration||2, stack:true, maxStack:3}, false);
         log(`<b>${it.name}</b> abre una herida en ${target.name}, que empieza a sangrar.`);
+        // Daga curva/gemela Tier S ('daga_s'): con 3+ cargas de Sangrado en
+        // el objetivo tras este golpe, +12% de daño propio 4 turnos, 1 vez
+        // por combate.
+        if(sp.tierSProc){
+          const st = hasStatus(target.statuses,'Sangrado');
+          if(st && (st.stacks||1)>=3 && fireTierSBuff(sp.tierSProc, true, null, {name:'Furioso', dmgMult:1.12})){
+            log(`<b>${it.name}</b> huele la sangre: +12% de daño durante 4 turnos.`);
+          }
+        }
       }
     } else if(sp.type==='silencio'){
       if(chance(sp.chance)){
@@ -4297,6 +5139,30 @@ function applyEquippedSpecials(target, dmgDealt, skill){
         applyStatus(target, {name:'Sangrado', duration:3, stack:true, maxStack:3}, false);
         log(`<b>${it.name}</b> abre una herida en ${target.name}, que empieza a sangrar.`);
       }
+    } else if(sp.type==='debilitar_enemigo'){
+      // Maza de combate Tier S ('maza_s'): además de su retroceso normal,
+      // 10% de probabilidad propia de bajarle el ataque al enemigo un 15%
+      // durante 4 turnos (reusa el estado Debilitado, que ya reduce el daño
+      // propio del que lo porta — ver enemyAct).
+      if(chance(sp.chance) && fireTierSBuff(sp.tierSProc, false, target, {name:'Debilitado'})){
+        log(`<b>${it.name}</b> quiebra la guardia de ${target.name}: -15% de su ataque durante 4 turnos.`);
+      }
+    } else if(sp.type==='esp_refund_on_apply' && skill){
+      // Vara arcana Tier S ('vara_s'): al aplicar Quemadura o Ralentizado
+      // (es decir, al golpear con Bola de fuego/Lanza de hielo), 5% de
+      // probabilidad de recuperar el Espíritu máximo completo.
+      if((skill.dmgType==='fuego' || skill.dmgType==='hielo') && chance(sp.chance)){
+        const d = derived();
+        state.char.curSpi = d.maxSpi;
+        log(`<b>${it.name}</b> te devuelve todo tu Espíritu.`);
+      }
+    } else if(sp.type==='proc_chance' && sp.tierSProc){
+      // Guantes Tier S ('guantes_s'): probabilidad genérica de potenciar la
+      // siguiente habilidad — el bono real se lee en playerUseSkill (ver
+      // hasStatus(combat.playerStatuses,'Furioso')), acá solo se dispara.
+      if(chance(sp.chance) && fireTierSBuff(sp.tierSProc, true, null, {name:'Furioso', dmgMult:1.25})){
+        log(`<b>${it.name}</b> resplandece: +25% de daño durante 4 turnos.`);
+      }
     }
   });
 }
@@ -4309,6 +5175,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
   if(!combat || combat.over) return;
   const skill = SKILLS[skillId];
   const d = derived();
+  if(!isRepeat) trySummonShadow();
 
   if(skill.ultimate && !isRepeat){
     const usesLeft = ULTIMATE_MAX_USES - (state.dungeon.ultimateUses||0);
@@ -4380,7 +5247,18 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
   // resolve target(s)
   let targets = [];
   if(skill.targetMode==='front'){
-    const fi = frontEnemyIndex();
+    // Si hay 2+ enemigos en el frente a la vez, el jugador ya eligió cuál
+    // por click (ver useSkillFromMenu/onTarget) y llega acá con targetIdx
+    // puesto — se valida que siga siendo un frontline vivo antes de usarlo,
+    // por si el objetivo murió/cambió entre el click y la resolución. Con
+    // un solo frontline vivo (el caso de siempre hasta ahora), targetIdx
+    // llega null y se sigue auto-eligiendo como antes.
+    let fi = -1;
+    if(targetIdx!=null && combat.enemies[targetIdx] && combat.enemies[targetIdx].hp>0 && combat.enemies[targetIdx].tpl && combat.enemies[targetIdx].tpl.frontline){
+      fi = targetIdx;
+    } else {
+      fi = frontEnemyIndex();
+    }
     if(fi<0){ log('No hay ningún enemigo al frente.'); return; }
     targets = [combat.enemies[fi]];
   } else if(skill.targetMode==='any'){
@@ -4491,17 +5369,32 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
     if(state.char.style==='tirador' && skillId==='ataque_basico') base *= 1.6;
     if(furioso) base *= (furioso.dmgMult||1);
     if(hasStatus(combat.playerStatuses,'Debilitado')) base *= 0.85; // te drenaron la fuerza: -15% de daño mientras dure
-    socketedStones().forEach(s=>{
-      if(s.special && s.special.type==='lowhp_dmg_v2' && state.char.curHP/d.maxHP < s.special.threshold){
-        const missingPct = (1 - state.char.curHP/d.maxHP) * 100; // puntos de vida faltantes
-        base *= 1 + s.special.base + missingPct*s.special.missingScale;
-      }
-    });
+    // Furia Contenida ya no vive acá (era un multiplicador pasivo por golpe,
+    // sin límite de usos) — ver el REWORK 2026-09-24 en SOUL_STONES.furia_*
+    // y checkFuriaContenidaTrigger(), enganchado en dealDamageToPlayer().
     // Bastón rúnico / Arco largo / Martillo de guerra épico: bono de daño
     // plano del arma equipada, siempre activo (no es una probabilidad).
-    specialsFromEquip(state.char.equip).forEach(sp=>{
+    const equipSpecialsForDmg = specialsFromEquip(state.char.equip);
+    equipSpecialsForDmg.forEach(sp=>{
       if(sp.type==='aumento_dano') base *= (1+sp.value);
     });
+    // Cuchillo largo/gemelo Tier S ('cuchillo_s'): objetivo por debajo del
+    // 25% de vida, +20% de daño — condición continua, se evalúa en cada
+    // golpe, no consume el "1 vez por combate".
+    if(target.hp/target.maxHP < 0.25 && equipSpecialsForDmg.some(sp=>sp.tierSProc==='cuchillo_s')){
+      base *= 1.2;
+    }
+    // Arco largo Tier S ('arcolargo_s'): objetivo por encima del 70% de
+    // vida, +15% de daño — mismo criterio continuo que arriba.
+    if(target.hp/target.maxHP > 0.7 && equipSpecialsForDmg.some(sp=>sp.tierSProc==='arcolargo_s')){
+      base *= 1.15;
+    }
+    // Bastón rúnico Tier S ('baston_s'): la primera habilidad elemental
+    // (no física) de todo el combate hace +15% de daño — 1 vez por combate.
+    if(skill.dmgType && skill.dmgType!=='fisico' && equipSpecialsForDmg.some(sp=>sp.tierSProc==='baston_s') && !combat.tierSFired.has('baston_s')){
+      combat.tierSFired.add('baston_s');
+      base *= 1.15;
+    }
     // Grimorio de plegarias épico (aliado Sacerdote): el enemigo bendecido
     // recibe más daño de todo el equipo mientras dure, tú incluido.
     const blessedDebuff = hasStatus(target.statuses,'Bendecido');
@@ -4554,11 +5447,31 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
     }
     // marked passive (all incoming dmg +20%)
     if(hasStatus(target.statuses,'Marcado')) base *= 1.2;
+    // Pasiva "mientras viva el acompañante" (2026-09-25, Matriarca Telaraña
+    // "Reina del Nido"): reduce el daño que RECIBE este enemigo mientras su
+    // compañero siga con vida — desaparece apenas el jugador lo derrota.
+    if(target.tpl && target.tpl.passiveWhileCompanionAlive && target.companionRef && target.companionRef.hp>0){
+      base *= (1 - target.tpl.passiveWhileCompanionAlive.reduccion);
+    }
+    // Autobuffs defensivos del enemigo (Seda Protectora, Caparazón
+    // Endurecido, etc. — ver utility:'self_buff' en resolveNewStyleEnemyMove).
+    (target.statuses||[]).forEach(st=>{ if(st.incomingDmgReduction) base *= (1 - st.incomingDmgReduction); });
+
+    // Foco arcano Tier S ('foco_s'): cuando la habilidad consumió un estado
+    // (cualquiera de los combos de arriba dejó comboText), +10% de daño más
+    // — condición continua, se evalúa en cada golpe que sí combea.
+    if(comboText && equipSpecialsForDmg.some(sp=>sp.tierSProc==='foco_s')){
+      base *= 1.1;
+    }
 
     let isCrit = skill.guaranteedCrit ? true : chance(crit);
     if(isCrit) base *= 1.5;
 
     let ignore = skill.ignoreResist||0;
+    // Carcaj Tier S ('carcaj_s'): el flag lo deja armado playerUseSkill justo
+    // antes de relanzar el segundo ataque básico (ver más abajo) — se
+    // consume acá mismo así que solo afecta a ESE golpe repetido.
+    if(combat.pendingIgnoreBoost){ ignore = Math.max(ignore, 0.5); combat.pendingIgnoreBoost = false; }
     let resKey = skill.dmgType==='arcano'? null : skill.dmgType;
     // Cataclismo elemental (ultimate del Mago): "fuego y hielo combinados" se
     // resuelve golpeando la resistencia más baja de las dos por objetivo, en
@@ -4620,10 +5533,25 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
       await playerUseSkill(skillId, targetIdx, true);
       return;
     }
-    if(skillId==='ataque_basico' && equipSpecials.some(sp=>sp.type==='segundo_ataque_basico' && chance(sp.chance))){
-      log('Realizas un segundo ataque básico.');
-      await playerUseSkill(skillId, targetIdx, true);
-      return;
+    if(skillId==='ataque_basico'){
+      const segundoAtaque = equipSpecials.find(sp=>sp.type==='segundo_ataque_basico' && chance(sp.chance));
+      if(segundoAtaque){
+        log('Realizas un segundo ataque básico.');
+        // Carcaj Tier S ('carcaj_s'): 10% de que ESTE segundo ataque ignore
+        // 50% de resistencia física — se arma acá, se consume una sola vez
+        // en el cálculo de daño de abajo (ver combat.pendingIgnoreBoost).
+        if(segundoAtaque.tierSProc==='carcaj_s' && chance(0.1)) combat.pendingIgnoreBoost = true;
+        await playerUseSkill(skillId, targetIdx, true);
+        // Arco corto Tier S ('arcocorto_s'): cada segundo ataque cura un 3%
+        // de tu vida máxima.
+        if(segundoAtaque.tierSProc==='arcocorto_s'){
+          const d0 = derived();
+          const before = state.char.curHP;
+          state.char.curHP = Math.min(d0.maxHP, state.char.curHP + Math.round(d0.maxHP*0.03));
+          if(state.char.curHP>before) log(`Tu Arco corto te devuelve ${state.char.curHP-before} de vida.`);
+        }
+        return;
+      }
     }
   }
 
@@ -4812,6 +5740,8 @@ function resolveOneAllyTurn(ally){
       const healBonus = 1 + (ally.specials||[]).filter(sp=>sp.type==='aumento_curacion').reduce((s,sp)=>s+sp.value,0);
       // Tomo sagrado épico: el aliado curado recibe +daño 2 turnos (reusa Inspirado).
       const healDmgBuff = (ally.specials||[]).find(sp=>sp.type==='dano_aliado_curado');
+      // Tomo sagrado Tier S: escudo si cura a alguien por debajo del 40% de vida.
+      const healShieldSp = (ally.specials||[]).find(sp=>sp.type==='escudo_en_curacion');
       if(playerPct < 0.5 && playerPct <= allyPct && hasSpirit){
         ally.spirit -= ALLY_SKILL_COST;
         const heal = Math.round(d.maxHP*0.15*healBonus*healMultiplierFor(combat.playerStatuses));
@@ -4821,6 +5751,11 @@ function resolveOneAllyTurn(ally){
         if(healDmgBuff){
           const existing = hasStatus(combat.playerStatuses,'Inspirado');
           if(existing) existing.duration = 2; else combat.playerStatuses.push({name:'Inspirado', duration:2, dmgMult:1+healDmgBuff.value});
+        }
+        if(healShieldSp && playerPct<0.4 && chance(healShieldSp.chance)){
+          const shieldAmt = Math.round(d.maxHP*healShieldSp.shieldPct);
+          grantShield(true, null, shieldAmt);
+          log(`<b>${ally.name}</b> te protege con un escudo de ${shieldAmt}.`);
         }
         combat.lastAction = {label:'Bendición curativa', effects:[{targetKind:'player', amount:state.char.curHP-before, kind:'heal'}]};
         return;
@@ -4835,6 +5770,11 @@ function resolveOneAllyTurn(ally){
           const existing = hasStatus(mostInjured.statuses,'Inspirado');
           if(existing) existing.duration = 2; else mostInjured.statuses.push({name:'Inspirado', duration:2, dmgMult:1+healDmgBuff.value});
         }
+        if(healShieldSp && allyPct<0.4 && chance(healShieldSp.chance)){
+          const shieldAmt = Math.round(mostInjured.maxHP*healShieldSp.shieldPct);
+          grantShield(false, mostInjured, shieldAmt);
+          log(`<b>${ally.name}</b> protege a <b>${mostInjured.name}</b> con un escudo de ${shieldAmt}.`);
+        }
         combat.lastAction = {label:'Bendición curativa', effects:[{targetKind:'ally', key:mostInjured.id, amount:mostInjured.hp-before, kind:'heal'}]};
         return;
       }
@@ -4847,12 +5787,21 @@ function resolveOneAllyTurn(ally){
         if(fiBless>=0){
           const target = combat.enemies[fiBless];
           ally.spirit -= ALLY_SKILL_COST;
-          // Grimorio de plegarias: duración base 2, Poco Común+ la sube a 3.
-          const grimorioDur = (ally.specials||[]).some(sp=>sp.type==='bendecido_dur');
+          // Grimorio de plegarias: duración base 2, Poco Común+ la sube a 3,
+          // Tier S (legendario) trae su propio duration:4 explícito.
+          const grimorioDurSp = (ally.specials||[]).filter(sp=>sp.type==='bendecido_dur').sort((a,b)=>(b.duration||3)-(a.duration||3))[0];
           const grimorioDebuff = (ally.specials||[]).find(sp=>sp.type==='dano_recibido_debuff');
-          const blessDef = {name:'Bendecido', duration: grimorioDur?3:2};
+          const blessDef = {name:'Bendecido', duration: grimorioDurSp ? (grimorioDurSp.duration||3) : 2};
           if(grimorioDebuff) blessDef.incomingDmgMult = 1+grimorioDebuff.value;
           applyStatus(target, blessDef, false);
+          // Grimorio de plegarias Tier S ('grimorio_s'): al bendecir a un
+          // enemigo, el propio aliado se envuelve en "Bendición" — el
+          // contrario de "Bendecido" (ese debilita al enemigo; este
+          // fortalece a quien lo lanza) — 4 turnos, 1 vez por combate.
+          const selfBuffSp = (ally.specials||[]).find(sp=>sp.type==='bendicion_propia');
+          if(selfBuffSp && fireTierSBuff(selfBuffSp.tierSProc, false, ally, {name:'Bendición', resBonus:selfBuffSp.resBonus, incomingDmgReduction:selfBuffSp.dmgReduction})){
+            log(`<b>${ally.name}</b> se envuelve en su propia Bendición: +${selfBuffSp.resBonus}% de resistencias y -${Math.round(selfBuffSp.dmgReduction*100)}% de daño recibido durante 4 turnos.`);
+          }
           ally.skillCooldown = ALLY_SKILL_COOLDOWN;
           log(`<b>${ally.name}</b> pronuncia una Bendición Sagrada sobre ${target.name}: sus resistencias caen.`);
           combat.lastAction = {label:'Bendición Sagrada', effects:[]};
@@ -4860,7 +5809,7 @@ function resolveOneAllyTurn(ally){
         }
       }
     }
-    const fi = frontEnemyIndex();
+    const fi = allyTargetEnemyIndex(ally);
     if(fi<0) return;
     const enemyTarget = combat.enemies[fi];
 
@@ -4883,6 +5832,12 @@ function resolveOneAllyTurn(ally){
     if(hasStatus(ally.statuses,'Debilitado')) dmg *= 0.85;
     const inspirado = hasStatus(ally.statuses,'Inspirado');
     if(inspirado) dmg *= (inspirado.dmgMult||1);
+    // Furioso: Grito de guerra del jugador NO llega a los aliados, pero
+    // Furia Contenida engarzada en el propio aliado sí lo usa (ver
+    // checkAllyFuriaContenidaTrigger) — mismo nombre de estado que el del
+    // jugador, mismo campo dmgMult.
+    const allyFurioso = hasStatus(ally.statuses,'Furioso');
+    if(allyFurioso) dmg *= (allyFurioso.dmgMult||1);
     (ally.specials||[]).forEach(sp=>{ if(sp.type==='aumento_dano') dmg *= (1+sp.value); });
     const blessedDebuff = hasStatus(enemyTarget.statuses,'Bendecido');
     if(blessedDebuff && blessedDebuff.incomingDmgMult) dmg *= blessedDebuff.incomingDmgMult;
@@ -5074,12 +6029,34 @@ function enemyAct(enemy){
   // Bloqueo (Guerrero: Espadón pesado y Escudo de hierro): una segunda capa
   // de "el golpe no llega", igual de incondicional que la esquiva de arriba.
   const defenderSpecials = target.kind==='ally' ? (target.ally.specials||[]) : specialsFromEquip(state.char.equip);
-  const bChance = blockChance(defenderSpecials);
+  let bChance = blockChance(defenderSpecials);
+  // Escudo de hierro Tier S ('defend_bloqueo_bonus'): +10% de bloqueo extra
+  // mientras el jugador se está Defendiendo este turno.
+  if(target.kind==='player' && combat.playerDefending){
+    defenderSpecials.forEach(sp=>{ if(sp.type==='defend_bloqueo_bonus') bChance += sp.value; });
+  }
   if(bChance>0 && chance(bChance)){
     log(`${enemy.name} ataca a ${target.kind==='ally' ? target.ally.name : 'ti'}, ¡pero el escudo bloquea el golpe por completo!`);
     combat.lastAction = {label:'¡Bloqueado!', effects:[]};
+    // Espadón pesado Tier S ('espadon_s'): 30% de devolver el 50% del
+    // ataque bruto del enemigo como daño (aproximación al "daño bloqueado":
+    // el golpe se anuló entero, así que no hay un número de daño ya
+    // calculado para devolver una fracción exacta de él).
+    if(defenderSpecials.some(sp=>sp.tierSProc==='espadon_s') && chance(0.3)){
+      const reflected = Math.max(1, Math.round(enemy.atk*0.5));
+      enemy.hp = Math.max(0, enemy.hp-reflected);
+      log(`El filo de tu Espadón devuelve ${reflected} de daño a ${enemy.name}.`);
+    }
     return;
   }
+
+  // Sistema nuevo, data-driven (2026-09-25, "Década 2 - Arañas" y en
+  // adelante): un tpl con `abilities`+`aiPriority` en vez de `moves` (lista
+  // de strings sueltas resueltas por un if-chain) resuelve su turno acá y
+  // nunca llega al sistema viejo de abajo — décadas ya lanzadas (Bosque
+  // Goblin, Bestias, Usurpador, Isla Paraíso, El Mar) siguen 100% con el
+  // sistema viejo, sin ningún cambio de comportamiento.
+  if(enemy.tpl.abilities){ resolveNewStyleEnemyMove(enemy, target); return; }
 
   const available = enemy.tpl.moves.filter(m=> !(m==='invocar' && enemy.cooldowns.invocar>0));
   let move = pick(available.length ? available : enemy.tpl.moves);
@@ -5171,6 +6148,15 @@ function enemyAct(enemy){
   let dmg = enemy.atk;
   const fortalecido = hasStatus(enemy.statuses,'Fortalecido');
   if(fortalecido) dmg = Math.round(dmg * (1 + (fortalecido.stacks||1)*0.04));
+  // Maza de combate Tier S ('maza_s' en applyEquippedSpecials): un enemigo
+  // Debilitado pega un 15% más flojo — mismo criterio que ya usa el
+  // Debilitado que sufren el jugador/aliados.
+  if(hasStatus(enemy.statuses,'Debilitado')) dmg = Math.round(dmg*0.85);
+  // Lectura genérica de cualquier estado propio con dmgMult (2026-09-25) —
+  // cubre autobuffs temporales como "Orden de la Colmena" (Matriarca
+  // Telaraña fortalece a su acompañante) sin tener que hardcodear cada
+  // nombre de estado nuevo, uno por uno, en este if-chain.
+  enemy.statuses.forEach(st=>{ if(st.dmgMult) dmg = Math.round(dmg*st.dmgMult); });
   let text = 'ataca';
   const moveLabel = MOVE_LABELS[move] || 'Ataque';
   // Los aliados ahora son "un personaje más": los mismos movimientos que
@@ -5205,13 +6191,26 @@ function enemyAct(enemy){
     finalDmg = dmg*(1-resVal/100);
     if(state.char.race==='enano') finalDmg -= 2;
     if(combat.playerDefending) finalDmg *= 0.5;
+    if(combat.playerPos==='frente') finalDmg *= (1-FRONTLINE_DAMAGE_REDUCTION);
     const furiosoBuff = hasStatus(combat.playerStatuses,'Furioso');
     if(furiosoBuff && furiosoBuff.incomingDmgReduction) finalDmg *= (1 - furiosoBuff.incomingDmgReduction);
     if(hasStatus(combat.playerStatuses,'Paralisis')) finalDmg *= 1.25; // indefenso: sin evasión y más daño recibido
     // Maza de combate / Espadón pesado épicos: reducción de daño recibido pasiva.
-    specialsFromEquip(state.char.equip).forEach(sp=>{
+    const playerEquipSpecials = specialsFromEquip(state.char.equip);
+    playerEquipSpecials.forEach(sp=>{
       if(sp.type==='reduccion_dano') finalDmg *= (1-sp.value);
     });
+    // Casco Tier S ('casco_s'): por debajo del 50% de vida, -5% de daño
+    // recibido adicional — continuo, no consume el "1 vez por combate".
+    if(hasTierSProc(playerEquipSpecials,'casco_s') && d.maxHP>0 && (state.char.curHP/d.maxHP) < 0.5){
+      finalDmg *= 0.95;
+    }
+    // Armadura Tier S ('armadura_s'): el primer golpe que recibís en todo el
+    // combate hace -10% de daño — 1 vez por combate (ver combat.tierSFired).
+    if(hasTierSProc(playerEquipSpecials,'armadura_s') && !combat.tierSFired.has('armadura_s:player')){
+      combat.tierSFired.add('armadura_s:player');
+      finalDmg *= 0.9;
+    }
     // Brecha de nivel: un monstruo de más nivel pega más fuerte, uno de
     // menos nivel pega más flojo — dirección invertida a la del jugador
     // atacando (ver levelDiffDamageMult en playerUseSkill).
@@ -5223,9 +6222,22 @@ function enemyAct(enemy){
   } else {
     const ally = target.ally;
     const allyResKey = elementalType || 'fisico';
-    let allyDmg = dmg*(1-(((ally.res && ally.res[allyResKey])||0) - (elementalType?0:corrosionResPenalty(ally.statuses)))/100);
+    const allyBendicion = hasStatus(ally.statuses,'Bendición');
+    let allyDmg = dmg*(1-(((ally.res && ally.res[allyResKey])||0) + (allyBendicion?allyBendicion.resBonus||0:0) - (elementalType?0:corrosionResPenalty(ally.statuses)))/100);
     if(hasStatus(ally.statuses,'Paralisis')) allyDmg *= 1.25; // indefenso: igual que al jugador
+    if(ally.pos==='frente') allyDmg *= (1-FRONTLINE_DAMAGE_REDUCTION);
     (ally.specials||[]).forEach(sp=>{ if(sp.type==='reduccion_dano') allyDmg *= (1-sp.value); });
+    const allyFuriosoDef = hasStatus(ally.statuses,'Furioso');
+    if(allyFuriosoDef && allyFuriosoDef.incomingDmgReduction) allyDmg *= (1 - allyFuriosoDef.incomingDmgReduction);
+    if(allyBendicion && allyBendicion.incomingDmgReduction) allyDmg *= (1 - allyBendicion.incomingDmgReduction);
+    // Casco/Armadura Tier S del aliado — mismo criterio que el jugador.
+    if(hasTierSProc(ally.specials,'casco_s') && ally.maxHP>0 && (ally.hp/ally.maxHP) < 0.5){
+      allyDmg *= 0.95;
+    }
+    if(hasTierSProc(ally.specials,'armadura_s') && !combat.tierSFired.has('armadura_s:'+ally.id)){
+      combat.tierSFired.add('armadura_s:'+ally.id);
+      allyDmg *= 0.9;
+    }
     allyDmg *= levelDiffDamageMult(monsterEffectiveLevel(), state.char.level);
     finalDmg = Math.max(1, Math.round(allyDmg));
     dealDamageToAlly(ally, finalDmg);
@@ -5252,6 +6264,152 @@ function enemyAct(enemy){
     enemy.hp = Math.max(0, enemy.hp-reflected);
     log(`${sp.text||'Tu equipo'} devuelve ${reflected} de daño a ${enemy.name}.`);
   });
+}
+
+// ============================================================
+// SISTEMA NUEVO DE IA DE ENEMIGOS (2026-09-25, "Década 2 - Arañas" en
+// adelante) — data-driven en vez del if-chain de strings sueltas de arriba.
+// Un tpl usa este sistema con dos campos nuevos en vez de `moves`:
+//   abilities: { idHabilidad: {label, mult, cooldown, condition(ctx),
+//     applies, selfBuff, bonusVsStatus, utility:'buff_companion',
+//     buffCompanion}, ... }
+//   aiPriority: ['idA','idB',...,'basico'] — se prueba en orden; la última
+//     entrada DEBE ser siempre usable (sin cooldown ni condition) para que
+//     nunca se quede sin nada que hacer.
+// ctx que recibe cada `condition`: {selfHpPct, targetHpPct, targetStatuses,
+// targetStatusCount(name)}.
+// enemy.cooldowns ya se decrementa genéricamente al principio de
+// enemyAct() (Object.keys(enemy.cooldowns).forEach...), así que acá solo
+// hace falta leerlo y, al usar una habilidad con cooldown, volver a armarlo.
+// ============================================================
+function resolveNewStyleEnemyMove(enemy, target){
+  const tpl = enemy.tpl;
+  const onPlayer = target.kind==='player';
+  const d = derived();
+  const targetStatuses = onPlayer ? combat.playerStatuses : target.ally.statuses;
+  const targetHp = onPlayer ? state.char.curHP : target.ally.hp;
+  const targetMaxHp = onPlayer ? d.maxHP : target.ally.maxHP;
+
+  // Pasiva de umbral de vida propia, 1 vez por combate (ej. "<50% HP: +10%
+  // ATQ 2 turnos" de varios guardianes) — no consume el turno/la acción.
+  if(tpl.hpThresholdBuff && !enemy.hpThresholdBuffUsed && enemy.maxHP>0 && (enemy.hp/enemy.maxHP) < tpl.hpThresholdBuff.threshold){
+    enemy.hpThresholdBuffUsed = true;
+    const existing = hasStatus(enemy.statuses, tpl.hpThresholdBuff.buff.name);
+    if(existing) Object.assign(existing, tpl.hpThresholdBuff.buff);
+    else enemy.statuses.push(Object.assign({}, tpl.hpThresholdBuff.buff));
+    log(`${enemy.name} reacciona al quedar herido: ${tpl.hpThresholdBuff.buff.name}.`);
+  }
+
+  const ctx = {
+    selfHpPct: enemy.maxHP>0 ? enemy.hp/enemy.maxHP : 1,
+    targetHpPct: targetMaxHp>0 ? targetHp/targetMaxHp : 1,
+    targetStatuses,
+    targetStatusCount(name){ const st=targetStatuses.find(s=>s.name===name); return st?(st.stacks||1):0; },
+  };
+
+  const priority = tpl.aiPriority || Object.keys(tpl.abilities);
+  let chosenId = null;
+  for(const id of priority){
+    const ab = tpl.abilities[id];
+    if(!ab) continue;
+    if(enemy.cooldowns[id] > 0) continue;
+    if(ab.condition && !ab.condition(ctx)) continue;
+    chosenId = id; break;
+  }
+  if(!chosenId) chosenId = priority[priority.length-1];
+  const ability = tpl.abilities[chosenId];
+  if(ability.cooldown) enemy.cooldowns[chosenId] = ability.cooldown;
+
+  // Movimiento de soporte puro (no hace daño): se autobuffea (defensa,
+  // ej. "Seda Protectora"/"Caparazón Endurecido") y termina el turno ahí.
+  if(ability.utility==='self_buff'){
+    const buff = ability.selfBuff;
+    const existing = hasStatus(enemy.statuses, buff.name);
+    if(existing) Object.assign(existing, buff);
+    else enemy.statuses.push(Object.assign({}, buff));
+    log(`${enemy.name} usa ${ability.label}.`);
+    combat.lastAction = {label:ability.label, effects:[]};
+    return;
+  }
+  // Movimiento de soporte puro (no hace daño): fortalece a su acompañante
+  // vivo (ej. "Orden de la Colmena" de la Matriarca Telaraña) y termina el
+  // turno ahí, igual que 'curar'/'buff_pasivo' del sistema viejo.
+  if(ability.utility==='buff_companion'){
+    if(enemy.companionRef && enemy.companionRef.hp>0){
+      const existing = hasStatus(enemy.companionRef.statuses, ability.buffCompanion.name);
+      if(existing) existing.duration = ability.buffCompanion.duration;
+      else enemy.companionRef.statuses.push(Object.assign({}, ability.buffCompanion));
+      log(`${enemy.name} usa ${ability.label}: fortalece a ${enemy.companionRef.name}.`);
+    } else {
+      log(`${enemy.name} usa ${ability.label}, pero no tiene compañero al que fortalecer.`);
+    }
+    combat.lastAction = {label:ability.label, effects:[]};
+    return;
+  }
+
+  let dmg = enemy.atk * (ability.mult!=null ? ability.mult : 1);
+  const fortalecido = hasStatus(enemy.statuses,'Fortalecido');
+  if(fortalecido) dmg = Math.round(dmg * (1 + (fortalecido.stacks||1)*0.04));
+  if(hasStatus(enemy.statuses,'Debilitado')) dmg = Math.round(dmg*0.85);
+  enemy.statuses.forEach(st=>{ if(st.dmgMult) dmg = Math.round(dmg*st.dmgMult); });
+  if(tpl.bonusVsOwnStatus && ctx.targetStatusCount(tpl.bonusVsOwnStatus.name) >= tpl.bonusVsOwnStatus.minStacks){
+    dmg = Math.round(dmg*tpl.bonusVsOwnStatus.mult);
+  }
+  if(ability.bonusVsTargetStatus && ctx.targetStatusCount(ability.bonusVsTargetStatus.name) >= (ability.bonusVsTargetStatus.minStacks||1)){
+    dmg = Math.round(dmg*ability.bonusVsTargetStatus.mult);
+  }
+
+  let finalDmg;
+  if(onPlayer){
+    let resVal = totalRes('fisico') - corrosionResPenalty(combat.playerStatuses);
+    finalDmg = dmg*(1-resVal/100);
+    if(state.char.race==='enano') finalDmg -= 2;
+    if(combat.playerDefending) finalDmg *= 0.5;
+    if(combat.playerPos==='frente') finalDmg *= (1-FRONTLINE_DAMAGE_REDUCTION);
+    const furiosoBuff = hasStatus(combat.playerStatuses,'Furioso');
+    if(furiosoBuff && furiosoBuff.incomingDmgReduction) finalDmg *= (1 - furiosoBuff.incomingDmgReduction);
+    if(hasStatus(combat.playerStatuses,'Paralisis')) finalDmg *= 1.25;
+    const playerEquipSpecials = specialsFromEquip(state.char.equip);
+    playerEquipSpecials.forEach(sp=>{ if(sp.type==='reduccion_dano') finalDmg *= (1-sp.value); });
+    if(hasTierSProc(playerEquipSpecials,'casco_s') && d.maxHP>0 && (state.char.curHP/d.maxHP) < 0.5) finalDmg *= 0.95;
+    if(hasTierSProc(playerEquipSpecials,'armadura_s') && !combat.tierSFired.has('armadura_s:player')){
+      combat.tierSFired.add('armadura_s:player'); finalDmg *= 0.9;
+    }
+    finalDmg *= levelDiffDamageMult(monsterEffectiveLevel(), state.char.level);
+    finalDmg = Math.max(1, Math.round(finalDmg));
+    dealDamageToPlayer(finalDmg);
+    if(ability.applies) applyStatus(null, Object.assign({}, ability.applies), true);
+    log(`${enemy.name} usa ${ability.label}: ${finalDmg} de daño.`);
+    combat.lastAction = {label:ability.label, effects:[{targetKind:'player', amount:finalDmg, kind:'dmg'}]};
+  } else {
+    const ally = target.ally;
+    const allyBendicion = hasStatus(ally.statuses,'Bendición');
+    let resVal = ((ally.res && ally.res.fisico)||0) + (allyBendicion?allyBendicion.resBonus||0:0) - corrosionResPenalty(ally.statuses);
+    let allyDmg = dmg*(1-resVal/100);
+    if(hasStatus(ally.statuses,'Paralisis')) allyDmg *= 1.25;
+    if(ally.pos==='frente') allyDmg *= (1-FRONTLINE_DAMAGE_REDUCTION);
+    (ally.specials||[]).forEach(sp=>{ if(sp.type==='reduccion_dano') allyDmg *= (1-sp.value); });
+    const allyFuriosoDef = hasStatus(ally.statuses,'Furioso');
+    if(allyFuriosoDef && allyFuriosoDef.incomingDmgReduction) allyDmg *= (1 - allyFuriosoDef.incomingDmgReduction);
+    if(allyBendicion && allyBendicion.incomingDmgReduction) allyDmg *= (1 - allyBendicion.incomingDmgReduction);
+    if(hasTierSProc(ally.specials,'casco_s') && ally.maxHP>0 && (ally.hp/ally.maxHP) < 0.5) allyDmg *= 0.95;
+    if(hasTierSProc(ally.specials,'armadura_s') && !combat.tierSFired.has('armadura_s:'+ally.id)){
+      combat.tierSFired.add('armadura_s:'+ally.id); allyDmg *= 0.9;
+    }
+    allyDmg *= levelDiffDamageMult(monsterEffectiveLevel(), state.char.level);
+    finalDmg = Math.max(1, Math.round(allyDmg));
+    dealDamageToAlly(ally, finalDmg);
+    if(ability.applies) applyStatus(ally, Object.assign({}, ability.applies), false);
+    log(`${enemy.name} usa ${ability.label} sobre ${ally.name}: ${finalDmg} de daño.`);
+    if(ally.hp<=0) log(`<b>${ally.name}</b> cae en combate y queda fuera de acción hasta que avances al siguiente nivel del laberinto.`);
+    combat.lastAction = {label:ability.label, effects:[{targetKind:'ally', key:ally.id, amount:finalDmg, kind:'dmg'}]};
+  }
+
+  if(ability.selfBuff){
+    const existing = hasStatus(enemy.statuses, ability.selfBuff.name);
+    if(existing) existing.duration = ability.selfBuff.duration;
+    else enemy.statuses.push(Object.assign({}, ability.selfBuff));
+  }
 }
 
 // Guarda la vida, MP y espíritu con la que terminó cada aliado en
@@ -5288,6 +6446,18 @@ function checkCombatEnd(){
   }
 }
 
+// Fragmentos de jefe de década — un tipo de material por década (piso que
+// cierra esa década), usados como ingrediente de la Forja Legendaria (ver
+// TIER_S_RECIPE). No se venden ni se compran con oro/Sellos, solo caen del
+// jefe de década correspondiente.
+const DECADE_BOSS_FRAGMENTS = {
+  10: {id:'ogro', name:'Fragmento del Ogro', icon:'👺'},
+  20: {id:'matriarca_escarlata', name:'Fragmento de la Matriarca Escarlata', icon:'🕷️'},
+  30: {id:'riakis', name:'Fragmento de Riakis', icon:'👁️'},
+  40: {id:'usurpador', name:'Fragmento del Usurpador', icon:'🎭'},
+  50: {id:'custodio_isla', name:'Fragmento del Custodio de la Isla', icon:'🏝️'},
+  60: {id:'storm_gush', name:'Fragmento de Storm Gush', icon:'🔱'},
+};
 function handleVictory(){
   stopBossAudio();
   const isBoss = combat.node.type==='jefe';
@@ -5295,7 +6465,7 @@ function handleVictory(){
   const level = state.dungeon.level || 1;
   const rewardMult = 1 + (level-1)*0.08; // los niveles más duros pagan algo mejor (solo aplica al oro)
   const perKillXP = isBoss ? guardianXP(level) : isElite ? eliteXP(level) : mobXP(level);
-  const xpGain = Math.max(1, Math.round(perKillXP * combat.enemies.length * (race().id==='humano'?1.1:1) * xpGapMultiplier() * earlyXpBoost(level)));
+  const xpGain = Math.max(1, Math.round(perKillXP * combat.enemies.length * (race().id==='humano'?1.1:1) * xpGapMultiplier() * earlyXpBoost(level) * XP_GLOBAL_BOOST));
   const goldGain = Math.round((rnd(6,14)*combat.enemies.length + (isBoss?60:isElite?20:0)) * rewardMult);
   state.char.xp += xpGain;
   state.char.gold += goldGain;
@@ -5362,7 +6532,10 @@ function handleVictory(){
       log(line);
       lootText += ' ' + line;
       advanceMissionsFor('find_equipment', 1);
-      if(['rango_a','legendario','ss'].includes(gearDrop.rarity)) gotRareGear = true;
+      if(['rango_a','legendario','ss'].includes(gearDrop.rarity)){
+        gotRareGear = true;
+        flashRareDrop(gearDrop, RARITIES[gearDrop.rarity].name);
+      }
     }
   }
   // Piedras de alma: solo caen del jefe de década o de un futuro jefe de
@@ -5377,7 +6550,22 @@ function handleVictory(){
     log(line);
     lootText += ' ' + line;
     advanceMissionsFor('find_soul_stones', 1);
-    if(['A','S','SS'].includes(stoneDrop.tier)) gotRareStone = true;
+    if(['A','S','SS'].includes(stoneDrop.tier)){
+      gotRareStone = true;
+      flashRareDrop(stoneDrop, stoneDrop.tier);
+    }
+  }
+  // Fragmentos de jefe de década — material de la Forja Legendaria (Tier S,
+  // ver TIER_S_RECIPE/buyTierSWeapon/buyTierSStone). Uno garantizado por
+  // cada jefe de década derrotado (pisos 10/20/30/40/50/60), pedido
+  // explícito 2026-09-24: "comprado con sellos + los fragmentos del piso
+  // 10, 20, 30... hasta el 60".
+  if(isDecadeFinal && DECADE_BOSS_FRAGMENTS[level]){
+    const frag = DECADE_BOSS_FRAGMENTS[level];
+    addToInventory({kind:'fragmento', fragId:frag.id, name:frag.name, icon:frag.icon});
+    const line = `También obtienes: <b>${frag.icon} ${frag.name}</b>.`;
+    log(line);
+    lootText += ' ' + line;
   }
   state.char.pityGear = gotRareGear ? 0 : (state.char.pityGear||0) + 1;
   // El contador de pity de piedras solo cuenta intentos reales (peleas donde
@@ -5400,6 +6588,7 @@ function handleVictory(){
     const d = derived();
     state.char.curHP = d.maxHP; state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi;
     log(`¡Subes a nivel ${state.char.level}! Tus estadísticas aumentan y te recuperas por completo.`);
+    flashLevelUp(state.char.level);
   }
 
   if(isBoss){
@@ -5417,8 +6606,15 @@ function handleVictory(){
     // completo, sin importar su propio nivel — a diferencia de Raro/Único,
     // que sí dependen del nivel del aliado (ver checkAllyAutoGearByLevel).
     if(isDecadeFinal && clearedLevel===30){
-      (state.char.allies||[]).filter(a=>a.role==='sacerdote' && (a.auto_gear_tier||'none')!=='rango_a')
+      (state.char.allies||[]).filter(a=>a.role==='sacerdote' && (a.auto_gear_tier||'none')!=='rango_a' && (a.auto_gear_tier||'none')!=='legendario')
         .forEach(a=> grantAllyAutoGear(a,'rango_a'));
+    }
+    // Jefe de la década 60 (Storm Gush): el Sacerdote desbloquea su set
+    // Tier S completo — pedido explícito 2026-09-24, mismo criterio que el
+    // Épico de arriba (no depende de su propio nivel de aliado).
+    if(isDecadeFinal && clearedLevel===60){
+      (state.char.allies||[]).filter(a=>a.role==='sacerdote' && (a.auto_gear_tier||'none')!=='legendario')
+        .forEach(a=> grantAllyAutoGear(a,'legendario'));
     }
     log(`Derrotas al guardián del nivel ${clearedLevel}.`);
 
@@ -5660,7 +6856,11 @@ function renderCombat(){
   }).join('') : `<p class="inv-empty-msg">No tienes pociones para usar.</p>`;
 
   const combatSpeed = getCombatSpeed();
-  const hpPct = Math.max(0, state.char.curHP/d.maxHP*100);
+  const playerShieldAmt = combat.playerShield||0;
+  const hpScale = d.maxHP + playerShieldAmt;
+  const hpPct = Math.max(0, state.char.curHP/hpScale*100);
+  const shieldPct = Math.max(0, playerShieldAmt/hpScale*100);
+  const hpNumLabel = playerShieldAmt>0 ? `${state.char.curHP} (${playerShieldAmt}) / ${d.maxHP}` : `${state.char.curHP} / ${d.maxHP}`;
   const stPct = Math.max(0, state.char.curSta/d.maxSta*100);
   const spPct = Math.max(0, state.char.curSpi/d.maxSpi*100);
   // El "objetivo" que se muestra es el mismo que recibiría un golpe básico
@@ -5711,7 +6911,8 @@ function renderCombat(){
             <span class="phud-icon hp">${PHUD_ICON_HP}</span>
             <div class="phud-bar">
               <div class="phud-fill hp ${hpPct<30?'low':''}" style="width:${hpPct}%"></div>
-              <span class="phud-num">${state.char.curHP} / ${d.maxHP}</span>
+              ${playerShieldAmt>0?`<div class="phud-fill shield" style="width:${shieldPct}%; left:${hpPct}%;"></div>`:''}
+              <span class="phud-num">${hpNumLabel}</span>
             </div>
           </div>
           <div class="phud-row">
@@ -5757,9 +6958,17 @@ function renderCombat(){
   const useSkillFromMenu = (sid)=>{
     const sk = SKILLS[sid];
     combat.pendingSkill = null;
+    combat.pendingTargetFilter = null;
     if(sk.targetMode==='any'){
       combat.pendingSkill = sid;
       log(`Elige un objetivo para ${sk.name}.`);
+    } else if(sk.targetMode==='front' && livingFrontlineEnemyIndices().length>1){
+      // Dos o más enemigos en el frente a la vez: se pide el mismo click de
+      // objetivo que 'any', pero solo entre los que están al frente (ver
+      // pendingTargetFilter, leído en onTarget más abajo).
+      combat.pendingSkill = sid;
+      combat.pendingTargetFilter = 'front';
+      log(`Elige a cuál de los enemigos del frente atacar con ${sk.name}.`);
     } else {
       guardedPlayerUseSkill(sid, null);
     }
@@ -5815,14 +7024,17 @@ function renderCombat(){
     name: state.char.nickname || s.name, icon: race().icon, style: state.char.style,
     hp: state.char.curHP, maxHP: d.maxHP, mp: state.char.curSta, maxMP: d.maxSta,
     spirit: state.char.curSpi, maxSpirit: d.maxSpi, statuses: combat.playerStatuses||[],
+    shield: combat.playerShield||0,
     pos: combat.playerPos, bgTheme: DECADE_BG_THEME[decadeIndexForLevel(state.dungeon.level)],
   };
   syncBattleStage(document.getElementById('battle-stage-mount'), combat, playerInfo, {
     isAllyHostile,
     onTarget: (idx)=>{
       if(!combat.pendingSkill) return;
+      if(combat.pendingTargetFilter==='front' && !livingFrontlineEnemyIndices().includes(idx)) return; // click fuera del frente, se ignora
       const sid = combat.pendingSkill;
       combat.pendingSkill = null;
+      combat.pendingTargetFilter = null;
       guardedPlayerUseSkill(sid, idx);
     },
   });
@@ -6174,7 +7386,7 @@ function renderCharacterSelect(rows){
     };
   });
   if(canCreateMore){
-    document.getElementById('btn-new-character').onclick = goToCreation;
+    document.getElementById('btn-new-character').onclick = ()=> goToCreation(true);
   }
 }
 
@@ -6194,7 +7406,13 @@ function enterCharacter(row){
   if(!tutorialSeen) showTutorial();
 }
 
-function goToCreation(){
+// canGoBack=false solo en el caso forzado (cuenta sin ningún personaje
+// todavía, ver enterGame): ahí "volver" no tiene a dónde ir. Cuando se llega
+// clickeando "Crear personaje nuevo" desde la selección (ya existe al menos
+// 1 personaje) sí se muestra el botón — pedido explícito 2026-09-25 tras un
+// clic accidental en "Crear personaje" que solo se podía resolver cerrando
+// sesión.
+function goToCreation(canGoBack){
   document.getElementById('btn-switch-char').style.display = 'none';
   document.getElementById('btn-reset').style.display = 'none';
   document.getElementById('gold-badge').style.display = 'none';
@@ -6209,6 +7427,8 @@ function goToCreation(){
   const nickMsg = document.getElementById('char-nickname-msg');
   if(nickMsg) nickMsg.textContent = '';
   document.getElementById('btn-begin').disabled = true;
+  document.getElementById('create-back-row').style.display = canGoBack ? 'block' : 'none';
+  document.getElementById('btn-cancel-creation').onclick = ()=> enterGame();
   showScreen('screen-create');
 }
 
