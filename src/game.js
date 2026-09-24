@@ -2611,6 +2611,18 @@ function weaponArtPath(it){
   if(!slug || !WEAPON_ART_RARITIES.has(it.rarity)) return null;
   return `src/assets/armas/${slug}_${it.rarity}.png`;
 }
+// Arte real de equipo general por senda (2026-09-25, pedido explícito:
+// "continúa con cascos y armadura"). A diferencia de las armas, el NOMBRE
+// del objeto cambia por rango (Casco de piedra -> ... -> Casco de vacío),
+// así que la clave acá es (senda, slot) — no el nombre — más el rango.
+// Recortado de los catálogos "Cascos - <clase>.png" / "armadura - <clase>.png"
+// en src/assets/equipo/<senda>_<slot>_<rareza>.png. Botas/Guantes/Accesorio
+// siguen sin arte propia todavía — caen al SVG genérico de siempre.
+const GEAR_ART_SLOTS = new Set(['casco','armadura']);
+function gearArtPath(it){
+  if(!GEAR_ART_SLOTS.has(it.slot) || !it.styleId || !WEAPON_ART_RARITIES.has(it.rarity)) return null;
+  return `src/assets/equipo/${it.styleId}_${it.slot}_${it.rarity}.png`;
+}
 // Una piedra de alma SIEMPRE trae `.tier` (letra E-SS) y NUNCA `.rarity`; el
 // equipo es al revés — es el discriminante ya usado en todo el resto del
 // archivo (SOUL_TIER_COLORS[x.tier] vs RARITIES[x.rarity]). No se usa
@@ -2641,7 +2653,7 @@ function itemArtTileHTML(it, px){
   const color = isStone ? (SOUL_TIER_COLORS[it.tier]||'#9a958c') : RARITIES[it.rarity||'comun'].color;
   const isHighTier = isStone ? ['A','S','SS'].includes(it.tier) : ['rango_a','legendario','ss'].includes(it.rarity);
   const glow = isHighTier ? `, 0 0 10px ${color}66` : '';
-  const artImg = isStone ? SOUL_STONE_ART[it.tier] : weaponArtPath(it);
+  const artImg = isStone ? SOUL_STONE_ART[it.tier] : (weaponArtPath(it) || gearArtPath(it));
   const shape = itemArtShape(it);
   let inner;
   if(artImg){
