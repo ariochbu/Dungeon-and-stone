@@ -2437,9 +2437,9 @@ function renderSheet(){
 
   document.getElementById('sheet').innerHTML = `
     <div class="sheet-title">
-      <div class="sheet-emblem">${r.icon}</div>
+      <div class="sheet-emblem"><img src="src/assets/razas/${r.id}.png" alt="" onerror="this.replaceWith('${r.icon}')"></div>
       <div>
-        <div class="name">${state.char.nickname} · ${r.name} · ${s.icon} ${s.name}</div>
+        <div class="name">${state.char.nickname} · ${r.name} · <img src="src/assets/clases/${s.id}.png" alt="" style="width:1.1em; height:1.1em; object-fit:contain; vertical-align:-2px;" onerror="this.replaceWith('${s.icon} ')"> ${s.name}</div>
         <div class="tag">Nivel ${state.char.level}</div>
       </div>
     </div>
@@ -2673,6 +2673,18 @@ function itemArtTileHTML(it, px){
 function itemRowWithArt(it, textHTML, px){
   return `<div style="display:flex; align-items:center; gap:10px; min-width:0; flex:1;">${itemArtTileHTML(it, px)}<div style="min-width:0; flex:1;">${textHTML}</div></div>`;
 }
+// Arte real de pociones (2026-09-25, pedido explícito) — sin rareza, así que
+// el tile usa un anillo neutro (bronce) en vez del color por rango. Mismo
+// respaldo de emoji si la imagen no existe.
+function potionArtTileHTML(potionId, px){
+  px = px || 36;
+  const tpl = POTION_TEMPLATES[potionId];
+  const inner = `<img src="src/assets/pociones/${potionId}.png" alt="" style="width:100%; height:100%; object-fit:contain;" onerror="this.replaceWith(Object.assign(document.createElement('span'),{style:'font-size:${Math.round(px*0.55)}px', textContent:'${tpl.icon}'}))">`;
+  return `<div class="item-art-tile" style="width:${px}px; height:${px}px; box-shadow:0 0 0 2px var(--border) inset;">${inner}</div>`;
+}
+function potionRowWithArt(potionId, textHTML, px){
+  return `<div style="display:flex; align-items:center; gap:10px; min-width:0; flex:1;">${potionArtTileHTML(potionId, px)}<div style="min-width:0; flex:1;">${textHTML}</div></div>`;
+}
 // Halo de color por rareza para toda la fila (no solo el nombre) — mismo
 // criterio que pedía distinguir de un vistazo un objeto Rango A/Legendario
 // del resto sin tener que leer el pill. El degradado se apaga a los ~110px
@@ -2793,10 +2805,7 @@ function renderInventory(){
   const potionHTML = potionItems.length ? potionItems.map(it=>{
     const tpl = POTION_TEMPLATES[it.potionId];
     return `<div class="inv-item-row">
-      <div>
-        <b>${tpl.icon} ${tpl.name}</b> <span class="slot-tag">x${it.qty}</span>
-        <div class="inv-item-bonus neutral">${tpl.desc}</div>
-      </div>
+      ${potionRowWithArt(it.potionId, `<b>${tpl.name}</b> <span class="slot-tag">x${it.qty}</span><div class="inv-item-bonus neutral">${tpl.desc}</div>`)}
       <button class="inv-btn" data-usepotion="${it.potionId}">Usar</button>
     </div>`;
   }).join('') : `<p class="inv-empty-msg">No tienes pociones. Búscalas en cofres del laberinto.</p>`;
@@ -3969,9 +3978,7 @@ function renderShop(){
   const potionHTML = Object.values(POTION_TEMPLATES).filter(t=>SHOP_POTION_PRICES[t.id]).map(t=>{
     const price = SHOP_POTION_PRICES[t.id];
     return `<div class="inv-item-row">
-      <div><b>${t.icon} ${t.name}</b>
-        <div class="inv-item-bonus neutral">${t.desc}</div>
-      </div>
+      ${potionRowWithArt(t.id, `<b>${t.name}</b><div class="inv-item-bonus neutral">${t.desc}</div>`)}
       <button class="inv-btn" data-buy-potion="${t.id}" ${state.char.gold<price?'disabled':''}>Comprar (${price} oro)</button>
     </div>`;
   }).join('');
@@ -3985,7 +3992,7 @@ function renderShop(){
       <button class="inv-btn" data-sell="${it.uid}">Vender (${itemSellValue(it)} oro)</button>
     </div>`),
     ...sellPotions.map(it=>`<div class="inv-item-row">
-      <div><b>${POTION_TEMPLATES[it.potionId].icon} ${POTION_TEMPLATES[it.potionId].name}</b> <span class="slot-tag">x${it.qty}</span></div>
+      ${potionRowWithArt(it.potionId, `<b>${POTION_TEMPLATES[it.potionId].name}</b> <span class="slot-tag">x${it.qty}</span>`)}
       <button class="inv-btn" data-sell-potion="${it.potionId}">Vender 1 (${itemSellValue(it)} oro)</button>
     </div>`),
     ...sellStones.map(it=>{
@@ -4101,7 +4108,7 @@ function renderHome(){
   const bagPotionHTML = potionItems.length ? potionItems.map(it=>{
     const tpl = POTION_TEMPLATES[it.potionId];
     return `<div class="inv-item-row">
-      <div><b>${tpl.icon} ${tpl.name}</b> <span class="slot-tag">x${it.qty}</span></div>
+      ${potionRowWithArt(it.potionId, `<b>${tpl.name}</b> <span class="slot-tag">x${it.qty}</span>`)}
       <button class="inv-btn" data-stash-potion="${it.potionId}">Guardar 1</button>
     </div>`;
   }).join('') : `<p class="inv-empty-msg">No llevas pociones contigo.</p>`;
@@ -4115,7 +4122,7 @@ function renderHome(){
   const stashPotionHTML = stashPotions.length ? stashPotions.map(it=>{
     const tpl = POTION_TEMPLATES[it.potionId];
     return `<div class="inv-item-row">
-      <div><b>${tpl.icon} ${tpl.name}</b> <span class="slot-tag">x${it.qty}</span></div>
+      ${potionRowWithArt(it.potionId, `<b>${tpl.name}</b> <span class="slot-tag">x${it.qty}</span>`)}
       <button class="inv-btn" data-retrieve-potion="${it.potionId}">Retirar 1</button>
     </div>`;
   }).join('') : `<p class="inv-empty-msg">El Hogar no guarda pociones todavía.</p>`;
@@ -6951,7 +6958,7 @@ function renderCombat(){
   const potionSubmenuHTML = potionItems.length ? potionItems.map(it=>{
     const tpl = POTION_TEMPLATES[it.potionId];
     return `<div class="submenu-item ${combat.turnBusy?'disabled':''}" data-potion="${it.potionId}">
-      <span class="item-name">${tpl.icon} ${tpl.name} x${it.qty}</span>
+      <span class="item-name"><img src="src/assets/pociones/${it.potionId}.png" alt="" style="width:18px; height:18px; object-fit:contain; vertical-align:-4px; margin-right:3px;" onerror="this.replaceWith('${tpl.icon} ')">${tpl.name} x${it.qty}</span>
       <span>${tpl.desc}</span>
     </div>`;
   }).join('') : `<p class="inv-empty-msg">No tienes pociones para usar.</p>`;
@@ -7150,6 +7157,7 @@ function renderCreation(){
   const raceGrid = document.getElementById('race-grid');
   raceGrid.innerHTML = Object.values(RACES).map(r=>`
     <button class="pick-card" data-race="${r.id}">
+      <img class="pick-card-art" src="src/assets/razas/${r.id}.png" alt="" loading="lazy">
       <h3>${r.icon} ${r.name}</h3>
       <div class="desc">${r.desc}</div>
       <div class="mini-stats">
@@ -7163,6 +7171,7 @@ function renderCreation(){
   const styleGrid = document.getElementById('style-grid');
   styleGrid.innerHTML = Object.values(STYLES).map(s=>`
     <button class="pick-card" data-style="${s.id}">
+      <img class="pick-card-art emblem" src="src/assets/clases/${s.id}.png" alt="" loading="lazy">
       <h3>${s.icon} ${s.name}</h3>
       <div class="desc">${s.desc}</div>
     </button>
@@ -7452,9 +7461,12 @@ function renderCharacterSelect(rows){
   const rowsHTML = rows.map(row=>{
     const r = RACES[row.race], s = STYLES[row.style];
     return `<div class="inv-item-row">
-      <div>
-        <b>${r.icon} ${row.nickname}</b> <span class="slot-tag">${r.name} · ${s.name}</span>${row.role==='admin' ? ' <span class="slot-tag">admin</span>' : ''}
-        <div class="inv-item-bonus neutral">Nivel ${row.level} · Récord: Nivel ${row.record_level} · Piso ${row.record_floor_idx}</div>
+      <div style="display:flex; align-items:center; gap:10px; min-width:0; flex:1;">
+        <div class="sheet-emblem" style="width:40px; height:40px; font-size:1.3em;"><img src="src/assets/razas/${r.id}.png" alt="" onerror="this.replaceWith('${r.icon}')"></div>
+        <div style="min-width:0; flex:1;">
+          <b>${row.nickname}</b> <span class="slot-tag">${r.name} · ${s.name}</span>${row.role==='admin' ? ' <span class="slot-tag">admin</span>' : ''}
+          <div class="inv-item-bonus neutral">Nivel ${row.level} · Récord: Nivel ${row.record_level} · Piso ${row.record_floor_idx}</div>
+        </div>
       </div>
       <div style="display:flex; gap:8px; flex-shrink:0;">
         <button class="inv-btn" data-play="${row.id}">Jugar</button>

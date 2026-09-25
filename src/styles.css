@@ -102,8 +102,9 @@
   .sheet-emblem{
     width:46px; height:46px; border-radius:50%; display:flex; align-items:center; justify-content:center;
     font-size:1.5em; background:radial-gradient(circle at 30% 30%, var(--stone-light), var(--stone));
-    border:1px solid var(--border); flex-shrink:0;
+    border:1px solid var(--border); flex-shrink:0; overflow:hidden;
   }
+  .sheet-emblem img{width:100%; height:100%; object-fit:cover;}
   .sheet-title .name{font-size:1.05em; color:var(--bronze-light);}
   .sheet-title .tag{color:var(--text-dim); font-size:0.78em;}
 
@@ -272,6 +273,13 @@
     background:var(--panel-2); border:1px solid var(--border); border-radius:4px; padding:12px 14px;
     text-align:left; color:var(--text);
   }
+  /* Retrato de raza / emblema de senda (2026-09-25, pedido explícito) —
+     arte real por encima del nombre en cada tarjeta de creación. */
+  .pick-card-art{
+    display:block; width:100%; height:150px; object-fit:cover; border-radius:3px;
+    margin-bottom:8px; background:var(--bg-2);
+  }
+  .pick-card-art.emblem{object-fit:contain; height:120px; background:transparent;}
   .pick-card:hover{border-color:var(--stone-light);}
   .pick-card.selected{border-color:var(--bronze); box-shadow:0 0 0 1px var(--bronze) inset;}
   .pick-card h3{font-size:1em; color:var(--bronze-light); margin-bottom:3px;}
