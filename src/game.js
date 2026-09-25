@@ -6007,7 +6007,12 @@ function enterNode(f,n){
     state.char.gold += gold;
     let msg = `Encuentras un cofre. +${gold} de oro.`;
     if(chance(0.6)){
-      const item = generateLoot(f, state.char.maxLevelUnlocked||1);
+      // El rango del botín (ver GEAR_TIER_MIN_LEVEL) gatea por el piso REAL
+      // en el que estás peleando ahora mismo (dg.level) — no por
+      // maxLevelUnlocked (bug real 2026-09-27: un personaje que ya había
+      // llegado al piso 20+ antes podía volver a grindear el piso 6 y
+      // seguir sacando Rango A ahí, porque maxLevelUnlocked nunca baja).
+      const item = generateLoot(f, dg.level||1);
       if(item){
         addToInventory(item);
         msg += item.kind==='potion'
@@ -6023,7 +6028,7 @@ function enterNode(f,n){
     // jefe de década, acá NO está asegurada (pedido explícito): es una
     // tirada más contra la misma tabla plana (con el mismo escalado por
     // piso), independiente del oro/objeto de arriba.
-    const stoneDrop = rollStoneDropForLevel(state.char.maxLevelUnlocked||1, null);
+    const stoneDrop = rollStoneDropForLevel(dg.level||1, null);
     if(stoneDrop){
       addToInventory(stoneDrop);
       msg += ` También encuentras una piedra de alma: <b style="color:${SOUL_TIER_COLORS[stoneDrop.tier]};">${stoneDrop.name}</b>.`;
@@ -6111,11 +6116,17 @@ const FLAT_STONE_TABLE = [
 // SÍ gateaba, pero contra state.char.level (nivel de personaje) en vez del
 // piso real — ambos suelen ir parejos pero pueden desincronizarse (grindear
 // nivel sin avanzar piso, o al revés), así que un rango A podía caer antes
-// de pisar el piso 20 de verdad. Todos los call-sites de rollGearDropForLevel/
-// rollStoneDropForLevel/rollGuaranteedStoneDropForLevel/generateLoot ahora
-// pasan state.char.maxLevelUnlocked (el piso más profundo ya alcanzado,
-// mismo campo que usa tierSUnlocked() para la Forja Legendaria) en vez de
-// state.char.level.
+// de pisar el piso 20 de verdad. Se cambió a state.char.maxLevelUnlocked.
+// 2026-09-27, bug real reportado (ariochbu dropeó Rango A en el piso 6):
+// maxLevelUnlocked es un techo que NUNCA baja, así que un personaje que ya
+// había llegado al piso 20+ alguna vez podía volver a grindear un piso bajo
+// y seguir sacando Rango A ahí — justo el mismo problema de fondo que el
+// fix de arriba quiso evitar, con otra variable. El gate correcto es el piso
+// REAL en el que se está peleando AHORA MISMO: los call-sites de combate/
+// cofre (handleVictory/enterNode) ahora pasan state.dungeon.level en vez de
+// maxLevelUnlocked. La única excepción real es makeMissionItemReward(): una
+// misión no tiene "el piso de ahora" (se completa desde el Gremio, no desde
+// un piso concreto), así que ese sigue usando maxLevelUnlocked a propósito.
 const GEAR_TIER_MIN_LEVEL = {rango_a:20, legendario:40, ss:50, rango_b:11, raro:11};
 const STONE_TIER_MIN_LEVEL = {A:20, S:40, SS:50, B:11, C:11};
 // A partir de qué nivel del laberinto ("piso") los rangos más bajos (E/F en
@@ -8588,7 +8599,12 @@ function handleVictory(){
   let gotRareGear = false;
   let gotRareStone = false;
   for(let i=0;i<rollCount;i++){
-    const gearDrop = rollGearDropForLevel(state.char.maxLevelUnlocked||1, state.dungeon.atFloor, bypassTiers);
+    // Rango gateado por el piso REAL de este combate (level = state.dungeon.level),
+    // no por maxLevelUnlocked — bug real 2026-09-27 (ver el comentario igual
+    // en el cofre, más arriba): maxLevelUnlocked nunca baja, así que grindear
+    // un piso bajo con un personaje que ya pasó por pisos altos antes seguía
+    // soltando Rango A donde no debería.
+    const gearDrop = rollGearDropForLevel(level, state.dungeon.atFloor, bypassTiers);
     if(gearDrop){
       addToInventory(gearDrop);
       const line = `También obtienes: <b>${itemNameHTML(gearDrop)}</b> (guardado en la mochila).`;
@@ -8607,7 +8623,7 @@ function handleVictory(){
   // pedido explícito 2026-09-18): a diferencia de un cofre, un jefe de
   // década ya nunca sale de la pelea con las manos vacías de piedras.
   if(stonesAllowedThisFight){
-    const stoneDrop = rollGuaranteedStoneDropForLevel(state.char.maxLevelUnlocked||1, bypassTiers);
+    const stoneDrop = rollGuaranteedStoneDropForLevel(level, bypassTiers);
     addToInventory(stoneDrop);
     const line = `También encuentras una piedra de alma: <b style="color:${SOUL_TIER_COLORS[stoneDrop.tier]};">${stoneDrop.name}</b>.`;
     log(line);
