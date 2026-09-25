@@ -973,6 +973,386 @@ const DECADE_BESTIARY = [
   }
 ];
 
+/* ============================================================
+   GACHA "CAÍDOS DEL LABERINTO" — mascotas (2026-09-24, pedido explícito)
+   ============================================================
+   100 mascotas en 6 rangos (fuente: PDF que pasó ariochbu). El rango de
+   cada una viene del RANGO DE NÚMERO del PDF, no de la etiqueta que haya
+   quedado dibujada dentro de su imagen — ariochbu confirmó explícitamente
+   que #041-070 son "Raro" aunque la lámina generada las etiquete "Poco
+   Común". bonuses usa un vocabulario chico y reutilizable:
+     {stat:'fis'|'hab', value:N}              -> estadística base (baseStat)
+     {mod:'maxhp_flat'|'mp_flat'|'espiritu_flat'|'res_magica'|
+          'resistencia_estado'|'defensa_fisica', value:N} -> pool/resistencia plana
+     {type:'aumento_dano'|'critico_dano'|'prob_critico'|'evasion_flat'|
+           'reduccion_dano'|'bloqueo'|'retroceso'|'aturdir'|
+           'penetracion_armadura'|'robovida'|'succion_hechizo'|
+           'segundo_ataque_basico'|'doble_encantamiento', value|chance|percent:N}
+       -> mismo `type` que ya consume el equipo (ver specialsFromEquip/
+          applyEquippedSpecials) — una mascota equipada inyecta estos
+          objetos exactamente en esos mismos arrays, así que reutiliza TODA
+          la lógica de combate ya existente sin duplicar nada.
+     {type:'aumento_dano_raza', raza:'goblin'|'arana'|'bestia'|'humano'|
+           'criatura_marina', value:N}         -> nuevo, ver ENEMY_RACE_TAG
+     {type:'aumento_dano_posicion', posicion:'frontline'|'retaguardia', value:N} -> nuevo
+   Épico en adelante suma además `unique:{name, desc, effect}` (ver
+   checkPetTriggers) para su habilidad única/mítica.
+*/
+const PET_RARITIES = {
+  poco_comun: {id:'poco_comun', name:'Poco Común', color:'#46c168', weight:80,    dupGold:1000},
+  raro:       {id:'raro',       name:'Raro',        color:'#3b8fe0', weight:15,    dupGold:4000},
+  unico:      {id:'unico',      name:'Único',       color:'#9350dd', weight:4,     dupGold:15000},
+  epico:      {id:'epico',      name:'Épico',       color:'#d6409f', weight:0.9,   dupGold:60000},
+  legendario: {id:'legendario', name:'Legendario',  color:'#e0b23f', weight:0.099, dupGold:300000},
+  mitico:     {id:'mitico',     name:'Mítico',      color:'#e0393f', weight:0.001, dupGold:2000000}
+};
+const PET_RARITY_ORDER = ['poco_comun','raro','unico','epico','legendario','mitico'];
+function petArtPath(id){ return `src/assets/mascotas/mascota_${String(id).padStart(3,'0')}.png`; }
+const PET_CATALOG = [
+  {id:1, name:'Horn Rabbit', rarity:'poco_comun', bonuses:[{type:'evasion_flat', value:0.03}]},
+  {id:2, name:'Blade Rabbit', rarity:'poco_comun', bonuses:[{type:'prob_critico', value:0.02}]},
+  {id:3, name:'Poisonous Viper', rarity:'poco_comun', bonuses:[{mod:'maxhp_flat', value:50}]},
+  {id:4, name:'Night Viper', rarity:'poco_comun', bonuses:[{mod:'res_magica', value:10}]},
+  {id:5, name:'Mad Mamba', rarity:'poco_comun', bonuses:[{stat:'hab', value:15}]},
+  {id:6, name:'Trash Mamba', rarity:'poco_comun', bonuses:[{type:'aumento_dano', value:0.02}]},
+  {id:7, name:'Wild Dog', rarity:'poco_comun', bonuses:[{stat:'fis', value:15}]},
+  {id:8, name:'Blue Wolf', rarity:'poco_comun', bonuses:[{type:'aumento_dano_raza', raza:'bestia', value:0.05}]},
+  {id:9, name:'Black Wolf', rarity:'poco_comun', bonuses:[{type:'critico_dano', value:0.05}]},
+  {id:10, name:'Red Deer', rarity:'poco_comun', bonuses:[{mod:'espiritu_flat', value:30}]},
+  {id:11, name:'Blue Stag', rarity:'poco_comun', bonuses:[{mod:'resistencia_estado', value:10}]},
+  {id:12, name:'Black Stag', rarity:'poco_comun', bonuses:[{mod:'mp_flat', value:30}]},
+  {id:13, name:'Stamp Boar', rarity:'poco_comun', bonuses:[{type:'aumento_dano_posicion', posicion:'frontline', value:0.05}]},
+  {id:14, name:'Gigant Boar', rarity:'poco_comun', bonuses:[{mod:'defensa_fisica', value:10}]},
+  {id:15, name:'Steel Boar', rarity:'poco_comun', bonuses:[{type:'bloqueo', chance:0.05}]},
+  {id:16, name:'Big Cocco', rarity:'poco_comun', bonuses:[{mod:'maxhp_flat', value:50}]},
+  {id:17, name:'Poisonous Cocco', rarity:'poco_comun', bonuses:[{type:'aumento_dano_raza', raza:'arana', value:0.05}]},
+  {id:18, name:'Venenous Cocco', rarity:'poco_comun', bonuses:[{type:'aturdir', chance:0.05}]},
+  {id:19, name:'Green Slime', rarity:'poco_comun', bonuses:[{mod:'mp_flat', value:30}]},
+  {id:20, name:'Heat Slime', rarity:'poco_comun', bonuses:[{type:'doble_encantamiento', chance:0.02}]},
+  {id:21, name:'Turtle Snake', rarity:'poco_comun', bonuses:[{type:'aumento_dano_raza', raza:'criatura_marina', value:0.05}]},
+  {id:22, name:'Gold Turtle Snake', rarity:'poco_comun', bonuses:[{mod:'res_magica', value:10}]},
+  {id:23, name:'Armored Tanuki', rarity:'poco_comun', bonuses:[{type:'aumento_dano_posicion', posicion:'retaguardia', value:0.05}]},
+  {id:24, name:'Copper Armored Tanuki', rarity:'poco_comun', bonuses:[{mod:'maxhp_flat', value:50}]},
+  {id:25, name:'Seven Colored Bat', rarity:'poco_comun', bonuses:[{type:'segundo_ataque_basico', chance:0.02}]},
+  {id:26, name:'Demon Spider', rarity:'poco_comun', bonuses:[{type:'aumento_dano_raza', raza:'arana', value:0.05}]},
+  {id:27, name:'Poison Mantis', rarity:'poco_comun', bonuses:[{type:'aumento_dano_raza', raza:'goblin', value:0.05}]},
+  {id:28, name:'Paralyzing Mantis', rarity:'poco_comun', bonuses:[{type:'aturdir', chance:0.05}]},
+  {id:29, name:'Seal Mantis', rarity:'poco_comun', bonuses:[{type:'retroceso', chance:0.05}]},
+  {id:30, name:'Copper Squirrel', rarity:'poco_comun', bonuses:[{type:'aumento_dano_raza', raza:'humano', value:0.05}]},
+  {id:31, name:'Iron Squirrel', rarity:'poco_comun', bonuses:[{mod:'defensa_fisica', value:10}]},
+  {id:32, name:'Crystal Squirrel', rarity:'poco_comun', bonuses:[{stat:'fis', value:15}]},
+  {id:33, name:'Red Lizard', rarity:'poco_comun', bonuses:[{stat:'hab', value:15}]},
+  {id:34, name:'Green Lizard', rarity:'poco_comun', bonuses:[{type:'aumento_dano_raza', raza:'humano', value:0.05}]},
+  {id:35, name:'Blue Lizard', rarity:'poco_comun', bonuses:[{type:'aumento_dano_raza', raza:'bestia', value:0.05}]},
+  {id:36, name:'Goblin Punk', rarity:'poco_comun', bonuses:[{type:'aumento_dano_raza', raza:'goblin', value:0.05}]},
+  {id:37, name:'Sword Kobold', rarity:'poco_comun', bonuses:[{type:'aumento_dano_posicion', posicion:'frontline', value:0.05}]},
+  {id:38, name:'Archer Kobold', rarity:'poco_comun', bonuses:[{type:'aumento_dano_posicion', posicion:'retaguardia', value:0.05}]},
+  {id:39, name:'Kobold Mage', rarity:'poco_comun', bonuses:[{mod:'espiritu_flat', value:30}]},
+  {id:40, name:'Orc', rarity:'poco_comun', bonuses:[{type:'aumento_dano', value:0.02}]},
+
+  {id:41, name:'Vorpal Bunny', rarity:'raro', bonuses:[{type:'aumento_dano', value:0.05},{type:'prob_critico', value:0.03}]},
+  {id:42, name:'Hazard Mamba', rarity:'raro', bonuses:[{type:'aumento_dano_raza', raza:'goblin', value:0.05},{type:'retroceso', chance:0.03}]},
+  {id:43, name:'Void Viper', rarity:'raro', bonuses:[{mod:'res_magica', value:10},{type:'evasion_flat', value:0.03}]},
+  {id:44, name:'Triple Horned Horse', rarity:'raro', bonuses:[{stat:'fis', value:15},{type:'aumento_dano_posicion', posicion:'frontline', value:0.05}]},
+  {id:45, name:'Crimson Horned Horse', rarity:'raro', bonuses:[{type:'aumento_dano', value:0.05},{type:'critico_dano', value:0.05}]},
+  {id:46, name:'Boroforu', rarity:'raro', bonuses:[{mod:'defensa_fisica', value:10},{mod:'maxhp_flat', value:50}]},
+  {id:47, name:'Black Boroforu', rarity:'raro', bonuses:[{mod:'resistencia_estado', value:10},{type:'evasion_flat', value:0.03}]},
+  {id:48, name:'Argiope', rarity:'raro', bonuses:[{type:'aumento_dano_raza', raza:'arana', value:0.05},{type:'aturdir', chance:0.05}]},
+  {id:49, name:'Gray Slime', rarity:'raro', bonuses:[{mod:'mp_flat', value:30},{mod:'res_magica', value:10}]},
+  {id:50, name:'Carbuncle', rarity:'raro', bonuses:[{mod:'espiritu_flat', value:30},{type:'doble_encantamiento', chance:0.02}]},
+  {id:51, name:'Armored Blue Shrimp', rarity:'raro', bonuses:[{mod:'defensa_fisica', value:10},{type:'bloqueo', chance:0.05}]},
+  {id:52, name:'Armored Scissorman', rarity:'raro', bonuses:[{type:'aumento_dano_raza', raza:'humano', value:0.05},{type:'retroceso', chance:0.05}]},
+  {id:53, name:'Rhinoceros Beetle', rarity:'raro', bonuses:[{mod:'maxhp_flat', value:50},{type:'aumento_dano_posicion', posicion:'frontline', value:0.05}]},
+  {id:54, name:'Messenger Locust', rarity:'raro', bonuses:[{type:'aumento_dano_posicion', posicion:'retaguardia', value:0.05},{type:'evasion_flat', value:0.03}]},
+  {id:55, name:'Yellow Monkey', rarity:'raro', bonuses:[{stat:'hab', value:15},{type:'prob_critico', value:0.03}]},
+  {id:56, name:'Bicorn', rarity:'raro', bonuses:[{stat:'fis', value:15},{type:'aturdir', chance:0.05}]},
+  {id:57, name:'Cave Alligator', rarity:'raro', bonuses:[{mod:'maxhp_flat', value:50},{type:'aumento_dano', value:0.05}]},
+  {id:58, name:'Crystal Crocodile', rarity:'raro', bonuses:[{mod:'defensa_fisica', value:10},{mod:'res_magica', value:10}]},
+  {id:59, name:'Amethyst Crocodile', rarity:'raro', bonuses:[{mod:'espiritu_flat', value:30},{type:'critico_dano', value:0.05}]},
+  {id:60, name:'Poison Cave Lizard', rarity:'raro', bonuses:[{type:'aumento_dano_raza', raza:'bestia', value:0.05},{mod:'resistencia_estado', value:10}]},
+  {id:61, name:'Skull Lizard', rarity:'raro', bonuses:[{type:'aumento_dano', value:0.05},{mod:'res_magica', value:10}]},
+  {id:62, name:'Rock-Turtle Frog', rarity:'raro', bonuses:[{mod:'maxhp_flat', value:50},{type:'bloqueo', chance:0.05}]},
+  {id:63, name:'Ness Frog', rarity:'raro', bonuses:[{mod:'mp_flat', value:30},{type:'aumento_dano_raza', raza:'criatura_marina', value:0.05}]},
+  {id:64, name:'Capybara', rarity:'raro', bonuses:[{mod:'maxhp_flat', value:50},{stat:'fis', value:15}]},
+  {id:65, name:'Dire Cat', rarity:'raro', bonuses:[{type:'aumento_dano_posicion', posicion:'retaguardia', value:0.05},{type:'prob_critico', value:0.03}]},
+  {id:66, name:'Nail Cat', rarity:'raro', bonuses:[{stat:'hab', value:15},{type:'critico_dano', value:0.05}]},
+  {id:67, name:'Cockatrice', rarity:'raro', bonuses:[{type:'aturdir', chance:0.05},{mod:'resistencia_estado', value:10}]},
+  {id:68, name:'Harpy', rarity:'raro', bonuses:[{type:'aumento_dano_posicion', posicion:'retaguardia', value:0.05},{type:'evasion_flat', value:0.03}]},
+  {id:69, name:'Falaise Eagle', rarity:'raro', bonuses:[{type:'aumento_dano_raza', raza:'humano', value:0.05},{type:'segundo_ataque_basico', chance:0.02}]},
+  {id:70, name:'Jade Eagle', rarity:'raro', bonuses:[{mod:'espiritu_flat', value:30},{type:'doble_encantamiento', chance:0.02}]},
+
+  {id:71, name:'Orthrus', rarity:'unico', bonuses:[{type:'aumento_dano', value:0.08},{type:'aumento_dano_raza', raza:'bestia', value:0.05},{type:'critico_dano', value:0.05}]},
+  {id:72, name:'Four Armed Bear', rarity:'unico', bonuses:[{mod:'maxhp_flat', value:100},{mod:'defensa_fisica', value:10},{type:'bloqueo', chance:0.05}]},
+  {id:73, name:'Oniguma', rarity:'unico', bonuses:[{type:'aumento_dano', value:0.08},{mod:'maxhp_flat', value:100},{type:'reduccion_dano', value:0.05}]},
+  {id:74, name:'Steel-armored Great Bear', rarity:'unico', bonuses:[{mod:'maxhp_flat', value:150},{mod:'defensa_fisica', value:15},{type:'bloqueo', chance:0.05}]},
+  {id:75, name:'Desolation Spirit Panda', rarity:'unico', bonuses:[{mod:'maxhp_flat', value:100},{mod:'res_magica', value:10},{mod:'resistencia_estado', value:10}]},
+  {id:76, name:'Black Wolf Leader', rarity:'unico', bonuses:[{type:'aumento_dano', value:0.10},{type:'aumento_dano_raza', raza:'bestia', value:0.05},{type:'segundo_ataque_basico', chance:0.02}]},
+  {id:77, name:'Red Bear', rarity:'unico', bonuses:[{mod:'maxhp_flat', value:120},{type:'aumento_dano', value:0.10},{type:'critico_dano', value:0.05}]},
+  {id:78, name:'Great Skeleton Centipede', rarity:'unico', bonuses:[{type:'aumento_dano', value:0.08},{type:'prob_critico', value:0.05},{mod:'resistencia_estado', value:10}]},
+  {id:79, name:'Stone Golem', rarity:'unico', bonuses:[{mod:'maxhp_flat', value:200},{mod:'defensa_fisica', value:20},{type:'bloqueo', chance:0.05}]},
+  {id:80, name:'Rock Golem', rarity:'unico', bonuses:[{mod:'maxhp_flat', value:150},{mod:'res_magica', value:10},{type:'reduccion_dano', value:0.05}]},
+  {id:81, name:'Steel Golem', rarity:'unico', bonuses:[{mod:'maxhp_flat', value:200},{mod:'defensa_fisica', value:15},{mod:'resistencia_estado', value:10}]},
+  {id:82, name:'High Octorp', rarity:'unico', bonuses:[{type:'aumento_dano', value:0.10},{type:'retroceso', chance:0.05},{type:'evasion_flat', value:0.03}]},
+  {id:83, name:'Octorp Queen', rarity:'unico', bonuses:[{type:'aumento_dano', value:0.08},{mod:'res_magica', value:10},{type:'doble_encantamiento', chance:0.02}]},
+  {id:84, name:'Chimera', rarity:'unico', bonuses:[{type:'aumento_dano', value:0.10},{type:'prob_critico', value:0.05},{type:'aumento_dano_posicion', posicion:'retaguardia', value:0.05}]},
+  {id:85, name:'Jadar Wyvern', rarity:'unico', bonuses:[{type:'aumento_dano', value:0.12},{type:'aumento_dano_posicion', posicion:'retaguardia', value:0.05},{type:'critico_dano', value:0.05}]},
+
+  {id:86, name:'Jadar Wyvern Leader', rarity:'epico', bonuses:[{type:'aumento_dano', value:0.10},{type:'aumento_dano', value:0.12},{type:'prob_critico', value:0.08}],
+    unique:{name:'Succión de vida', desc:'+10% de succión de vida', effect:{kind:'robovida', percent:0.10}}},
+  {id:87, name:'Hell Cerberus', rarity:'epico', bonuses:[{type:'aumento_dano', value:0.10},{type:'aumento_dano', value:0.15},{type:'segundo_ataque_basico', chance:0.04}],
+    unique:{name:'Recuperación', desc:'Cuando bajas al 30% de HP o menos, recuperas 25% de tu HP máxima (1 vez por combate).', effect:{kind:'hp_threshold_heal', threshold:0.30, healPct:0.25}}},
+  {id:88, name:'Fomor', rarity:'epico', bonuses:[{type:'aumento_dano', value:0.10},{mod:'maxhp_flat', value:200},{mod:'defensa_fisica', value:18}],
+    unique:{name:'Escudo', desc:'10% de probabilidad al recibir daño de generar un escudo = 5% de tu HP máxima.', effect:{kind:'shield_on_hit', chance:0.10, shieldPct:0.05}}},
+  {id:89, name:'Balor', rarity:'epico', bonuses:[{type:'aumento_dano', value:0.10},{type:'aumento_dano', value:0.12},{type:'penetracion_armadura', value:0.08}],
+    unique:{name:'Succión de hechizo', desc:'+10% de succión de hechizo', effect:{kind:'succion_hechizo', percent:0.10}}},
+  {id:90, name:'Giant Steel Toad', rarity:'epico', bonuses:[{type:'aumento_dano', value:0.10},{mod:'maxhp_flat', value:250},{type:'reduccion_dano', value:0.08}],
+    unique:{name:'Recuperación', desc:'Cuando bajas al 30% de HP o menos, recuperas 25% de tu HP máxima (1 vez por combate).', effect:{kind:'hp_threshold_heal', threshold:0.30, healPct:0.25}}},
+  {id:91, name:'Griffin', rarity:'epico', bonuses:[{type:'aumento_dano', value:0.10},{type:'prob_critico', value:0.08},{type:'evasion_flat', value:0.05}],
+    unique:{name:'Escudo', desc:'10% de probabilidad al recibir daño de generar un escudo = 5% de tu HP máxima.', effect:{kind:'shield_on_hit', chance:0.10, shieldPct:0.05}}},
+  {id:92, name:'Grief Charybdis', rarity:'epico', bonuses:[{type:'aumento_dano', value:0.10},{type:'aumento_dano', value:0.12},{type:'doble_encantamiento', chance:0.04}],
+    unique:{name:'Recuperación de MP/Espíritu', desc:'Cuando tu MP o Espíritu baja al 20% o menos, recuperas 30% del recurso máximo correspondiente (1 vez por combate).', effect:{kind:'resource_threshold_recovery', threshold:0.20, recoverPct:0.30}}},
+  {id:93, name:'Large Vulcan Golden Elephant', rarity:'epico', bonuses:[{type:'aumento_dano', value:0.10},{mod:'maxhp_flat', value:200},{mod:'defensa_fisica', value:20}],
+    unique:{name:'Recuperación', desc:'Cuando bajas al 30% de HP o menos, recuperas 25% de tu HP máxima (1 vez por combate).', effect:{kind:'hp_threshold_heal', threshold:0.30, healPct:0.25}}},
+  {id:94, name:'Flame Dragon Empress', rarity:'epico', bonuses:[{type:'aumento_dano', value:0.10},{type:'aumento_dano', value:0.15},{type:'prob_critico', value:0.08}],
+    unique:{name:'Succión de vida', desc:'+10% de succión de vida', effect:{kind:'robovida', percent:0.10}}},
+
+  {id:95, name:'Thunder Dragon', rarity:'legendario', bonuses:[{type:'aumento_dano', value:0.10},{type:'aumento_dano', value:0.16},{type:'prob_critico', value:0.10},{type:'segundo_ataque_basico', chance:0.06}],
+    unique:{name:'Escudo del Trueno', desc:'15% de probabilidad al recibir daño de generar un escudo que absorbe 25% de tu HP máxima.', effect:{kind:'shield_on_hit', chance:0.15, shieldPct:0.25}}},
+  {id:96, name:'Thunderstorm Dragon', rarity:'legendario', bonuses:[{type:'aumento_dano', value:0.10},{type:'aumento_dano', value:0.14},{type:'prob_critico', value:0.10},{type:'doble_encantamiento', chance:0.06}],
+    unique:{name:'Absorción Arcana', desc:'+30% de succión de hechizo', effect:{kind:'succion_hechizo', percent:0.30}}},
+  {id:97, name:'Crimson Dragon Emperor', rarity:'legendario', bonuses:[{type:'aumento_dano', value:0.10},{type:'aumento_dano', value:0.18},{type:'critico_dano', value:0.08},{type:'segundo_ataque_basico', chance:0.06}],
+    unique:{name:'Devorador Carmesí', desc:'+30% de succión de vida', effect:{kind:'robovida', percent:0.30}}},
+  {id:98, name:'Tatsushirou', rarity:'legendario', bonuses:[{type:'aumento_dano', value:0.10},{mod:'maxhp_flat', value:300},{mod:'defensa_fisica', value:20},{type:'reduccion_dano', value:0.08}],
+    unique:{name:'Regeneración del Último Aliento', desc:'Cuando bajas al 30% de HP o menos, recuperas 50% de tu HP máxima (1 vez por combate).', effect:{kind:'hp_threshold_heal', threshold:0.30, healPct:0.50}}},
+  {id:99, name:'Grand Leviathan', rarity:'legendario', bonuses:[{type:'aumento_dano', value:0.10},{type:'aumento_dano', value:0.16},{mod:'maxhp_flat', value:250},{type:'doble_encantamiento', chance:0.06}],
+    unique:{name:'Reserva Abisal', desc:'Cuando tu MP o Espíritu baja al 20% o menos, recuperas 60% del recurso máximo correspondiente (1 vez por combate).', effect:{kind:'resource_threshold_recovery', threshold:0.20, recoverPct:0.60}}},
+
+  {id:100, name:'Dragon Emperor of Order', rarity:'mitico', bonuses:[{type:'aumento_dano', value:0.10},{type:'aumento_dano', value:0.25},{type:'prob_critico', value:0.15},{type:'segundo_ataque_basico', chance:0.10},{type:'reduccion_dano', value:0.12}],
+    unique:{name:'Orden de la Eternidad', desc:'Restauración Imperial: al 30% de HP o menos, recuperas 75% de tu HP máxima y generas un escudo = 40% de tu HP máxima (1 vez por combate). Renacimiento del Emperador: si recibes daño letal, revives con 50% de tu HP máxima y un escudo = 25% de tu HP máxima (1 vez por combate).',
+      effect:{kind:'mythic_bundle', heal:{threshold:0.30, healPct:0.75, shieldPct:0.40}, revive:{hpPct:0.50, shieldPct:0.25}}}}
+];
+function petTpl(id){ return PET_CATALOG.find(p=>p.id===Number(id)); }
+
+// Tags de raza por enemigo, derivados por década (no hace falta etiquetar
+// a mano cada una de las ~60 entradas de DECADE_BESTIARY): Década 0 son
+// Goblins, 1 Arañas, 2 Bestias, 3 el Usurpador (dobles/impostores, sin tag
+// de mascota que le calce), 4 Isla Paraíso (sobrevivientes/mercenarios
+// HUMANOS) y 5 El Mar/Storm Gush (criaturas marinas). Se calcula una sola
+// vez recorriendo todas las formas que puede tomar una década (regular/
+// elite/guardianByFloor objeto-o-array/decadeBoss).
+const DECADE_RACE_TAG = ['goblin','arana','bestia',null,'humano','criatura_marina'];
+const ENEMY_RACE_TAG = {};
+(function buildEnemyRaceTags(){
+  DECADE_BESTIARY.forEach((decade, di)=>{
+    const tag = DECADE_RACE_TAG[di];
+    if(!tag) return;
+    const tag1 = (tpl)=>{ if(tpl && tpl.id) ENEMY_RACE_TAG[tpl.id] = tag; };
+    (decade.regular||[]).forEach(tag1);
+    (decade.elite||[]).forEach(tag1);
+    if(decade.guardianByFloor) Object.values(decade.guardianByFloor).forEach(tag1);
+    if(decade.decadeBoss) tag1(decade.decadeBoss);
+  });
+})();
+
+// Slots de mascota equipada — pasivo puro (2026-09-24, pedido explícito):
+// base 3, +1 a nivel de personaje 30 (4), +1 al pasar el piso 60 del
+// laberinto ("derrotar un Storm Gush", ver maxLevelUnlocked: se vuelve 61
+// recién cuando el piso 60 ya se limpió) (5), +1 en piso 80 (6), +1 en
+// piso 90 (7 en total, tope).
+function maxPetSlots(){
+  let n = 3;
+  if(state.char.level >= 30) n += 1;
+  const maxLvl = state.char.maxLevelUnlocked||1;
+  if(maxLvl >= 61) n += 1;
+  if(maxLvl >= 81) n += 1;
+  if(maxLvl >= 91) n += 1;
+  return n;
+}
+function ensurePets(){
+  if(!state.char.pets) state.char.pets = {owned:{}, equipped:[], pendingFreePulls:0};
+  if(!state.char.pets.owned) state.char.pets.owned={};
+  if(!state.char.pets.equipped) state.char.pets.equipped=[];
+  if(!state.char.pets.pendingFreePulls) state.char.pets.pendingFreePulls=0;
+}
+function ownedPetCount(id){ ensurePets(); return state.char.pets.owned[id]||0; }
+function equippedPetIds(){ ensurePets(); return state.char.pets.equipped; }
+function equippedPets(){ return equippedPetIds().map(petTpl).filter(Boolean); }
+function isPetEquipped(id){ return equippedPetIds().includes(Number(id)); }
+function togglePetEquip(id){
+  ensurePets();
+  id = Number(id);
+  const eq = state.char.pets.equipped;
+  const idx = eq.indexOf(id);
+  if(idx>=0){ eq.splice(idx,1); return true; }
+  if(eq.length >= maxPetSlots()){ log('No tienes más espacios de mascota disponibles.'); return false; }
+  if(ownedPetCount(id)<=0) return false;
+  eq.push(id);
+  return true;
+}
+// Suma de bonuses {stat:...} de las mascotas equipadas — usado desde
+// baseStat() exactamente como ya suma equipo/piedras.
+function petStatSum(key){
+  let total = 0;
+  equippedPets().forEach(p=> p.bonuses.forEach(b=>{ if(b.stat===key) total += b.value; }));
+  return total;
+}
+// Suma de bonuses {mod:...} — usado desde derived()/totalRes() junto a
+// equipModsSum(eq,...).
+function petModSum(key){
+  let total = 0;
+  equippedPets().forEach(p=> p.bonuses.forEach(b=>{ if(b.mod===key) total += b.value; }));
+  return total;
+}
+// Todos los bonuses {type:...} de las mascotas equipadas, en el MISMO
+// formato {type, value|chance|percent} que ya consumen specialsFromEquip/
+// applyEquippedSpecials/blockChance — se inyectan directo en esos arrays
+// (ver el cambio en specialsFromEquip), así que ya heredan toda la lógica
+// de combate existente (bloqueo, retroceso, robo de vida, segundo ataque,
+// penetración, reducción de daño, doble encantamiento...) sin duplicarla.
+function specialsFromPets(){
+  const out = [];
+  equippedPets().forEach(p=> p.bonuses.forEach(b=>{ if(b.type) out.push(b); }));
+  return out;
+}
+function petUniqueEffects(){
+  return equippedPets().filter(p=>p.unique).map(p=>({petId:p.id, name:p.name, unique:p.unique}));
+}
+
+// Tiradas de gacha (2026-09-24, pedido explícito): x1 = 10 mil de oro; x10 =
+// 100 mil de oro pero entrega 11 tiradas (1 extra de regalo). También se
+// puede pagar con Sellos del Laberinto (2026-09-25, pedido explícito) — el
+// primer número que propuso ariochbu (20/200) quedaba muy por debajo de lo
+// que ya cuestan las cosas en Sellos (equipo Único 350, Épico 700, Forja
+// 1500 — ver SELLO_SHOP_SLOTS/TIER_S_RECIPE), así que tras mi recomendación
+// quedó en 100/1.000, misma proporción 10x que el oro (sin descuento real,
+// solo la tirada de regalo). Sin pity (confirmado explícito, "cada tirada
+// es independiente", igual que el espíritu real de MIR4). Duplicado (ya
+// tenías esa mascota exacta) se convierte en oro según su rango en vez de
+// acumularse (confirmado explícito) — por eso `owned` guarda presencia
+// (0/1), no un contador.
+const GACHA_COST_X1 = 10000;
+const GACHA_COST_X10 = 100000; // entrega 11 tiradas
+const GACHA_COST_SELLOS_X1 = 100;
+const GACHA_COST_SELLOS_X10 = 1000; // entrega 11 tiradas
+function rollPetId(){
+  const rarity = pickWeighted(PET_RARITY_ORDER.map(r=>({tpl:r, weight:PET_RARITIES[r].weight})));
+  const pool = PET_CATALOG.filter(p=>p.rarity===rarity);
+  return pick(pool).id;
+}
+// Núcleo compartido: tira `count` mascotas y resuelve duplicados en oro —
+// usado tanto por una tirada pagada (pullGacha) como por una tirada gratis
+// (grantFreePetPulls, ver el check-in diario) sin duplicar la lógica.
+function doPetPulls(count){
+  ensurePets();
+  const results = [];
+  for(let i=0;i<count;i++){
+    const id = rollPetId();
+    const tpl = petTpl(id);
+    const isDup = !!state.char.pets.owned[id];
+    let goldRefund = 0;
+    if(isDup){
+      goldRefund = PET_RARITIES[tpl.rarity].dupGold;
+      state.char.gold += goldRefund;
+    } else {
+      state.char.pets.owned[id] = 1;
+    }
+    results.push({id, tpl, isDup, goldRefund});
+  }
+  return results;
+}
+function pullGacha(kind, payWith){
+  ensurePets();
+  payWith = payWith==='sellos' ? 'sellos' : 'gold';
+  const count = kind==='x10' ? 11 : 1;
+  let cost, costLabel;
+  if(payWith==='sellos'){
+    cost = kind==='x10' ? GACHA_COST_SELLOS_X10 : GACHA_COST_SELLOS_X1;
+    if((state.char.missionCurrency||0) < cost) return null;
+    state.char.missionCurrency -= cost;
+    costLabel = `${cost.toLocaleString('es')} Sellos del Laberinto`;
+  } else {
+    cost = kind==='x10' ? GACHA_COST_X10 : GACHA_COST_X1;
+    if(state.char.gold < cost) return null;
+    state.char.gold -= cost;
+    costLabel = `${cost.toLocaleString('es')} de oro`;
+  }
+  const results = doPetPulls(count);
+  const rareCount = results.filter(r=>['epico','legendario','mitico'].includes(r.tpl.rarity)).length;
+  log(`Otorgas una ofrenda al árbol (${count===11?'x10 +1':'x1'}, -${costLabel}): consigues ${count} Caído(s) del Laberinto${rareCount?`, ¡${rareCount} de rango Épico o superior!`:''}.`);
+  renderSheet();
+  save();
+  return results;
+}
+// Tiradas de regalo (check-in diario y otorgadas por admin, ver más abajo)
+// — mismo motor de doPetPulls, sin cobrar nada. resuelve YA MISMO (revela
+// las mascotas); las que llegan como "pendientes" (ver pets.pendingFreePulls)
+// se resuelven recién cuando el jugador las reclama a mano en la Ofrenda.
+function grantFreePetPulls(count){
+  ensurePets();
+  const results = doPetPulls(count);
+  const rareCount = results.filter(r=>['epico','legendario','mitico'].includes(r.tpl.rarity)).length;
+  log(`El árbol te concede ${count} ofrenda(s) gratis: consigues ${count} Caído(s) del Laberinto${rareCount?`, ¡${rareCount} de rango Épico o superior!`:''}.`);
+  renderSheet();
+  return results;
+}
+
+/* ============================================================
+   CHECK-IN DIARIO (2026-09-25, pedido explícito, ajustado en el mismo
+   pedido) — un reclamo cada 24h, el día calendario cambia a las 00:01 hora
+   de Ecuador (mismo huso que ya usa el reloj del header, ver
+   ECUADOR_UTC_OFFSET). Si faltas un día no se reinicia — solo se pausa, y
+   al volver reclamas el día siguiente al último que reclamaste. La
+   recompensa de cada día N es N tiradas gratis a la Ofrenda (día 1 = 1,
+   día 30 = 30) — no se resuelven solas: se acumulan en
+   pets.pendingFreePulls hasta que el jugador las reclama a mano frente al
+   árbol (mismo motor que usa el admin para otorgar tiradas por fuera, p.ej.
+   pagos por criptomonedas — ver grantPendingPulls en el panel admin). El
+   ciclo entero se reinicia al día 1 el 1 de cada mes (calendario de
+   Ecuador), sin importar en qué día se había quedado.
+   ============================================================ */
+function ecuadorDateStr(date){
+  date = date || new Date();
+  const shifted = new Date(date.getTime() + ECUADOR_UTC_OFFSET*3600000);
+  return shifted.toISOString().slice(0,10); // YYYY-MM-DD, calendario de Ecuador
+}
+function ensureCheckin(){ if(!state.char.checkin) state.char.checkin = {day:0, lastClaimDate:null}; }
+function checkinAvailable(){
+  ensureCheckin();
+  return state.char.checkin.lastClaimDate !== ecuadorDateStr();
+}
+// true si el último reclamo fue en un mes calendario distinto al actual
+// (hora de Ecuador) — el disparador del reinicio a día 1. La primerísima
+// vez (lastClaimDate null) NO cuenta como reinicio, es simplemente el inicio.
+function checkinIsNewMonth(){
+  ensureCheckin();
+  if(!state.char.checkin.lastClaimDate) return false;
+  return state.char.checkin.lastClaimDate.slice(0,7) !== ecuadorDateStr().slice(0,7);
+}
+// Vista previa del día que TOCARÍA reclamar ahora mismo (para pintar la
+// cuadrícula antes de hacer clic), sin efectos secundarios.
+function checkinPreviewDay(){
+  ensureCheckin();
+  if(checkinIsNewMonth() || !state.char.checkin.day) return 1;
+  return Math.min(30, state.char.checkin.day+1);
+}
+// Días ya reclamados DENTRO del ciclo vigente (0 si el mes ya rotó y el
+// contador guardado quedó "viejo") — lo que la cuadrícula pinta como ✓.
+function checkinCycleClaimedDay(){
+  return checkinIsNewMonth() ? 0 : (state.char.checkin.day||0);
+}
+function claimCheckin(){
+  ensureCheckin();
+  if(!checkinAvailable()) return null;
+  const day = checkinPreviewDay();
+  state.char.checkin.day = day;
+  state.char.checkin.lastClaimDate = ecuadorDateStr();
+  state.char.pets.pendingFreePulls = (state.char.pets.pendingFreePulls||0) + day;
+  log(`Check-in diario (día ${day}/30 de este mes): se suman ${day} ofrenda(s) gratis pendientes en el árbol (total acumulado: ${state.char.pets.pendingFreePulls}).`);
+  renderSheet();
+  save();
+  return {day, pending: state.char.pets.pendingFreePulls};
+}
+
 const POTION_TEMPLATES = {
   vida_menor: {id:'vida_menor', name:'Poción de vida menor', icon:'🧪', desc:'Restaura el 35% de tu vida máxima.', effect:{heal:'hp', amount:0.35}},
   vida_mayor: {id:'vida_mayor', name:'Poción de vida mayor', icon:'🍷', desc:'Restaura el 70% de tu vida máxima.', effect:{heal:'hp', amount:0.7}},
@@ -1430,8 +1810,100 @@ function dealDamageToPlayer(amount){
     combat.playerShield -= absorbed;
     amount -= absorbed;
   }
-  if(amount>0) state.char.curHP = Math.max(0, state.char.curHP - amount);
+  if(amount>0){
+    const wouldBeLethal = combat && (state.char.curHP - amount) <= 0;
+    if(!(wouldBeLethal && checkPetRevive())) state.char.curHP = Math.max(0, state.char.curHP - amount);
+  }
+  checkPetShieldOnHit();
   checkFuriaContenidaTrigger();
+  checkPetTriggers();
+}
+// Habilidades únicas de mascota Épico+ (ver PET_CATALOG unique.effect) —
+// mismo choke point que checkFuriaContenidaTrigger (dealDamageToPlayer es
+// la única puerta de entrada de daño al jugador, cubre enemigos/DOT/
+// autogolpe por igual) y misma bandera combat.tierSFired para "1 vez por
+// combate", con una key por mascota para que dos mascotas equipadas con el
+// mismo tipo de única no se pisen entre sí.
+function checkPetTriggers(){
+  if(!combat) return;
+  const d = derived();
+  if(d.maxHP<=0) return;
+  petUniqueEffects().forEach(({petId, name, unique})=>{
+    const eff = unique.effect;
+    const key = `pet_${petId}_heal`;
+    let threshold=null, healPct=null, shieldPct=null;
+    if(eff.kind==='hp_threshold_heal'){ threshold=eff.threshold; healPct=eff.healPct; }
+    else if(eff.kind==='mythic_bundle'){ threshold=eff.heal.threshold; healPct=eff.heal.healPct; shieldPct=eff.heal.shieldPct; }
+    else return;
+    if(combat.tierSFired.has(key)) return;
+    if(state.char.curHP/d.maxHP > threshold) return;
+    combat.tierSFired.add(key);
+    const before = state.char.curHP;
+    state.char.curHP = Math.min(d.maxHP, state.char.curHP + Math.round(d.maxHP*healPct));
+    if(shieldPct) grantShield(true, null, Math.round(d.maxHP*shieldPct));
+    log(`<b>${name}</b> se activa (${unique.name}): recuperas ${state.char.curHP-before} de vida${shieldPct?' y generas un escudo':''}.`);
+  });
+}
+// Escudo al recibir daño (Fomor/Griffin/Thunder Dragon): a diferencia de lo
+// de arriba, NO es "1 vez por combate" — su propio texto dice "X% de
+// probabilidad al recibir daño", así que puede repetirse golpe a golpe.
+function checkPetShieldOnHit(){
+  if(!combat) return;
+  const d = derived();
+  petUniqueEffects().forEach(({name, unique})=>{
+    const eff = unique.effect;
+    if(eff.kind!=='shield_on_hit') return;
+    if(chance(eff.chance)){
+      grantShield(true, null, Math.round(d.maxHP*eff.shieldPct));
+      log(`<b>${name}</b> genera un escudo que absorbe ${Math.round(eff.shieldPct*100)}% de tu vida máxima.`);
+    }
+  });
+}
+// Renacimiento del Emperador (mascota Mítica única): se evalúa ANTES de
+// restar el daño letal — si revive, ese golpe ya no te baja a 0.
+function checkPetRevive(){
+  if(!combat) return false;
+  const d = derived();
+  let revived = false;
+  petUniqueEffects().forEach(({petId, name, unique})=>{
+    if(revived) return;
+    const eff = unique.effect;
+    if(eff.kind!=='mythic_bundle' || !eff.revive) return;
+    const key = `pet_${petId}_revive`;
+    if(combat.tierSFired.has(key)) return;
+    combat.tierSFired.add(key);
+    state.char.curHP = Math.max(1, Math.round(d.maxHP*eff.revive.hpPct));
+    grantShield(true, null, Math.round(d.maxHP*eff.revive.shieldPct));
+    log(`<b>${name}</b> se activa: ¡Renacimiento del Emperador! Revives con ${state.char.curHP} de vida y un escudo.`);
+    revived = true;
+  });
+  return revived;
+}
+// Recuperación de MP/Espíritu por umbral (Grief Charybdis/Grand Leviathan) —
+// se evalúa cada vez que el jugador gasta MP o Espíritu (ver playerUseSkill),
+// mismo criterio de "1 vez por combate" que checkPetTriggers.
+function checkPetResourceRecovery(){
+  if(!combat) return;
+  const d = derived();
+  petUniqueEffects().forEach(({petId, name, unique})=>{
+    const eff = unique.effect;
+    if(eff.kind!=='resource_threshold_recovery') return;
+    const key = `pet_${petId}_resource`;
+    if(combat.tierSFired.has(key)) return;
+    const staPct = d.maxSta>0 ? state.char.curSta/d.maxSta : 1;
+    const spiPct = d.maxSpi>0 ? state.char.curSpi/d.maxSpi : 1;
+    if(staPct <= eff.threshold && staPct<=spiPct){
+      combat.tierSFired.add(key);
+      const before = state.char.curSta;
+      state.char.curSta = Math.min(d.maxSta, state.char.curSta + Math.round(d.maxSta*eff.recoverPct));
+      log(`<b>${name}</b> se activa (${unique.name}): recuperas ${state.char.curSta-before} de MP.`);
+    } else if(spiPct <= eff.threshold){
+      combat.tierSFired.add(key);
+      const before = state.char.curSpi;
+      state.char.curSpi = Math.min(d.maxSpi, state.char.curSpi + Math.round(d.maxSpi*eff.recoverPct));
+      log(`<b>${name}</b> se activa (${unique.name}): recuperas ${state.char.curSpi-before} de Espíritu.`);
+    }
+  });
 }
 // Escudo (2026-09-25, pedido explícito): un valor que se resta ANTES que la
 // vida — "750 (250)/750" significa 750 de vida intacta + 250 de escudo por
@@ -2168,6 +2640,8 @@ let rankingOpen = false; // whether the Ranking panel is showing
 let adminOpen = false; // whether the Admin panel is showing
 let missionsOpen = false; // whether the Gremio (missions board) panel is showing
 let tabernaOpen = false; // whether the Taberna (allies) panel is showing
+let ofrendaOpen = false; // whether the Otorgar Ofrenda (pet gacha) panel is showing
+let checkinOpen = false; // whether the check-in diario panel is showing
 let currentUser = null; // Supabase auth user
 let currentProfile = null; // {id, username, role, is_banned}
 
@@ -2184,7 +2658,9 @@ function freshState(raceId, styleId){
       maxLevelUnlocked:1, // highest labyrinth level (1-10) unlocked so far
       record:{level:1, floorIdx:0}, // deepest point ever reached (updates on every floor entered, not just guardian kills)
       stash:{gold:0, items:[]}, // Hogar: safe storage, never touched by death penalties
-      soulSlots:[] // piedras de alma engarzadas; se desbloquea 1 espacio cada 10 niveles
+      soulSlots:[], // piedras de alma engarzadas; se desbloquea 1 espacio cada 10 niveles
+      pets:{owned:{}, equipped:[], pendingFreePulls:0}, // Caídos del Laberinto — owned:{petId:cantidad}, equipped:[petId,...], pendingFreePulls: tiradas gratis acumuladas sin reclamar (check-in / admin)
+      checkin:{day:0, lastClaimDate:null} // check-in diario 1-30, ver CHECKIN_REWARDS
     },
     dungeon:null, // {floors, atFloor, atNode, level, done}
     log:[]
@@ -2234,6 +2710,7 @@ function baseStat(key){
     if(it && it.bonus && it.bonus.stat === key) v += it.bonus.value;
   });
   socketedStones().forEach(s=>{ if(s.bonus && s.bonus.stat === key) v += s.bonus.value; });
+  v += petStatSum(key);
   return v;
 }
 
@@ -2246,6 +2723,7 @@ function totalRes(key){
     if(it && it.bonus && it.bonus.res === key) v += it.bonus.value;
   });
   socketedStones().forEach(s=>{ if(s.bonus && s.bonus.res === key) v += s.bonus.value; });
+  if(key==='fisico') v += petModSum('defensa_fisica');
   if(state.char.race === 'enano' && key==='fisico'){ /* flat handled in damage calc */ }
   return clamp(v, -60, 80);
 }
@@ -2288,25 +2766,27 @@ function derived(){
   // un diccionario libre {clave: valor} que se suma acá. maxhp_flat (Casco)
   // es HP real, sin el ×8 que sí aplica al viejo bonus.stat==='maxhp' de
   // Armadura.
-  maxHP += equipModsSum(eq, 'maxhp_flat');
-  maxSta += equipModsSum(eq, 'mp_flat');
-  maxSpi += equipModsSum(eq, 'espiritu_flat');
+  maxHP += equipModsSum(eq, 'maxhp_flat') + petModSum('maxhp_flat');
+  maxSta += equipModsSum(eq, 'mp_flat') + petModSum('mp_flat');
+  maxSpi += equipModsSum(eq, 'espiritu_flat') + petModSum('espiritu_flat');
   const fortalezaMentalPct = equipModsSum(eq, 'fortaleza_mental');
   // Fortaleza mental (Accesorio) ahora también aporta un poco a Resistencia
   // mágica (pedido explícito: "separarlas, pero que fortaleza mental
   // también aumente un poco resistencia mágica") — a una fracción de lo que
   // aporta Botas, para que Botas siga siendo la fuente principal.
   const FORTALEZA_MENTAL_TO_RES_MAGICA = 0.4;
-  const resMagica = clamp(equipModsSum(eq, 'res_magica') + fortalezaMentalPct*FORTALEZA_MENTAL_TO_RES_MAGICA, -60, 80);
+  const resMagica = clamp(equipModsSum(eq, 'res_magica') + petModSum('res_magica') + fortalezaMentalPct*FORTALEZA_MENTAL_TO_RES_MAGICA, -60, 80);
   const fortalezaMental = clamp(fortalezaMentalPct/100, 0, 0.9);
-  const resistenciaEstado = clamp(equipModsSum(eq, 'resistencia_estado')/100, 0, 0.9);
+  const resistenciaEstado = clamp((equipModsSum(eq, 'resistencia_estado') + petModSum('resistencia_estado'))/100, 0, 0.9);
   // Precisión y Penetración: además de lo que dé el equipo, crecen solas
   // con el nivel (pedido explícito) — sin nada de equipo, un nivel 60 ya
   // trae ~9% de Precisión "de fábrica".
   const PRECISION_PER_LEVEL = 0.0015, PENETRACION_PER_LEVEL = 0.001;
   const precision = clamp(equipModsSum(eq, 'precision')/100 + state.char.level*PRECISION_PER_LEVEL, 0, 0.9);
   const penetracionNivel = state.char.level*PENETRACION_PER_LEVEL;
-  const critChance = clamp(0.05 + hab*0.006 + (race().id==='bestia'?0.15:0), 0, 0.6);
+  const petCritProc = specialsFromPets().filter(sp=>sp.type==='prob_critico').reduce((s,sp)=>s+sp.value,0);
+  const critChance = clamp(0.05 + hab*0.006 + (race().id==='bestia'?0.15:0) + petCritProc, 0, 0.6);
+  const critDmgBonus = specialsFromPets().filter(sp=>sp.type==='critico_dano').reduce((s,sp)=>s+sp.value,0);
   // Esquivar: viene de Habilidad, pero solo la parte "natural" (raza + nivel)
   // pesa completo — la que aporta EQUIPO pesa la mitad (2026-09-16, pedido
   // explícito). El Asesino es la única senda cuya arma1+arma2+guantes vierten
@@ -2329,7 +2809,7 @@ function derived(){
   specialsFromEquip(eq).forEach(sp=>{
     if(sp.type==='evasion_flat') evasionBase += sp.value;
   });
-  return {fis,esp,hab,maxHP,maxSta,maxSpi,critChance,evasionBase,resMagica,fortalezaMental,resistenciaEstado,precision,penetracionNivel};
+  return {fis,esp,hab,maxHP,maxSta,maxSpi,critChance,critDmgBonus,evasionBase,resMagica,fortalezaMental,resistenciaEstado,precision,penetracionNivel};
 }
 
 function scaleStatValue(){
@@ -2362,6 +2842,8 @@ function migrateState(){
   if(!state.char.equip.hasOwnProperty('arma2')) state.char.equip.arma2 = null;
   ['casco','botas','guantes'].forEach(s=>{ if(!state.char.equip.hasOwnProperty(s)) state.char.equip[s] = null; });
   if(!state.char.soulSlots) state.char.soulSlots = [];
+  if(!state.char.pets) state.char.pets = {owned:{}, equipped:[]};
+  if(!state.char.checkin) state.char.checkin = {day:0, lastClaimDate:null};
   if(!state.char.record) state.char.record = {level: state.char.maxLevelUnlocked||1, floorIdx:0};
   if(state.dungeon && state.dungeon.level===undefined){
     state.dungeon.level = state.dungeon.tier || state.char.maxLevelUnlocked || 1;
@@ -2406,6 +2888,8 @@ function characterToRow(){
     soul_slots: state.char.soulSlots,
     pity_gear: state.char.pityGear,
     pity_stone: state.char.pityStone,
+    pets: state.char.pets,
+    checkin: state.char.checkin,
     dungeon: state.dungeon
   };
 }
@@ -2471,6 +2955,8 @@ function rowToState(row){
       soulSlots: (row.soul_slots || []).map(refreshStoneFromTemplate),
       pityGear: row.pity_gear || 0,
       pityStone: row.pity_stone || 0,
+      pets: row.pets || {owned:{}, equipped:[]},
+      checkin: row.checkin || {day:0, lastClaimDate:null},
       bannedAllyTemplates: row.banned_ally_templates || []
     },
     dungeon: row.dungeon || null,
@@ -2820,6 +3306,8 @@ function renderAll(){
     adminOpen = false;
     missionsOpen = false;
     tabernaOpen = false;
+    ofrendaOpen = false;
+    checkinOpen = false;
     renderCombat();
   } else if(invOpen){
     renderInventory();
@@ -2835,6 +3323,10 @@ function renderAll(){
     renderMissions();
   } else if(tabernaOpen){
     renderTaberna();
+  } else if(ofrendaOpen){
+    renderOfrenda();
+  } else if(checkinOpen){
+    renderCheckin();
   } else if(state.dungeon && !state.dungeon.floors[state.dungeon.floors.length-1][0].done){
     renderMap();
   } else {
@@ -3196,6 +3688,40 @@ function itemNameHTML(it){
   return `<b style="color:${r.color};${glow}">${it.name}</b> <span class="slot-tag" style="border-color:${r.color}; color:${r.color};">${r.name}</span>${roleTag}`;
 }
 
+// Sector de mascotas dentro del Inventario (2026-09-24, pedido explícito:
+// "un sector apartado para ellos... que no consuma tanto espacio visual y
+// separaciones por categoria") — solo se muestra lo que ya se ganó (nunca
+// pinta los 100 huecos vacíos, eso sí ocuparía muchísimo espacio), en
+// miniaturas chicas agrupadas por rango, con un check dorado sobre la
+// equipada. Clic en cualquiera togglea equipar/quitar respetando
+// maxPetSlots().
+function renderPetSectionHTML(){
+  ensurePets();
+  const slots = maxPetSlots();
+  const eqIds = equippedPetIds();
+  const groupsHTML = PET_RARITY_ORDER.map(rarity=>{
+    const all = PET_CATALOG.filter(p=>p.rarity===rarity);
+    const owned = all.filter(p=>ownedPetCount(p.id)>0);
+    if(!owned.length) return '';
+    const r = PET_RARITIES[rarity];
+    const tiles = owned.map(p=>{
+      const equipped = eqIds.includes(p.id);
+      return `<div class="pet-mini-tile ${equipped?'equipped':''}" data-pet-toggle="${p.id}" title="${p.name}${equipped?' (equipada)':''}" style="box-shadow:0 0 0 2px ${equipped?'var(--bronze-light)':r.color+'88'} inset;">
+        <img src="${petArtPath(p.id)}" alt="${p.name}" loading="lazy">
+        ${equipped ? '<span class="pet-equipped-badge">✓</span>' : ''}
+      </div>`;
+    }).join('');
+    return `<div class="pet-rarity-row">
+      <div class="pet-rarity-label" style="color:${r.color};">${r.name} <span style="opacity:0.7;">(${owned.length}/${all.length})</span></div>
+      <div class="pet-mini-grid">${tiles}</div>
+    </div>`;
+  }).join('');
+  return `
+    <div class="section-label">Caídos del Laberinto <span style="font-weight:normal; color:var(--text-dim); font-size:0.8em;">(${eqIds.length}/${slots} equipadas)</span></div>
+    ${groupsHTML || `<p class="inv-empty-msg">Aún no tienes ninguna. Consigue tu primera en 🌳 Otorgar ofrenda, en la ciudad.</p>`}
+  `;
+}
+
 function renderInventory(){
   const allies = state.char.allies || [];
   const targetRow = equipTarget!=='player' ? allies.find(a=>a.id===equipTarget) : null;
@@ -3344,9 +3870,13 @@ function renderInventory(){
     ${soulSlotsHTML}
     ${stoneBagHTML}
     ${fragmentSection}
+    ${targetRow ? '' : renderPetSectionHTML()}
   `;
 
   document.getElementById('btn-close-inv').onclick = ()=>{ invOpen=false; renderAll(); };
+  document.querySelectorAll('[data-pet-toggle]').forEach(el=>{
+    el.onclick = ()=>{ togglePetEquip(el.dataset.petToggle); renderSheet(); renderInventory(); save(); };
+  });
   const targetSelect = document.getElementById('equip-target-select');
   if(targetSelect) targetSelect.onchange = ()=>{ equipTarget = targetSelect.value; renderInventory(); };
   document.querySelectorAll('[data-gearfilter]').forEach(btn=>{
@@ -3581,6 +4111,16 @@ function renderCity(){
         <p>Acepta misiones de exploradores a cambio de oro, experiencia y Sellos del Laberinto.</p>
         <button id="btn-open-missions">Ver misiones</button>
       </div>
+      <div class="action-card ofrenda-card">
+        <h3>🌳 Otorgar ofrenda</h3>
+        <p>Un Ygdrasil en miniatura crece en el corazón de la ciudad. Ofrécele oro o Sellos y te devolverá un Caído del Laberinto — una mascota que NO pelea, solo aporta su propio don pasivo mientras la llevas equipada.</p>
+        <button id="btn-open-ofrenda">Acercarse al árbol</button>
+      </div>
+      <div class="action-card checkin-card">
+        <h3>📅 Check-in diario${checkinAvailable()?' <span class="checkin-badge">¡Disponible!</span>':''}</h3>
+        <p>Entra cada día para reclamar ofrendas gratis para el árbol — el día ${checkinPreviewDay()} te daría ${checkinPreviewDay()} tirada${checkinPreviewDay()===1?'':'s'} gratis. Se reinicia el día 1 de cada mes.</p>
+        <button id="btn-open-checkin">${checkinAvailable()?'Reclamar recompensa de hoy':'Ver calendario'}</button>
+      </div>
     </div>
     <div class="section-label">Antes de partir</div>
     <p style="color:var(--text-dim); font-size:0.85em; margin-top:0;">Revisa tu 🎒 Inventario (arriba) para equipar mejor equipo o comprobar cuántas pociones llevas antes de entrar al laberinto. Si mueres dentro perderás el equipo suelto de tu mochila y el ${DEFEAT_GOLD_LOSS_PCT}% de tu oro; si te retiras tras vencer a un guardián, conservas todo.</p>
@@ -3643,6 +4183,188 @@ function renderCity(){
     invOpen = false; homeOpen = false; shopOpen = false; rankingOpen = false; adminOpen = false; missionsOpen = false; tabernaOpen = true;
     renderAll();
   };
+  document.getElementById('btn-open-ofrenda').onclick = ()=>{
+    invOpen = false; homeOpen = false; shopOpen = false; rankingOpen = false; adminOpen = false; missionsOpen = false; tabernaOpen = false; ofrendaOpen = true;
+    renderAll();
+  };
+  document.getElementById('btn-open-checkin').onclick = ()=>{
+    invOpen = false; homeOpen = false; shopOpen = false; rankingOpen = false; adminOpen = false; missionsOpen = false; tabernaOpen = false; ofrendaOpen = false; checkinOpen = true;
+    renderAll();
+  };
+}
+
+/* ============================================================
+   RENDER: OTORGAR OFRENDA — gacha de mascotas "Caídos del Laberinto"
+   ============================================================ */
+function showPetRates(){
+  const rows = PET_RARITY_ORDER.map(r=>{
+    const t = PET_RARITIES[r];
+    return `<div style="display:flex; justify-content:space-between; gap:10px; padding:4px 0; border-bottom:1px solid var(--border);">
+      <span style="color:${t.color}; font-weight:bold;">${t.name}</span>
+      <span>${t.weight}%</span>
+    </div>`;
+  }).join('');
+  showOverlay('Tasas de invocación', `
+    <p style="margin-top:0;">Cada tirada es independiente — no hay tirada garantizada (sin pity). Si sale una mascota que ya tienes, se convierte automáticamente en oro según su rango en vez de acumularse.</p>
+    ${rows}
+  `, ()=>{});
+}
+function petCardHTML(id, opts){
+  opts = opts||{};
+  const tpl = petTpl(id);
+  const r = PET_RARITIES[tpl.rarity];
+  return `<div class="pet-reveal-card ${opts.big?'big':''}" style="animation-delay:${opts.delay||0}ms; box-shadow:0 0 0 2px ${r.color}bb, 0 0 ${opts.big?22:12}px ${r.color}99;">
+    <img src="${petArtPath(id)}" alt="${tpl.name}" loading="lazy">
+    ${opts.dup ? `<div class="pet-dup-badge">Duplicado · +${PET_RARITIES[tpl.rarity].dupGold.toLocaleString('es')} oro</div>` : '<div class="pet-new-badge">¡Nuevo!</div>'}
+  </div>`;
+}
+// x11 (x10 con regalo): todas las de rango Único o menos se revelan juntas
+// primero; Épico en adelante se revela después, con más brillo — pedido
+// explícito ("cuando sale x11 aparecen todas de manera simultanea, pero
+// epico en adelante + se revelan al final"). Puro CSS animation-delay, sin
+// timers encadenados.
+function renderOfrendaResults(results){
+  const container = document.getElementById('ofrenda-results');
+  if(!container) return;
+  if(!results || !results.length){ container.innerHTML=''; return; }
+  const common = results.filter(r=>!['epico','legendario','mitico'].includes(r.tpl.rarity));
+  const rare = results.filter(r=>['epico','legendario','mitico'].includes(r.tpl.rarity));
+  const commonHTML = common.map((r,i)=>petCardHTML(r.id, {dup:r.isDup, delay:i*100})).join('');
+  const rareDelayBase = common.length ? common.length*100 + 600 : 0;
+  const rareHTML = rare.map((r,i)=>petCardHTML(r.id, {big:true, dup:r.isDup, delay:rareDelayBase + i*400})).join('');
+  container.innerHTML = `<div class="pet-reveal-grid">${commonHTML}${rareHTML}</div>`;
+}
+function renderOfrenda(){
+  ensurePets();
+  const ownedCount = Object.keys(state.char.pets.owned).length;
+  document.getElementById('main-panel').innerHTML = `
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:4px;">
+      <h3 style="color:var(--bronze-light);">🌳 Otorgar ofrenda</h3>
+      <button class="reset-btn" id="btn-close-ofrenda">Cerrar</button>
+    </div>
+    <p style="color:var(--text-dim); font-size:0.85em; margin-top:0;">Un Ygdrasil en miniatura crece en el corazón de la ciudad. Ofrécele oro o Sellos del Laberinto y te devolverá un Caído del Laberinto — una mascota que se equipa en un espacio pasivo y aporta su propio don, sin pelear ella misma.</p>
+    <div class="ygdrasil-stage" id="ygdrasil-stage">
+      <div class="ygdrasil-glow"></div>
+      <div class="ygdrasil-tree">🌳</div>
+    </div>
+    <p class="ofrenda-collection-line" style="color:var(--bronze-light); font-size:0.85em; text-align:center; margin:6px 0;">Colección: ${ownedCount} / ${PET_CATALOG.length} Caídos del Laberinto reunidos · ${equippedPetIds().length}/${maxPetSlots()} equipadas</p>
+    ${state.char.pets.pendingFreePulls>0 ? `
+    <div class="ofrenda-pending-box">
+      <div>🎁 Tienes <b>${state.char.pets.pendingFreePulls}</b> ofrenda(s) gratis pendientes (check-in diario y/o regalos del equipo).</div>
+      <button class="btn-main" id="btn-claim-pending">Reclamar todas</button>
+    </div>` : ''}
+    <div class="section-label" style="margin-top:4px;">Pagar con oro (⛁ ${state.char.gold.toLocaleString('es')})</div>
+    <div class="ofrenda-btn-row">
+      <button class="btn-main" id="btn-pull-x1-gold" ${state.char.gold<GACHA_COST_X1?'disabled':''}>Ofrenda x1 — ${GACHA_COST_X1.toLocaleString('es')} oro</button>
+      <button class="btn-main" id="btn-pull-x10-gold" ${state.char.gold<GACHA_COST_X10?'disabled':''}>Ofrenda x10 (+1 regalo) — ${GACHA_COST_X10.toLocaleString('es')} oro</button>
+    </div>
+    <div class="section-label">Pagar con Sellos del Laberinto (🎖️ ${(state.char.missionCurrency||0).toLocaleString('es')})</div>
+    <div class="ofrenda-btn-row">
+      <button class="btn-main secondary-choice" id="btn-pull-x1-sellos" ${(state.char.missionCurrency||0)<GACHA_COST_SELLOS_X1?'disabled':''}>Ofrenda x1 — ${GACHA_COST_SELLOS_X1.toLocaleString('es')} Sellos</button>
+      <button class="btn-main secondary-choice" id="btn-pull-x10-sellos" ${(state.char.missionCurrency||0)<GACHA_COST_SELLOS_X10?'disabled':''}>Ofrenda x10 (+1 regalo) — ${GACHA_COST_SELLOS_X10.toLocaleString('es')} Sellos</button>
+    </div>
+    <div class="section-label">Comprar tiradas</div>
+    <div class="ofrenda-buy-box">
+      <div>💎 ¿Quieres tiradas extra sin gastar oro ni Sellos? Contacta al administrador por Discord y coordina tu compra — te acredita las ofrendas directo en tu cuenta, listas para reclamar aquí mismo.</div>
+      <div class="ofrenda-buy-contact">Discord: <b>xariochix5266</b></div>
+    </div>
+    <button class="reset-btn" id="btn-pet-rates" style="margin:10px auto 0; display:block;">Ver tasas de invocación</button>
+    <div id="ofrenda-results"></div>
+  `;
+  document.getElementById('btn-close-ofrenda').onclick = ()=>{ ofrendaOpen=false; renderAll(); };
+  document.getElementById('btn-pet-rates').onclick = showPetRates;
+  const allPullBtns = ()=> ['btn-pull-x1-gold','btn-pull-x10-gold','btn-pull-x1-sellos','btn-pull-x10-sellos'].map(id=>document.getElementById(id));
+  const refreshBtnStates = ()=>{
+    document.getElementById('btn-pull-x1-gold').disabled = state.char.gold < GACHA_COST_X1;
+    document.getElementById('btn-pull-x10-gold').disabled = state.char.gold < GACHA_COST_X10;
+    document.getElementById('btn-pull-x1-sellos').disabled = (state.char.missionCurrency||0) < GACHA_COST_SELLOS_X1;
+    document.getElementById('btn-pull-x10-sellos').disabled = (state.char.missionCurrency||0) < GACHA_COST_SELLOS_X10;
+  };
+  const doPull = (kind, payWith)=>{
+    const cost = payWith==='sellos' ? (kind==='x10'?GACHA_COST_SELLOS_X10:GACHA_COST_SELLOS_X1) : (kind==='x10'?GACHA_COST_X10:GACHA_COST_X1);
+    const have = payWith==='sellos' ? (state.char.missionCurrency||0) : state.char.gold;
+    if(have < cost) return;
+    const stage = document.getElementById('ygdrasil-stage');
+    stage.classList.add('shining');
+    allPullBtns().forEach(b=>b.disabled = true);
+    document.getElementById('ofrenda-results').innerHTML = '';
+    setTimeout(()=>{
+      const results = pullGacha(kind, payWith);
+      stage.classList.remove('shining');
+      renderOfrendaResults(results);
+      renderSheet();
+      refreshBtnStates();
+      document.querySelector('.ofrenda-collection-line').textContent =
+        `Colección: ${Object.keys(state.char.pets.owned).length} / ${PET_CATALOG.length} Caídos del Laberinto reunidos · ${equippedPetIds().length}/${maxPetSlots()} equipadas`;
+    }, 900);
+  };
+  document.getElementById('btn-pull-x1-gold').onclick = ()=>doPull('x1','gold');
+  document.getElementById('btn-pull-x10-gold').onclick = ()=>doPull('x10','gold');
+  document.getElementById('btn-pull-x1-sellos').onclick = ()=>doPull('x1','sellos');
+  document.getElementById('btn-pull-x10-sellos').onclick = ()=>doPull('x10','sellos');
+  const claimBtn = document.getElementById('btn-claim-pending');
+  if(claimBtn){
+    claimBtn.onclick = ()=>{
+      const count = state.char.pets.pendingFreePulls;
+      if(count<=0) return;
+      const stage = document.getElementById('ygdrasil-stage');
+      stage.classList.add('shining');
+      claimBtn.disabled = true;
+      allPullBtns().forEach(b=>b.disabled = true);
+      document.getElementById('ofrenda-results').innerHTML = '';
+      setTimeout(()=>{
+        state.char.pets.pendingFreePulls = 0;
+        const results = grantFreePetPulls(count);
+        stage.classList.remove('shining');
+        renderOfrendaResults(results);
+        refreshBtnStates();
+        const pendingBox = document.querySelector('.ofrenda-pending-box');
+        if(pendingBox) pendingBox.remove();
+        document.querySelector('.ofrenda-collection-line').textContent =
+          `Colección: ${Object.keys(state.char.pets.owned).length} / ${PET_CATALOG.length} Caídos del Laberinto reunidos · ${equippedPetIds().length}/${maxPetSlots()} equipadas`;
+        save();
+      }, 900);
+    };
+  }
+}
+
+/* ============================================================
+   RENDER: CHECK-IN DIARIO
+   ============================================================ */
+function renderCheckin(){
+  ensureCheckin();
+  const available = checkinAvailable();
+  const previewDay = checkinPreviewDay();
+  const cycleClaimedDay = checkinCycleClaimedDay();
+  const gridHTML = Array.from({length:30}, (_,i)=>i+1).map(day=>{
+    const isClaimed = day <= cycleClaimedDay;
+    const isNext = available && day===previewDay;
+    const cls = isNext ? 'next' : (isClaimed ? 'claimed' : 'locked');
+    return `<div class="checkin-cell ${cls}">
+      <div class="checkin-day">Día ${day}</div>
+      <div class="checkin-reward">🎁 x${day}</div>
+      ${isClaimed?'<div class="checkin-check">✓</div>':''}
+    </div>`;
+  }).join('');
+  document.getElementById('main-panel').innerHTML = `
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:4px;">
+      <h3 style="color:var(--bronze-light);">📅 Check-in diario</h3>
+      <button class="reset-btn" id="btn-close-checkin">Cerrar</button>
+    </div>
+    <p style="color:var(--text-dim); font-size:0.85em; margin-top:0;">Entra cada día para reclamar ofrendas gratis para el árbol — el día ${'N'} te da ${'N'} tiradas gratis, acumulables si no las reclamas de inmediato. Si faltas un día no pierdes tu progreso, solo se pausa. El ciclo completo se reinicia el día 1 de cada mes.</p>
+    <p style="color:var(--bronze-light); font-size:0.85em;">${available ? `¡Tienes el día <b>${previewDay}</b> disponible!` : `Ya reclamaste hoy (día ${state.char.checkin.day}/30). Vuelve mañana desde las 00:01.`}</p>
+    <button class="btn-main" id="btn-claim-checkin" ${available?'':'disabled'} style="margin-bottom:12px;">${available?`Reclamar día ${previewDay} (+${previewDay} ofrendas gratis)`:'Ya reclamado hoy'}</button>
+    <div class="checkin-grid">${gridHTML}</div>
+    <p style="color:var(--text-dim); font-size:0.78em; margin-top:10px;">Las ofrendas gratis se acumulan en 🌳 Otorgar ofrenda — ábrela y pulsa "Reclamar todas" para revelar tus mascotas.</p>
+  `;
+  document.getElementById('btn-close-checkin').onclick = ()=>{ checkinOpen=false; renderAll(); };
+  const claimBtn = document.getElementById('btn-claim-checkin');
+  if(available){
+    claimBtn.onclick = ()=>{
+      claimCheckin();
+      renderCheckin();
+    };
+  }
 }
 
 /* ============================================================
@@ -4206,7 +4928,7 @@ async function loadAdminList(){
   const msg = document.getElementById('admin-msg');
   const [profilesRes, charsRes] = await Promise.all([
     supabase.from('profiles').select('id, username, is_banned, created_at').order('created_at', { ascending: false }).limit(100),
-    supabase.from('characters').select('id, user_id, nickname, role, hidden_from_leaderboard, level, record_level, record_floor_idx').order('slot_number')
+    supabase.from('characters').select('id, user_id, nickname, role, hidden_from_leaderboard, level, record_level, record_floor_idx, pets').order('slot_number')
   ]);
   const { data, error } = profilesRes;
   if(!list) return; // el jugador cerró el panel antes de que llegara la respuesta
@@ -4236,6 +4958,7 @@ async function loadAdminList(){
         <div style="display:flex; gap:8px; flex-shrink:0; flex-wrap:wrap;">
           <button class="inv-btn" data-toggle-role="${c.id}" ${isLoaded?'disabled title="No puedes quitarte el rol admin al personaje con el que jugaste esta sesión"':''}>${c.role==='admin'?'Quitar admin':'Hacer admin'}</button>
           <button class="inv-btn" data-toggle-ranking="${c.id}">${c.hidden_from_leaderboard?'Mostrar en ranking':'Ocultar del ranking'}</button>
+          <button class="inv-btn" data-grant-pulls="${c.id}" title="Ofrendas gratis pendientes: ${(c.pets&&c.pets.pendingFreePulls)||0}">🎁 Dar tiradas</button>
           <button class="inv-btn danger" data-delete-char="${c.id}">Eliminar personaje</button>
         </div>
       </div>`;
@@ -4283,6 +5006,28 @@ async function loadAdminList(){
       const { error } = await supabase.from('characters').update({ hidden_from_leaderboard: !target.hidden_from_leaderboard }).eq('id', id);
       if(error) msg.textContent = 'No se pudo actualizar: ' + error.message;
       else msg.textContent = '';
+      await loadAdminList();
+    };
+  });
+  // Otorgar tiradas gratis (2026-09-25, pedido explícito: pagos por
+  // criptomonedas se acreditan a mano acá, fuera de la Tienda) — se suman a
+  // pets.pendingFreePulls del PERSONAJE elegido (no del admin), el mismo
+  // campo que usa el check-in diario; el jugador las reclama él mismo frente
+  // al árbol la próxima vez que entre, con la animación normal.
+  list.querySelectorAll('[data-grant-pulls]').forEach(btn=>{
+    btn.onclick = async ()=>{
+      const id = btn.dataset.grantPulls;
+      const target = chars.find(c=>c.id===id);
+      const typed = prompt(`¿Cuántas ofrendas gratis le das a "${target.nickname}"? (Pendientes actuales: ${(target.pets&&target.pets.pendingFreePulls)||0})`, '1');
+      if(typed === null) return;
+      const n = parseInt(typed, 10);
+      if(!Number.isFinite(n) || n<=0){ msg.textContent = 'Ingresa un número mayor a 0.'; return; }
+      btn.disabled = true;
+      const currentPets = target.pets || {owned:{}, equipped:[], pendingFreePulls:0};
+      const updatedPets = Object.assign({}, currentPets, {pendingFreePulls: (currentPets.pendingFreePulls||0) + n});
+      const { error } = await supabase.from('characters').update({ pets: updatedPets }).eq('id', id);
+      if(error) msg.textContent = 'No se pudo otorgar: ' + error.message;
+      else msg.textContent = `Le diste ${n} ofrenda(s) gratis a ${target.nickname}.`;
       await loadAdminList();
     };
   });
@@ -5637,6 +6382,11 @@ function specialsFromEquip(equip){
     const it = equip && equip[slot];
     if(it) itemSpecialsArr(it).forEach(sp=> out.push(sp));
   });
+  // Mascotas equipadas (ver PET_CATALOG/specialsFromPets): solo aplican al
+  // jugador, nunca a un aliado — specialsFromEquip(equip) SIEMPRE se llama
+  // con state.char.equip para el jugador (los aliados usan su propio
+  // ally.specials aparte), así que esta comparación es un guardia seguro.
+  if(equip === state.char.equip) specialsFromPets().forEach(sp=> out.push(sp));
   return out;
 }
 function blockChance(specialsArr){
@@ -5650,6 +6400,7 @@ function applyEquippedSpecials(target, dmgDealt, skill){
     if(it) itemSpecialsArr(it).forEach(sp=> sources.push({it, sp}));
   });
   socketedStones().forEach(s=> itemSpecialsArr(s).forEach(sp=> sources.push({it:s, sp})));
+  equippedPets().forEach(p=> p.bonuses.forEach(sp=>{ if(sp.type) sources.push({it:{name:p.name}, sp}); }));
   sources.forEach(({it, sp})=>{
     if(sp.type==='aturdir'){
       // Piedras de alma únicamente (formato viejo) — inmediato, sin cambios.
@@ -5792,6 +6543,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
   if(skill.cost && !isRepeat){
     if(skill.cost.tipo==='estamina') state.char.curSta -= skill.cost.valor;
     else state.char.curSpi -= skill.cost.valor;
+    checkPetResourceRecovery();
     // Sabiduría/Voluntad (piedras) y Vara arcana (arma de Mago/Sacerdote):
     // probabilidad de recuperar parte de lo gastado — mismo mecanismo,
     // ahora también leído de las armas equipadas, no solo de las piedras.
@@ -5951,6 +6703,14 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
     const equipSpecialsForDmg = specialsFromEquip(state.char.equip);
     equipSpecialsForDmg.forEach(sp=>{
       if(sp.type==='aumento_dano') base *= (1+sp.value);
+      // Daño por raza/posición de mascota (Caídos del Laberinto, ver
+      // ENEMY_RACE_TAG/DECADE_RACE_TAG y target.tpl.frontline, que ya
+      // existe en TODO enemigo de la bestiaria).
+      if(sp.type==='aumento_dano_raza' && target.tpl && ENEMY_RACE_TAG[target.tpl.id]===sp.raza) base *= (1+sp.value);
+      if(sp.type==='aumento_dano_posicion' && target.tpl){
+        const isFrontline = !!target.tpl.frontline;
+        if((sp.posicion==='frontline') === isFrontline) base *= (1+sp.value);
+      }
     });
     // Cuchillo largo/gemelo Tier S ('cuchillo_s'): objetivo por debajo del
     // 25% de vida, +20% de daño — condición continua, se evalúa en cada
@@ -6039,7 +6799,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
     }
 
     let isCrit = skill.guaranteedCrit ? true : chance(crit);
-    if(isCrit) base *= 1.5;
+    if(isCrit) base *= (1.5 + d.critDmgBonus);
 
     let ignore = skill.ignoreResist||0;
     // Carcaj Tier S ('carcaj_s'): el flag lo deja armado playerUseSkill justo
@@ -7558,6 +8318,11 @@ function renderCombat(){
       </div>
       ${enemyHUD}
     </div>
+    ${equippedPets().length ? `
+    <div class="combat-pets-strip" title="Mascotas equipadas: solo aportan sus bonificaciones pasivas, no pelean ni ocupan un puesto en la escena.">
+      <span class="combat-pets-label">Mascotas</span>
+      ${equippedPets().map(p=>`<div class="combat-pet-chip" style="box-shadow:0 0 0 2px ${PET_RARITIES[p.rarity].color}bb inset;"><img src="${petArtPath(p.id)}" alt="${p.name}" title="${p.name}" loading="lazy"></div>`).join('')}
+    </div>` : ''}
     <div id="battle-stage-mount" style="margin-bottom:6px;"></div>
 
     <div class="battle-menu" id="battle-menu">
@@ -7755,6 +8520,8 @@ document.getElementById('btn-inventory').onclick = ()=>{
   shopOpen = false;
   rankingOpen = false;
   adminOpen = false;
+  ofrendaOpen = false;
+  checkinOpen = false;
   invOpen = !invOpen;
   renderAll();
 };
@@ -7764,7 +8531,7 @@ document.querySelectorAll('#city-nav .nav-btn').forEach(btn=>{
     if(!state) return;
     if(combat && combat.active) return;
     const key = btn.dataset.nav;
-    invOpen = false; homeOpen = false; shopOpen = false; rankingOpen = false; adminOpen = false; missionsOpen = false; tabernaOpen = false;
+    invOpen = false; homeOpen = false; shopOpen = false; rankingOpen = false; adminOpen = false; missionsOpen = false; tabernaOpen = false; ofrendaOpen = false; checkinOpen = false;
     if(key==='home') homeOpen = true;
     else if(key==='shop') shopOpen = true;
     else if(key==='taberna') tabernaOpen = true;

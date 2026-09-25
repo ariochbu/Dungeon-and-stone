@@ -585,3 +585,108 @@
     .city-art{padding:14px 10px;}
     .log-box{max-height:90px;}
   }
+
+  /* ---------- Otorgar ofrenda (gacha "Caídos del Laberinto") ---------- */
+  .ofrenda-card{ position:relative; overflow:hidden; background:linear-gradient(160deg, rgba(74,140,74,0.14), var(--panel-2) 60%); border-color:#3f5c3a; }
+  .ygdrasil-stage{
+    position:relative; height:180px; margin:10px 0; border-radius:6px; overflow:hidden;
+    background:radial-gradient(ellipse at 50% 100%, rgba(74,140,74,0.28), rgba(20,17,15,0) 70%), var(--panel-2);
+    border:1px solid #3f5c3a; display:flex; align-items:center; justify-content:center;
+  }
+  .ygdrasil-glow{
+    position:absolute; inset:0; background:radial-gradient(ellipse at 50% 60%, rgba(120,220,120,0.20), transparent 65%);
+    animation:ygdrasil-breathe 4s ease-in-out infinite;
+  }
+  .ygdrasil-tree{ font-size:5.5em; filter:drop-shadow(0 0 14px rgba(90,200,90,0.45)); position:relative; z-index:1; transition:filter 0.3s ease, transform 0.3s ease; }
+  @keyframes ygdrasil-breathe{ 0%,100%{opacity:0.55;} 50%{opacity:1;} }
+  .ygdrasil-stage.shining .ygdrasil-glow{ animation:ygdrasil-shine 0.9s ease-in-out; }
+  .ygdrasil-stage.shining .ygdrasil-tree{ filter:drop-shadow(0 0 34px rgba(160,255,160,0.95)) brightness(1.3); transform:scale(1.08); }
+  @keyframes ygdrasil-shine{ 0%{opacity:0.5;} 40%{opacity:1; background:radial-gradient(ellipse at 50% 60%, rgba(160,255,160,0.55), transparent 70%);} 100%{opacity:0.6;} }
+  .ofrenda-btn-row{ display:flex; gap:10px; flex-wrap:wrap; }
+  .ofrenda-btn-row .btn-main{ flex:1; min-width:190px; }
+  .ofrenda-pending-box{
+    display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;
+    background:rgba(120,220,120,0.10); border:1px solid #3f5c3a; border-radius:5px; padding:9px 12px; margin-bottom:10px;
+    font-size:0.85em;
+  }
+  .ofrenda-pending-box .btn-main{ padding:7px 16px; width:auto; flex:none; }
+  .ofrenda-buy-box{
+    background:rgba(147,80,221,0.10); border:1px solid #5c3f7a; border-radius:5px; padding:10px 12px;
+    font-size:0.85em; line-height:1.5;
+  }
+  .ofrenda-buy-contact{ margin-top:6px; color:var(--bronze-light); }
+
+  .pet-reveal-grid{ display:flex; flex-wrap:wrap; gap:10px; justify-content:center; margin-top:14px; }
+  .pet-reveal-card{
+    width:96px; border-radius:6px; overflow:hidden; opacity:0; position:relative;
+    animation:pet-reveal-pop 0.5s ease forwards;
+  }
+  .pet-reveal-card.big{ width:130px; }
+  .pet-reveal-card img{ display:block; width:100%; height:auto; }
+  @keyframes pet-reveal-pop{
+    0%{ opacity:0; transform:scale(0.55) translateY(10px); }
+    70%{ opacity:1; transform:scale(1.05); }
+    100%{ opacity:1; transform:scale(1); }
+  }
+  .pet-new-badge, .pet-dup-badge{
+    position:absolute; left:0; right:0; bottom:0; text-align:center; font-size:0.62em; padding:2px 3px;
+    background:rgba(14,12,10,0.82); color:var(--bronze-light); font-family:'Cinzel';
+  }
+  .pet-dup-badge{ color:#e0b23f; }
+
+  .pet-rarity-row{ margin-bottom:8px; }
+  .pet-rarity-label{ font-size:0.78em; font-weight:bold; margin-bottom:4px; }
+  .pet-mini-grid{ display:flex; flex-wrap:wrap; gap:6px; }
+  .pet-mini-tile{
+    position:relative; width:42px; height:56px; border-radius:4px; overflow:hidden; cursor:pointer;
+    background:var(--stone);
+  }
+  .pet-mini-tile img{ width:100%; height:100%; object-fit:cover; object-position:top center; }
+  .pet-mini-tile:hover{ filter:brightness(1.2); }
+  .pet-mini-tile.equipped{ outline:2px solid var(--bronze-light); }
+  .pet-equipped-badge{
+    position:absolute; top:1px; right:2px; color:var(--bronze-light); font-size:0.75em; text-shadow:0 0 3px #000, 0 0 3px #000;
+  }
+  @media (max-width:600px){
+    .pet-reveal-card{ width:78px; }
+    .pet-reveal-card.big{ width:104px; }
+    .ygdrasil-stage{ height:150px; }
+    .ygdrasil-tree{ font-size:4.2em; }
+  }
+
+  /* ---------- Check-in diario ---------- */
+  .checkin-card{ position:relative; background:linear-gradient(160deg, rgba(184,147,74,0.10), var(--panel-2) 60%); }
+  .checkin-badge{
+    display:inline-block; font-size:0.62em; font-family:'Crimson Text', serif; font-weight:bold; letter-spacing:0.5px;
+    background:var(--blood); color:#fff; padding:2px 7px; border-radius:10px; vertical-align:middle; margin-left:4px;
+    animation:checkin-pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes checkin-pulse{ 0%,100%{opacity:1;} 50%{opacity:0.55;} }
+  .checkin-grid{
+    display:grid; grid-template-columns:repeat(auto-fill, minmax(78px, 1fr)); gap:8px; margin-top:6px;
+  }
+  .checkin-cell{
+    position:relative; background:var(--panel-2); border:1px solid var(--border); border-radius:5px;
+    padding:8px 6px; text-align:center;
+  }
+  .checkin-cell.claimed{ border-color:var(--good); opacity:0.65; }
+  .checkin-cell.next{ border-color:var(--bronze-light); box-shadow:0 0 0 1px var(--bronze-light), 0 0 10px rgba(217,183,107,0.35); }
+  .checkin-cell.locked{ opacity:0.55; }
+  .checkin-day{ font-size:0.68em; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.5px; }
+  .checkin-reward{ font-size:0.9em; margin-top:3px; font-variant-numeric:tabular-nums; }
+  .checkin-check{ position:absolute; top:2px; right:4px; color:var(--good); font-size:0.85em; }
+
+  /* Franja de mascotas equipadas dentro del combate — puramente decorativa
+     (2026-09-24, pedido explícito: "las mascotas NO pelean... sin afectar
+     la batalla directamente y/o las sendas donde estan los aliados y
+     jugadores"): vive fuera de #battle-stage-mount (el canvas de
+     battleStage.js), así que nunca ocupa un puesto de Frente/Retaguardia ni
+     compite por espacio con jugador/aliados/enemigos. Solo aparece si hay
+     al menos una mascota equipada. */
+  .combat-pets-strip{
+    display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin:0 0 8px;
+    padding:5px 8px; background:var(--panel-2); border:1px solid var(--border); border-radius:4px;
+  }
+  .combat-pets-label{ font-size:0.68em; color:var(--text-dim); text-transform:uppercase; letter-spacing:1px; margin-right:2px; }
+  .combat-pet-chip{ width:28px; height:38px; border-radius:3px; overflow:hidden; flex-shrink:0; background:var(--stone); }
+  .combat-pet-chip img{ width:100%; height:100%; object-fit:cover; object-position:top center; }
