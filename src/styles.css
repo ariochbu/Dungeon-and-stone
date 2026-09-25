@@ -296,6 +296,12 @@
   .pick-card .desc{font-size:0.8em; color:var(--text-dim); margin-bottom:8px; min-height:34px;}
   .pick-card .mini-stats{display:flex; gap:8px; font-size:0.72em; color:var(--text-dim);}
   .pick-card .mini-stats span b{color:var(--text);}
+  /* Ventajas/desventajas por raza (2026-09-26, pedido explícito) — mismo
+     lenguaje visual que los chips de resistencia (verde=bueno, rojo=malo)
+     para que se lean de un vistazo antes de elegir. */
+  .race-pros-cons{margin-top:8px; padding-top:8px; border-top:1px solid var(--border); font-size:0.74em; line-height:1.4;}
+  .race-pros-cons .pro{color:var(--good); margin-bottom:3px;}
+  .race-pros-cons .con{color:var(--blood-light);}
   .begin-row{text-align:center; margin-top:26px;}
   .btn-main{
     background:linear-gradient(180deg, var(--blood-light), var(--blood));
@@ -682,6 +688,14 @@
     color:#fff; background:rgba(70,193,104,0.35); opacity:0; transition:opacity 0.15s ease;
   }
   .pet-mini-tile:hover .pet-equip-hint{ opacity:1; }
+  /* Cantidad acumulada (2026-09-26, pedido explícito: duplicados ya no se
+     descartan, deben verse como "(1)", "(2)"...) — esquina inferior
+     izquierda, siempre visible, no compite con el "+" que solo aparece al
+     pasar el cursor. */
+  .pet-count-badge{
+    position:absolute; bottom:1px; left:2px; color:var(--text); font-size:0.68em; font-weight:bold;
+    text-shadow:0 0 3px #000, 0 0 3px #000;
+  }
   .pet-slot-thumb{ width:36px; height:48px; border-radius:4px; overflow:hidden; flex-shrink:0; background:var(--stone); }
   .pet-slot-thumb img{ width:100%; height:100%; object-fit:cover; object-position:top center; }
 

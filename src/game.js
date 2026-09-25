@@ -9,48 +9,64 @@ import { CLASS_SPRITES, ENEMY_SPRITES } from './battleSprites.js?v=65';
    DATA
    ============================================================ */
 
+// pros/cons (2026-09-26, pedido explícito: "coloquemos 'ventajas y
+// desventajas' de cada raza") — reflejan literalmente los stats/res/passive
+// de arriba, no son adorno: quien lee la ficha antes de crear personaje
+// tiene que poder anticipar el hueco que le va a tocar tapar con equipo.
 const RACES = {
   barbaro: {
     id:'barbaro', name:'Bárbaro', icon:'🪓',
     desc:'Carne y furia. El más fuerte y el más despreciado fuera del combate.',
     stats:{fis:8, esp:3, hab:5},
     res:{fisico:15, fuego:-10, hielo:0, veneno:0, aturdimiento:20},
-    passive:'Furia de sangre', passiveDesc:'Por debajo del 30% de vida, tu daño físico aumenta un 20%.'
+    passive:'Furia de sangre', passiveDesc:'Por debajo del 30% de vida, tu daño físico aumenta un 20%.',
+    pros:'El Físico más alto del juego y gran resistencia a Aturdimiento.',
+    cons:'Espíritu muy bajo (poco MP para hechizos) y débil contra Fuego.'
   },
   enano: {
     id:'enano', name:'Enano', icon:'⛏️',
     desc:'Robusto y terco. Resiste lo que otros no soportarían.',
     stats:{fis:7, esp:4, hab:4},
     res:{fisico:10, fuego:0, hielo:10, veneno:25, aturdimiento:5},
-    passive:'Piel de piedra', passiveDesc:'Reduce todo daño físico recibido en una cantidad plana adicional.'
+    passive:'Piel de piedra', passiveDesc:'Reduce todo daño físico recibido en una cantidad plana adicional.',
+    pros:'La raza más resistente en general — Físico, Veneno y Hielo por encima del resto.',
+    cons:'Habilidad baja: menos crítico y evasión que cualquier otra raza.'
   },
   hada: {
     id:'hada', name:'Hada', icon:'🦋',
     desc:'Frágil pero certera. Vive de no ser tocada.',
     stats:{fis:3, esp:9, hab:6},
     res:{fisico:-10, fuego:15, hielo:15, veneno:5, aturdimiento:0},
-    passive:'Gracia', passiveDesc:'+15% de probabilidad de esquivar cualquier ataque.'
+    passive:'Gracia', passiveDesc:'+15% de probabilidad de esquivar cualquier ataque.',
+    pros:'El Espíritu más alto del juego (mejor daño mágico y MP) + 15% de evasión propia.',
+    cons:'El Físico más bajo del juego, y encima resta resistencia física: cada golpe que sí conecta duele más.'
   },
   humano: {
     id:'humano', name:'Humano', icon:'🗡️',
     desc:'Sin extremos, sin techo. Aprende más rápido que el resto.',
     stats:{fis:5, esp:5, hab:6},
     res:{fisico:5, fuego:5, hielo:5, veneno:5, aturdimiento:5},
-    passive:'Adaptable', passiveDesc:'Ganas un 10% más de experiencia de cada victoria.'
+    passive:'Adaptable', passiveDesc:'Ganas un 10% más de experiencia de cada victoria.',
+    pros:'La más equilibrada de todas, sin ningún punto débil real, y sube de nivel un 10% más rápido.',
+    cons:'Ningún stat ni resistencia sobresale por encima de las demás razas — sin techo propio.'
   },
   draconido: {
     id:'draconido', name:'Dracónido', icon:'🐉',
     desc:'Sangre de bestia antigua. Poderoso, pero torpe con el hielo.',
     stats:{fis:7, esp:7, hab:3},
     res:{fisico:0, fuego:30, hielo:-15, veneno:0, aturdimiento:10},
-    passive:'Sangre ancestral', passiveDesc:'Tus habilidades de fuego infligen un 15% adicional de daño.'
+    passive:'Sangre ancestral', passiveDesc:'Tus habilidades de fuego infligen un 15% adicional de daño.',
+    pros:'La única raza fuerte en Físico Y Espíritu a la vez, casi inmune al Fuego (+30%).',
+    cons:'Habilidad muy baja (poco crítico/evasión) y con resistencia negativa a Hielo — su elemento opuesto pega más fuerte.'
   },
   bestia: {
     id:'bestia', name:'Hombre bestia', icon:'🐺',
     desc:'Instinto puro. Golpea primero, golpea fuerte, golpea rápido.',
     stats:{fis:6, esp:2, hab:9},
     res:{fisico:5, fuego:0, hielo:0, veneno:-10, aturdimiento:15},
-    passive:'Instinto cazador', passiveDesc:'+15% de probabilidad de golpe crítico.'
+    passive:'Instinto cazador', passiveDesc:'+15% de probabilidad de golpe crítico.',
+    pros:'La Habilidad más alta del juego (más crítico y evasión) + 15% de crítico propio adicional.',
+    cons:'El Espíritu más bajo del juego (casi sin MP para magia) y resta resistencia a Veneno.'
   }
 };
 
@@ -1294,9 +1310,10 @@ function petUniqueEffects(){
 // quedó en 100/1.000, misma proporción 10x que el oro (sin descuento real,
 // solo la tirada de regalo). Sin pity (confirmado explícito, "cada tirada
 // es independiente", igual que el espíritu real de MIR4). Duplicado (ya
-// tenías esa mascota exacta) se convierte en oro según su rango en vez de
-// acumularse (confirmado explícito) — por eso `owned` guarda presencia
-// (0/1), no un contador.
+// tenías esa mascota exacta) SIGUE dando +1000 de oro (ver PET_DUP_GOLD),
+// pero desde 2026-09-26 (pedido explícito, de cara al futuro sistema de
+// "grabados" por colección completa) YA NO se descarta — `owned[id]` es
+// una cantidad real acumulable, no una presencia 0/1.
 const GACHA_COST_X1 = 10000;
 const GACHA_COST_X10 = 100000; // entrega 11 tiradas
 const GACHA_COST_SELLOS_X1 = 100;
@@ -1320,9 +1337,13 @@ function doPetPulls(count){
     if(isDup){
       goldRefund = PET_DUP_GOLD;
       state.char.gold += goldRefund;
-    } else {
-      state.char.pets.owned[id] = 1;
     }
+    // Acumulable (2026-09-26, pedido explícito): un duplicado YA NO se
+    // descarta — sigue dando los +1000 de oro de siempre, pero además suma
+    // al contador (owned[id] pasa de presencia 0/1 a cantidad real), para
+    // que el futuro sistema de "grabados" pueda leer cuántas copias
+    // exactas tienes de cada Caído.
+    state.char.pets.owned[id] = (state.char.pets.owned[id]||0) + 1;
     results.push({id, tpl, isDup, goldRefund});
   }
   return results;
@@ -3815,7 +3836,7 @@ function renderPetSectionHTML(){
       <div class="inv-item-row" style="margin-bottom:0; ${rarityRowStyleColor(r.color)}">
         <div style="display:flex; align-items:center; gap:10px; min-width:0; flex:1;">
           <div class="pet-slot-thumb" data-pet-zoom="${petId}" style="box-shadow:0 0 0 2px ${r.color}bb;"><img src="${petArtPath(petId)}" alt="${tpl.name}"></div>
-          <div style="min-width:0; flex:1;"><b style="color:${r.color};">${tpl.name}</b> <span class="slot-tag" style="border-color:${r.color}; color:${r.color};">${r.name}</span></div>
+          <div style="min-width:0; flex:1;"><b style="color:${r.color};">${tpl.name}</b> <span class="slot-tag" style="border-color:${r.color}; color:${r.color};">${r.name}</span> <span style="color:var(--text-dim); font-size:0.85em;">(${ownedPetCount(petId)})</span></div>
         </div>
         <button class="inv-btn danger" data-pet-unequip="${petId}">Quitar</button>
       </div>
@@ -3832,6 +3853,7 @@ function renderPetSectionHTML(){
       <div class="pet-mini-tile" data-pet-zoom="${p.id}" data-pet-equip-bag="${p.id}" title="${p.name} — clic para equipar" style="box-shadow:0 0 0 2px ${r.color}88 inset;">
         <img src="${petArtPath(p.id)}" alt="${p.name}" loading="lazy">
         <span class="pet-equip-hint">+</span>
+        <span class="pet-count-badge">(${ownedPetCount(p.id)})</span>
       </div>`).join('');
     if(!bag.length) return ''; // todos los de este rango ya están equipados
     return `<div class="pet-rarity-row">
@@ -8745,6 +8767,10 @@ function renderCreation(){
         <span>FIS <b>${r.stats.fis}</b></span>
         <span>ESP <b>${r.stats.esp}</b></span>
         <span>HAB <b>${r.stats.hab}</b></span>
+      </div>
+      <div class="race-pros-cons">
+        <div class="pro">▲ ${r.pros}</div>
+        <div class="con">▼ ${r.cons}</div>
       </div>
     </button>
   `).join('');
