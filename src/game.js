@@ -1184,7 +1184,7 @@ function togglePetEquip(id){
   const eq = state.char.pets.equipped;
   const idx = eq.indexOf(id);
   if(idx>=0){ eq.splice(idx,1); return true; }
-  if(eq.length >= maxPetSlots()){ log('No tienes más espacios de mascota disponibles.'); return false; }
+  if(eq.length >= maxPetSlots()){ log('No tienes más espacios para Caídos del Laberinto disponibles.'); return false; }
   if(ownedPetCount(id)<=0) return false;
   eq.push(id);
   return true;
@@ -4113,7 +4113,7 @@ function renderCity(){
       </div>
       <div class="action-card ofrenda-card">
         <h3>🌳 Otorgar ofrenda</h3>
-        <p>Un Ygdrasil en miniatura crece en el corazón de la ciudad. Ofrécele oro o Sellos y te devolverá un Caído del Laberinto — una mascota que NO pelea, solo aporta su propio don pasivo mientras la llevas equipada.</p>
+        <p>Un Ygdrasil en miniatura crece en el corazón de la ciudad. Ofrécele oro, Sellos del Laberinto o una recarga y te devolverá un Caído del Laberinto para tu colección.</p>
         <button id="btn-open-ofrenda">Acercarse al árbol</button>
       </div>
       <div class="action-card checkin-card">
@@ -4205,7 +4205,7 @@ function showPetRates(){
     </div>`;
   }).join('');
   showOverlay('Tasas de invocación', `
-    <p style="margin-top:0;">Cada tirada es independiente — no hay tirada garantizada (sin pity). Si sale una mascota que ya tienes, se convierte automáticamente en oro según su rango en vez de acumularse.</p>
+    <p style="margin-top:0;">Cada tirada es independiente — no hay tirada garantizada (sin pity). Si sale un Caído del Laberinto que ya tienes, se convierte automáticamente en oro según su rango en vez de acumularse.</p>
     ${rows}
   `, ()=>{});
 }
@@ -4242,7 +4242,7 @@ function renderOfrenda(){
       <h3 style="color:var(--bronze-light);">🌳 Otorgar ofrenda</h3>
       <button class="reset-btn" id="btn-close-ofrenda">Cerrar</button>
     </div>
-    <p style="color:var(--text-dim); font-size:0.85em; margin-top:0;">Un Ygdrasil en miniatura crece en el corazón de la ciudad. Ofrécele oro o Sellos del Laberinto y te devolverá un Caído del Laberinto — una mascota que se equipa en un espacio pasivo y aporta su propio don, sin pelear ella misma.</p>
+    <p style="color:var(--text-dim); font-size:0.85em; margin-top:0;">Un Ygdrasil en miniatura crece en el corazón de la ciudad. Ofrécele oro, Sellos del Laberinto o una recarga y te devolverá un Caído del Laberinto para tu colección.</p>
     <div class="ygdrasil-stage" id="ygdrasil-stage">
       <div class="ygdrasil-glow"></div>
       <div class="ygdrasil-tree">🌳</div>
@@ -4263,16 +4263,18 @@ function renderOfrenda(){
       <button class="btn-main secondary-choice" id="btn-pull-x1-sellos" ${(state.char.missionCurrency||0)<GACHA_COST_SELLOS_X1?'disabled':''}>Ofrenda x1 — ${GACHA_COST_SELLOS_X1.toLocaleString('es')} Sellos</button>
       <button class="btn-main secondary-choice" id="btn-pull-x10-sellos" ${(state.char.missionCurrency||0)<GACHA_COST_SELLOS_X10?'disabled':''}>Ofrenda x10 (+1 regalo) — ${GACHA_COST_SELLOS_X10.toLocaleString('es')} Sellos</button>
     </div>
-    <div class="section-label">Comprar tiradas</div>
-    <div class="ofrenda-buy-box">
-      <div>💎 ¿Quieres tiradas extra sin gastar oro ni Sellos? Contacta al administrador por Discord y coordina tu compra — te acredita las ofrendas directo en tu cuenta, listas para reclamar aquí mismo.</div>
-      <div class="ofrenda-buy-contact">Discord: <b>xariochix5266</b></div>
-    </div>
+    <button class="reset-btn" id="btn-buy-pulls" style="margin:6px auto 0; display:block;">💎 Recargar para más tiradas</button>
     <button class="reset-btn" id="btn-pet-rates" style="margin:10px auto 0; display:block;">Ver tasas de invocación</button>
     <div id="ofrenda-results"></div>
   `;
   document.getElementById('btn-close-ofrenda').onclick = ()=>{ ofrendaOpen=false; renderAll(); };
   document.getElementById('btn-pet-rates').onclick = showPetRates;
+  document.getElementById('btn-buy-pulls').onclick = ()=>{
+    showOverlay('Recargar tiradas', `
+      <p style="margin-top:0;">¿Quieres tiradas extra sin gastar oro ni Sellos? Contacta al administrador por Discord y coordina tu compra — te acredita las ofrendas directo en tu cuenta, listas para reclamar aquí mismo.</p>
+      <p style="color:var(--bronze-light);">Discord: <b>xariochix5266</b></p>
+    `, ()=>{});
+  };
   const allPullBtns = ()=> ['btn-pull-x1-gold','btn-pull-x10-gold','btn-pull-x1-sellos','btn-pull-x10-sellos'].map(id=>document.getElementById(id));
   const refreshBtnStates = ()=>{
     document.getElementById('btn-pull-x1-gold').disabled = state.char.gold < GACHA_COST_X1;
@@ -4355,7 +4357,7 @@ function renderCheckin(){
     <p style="color:var(--bronze-light); font-size:0.85em;">${available ? `¡Tienes el día <b>${previewDay}</b> disponible!` : `Ya reclamaste hoy (día ${state.char.checkin.day}/30). Vuelve mañana desde las 00:01.`}</p>
     <button class="btn-main" id="btn-claim-checkin" ${available?'':'disabled'} style="margin-bottom:12px;">${available?`Reclamar día ${previewDay} (+${previewDay} ofrendas gratis)`:'Ya reclamado hoy'}</button>
     <div class="checkin-grid">${gridHTML}</div>
-    <p style="color:var(--text-dim); font-size:0.78em; margin-top:10px;">Las ofrendas gratis se acumulan en 🌳 Otorgar ofrenda — ábrela y pulsa "Reclamar todas" para revelar tus mascotas.</p>
+    <p style="color:var(--text-dim); font-size:0.78em; margin-top:10px;">Las ofrendas gratis se acumulan en 🌳 Otorgar ofrenda — ábrela y pulsa "Reclamar todas" para revelar tus Caídos del Laberinto.</p>
   `;
   document.getElementById('btn-close-checkin').onclick = ()=>{ checkinOpen=false; renderAll(); };
   const claimBtn = document.getElementById('btn-claim-checkin');
@@ -8106,6 +8108,7 @@ const TUTORIAL_SLIDES = [
   {title:'El Gremio', body:'Un tablón de 10 misiones que se refresca cada 12 horas. Complétalas para ganar oro, experiencia y Sellos del Laberinto, canjeables por equipo Único y Épico. Si una misión no te gusta, puedes refrescarla hasta 3 veces por tablón.'},
   {title:'La Taberna', body:'Desde nivel 10, recluta aliados — guerrero, arquero, asesino, mago o sacerdote — pagando oro. Pelean junto a ti de forma automática: el que tiene rol de tanque ocupa el Frente y absorbe los golpes por ti. Los sacerdotes solo existen como aliados, nunca como senda de combate propia: cuidan a quien pelea, no bajan a pelear ellos mismos.'},
   {title:'Mantener a tus aliados', body:'Cada aliado te cobra un salario cada vez que sales del laberinto. Pagarlo sube un poco su satisfacción; no poder pagarlo la baja bastante, cada vez más si se repite. Si su satisfacción cae demasiado, deserta y lo pierdes para siempre — no vuelve a estar disponible, ni siquiera despidiéndolo tú antes.'},
+  {title:'Otorgar ofrenda', body:'El Ygdrasil de la ciudad entrega Caídos del Laberinto a cambio de oro, Sellos o una recarga. Cada uno se equipa en un espacio pasivo y aporta su propio don mientras lo lleves — no combaten por su cuenta ni ocupan un puesto de Frente o Retaguardia.'},
   {title:'Ranking', body:'Tu récord personal (el piso más profundo que has alcanzado) y el top 10 de todos los jugadores.'},
   {title:'Combate por turnos', body:'Cada turno eliges una habilidad o acción. Frente y Retaguardia son tus dos posiciones: la mayoría de golpes físicos fuertes exigen estar en el Frente; la Retaguardia favorece las habilidades a distancia.'},
   {title:'MP y Espíritu', body:'El MP paga tus habilidades físicas. El Espíritu paga las mágicas y de utilidad, y también aumenta tu daño mágico. Reposicionarte cambia entre Frente y Retaguardia, y ocupa tu turno.'},
@@ -8319,8 +8322,8 @@ function renderCombat(){
       ${enemyHUD}
     </div>
     ${equippedPets().length ? `
-    <div class="combat-pets-strip" title="Mascotas equipadas: solo aportan sus bonificaciones pasivas, no pelean ni ocupan un puesto en la escena.">
-      <span class="combat-pets-label">Mascotas</span>
+    <div class="combat-pets-strip" title="Caídos del Laberinto equipados: solo aportan sus bonificaciones pasivas, no pelean ni ocupan un puesto en la escena.">
+      <span class="combat-pets-label">Caídos del Laberinto</span>
       ${equippedPets().map(p=>`<div class="combat-pet-chip" style="box-shadow:0 0 0 2px ${PET_RARITIES[p.rarity].color}bb inset;"><img src="${petArtPath(p.id)}" alt="${p.name}" title="${p.name}" loading="lazy"></div>`).join('')}
     </div>` : ''}
     <div id="battle-stage-mount" style="margin-bottom:6px;"></div>

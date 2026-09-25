@@ -610,11 +610,6 @@
     font-size:0.85em;
   }
   .ofrenda-pending-box .btn-main{ padding:7px 16px; width:auto; flex:none; }
-  .ofrenda-buy-box{
-    background:rgba(147,80,221,0.10); border:1px solid #5c3f7a; border-radius:5px; padding:10px 12px;
-    font-size:0.85em; line-height:1.5;
-  }
-  .ofrenda-buy-contact{ margin-top:6px; color:var(--bronze-light); }
 
   .pet-reveal-grid{ display:flex; flex-wrap:wrap; gap:10px; justify-content:center; margin-top:14px; }
   .pet-reveal-card{
