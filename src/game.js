@@ -98,11 +98,27 @@ const STYLES = {
    mantenimiento recurrente todavía; nivel 10 de personaje requerido)
    ============================================================ */
 const ALLY_ROSTER = [
-  {templateId:'aldric', role:'guerrero', name:'Aldric de la Muralla', icon:'🛡️', bio:'Escudero retirado que aún no aprende a rendirse. Se planta al frente y no se mueve.', skillName:'Golpe Pesado', skillDesc:'Cada pocos turnos, un golpe con 60% más de daño.', baseCost:195, costPerLevel:13, frontline:true},
+  // Golpe Pesado de Aldric suma 12% de probabilidad de aturdir al golpear
+  // (pedido explícito 2026-09-26, pequeño buff — ver resolveOneAllyTurn).
+  {templateId:'aldric', role:'guerrero', name:'Aldric de la Muralla', icon:'🛡️', bio:'Escudero retirado que aún no aprende a rendirse. Se planta al frente y no se mueve.', skillName:'Golpe Pesado', skillDesc:'Cada pocos turnos, un golpe con 60% más de daño y 12% de probabilidad de aturdir.', baseCost:195, costPerLevel:13, frontline:true},
   {templateId:'neira', role:'arquero', name:'Neira la Certera', icon:'🏹', bio:'Cazadora de las tierras altas. Nunca falla dos veces al mismo blanco.', skillName:'Disparo Certero', skillDesc:'Cada pocos turnos, un disparo que ignora buena parte de la resistencia del objetivo.', baseCost:220, costPerLevel:14, frontline:false},
-  {templateId:'vex', role:'asesino', name:'Vex', icon:'🗡️', bio:'No cuenta su pasado. Solo dice que llegó tarde a la venganza que buscaba.', skillName:'Golpe Sombrío', skillDesc:'Cada pocos turnos, más daño mientras más herido esté el objetivo.', baseCost:245, costPerLevel:16, frontline:false},
-  {templateId:'fennwick', role:'mago', name:'Fennwick', icon:'🔮', bio:'Aprendiz expulsado del Círculo Roto por "experimentar de más".', skillName:'Bola de Fuego', skillDesc:'Cada pocos turnos, daño de fuego en vez de físico — útil contra enemigos resistentes al golpe.', baseCost:285, costPerLevel:18, frontline:false},
-  {templateId:'delyth', role:'sacerdote', name:'Hermana Delyth', icon:'✨', bio:'La última de su orden. Cura a cualquiera que se lo pida, sin preguntar por qué pelea.', skillName:'Bendición Sagrada', skillDesc:'Cuando nadie necesita curación, baja todas las resistencias del enemigo del frente por unos turnos.', baseCost:310, costPerLevel:20, frontline:false}
+  // Epíteto agregado (pedido explícito 2026-09-26) para que quede a la par
+  // del resto del roster — la habilidad (Golpe Sombrío) no cambia.
+  {templateId:'vex', role:'asesino', name:'Vex el Desgarrador', icon:'🗡️', bio:'No cuenta su pasado. Solo dice que llegó tarde a la venganza que buscaba.', skillName:'Golpe Sombrío', skillDesc:'Cada pocos turnos, más daño mientras más herido esté el objetivo.', baseCost:245, costPerLevel:16, frontline:false},
+  // Epíteto agregado (pedido explícito 2026-09-26) — la habilidad (Bola de
+  // Fuego) no cambia.
+  {templateId:'fennwick', role:'mago', name:'Fennwick el Incendiario', icon:'🔮', bio:'Aprendiz expulsado del Círculo Roto por "experimentar de más".', skillName:'Bola de Fuego', skillDesc:'Cada pocos turnos, daño de fuego en vez de físico — útil contra enemigos resistentes al golpe.', baseCost:285, costPerLevel:18, frontline:false},
+  {templateId:'delyth', role:'sacerdote', name:'Hermana Delyth', icon:'✨', bio:'La última de su orden. Cura a cualquiera que se lo pida, sin preguntar por qué pelea.', skillName:'Bendición Sagrada', skillDesc:'Cuando nadie necesita curación, baja todas las resistencias del enemigo del frente por unos turnos.', baseCost:310, costPerLevel:20, frontline:false},
+
+  // 5 aliados nuevos (pedido explícito 2026-09-26) — segunda opción por
+  // senda, mismo costo que su contraparte del mismo rol (ver resolveOneAllyTurn
+  // para el detalle mecánico de cada habilidad, todas con cooldown de 3 turnos
+  // igual que el resto del roster).
+  {templateId:'brann', role:'guerrero', name:'Brann el Bastión', icon:'🪖', bio:'Antiguo capitán de guarnición. Prefiere encajar el golpe él mismo a ver caer a alguien más.', skillName:'Muralla Viviente', skillDesc:'Cada pocos turnos, -20% de daño recibido durante 3 turnos y recupera el 10% de su vida máxima al instante (no ataca ese turno).', baseCost:195, costPerLevel:13, frontline:true},
+  {templateId:'lyra', role:'arquero', name:'Lyra la Comandante', icon:'🎯', bio:'Dirigió una compañía de exploradores antes de que el laberinto se la tragara entera.', skillName:'Mando de Retaguardia', skillDesc:'Cada pocos turnos, ella y el resto de la retaguardia reciben +10% de daño durante 3 turnos, sin dejar de atacar ese mismo turno.', baseCost:220, costPerLevel:14, frontline:false},
+  {templateId:'kael', role:'asesino', name:'Kael el Desangrador', icon:'🔪', bio:'Aprendió el oficio en fosas de pelea clandestinas. Nunca deja que una herida cierre.', skillName:'Tajo Sangriento', skillDesc:'Cada pocos turnos, un ataque que aplica Sangrado garantizado (y 30% de probabilidad de una segunda carga).', baseCost:245, costPerLevel:16, frontline:false},
+  {templateId:'eira', role:'mago', name:'Eira la Escarchada', icon:'❄️', bio:'Sobrevivió sola un invierno entero en las cumbres. El frío dejó de asustarla hace mucho.', skillName:'Aliento Glacial', skillDesc:'Cada pocos turnos, magia de hielo (+15% de daño) con 25% de probabilidad de Ralentizar al objetivo.', baseCost:285, costPerLevel:18, frontline:false},
+  {templateId:'seraphina', role:'sacerdote', name:'Seraphina la Égida', icon:'🕊️', bio:'Juró proteger antes de aprender a rezar. Todavía no decide cuál de las dos cosas se le da mejor.', skillName:'Égida Sagrada', skillDesc:'Sin enfriamiento: cada turno que tenga espíritu, escuda al aliado con menos vida que no tenga ya un escudo (20% de su vida máxima) y debilita al enemigo del frente (-15% de su daño durante 2 turnos).', baseCost:310, costPerLevel:20, frontline:false}
 ];
 const ALLY_MIN_LEVEL = 10;
 const MAX_ALLIES = 4;
@@ -6582,9 +6598,9 @@ function computeCritEvasion(){
   const furioso = hasStatus(combat.playerStatuses,'Furioso');
   if(furioso) ev += furioso.evasionDelta/100;
   if(combat.playerDefending) ev = Math.max(ev, 0.5);
-  // Ralentizado (2026-09-25, décadas 21+): -15% de evasión plana mientras
-  // dure — antes el estado se aplicaba pero no hacía nada al jugador.
-  if(hasStatus(combat.playerStatuses,'Ralentizado')) ev -= 0.15;
+  // Ralentizado: -20% de evasión plana mientras dure (corregido 2026-09-26:
+  // el texto y el tooltip siempre dijeron -20%, el código aplicaba -15%).
+  if(hasStatus(combat.playerStatuses,'Ralentizado')) ev -= 0.20;
   if(hasStatus(combat.playerStatuses,'Paralisis')) ev = 0; // indefenso: la Parálisis anula toda evasión, incluso defendiendo
   return {crit:d.critChance, evasion:clamp(ev,0.02,0.6)};
 }
@@ -6604,7 +6620,7 @@ function computeAllyEvasion(ally){
   if(hasStatus(ally.statuses,'Paralisis')) return 0;
   const evasionFlat = (ally.specials||[]).filter(sp=>sp.type==='evasion_flat').reduce((sum,sp)=>sum+sp.value,0);
   let ev = 0.06 + evasionFlat - levelGapEvasionBonus(monsterEffectiveLevel(), state.char.level);
-  if(hasStatus(ally.statuses,'Ralentizado')) ev -= 0.15;
+  if(hasStatus(ally.statuses,'Ralentizado')) ev -= 0.20;
   return clamp(ev, 0.02, 0.6);
 }
 
@@ -6773,7 +6789,9 @@ const STATUS_INFO = {
   Ceguera:      {buff:false, desc:'Probabilidad de que sus golpes fallen por completo.'},
   Miedo:        {buff:false, desc:'Probabilidad de perder el turno por pánico.'},
   Confusion:    {buff:false, desc:'Probabilidad de golpear al azar — puede alcanzar a un aliado o a sí mismo.'},
-  Silencio:     {buff:false, desc:'Su próximo turno solo puede usar ataques básicos, sin habilidades especiales.'}
+  Silencio:     {buff:false, desc:'Su próximo turno solo puede usar ataques básicos, sin habilidades especiales.'},
+  'Bastión':    {buff:true,  desc:'-20% de daño recibido (Muralla Viviente de Brann el Bastión).'},
+  'Égida':      {buff:true,  desc:'-10% de daño recibido mientras dure (Égida Sagrada de Seraphina).'}
 };
 function statusChipHTML(st){
   const info = STATUS_INFO[st.name];
@@ -7626,7 +7644,57 @@ function resolveOneAllyTurn(ally){
 
     if(allyMaybeSelfPreserve(ally)) return;
 
-    if(ally.role==='sacerdote'){
+    // Brann el Bastión (Muralla Viviente, pedido explícito 2026-09-26): a
+    // diferencia del resto de guerreros, su habilidad es puramente
+    // defensiva — no ataca ese turno. Mismo pool/costo que cualquier otro
+    // guerrero (MP, ALLY_SKILL_COST), mismo cooldown de 3 turnos.
+    if(ally.templateId==='brann' && ally.skillCooldown<=0 && ally.mp>=ALLY_SKILL_COST){
+      ally.skillCooldown = ALLY_SKILL_COOLDOWN;
+      ally.mp -= ALLY_SKILL_COST;
+      const heal = Math.round(ally.maxHP*0.10);
+      const before = ally.hp;
+      ally.hp = Math.min(ally.maxHP, ally.hp+heal);
+      const existing = hasStatus(ally.statuses,'Bastión');
+      if(existing) existing.duration = 3; else ally.statuses.push({name:'Bastión', duration:3, incomingDmgReduction:0.20});
+      log(`<b>${ally.name}</b> alza una Muralla Viviente: recupera ${ally.hp-before} de vida y reduce el daño que recibe un 20% durante 3 turnos.`);
+      combat.lastAction = {label:'Muralla Viviente', effects:[{targetKind:'ally', key:ally.id, amount:ally.hp-before, kind:'heal'}]};
+      return;
+    }
+
+    if(ally.role==='sacerdote' && ally.templateId==='seraphina'){
+      // Égida Sagrada (pedido explícito 2026-09-26, ajustado 2026-09-27): los
+      // sacerdotes NO usan cooldown de turnos — se dispara todos los turnos
+      // que tenga espíritu, igual que Delyth. En su lugar, el escudo tiene su
+      // propio candado natural: no se puede volver a colocar sobre alguien
+      // que todavía tiene un escudo activo (de cualquier fuente, no solo el
+      // suyo) — así nunca desperdicia el turno sobre quien ya está cubierto,
+      // y prioriza al más débil ENTRE los que de verdad lo necesitan. El
+      // debilitamiento al enemigo del frente no depende de esto: se repite
+      // cada turno igual (Debilitado no se acumula, solo refresca duración).
+      const hasSpirit = ally.spirit>=ALLY_SKILL_COST;
+      if(hasSpirit){
+        const shieldable = livingAllies().filter(a=>a!==ally && !(a.shield>0));
+        const weakest = shieldable.length ? shieldable.sort((a,b)=>(a.hp/a.maxHP)-(b.hp/b.maxHP))[0] : null;
+        const fiDebuff = frontEnemyIndex();
+        if(weakest || fiDebuff>=0){
+          ally.spirit -= ALLY_SKILL_COST;
+          if(weakest){
+            const shieldAmt = Math.round(weakest.maxHP*0.20);
+            grantShield(false, weakest, shieldAmt);
+            const existing = hasStatus(weakest.statuses,'Égida');
+            if(existing) existing.duration = 3; else weakest.statuses.push({name:'Égida', duration:3, incomingDmgReduction:0.10});
+            log(`<b>${ally.name}</b> protege a <b>${weakest.name}</b> con un escudo de ${shieldAmt} y -10% de daño recibido durante 3 turnos.`);
+          }
+          if(fiDebuff>=0){
+            const target = combat.enemies[fiDebuff];
+            applyStatus(target, {name:'Debilitado', duration:2}, false);
+            log(`<b>${ally.name}</b> debilita a ${target.name}: -15% de su daño durante 2 turnos.`);
+          }
+          combat.lastAction = {label:'Égida Sagrada', effects:[]};
+          return;
+        }
+      }
+    } else if(ally.role==='sacerdote'){
       const d = derived();
       const playerPct = state.char.curHP / d.maxHP;
       const others = livingAllies().filter(a=>a!==ally);
@@ -7679,7 +7747,10 @@ function resolveOneAllyTurn(ally){
       // Sagrada — baja todas las resistencias del enemigo del frente, para
       // que tanto tus golpes como los del resto del equipo rindan más contra
       // objetivos muy resistentes (el hueco que Riakis necesita para caer).
-      if(ally.skillCooldown<=0 && hasSpirit){
+      // Sin cooldown (pedido explícito 2026-09-27, los sacerdotes no usan
+      // enfriamiento): se repite cada turno que le sobre espíritu y nadie
+      // necesite curarse — Bendecido no se acumula, solo refresca duración.
+      if(hasSpirit){
         const fiBless = frontEnemyIndex();
         if(fiBless>=0){
           const target = combat.enemies[fiBless];
@@ -7699,7 +7770,6 @@ function resolveOneAllyTurn(ally){
           if(selfBuffSp && fireTierSBuff(selfBuffSp.tierSProc, false, ally, {name:'Bendición', resBonus:selfBuffSp.resBonus, incomingDmgReduction:selfBuffSp.dmgReduction})){
             log(`<b>${ally.name}</b> se envuelve en su propia Bendición: +${selfBuffSp.resBonus}% de resistencias y -${Math.round(selfBuffSp.dmgReduction*100)}% de daño recibido durante 4 turnos.`);
           }
-          ally.skillCooldown = ALLY_SKILL_COOLDOWN;
           log(`<b>${ally.name}</b> pronuncia una Bendición Sagrada sobre ${target.name}: sus resistencias caen.`);
           combat.lastAction = {label:'Bendición Sagrada', effects:[]};
           return;
@@ -7742,21 +7812,57 @@ function resolveOneAllyTurn(ally){
     let skillText = null;
     let skillName = null;
 
+    // stunProc/postHitEffects: efectos de la habilidad que no son el golpe en
+    // sí (aturdir, Sangrado, Ralentizado, buff de equipo) — se resuelven
+    // DESPUÉS de aplicar el daño, más abajo, para no interferir con el
+    // cálculo de dmg de arriba.
+    let stunProc = 0;
+    let postHitEffects = null;
     if(ally.skillCooldown<=0 && ally.role!=='sacerdote' && ally[ALLY_SKILL_POOL[ally.role]]>=ALLY_SKILL_COST){
       ally.skillCooldown = ALLY_SKILL_COOLDOWN;
       ally[ALLY_SKILL_POOL[ally.role]] -= ALLY_SKILL_COST;
-      if(ally.role==='guerrero'){ dmg *= 1.6; skillText = 'descarga un Golpe Pesado sobre'; skillName = 'Golpe Pesado'; }
-      else if(ally.role==='arquero'){ dmg *= 1.0; skillText = 'clava un Disparo Certero (ignora parte de la resistencia) en'; skillName = 'Disparo Certero'; }
-      else if(ally.role==='asesino'){
+      if(ally.templateId==='aldric'){ dmg *= 1.6; stunProc = 0.12; skillText = 'descarga un Golpe Pesado sobre'; skillName = 'Golpe Pesado'; }
+      else if(ally.templateId==='neira'){ dmg *= 1.0; skillText = 'clava un Disparo Certero (ignora parte de la resistencia) en'; skillName = 'Disparo Certero'; }
+      else if(ally.templateId==='lyra'){
+        dmg *= 1.0;
+        skillText = 'dispara al mando de la retaguardia contra';
+        skillName = 'Mando de Retaguardia';
+        // Ella + el resto de aliados de retaguardia (no el jugador, no el
+        // frente): +10% de daño 3 turnos — mismo status 'Inspirado' que ya
+        // usa el resto del juego para "+% de daño temporal".
+        postHitEffects = ()=>{
+          const buffed = livingAllies().filter(a=>a.pos==='retaguardia');
+          buffed.forEach(a=>{
+            const existing = hasStatus(a.statuses,'Inspirado');
+            if(existing) existing.duration = 3; else a.statuses.push({name:'Inspirado', duration:3, dmgMult:1.10});
+          });
+          log(`<b>${ally.name}</b> da la orden: la retaguardia recibe +10% de daño durante 3 turnos.`);
+        };
+      }
+      else if(ally.templateId==='vex'){
         const missingPct = 1 - (enemyTarget.hp/enemyTarget.maxHP);
         dmg *= 1 + missingPct*0.6;
         skillText = 'aprovecha un Golpe Sombrío contra';
         skillName = 'Golpe Sombrío';
       }
-      else if(ally.role==='mago'){ resKey = 'fuego'; dmg *= 1.15; skillText = 'lanza una Bola de Fuego a'; skillName = 'Bola de Fuego'; }
+      else if(ally.templateId==='kael'){
+        skillText = 'abre un Tajo Sangriento en';
+        skillName = 'Tajo Sangriento';
+        postHitEffects = ()=>{
+          applyStatus(enemyTarget, {name:'Sangrado', duration:3, stack:true, maxStack:3}, false);
+          if(chance(0.30)) applyStatus(enemyTarget, {name:'Sangrado', duration:3, stack:true, maxStack:3}, false);
+        };
+      }
+      else if(ally.templateId==='fennwick'){ resKey = 'fuego'; dmg *= 1.15; skillText = 'lanza una Bola de Fuego a'; skillName = 'Bola de Fuego'; }
+      else if(ally.templateId==='eira'){
+        resKey = 'hielo'; dmg *= 1.15;
+        skillText = 'exhala un Aliento Glacial sobre';
+        skillName = 'Aliento Glacial';
+        postHitEffects = ()=>{ if(chance(0.25)) applyStatus(enemyTarget, {name:'Ralentizado', duration:2}, false); };
+      }
     }
 
-    let resVal = ally.role==='arquero' && skillText ? effectiveEnemyRes(enemyTarget, resKey)*0.6 : effectiveEnemyRes(enemyTarget, resKey);
+    let resVal = ally.templateId==='neira' && skillText ? effectiveEnemyRes(enemyTarget, resKey)*0.6 : effectiveEnemyRes(enemyTarget, resKey);
     (ally.specials||[]).forEach(sp=>{
       if(sp.type==='penetracion_armadura' && resKey==='fisico') resVal -= sp.value*100;
       if(sp.type==='penetracion_magica' && resKey!=='fisico') resVal -= sp.value*100;
@@ -7774,6 +7880,13 @@ function resolveOneAllyTurn(ally){
       log(`${enemyTarget.name} refleja ${reflected} de daño de vuelta a <b>${ally.name}</b>.`);
     }
     applyAllySpecials(ally, enemyTarget, dmg);
+    // Golpe Pesado de Aldric (pedido explícito 2026-09-26): 12% de
+    // probabilidad de aturdir al golpear, además del +60% de daño de siempre.
+    if(stunProc>0 && enemyTarget.hp>0 && chance(stunProc)){
+      applyStatus(enemyTarget, {name:'Aturdido', duration:1}, false);
+      log(`<b>${ally.name}</b> deja aturdido a ${enemyTarget.name}.`);
+    }
+    if(postHitEffects && enemyTarget.hp>0) postHitEffects();
     combat.lastAction = {label: skillName || 'Ataque', effects:[{targetKind:'enemy', key:fi, amount:dmg, kind:'dmg'}]};
 }
 
@@ -8132,6 +8245,12 @@ function enemyAct(enemy){
     const allyFuriosoDef = hasStatus(ally.statuses,'Furioso');
     if(allyFuriosoDef && allyFuriosoDef.incomingDmgReduction) allyDmg *= (1 - allyFuriosoDef.incomingDmgReduction);
     if(allyBendicion && allyBendicion.incomingDmgReduction) allyDmg *= (1 - allyBendicion.incomingDmgReduction);
+    // Muralla Viviente (Brann) / Égida Sagrada (Seraphina) — mismo patrón
+    // que Furioso/Bendición de arriba (pedido explícito 2026-09-26).
+    const allyBastion = hasStatus(ally.statuses,'Bastión');
+    if(allyBastion && allyBastion.incomingDmgReduction) allyDmg *= (1 - allyBastion.incomingDmgReduction);
+    const allyEgida = hasStatus(ally.statuses,'Égida');
+    if(allyEgida && allyEgida.incomingDmgReduction) allyDmg *= (1 - allyEgida.incomingDmgReduction);
     // Casco/Armadura Tier S del aliado — mismo criterio que el jugador.
     if(hasTierSProc(ally.specials,'casco_s') && ally.maxHP>0 && (ally.hp/ally.maxHP) < 0.5){
       allyDmg *= 0.95;
@@ -8323,6 +8442,12 @@ function resolveNewStyleEnemyMove(enemy, target){
     const allyFuriosoDef = hasStatus(ally.statuses,'Furioso');
     if(allyFuriosoDef && allyFuriosoDef.incomingDmgReduction) allyDmg *= (1 - allyFuriosoDef.incomingDmgReduction);
     if(allyBendicion && allyBendicion.incomingDmgReduction) allyDmg *= (1 - allyBendicion.incomingDmgReduction);
+    // Muralla Viviente (Brann) / Égida Sagrada (Seraphina) — mismo patrón
+    // que Furioso/Bendición de arriba (pedido explícito 2026-09-26).
+    const allyBastion = hasStatus(ally.statuses,'Bastión');
+    if(allyBastion && allyBastion.incomingDmgReduction) allyDmg *= (1 - allyBastion.incomingDmgReduction);
+    const allyEgida = hasStatus(ally.statuses,'Égida');
+    if(allyEgida && allyEgida.incomingDmgReduction) allyDmg *= (1 - allyEgida.incomingDmgReduction);
     if(hasTierSProc(ally.specials,'casco_s') && ally.maxHP>0 && (ally.hp/ally.maxHP) < 0.5) allyDmg *= 0.95;
     if(hasTierSProc(ally.specials,'armadura_s') && !combat.tierSFired.has('armadura_s:'+ally.id)){
       combat.tierSFired.add('armadura_s:'+ally.id); allyDmg *= 0.9;
