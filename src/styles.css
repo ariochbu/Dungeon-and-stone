@@ -589,18 +589,26 @@
   /* ---------- Otorgar ofrenda (gacha "Caídos del Laberinto") ---------- */
   .ofrenda-card{ position:relative; overflow:hidden; background:linear-gradient(160deg, rgba(74,140,74,0.14), var(--panel-2) 60%); border-color:#3f5c3a; }
   .ygdrasil-stage{
-    position:relative; height:180px; margin:10px 0; border-radius:6px; overflow:hidden;
-    background:radial-gradient(ellipse at 50% 100%, rgba(74,140,74,0.28), rgba(20,17,15,0) 70%), var(--panel-2);
-    border:1px solid #3f5c3a; display:flex; align-items:center; justify-content:center;
+    position:relative; height:220px; margin:10px 0; border-radius:6px; overflow:hidden;
+    background:var(--panel-2); border:1px solid #3f5c3a;
+  }
+  .ygdrasil-tree{
+    position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:center 35%;
+    z-index:0; filter:saturate(1.05) brightness(0.95); transition:filter 0.3s ease, transform 0.3s ease;
+  }
+  .ygdrasil-tree-fallback{
+    position:relative; z-index:1; font-size:5.5em; filter:drop-shadow(0 0 14px rgba(90,200,90,0.45));
+    display:flex; align-items:center; justify-content:center; width:100%; height:100%;
+    transition:filter 0.3s ease, transform 0.3s ease;
   }
   .ygdrasil-glow{
-    position:absolute; inset:0; background:radial-gradient(ellipse at 50% 60%, rgba(120,220,120,0.20), transparent 65%);
+    position:absolute; inset:0; z-index:1; background:radial-gradient(ellipse at 50% 60%, rgba(120,220,120,0.20), transparent 65%);
     animation:ygdrasil-breathe 4s ease-in-out infinite;
   }
-  .ygdrasil-tree{ font-size:5.5em; filter:drop-shadow(0 0 14px rgba(90,200,90,0.45)); position:relative; z-index:1; transition:filter 0.3s ease, transform 0.3s ease; }
   @keyframes ygdrasil-breathe{ 0%,100%{opacity:0.55;} 50%{opacity:1;} }
   .ygdrasil-stage.shining .ygdrasil-glow{ animation:ygdrasil-shine 0.9s ease-in-out; }
-  .ygdrasil-stage.shining .ygdrasil-tree{ filter:drop-shadow(0 0 34px rgba(160,255,160,0.95)) brightness(1.3); transform:scale(1.08); }
+  .ygdrasil-stage.shining .ygdrasil-tree{ filter:saturate(1.3) brightness(1.25); transform:scale(1.06); }
+  .ygdrasil-stage.shining .ygdrasil-tree-fallback{ filter:drop-shadow(0 0 34px rgba(160,255,160,0.95)) brightness(1.3); transform:scale(1.08); }
   @keyframes ygdrasil-shine{ 0%{opacity:0.5;} 40%{opacity:1; background:radial-gradient(ellipse at 50% 60%, rgba(160,255,160,0.55), transparent 70%);} 100%{opacity:0.6;} }
   .ofrenda-btn-row{ display:flex; gap:10px; flex-wrap:wrap; }
   .ofrenda-btn-row .btn-main{ flex:1; min-width:190px; }
@@ -645,8 +653,8 @@
   @media (max-width:600px){
     .pet-reveal-card{ width:78px; }
     .pet-reveal-card.big{ width:104px; }
-    .ygdrasil-stage{ height:150px; }
-    .ygdrasil-tree{ font-size:4.2em; }
+    .ygdrasil-stage{ height:160px; }
+    .ygdrasil-tree-fallback{ font-size:4.2em; }
   }
 
   /* ---------- Check-in diario ---------- */

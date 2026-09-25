@@ -4245,7 +4245,7 @@ function renderOfrenda(){
     <p style="color:var(--text-dim); font-size:0.85em; margin-top:0;">Un Ygdrasil en miniatura crece en el corazón de la ciudad. Ofrécele oro, Sellos del Laberinto o una recarga y te devolverá un Caído del Laberinto para tu colección.</p>
     <div class="ygdrasil-stage" id="ygdrasil-stage">
       <div class="ygdrasil-glow"></div>
-      <div class="ygdrasil-tree">🌳</div>
+      <img class="ygdrasil-tree" src="src/assets/ofrenda/ygdrasil.jpg" alt="Ygdrasil" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'ygdrasil-tree-fallback', textContent:'🌳'}))">
     </div>
     <p class="ofrenda-collection-line" style="color:var(--bronze-light); font-size:0.85em; text-align:center; margin:6px 0;">Colección: ${ownedCount} / ${PET_CATALOG.length} Caídos del Laberinto reunidos · ${equippedPetIds().length}/${maxPetSlots()} equipadas</p>
     ${state.char.pets.pendingFreePulls>0 ? `
