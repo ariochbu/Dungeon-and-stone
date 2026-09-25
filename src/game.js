@@ -452,70 +452,523 @@ const DECADE_BESTIARY = [
       },
       aiPriority:['golpe_brutal_final','veneno_matriarca','paralisis_matriarca','mordida_final']}
   },
-  // Década 2 — pisos 21-30 — Guaridas de bestias, con Riakis
+  // Década 2 — pisos 21-30 — Bestias (REWORK 2026-09-25, pedido explícito,
+  // PDF "Rework Decada 3: Bestias" — el compendio la sigue llamando Década 2
+  // por índice de array). Sangrado es la identidad (ya existía como estado,
+  // ver applies:{name:'Sangrado', stack:true, maxStack:3}). Segunda década en
+  // usar el motor nuevo (abilities+aiPriority). Simplificaciones deliberadas
+  // frente al PDF: "Aullido de Dominio" (el Alfa sube el ATQ del OTRO élite)
+  // se aproxima a un autobuff propio — los 2 élites de un encuentro se
+  // sortean al azar del mismo pool, sin companionRef entre ellos, así que no
+  // hay a quién apuntar el buff. "Piel Densa"/pasivas de reducción constante
+  // se aproximan con una habilidad de auto-buff (utility:'self_buff') que se
+  // recasta por cooldown en vez de estar siempre activa.
   {
     regular: [
-      {id:'loba_acantilado', name:'Loba de acantilado', icon:'🐺', hp:1.1, atk:1.1, res:{fisico:10,fuego:0,hielo:5,veneno:0,aturdimiento:0}, moves:['pegar','morder'], frontline:true},
-      {id:'oso_cuevas', name:'Oso de las cuevas', icon:'🐻', hp:1.3, atk:1.15, res:{fisico:15,fuego:0,hielo:5,veneno:0,aturdimiento:5}, moves:['pegar','aplastar','morder'], frontline:true},
-      {id:'buitre_corrupto', name:'Buitre corrupto', icon:'🦅', hp:0.8, atk:1.0, res:{fisico:-5,fuego:0,hielo:0,veneno:10,aturdimiento:0}, moves:['pegar','cegar','morder']},
-      {id:'lince_sombrio', name:'Lince sombrío', icon:'🐈‍⬛', hp:0.9, atk:1.1, res:{fisico:5,fuego:0,hielo:0,veneno:0,aturdimiento:0}, moves:['pegar','atemorizar','morder']}
+      {id:'loba_acantilado', name:'Loba de Acantilado', icon:'🐺', hp:1.00, atk:1.05, res:{fisico:10,fuego:0,hielo:5,veneno:0,aturdimiento:0}, frontline:true,
+        abilities:{
+          mordida:{label:'Mordida', mult:1.00, applies:{name:'Sangrado', chance:0.10, duration:2, stack:true, maxStack:3}},
+          desgarro:{label:'Desgarro', mult:0.80, applies:{name:'Sangrado', chance:0.30, duration:3, stack:true, maxStack:3}, cooldown:3},
+          carrera_depredadora:{label:'Carrera Depredadora', mult:1.15, cooldown:4, condition:(ctx)=>ctx.targetStatusCount('Sangrado')>=1, bonusVsTargetStatus:{name:'Sangrado', mult:1.20}},
+        },
+        aiPriority:['desgarro','carrera_depredadora','mordida']},
+      {id:'oso_cuevas', name:'Oso de las Cuevas', icon:'🐻', hp:1.25, atk:1.10, res:{fisico:20,fuego:0,hielo:5,veneno:0,aturdimiento:10}, frontline:true,
+        abilities:{
+          zarpazo:{label:'Zarpazo', mult:1.00, applies:{name:'Sangrado', chance:0.10, duration:2, stack:true, maxStack:3}},
+          garra_profunda:{label:'Garra Profunda', mult:1.15, applies:{name:'Sangrado', chance:0.30, duration:3, stack:true, maxStack:3}, cooldown:3},
+          golpe_brutal_oso:{label:'Golpe Brutal', mult:1.35, cooldown:4, condition:(ctx)=>ctx.targetStatusCount('Sangrado')>=1},
+        },
+        aiPriority:['garra_profunda','golpe_brutal_oso','zarpazo']},
+      {id:'buitre_corrupto', name:'Buitre Corrupto', icon:'🦅', hp:0.80, atk:0.95, res:{fisico:-5,fuego:0,hielo:0,veneno:15,aturdimiento:0},
+        abilities:{
+          picotazo:{label:'Picotazo', mult:1.00, applies:{name:'Sangrado', chance:0.10, duration:2, stack:true, maxStack:3}},
+          garra_desgarradora:{label:'Garra Desgarradora', mult:0.75, applies:{name:'Sangrado', chance:0.25, duration:3, stack:true, maxStack:3}, cooldown:3},
+          cegar_buitre:{label:'Cegar', mult:0.50, applies:{name:'Ceguera', chance:0.20, duration:2}, cooldown:4, condition:(ctx)=>ctx.targetStatusCount('Ceguera')===0},
+        },
+        aiPriority:['cegar_buitre','garra_desgarradora','picotazo']},
+      {id:'lince_sombrio', name:'Lince Sombrío', icon:'🐈‍⬛', hp:0.85, atk:1.15, res:{fisico:5,fuego:0,hielo:0,veneno:0,aturdimiento:5},
+        abilities:{
+          zarpazo_lince:{label:'Zarpazo', mult:1.00, applies:{name:'Sangrado', chance:0.15, duration:2, stack:true, maxStack:3}},
+          corte_garganta:{label:'Corte de Garganta', mult:0.85, applies:{name:'Sangrado', chance:0.30, duration:3, stack:true, maxStack:3}, cooldown:3, condition:(ctx)=>ctx.targetHpPct<0.5},
+          atemorizar_lince:{label:'Atemorizar', mult:0.60, applies:{name:'Miedo', chance:0.20, duration:2}, cooldown:5},
+        },
+        aiPriority:['corte_garganta','atemorizar_lince','zarpazo_lince']},
     ],
-    elite: [{id:'alfa_manada', name:'Alfa de la manada', icon:'🐺', hp:2.1, atk:1.4, res:{fisico:15,fuego:0,hielo:5,veneno:0,aturdimiento:5}, moves:['pegar','atemorizar'], elite:true, frontline:true}],
-    guardians: [
-      {id:'behemoth_piedra', name:'Behemoth de piedra', icon:'🗿', hp:3.8, atk:1.5, res:{fisico:30,fuego:0,hielo:0,veneno:0,aturdimiento:20}, moves:['pegar','aplastar'], boss:true, frontline:true},
-      {id:'guardian_corrupto', name:'Guardián corrupto', icon:'🐗', hp:3.5, atk:1.6, res:{fisico:15,fuego:0,hielo:0,veneno:10,aturdimiento:10}, moves:['pegar','aplastar','atemorizar'], boss:true, frontline:true}
+    elite: [
+      {id:'alfa_manada', name:'Alfa de la Manada', icon:'🐺', hp:1.85, atk:1.28, res:{fisico:15,fuego:0,hielo:5,veneno:0,aturdimiento:5}, elite:true, frontline:true,
+        abilities:{
+          mordida_alfa:{label:'Mordida Alfa', mult:1.05, applies:{name:'Sangrado', chance:0.15, duration:2, stack:true, maxStack:3}},
+          desgarro_alfa:{label:'Desgarro Alfa', mult:1.05, applies:{name:'Sangrado', chance:0.35, duration:3, stack:true, maxStack:3}, cooldown:3},
+          frenesi_manada:{label:'Frenesí de Manada', mult:1.30, cooldown:4, condition:(ctx)=>ctx.targetStatusCount('Sangrado')>=1},
+          aullido_dominio:{label:'Aullido de Dominio', mult:0.50, cooldown:5, selfBuff:{name:'Fortalecido', duration:2, stacks:5}},
+        },
+        aiPriority:['aullido_dominio','desgarro_alfa','frenesi_manada','mordida_alfa']},
+      {id:'tigre_carmesi', name:'Tigre Carmesí', icon:'🐅', hp:1.75, atk:1.32, res:{fisico:10,fuego:0,hielo:0,veneno:5,aturdimiento:5}, elite:true, frontline:true,
+        abilities:{
+          garra_carmesi:{label:'Garra Carmesí', mult:1.05, applies:{name:'Sangrado', chance:0.20, duration:2, stack:true, maxStack:3}},
+          presa_sanguinaria:{label:'Presa Sanguinaria', mult:0.95, applies:{name:'Sangrado', chance:0.35, duration:3, stack:true, maxStack:3}, cooldown:3},
+          salto_mortal_tigre:{label:'Salto Mortal', mult:1.35, cooldown:4, condition:(ctx)=>ctx.targetHpPct<0.5},
+        },
+        bonusVsOwnStatus:{name:'Sangrado', minStacks:1, mult:1.15},
+        aiPriority:['presa_sanguinaria','salto_mortal_tigre','garra_carmesi']},
     ],
+    guardians: [],
+    // Guardián único y determinista por piso (21 a 29) — mismo patrón que
+    // Arañas (guardianByFloor en enterNode(), f%10).
+    guardianByFloor: {
+      1: {id:'gran_lobo_hoja', name:'Gran Lobo de Hoja', icon:'🐺', hp:2.80, atk:1.25, res:{fisico:15,fuego:0,hielo:5,veneno:5,aturdimiento:5}, boss:true, frontline:true,
+        abilities:{
+          mordida_g21:{label:'Mordida', mult:1.10, applies:{name:'Sangrado', chance:0.15, duration:2, stack:true, maxStack:3}},
+          desgarro_g21:{label:'Desgarro', mult:0.95, applies:{name:'Sangrado', chance:0.35, duration:3, stack:true, maxStack:3}, cooldown:3},
+          carga_salvaje_g21:{label:'Carga Salvaje', mult:1.25, cooldown:4},
+        },
+        bonusVsOwnStatus:{name:'Sangrado', minStacks:1, mult:1.15},
+        aiPriority:['desgarro_g21','carga_salvaje_g21','mordida_g21']},
+      2: {id:'oso_roca_lunar', name:'Oso Roca Lunar', icon:'🐻', hp:3.10, atk:1.20, res:{fisico:30,fuego:0,hielo:10,veneno:5,aturdimiento:15}, boss:true, frontline:true,
+        abilities:{
+          zarpazo_g22:{label:'Zarpazo', mult:1.10, applies:{name:'Sangrado', chance:0.20, duration:2, stack:true, maxStack:3}},
+          garra_pesada_g22:{label:'Garra Pesada', mult:1.25, applies:{name:'Sangrado', chance:0.30, duration:3, stack:true, maxStack:3}, cooldown:3},
+          aplastamiento_g22:{label:'Aplastamiento', mult:1.40, cooldown:4},
+          piel_densa:{label:'Piel Densa', utility:'self_buff', selfBuff:{name:'Piel Densa', duration:4, incomingDmgReduction:0.10}, cooldown:5},
+        },
+        aiPriority:['piel_densa','garra_pesada_g22','aplastamiento_g22','zarpazo_g22']},
+      3: {id:'halcon_guerra', name:'Halcón de Guerra', icon:'🦅', hp:2.60, atk:1.30, res:{fisico:0,fuego:0,hielo:10,veneno:5,aturdimiento:5}, boss:true,
+        abilities:{
+          garra_g23:{label:'Garra', mult:1.00, applies:{name:'Sangrado', chance:0.10, duration:2, stack:true, maxStack:3}},
+          picado_g23:{label:'Picado', mult:1.30, applies:{name:'Sangrado', chance:0.20, duration:2, stack:true, maxStack:3}, cooldown:3, selfBuff:{name:'Tras Picado', duration:1, evasionDelta:15}},
+          corte_ala:{label:'Corte de Ala', mult:0.80, applies:{name:'Sangrado', chance:0.35, duration:3, stack:true, maxStack:3}, cooldown:3},
+        },
+        aiPriority:['picado_g23','corte_ala','garra_g23']},
+      4: {id:'tigre_sable', name:'Tigre Sable', icon:'🐅', hp:2.75, atk:1.30, res:{fisico:10,fuego:0,hielo:0,veneno:5,aturdimiento:5}, boss:true, frontline:true,
+        abilities:{
+          garra_g24:{label:'Garra', mult:1.05, applies:{name:'Sangrado', chance:0.15, duration:2, stack:true, maxStack:3}},
+          presa_g24:{label:'Presa', mult:0.90, applies:{name:'Sangrado', chance:0.35, duration:3, stack:true, maxStack:3}, cooldown:3},
+          salto_mortal_g24:{label:'Salto Mortal', mult:1.40, cooldown:4, condition:(ctx)=>ctx.targetHpPct<0.5},
+        },
+        bonusVsOwnStatus:{name:'Sangrado', minStacks:1, mult:1.15},
+        aiPriority:['salto_mortal_g24','presa_g24','garra_g24']},
+      5: {id:'jabali_hierro', name:'Jabalí de Hierro', icon:'🐗', hp:3.25, atk:1.28, res:{fisico:25,fuego:0,hielo:0,veneno:5,aturdimiento:15}, boss:true, frontline:true,
+        abilities:{
+          embestida_g25:{label:'Embestida', mult:1.15, applies:{name:'Sangrado', chance:0.20, duration:2, stack:true, maxStack:3}},
+          colmillos_g25:{label:'Colmillos', mult:0.90, applies:{name:'Sangrado', chance:0.30, duration:3, stack:true, maxStack:3}, cooldown:3},
+          carga_brutal_g25:{label:'Carga Brutal', mult:1.35, cooldown:4},
+        },
+        aiPriority:['carga_brutal_g25','colmillos_g25','embestida_g25']},
+      6: {id:'lobo_quimera', name:'Lobo Quimera', icon:'🐺', hp:3.00, atk:1.35, res:{fisico:15,fuego:0,hielo:5,veneno:20,aturdimiento:10}, boss:true, frontline:true,
+        abilities:{
+          mordida_quimera:{label:'Mordida Quimera', mult:1.10, applies:{name:'Sangrado', chance:0.20, duration:2, stack:true, maxStack:3}},
+          aullido_salvaje:{label:'Aullido Salvaje', mult:0.75, applies:{name:'Miedo', chance:0.25, duration:2}, cooldown:4},
+          desgarro_quimerico:{label:'Desgarro Quimérico', mult:1.20, applies:{name:'Sangrado', chance:0.35, duration:3, stack:true, maxStack:3}, cooldown:3},
+        },
+        bonusVsOwnStatus:{name:'Sangrado', minStacks:1, mult:1.15},
+        aiPriority:['aullido_salvaje','desgarro_quimerico','mordida_quimera']},
+      7: {id:'oso_acorazado', name:'Oso Acorazado', icon:'🐻', hp:3.55, atk:1.20, res:{fisico:40,fuego:0,hielo:10,veneno:20,aturdimiento:30}, boss:true, frontline:true,
+        abilities:{
+          golpe_g27:{label:'Golpe', mult:1.00},
+          garra_blindada:{label:'Garra Blindada', mult:1.15, applies:{name:'Sangrado', chance:0.30, duration:3, stack:true, maxStack:3}, cooldown:3},
+          carga_g27:{label:'Carga', mult:1.30, cooldown:4},
+          coraza:{label:'Coraza', utility:'self_buff', selfBuff:{name:'Coraza', duration:4, incomingDmgReduction:0.15}, cooldown:5},
+        },
+        aiPriority:['coraza','garra_blindada','carga_g27','golpe_g27']},
+      8: {id:'bestia_carmesi', name:'Bestia Carmesí', icon:'🩸', hp:3.25, atk:1.40, res:{fisico:20,fuego:0,hielo:5,veneno:25,aturdimiento:10}, boss:true, frontline:true,
+        abilities:{
+          mordida_g28:{label:'Mordida', mult:1.10, applies:{name:'Sangrado', chance:0.20, duration:2, stack:true, maxStack:3}},
+          doble_garra:{label:'Doble Garra', mult:1.20, applies:{name:'Sangrado', chance:0.35, duration:3, stack:true, maxStack:3}, cooldown:3},
+          frenesi_carmesi:{label:'Frenesí Carmesí', mult:1.35, cooldown:4, condition:(ctx)=>ctx.targetStatusCount('Sangrado')>=2, bonusVsTargetStatus:{name:'Sangrado', minStacks:2, mult:1.30}},
+        },
+        aiPriority:['doble_garra','frenesi_carmesi','mordida_g28']},
+      9: {id:'rey_manada', name:'Rey de la Manada', icon:'👑', hp:3.75, atk:1.40, res:{fisico:25,fuego:0,hielo:5,veneno:35,aturdimiento:15}, boss:true, frontline:true,
+        abilities:{
+          mordida_real:{label:'Mordida Real', mult:1.15, applies:{name:'Sangrado', chance:0.20, duration:2, stack:true, maxStack:3}},
+          aullido_rey:{label:'Aullido del Rey', mult:0.60, applies:{name:'Miedo', chance:0.15, duration:2}, cooldown:5, selfBuff:{name:'Fortalecido', duration:2, stacks:3}},
+          desgarro_real:{label:'Desgarro Real', mult:1.25, applies:{name:'Sangrado', chance:0.35, duration:3, stack:true, maxStack:3}, cooldown:3},
+          frenesi_alfa:{label:'Frenesí del Alfa', mult:1.30, cooldown:4, condition:(ctx)=>ctx.targetHpPct<0.4},
+        },
+        aiPriority:['aullido_rey','desgarro_real','frenesi_alfa','mordida_real']},
+    },
     // Riakis: su "escudo de corrupción" resiste casi todo el daño mundano
     // (físico/veneno/aturdimiento) pero es vulnerable a fuego/hielo — el hueco
-    // que un Canalizador puede explotar hoy. Cuando exista el Sacerdote
-    // (Taberna), su efecto sagrado deberá abrir ese mismo hueco sin necesitar
-    // magia elemental — queda como gancho pendiente, no implementado todavía.
+    // que un Canalizador puede explotar hoy. Intacto por pedido explícito del
+    // PDF ("Riakis no se reequilibra").
     decadeBoss: {id:'riakis', name:'Señor del Caos Riakis', icon:'👁️', hp:5.0, atk:1.6, res:{fisico:55,fuego:-25,hielo:-25,veneno:40,aturdimiento:30}, moves:['pegar','cegar','atemorizar'], boss:true, frontline:true}
   },
-  // Década 3 — pisos 31-40 — El Usurpador Sin Nombre (mimetismo, Confusión)
+  // Década 3 — pisos 31-40 — El Usurpador Sin Nombre (REWORK 2026-09-25,
+  // pedido explícito, PDF "Decada 4 - El Usurpador Sin Nombre"). Identidad:
+  // Confusión (ya existía como estado — MENTAL_STATUSES/hasStatus). El PDF
+  // limita Confusión a 18% en normales / 28% en élites / 32% en guardianes;
+  // se respeta ese techo. Simplificaciones frente al PDF: el motor no tiene
+  // "intercambio de posición entre enemigos" ni "señuelo de 1 HP invocado a
+  // mitad de combate" ni reflejo de daño — esas 3 mecánicas (Espejo/Doble/
+  // varios guardianes) se aproximan con autobuffs defensivos propios
+  // (utility:'self_buff') o un golpe extra, documentado unidad por unidad
+  // solo donde hace diferencia real.
   {
     regular: [
-      {id:'sombra_mimetica', name:'Sombra mimética', icon:'🫥', hp:0.9, atk:1.05, res:{fisico:0,fuego:0,hielo:0,veneno:0,aturdimiento:10}, moves:['pegar','confundir']},
-      {id:'espejo_viviente', name:'Espejo viviente', icon:'🪞', hp:1.0, atk:1.0, res:{fisico:5,fuego:5,hielo:5,veneno:5,aturdimiento:5}, moves:['pegar','confundir'], frontline:true},
-      {id:'doble_corrupto', name:'Doble corrupto', icon:'👥', hp:1.1, atk:1.1, res:{fisico:10,fuego:0,hielo:0,veneno:0,aturdimiento:0}, moves:['pegar'], frontline:true},
-      {id:'farsante_menor', name:'Farsante menor', icon:'🎭', hp:0.85, atk:1.0, res:{fisico:0,fuego:0,hielo:0,veneno:0,aturdimiento:0}, moves:['pegar','robar','confundir']}
+      {id:'sombra_mimetica', name:'Sombra Mimética', icon:'🫥', hp:0.90, atk:1.00, res:{fisico:0,fuego:0,hielo:0,veneno:0,aturdimiento:10},
+        abilities:{
+          golpe_umbrio:{label:'Golpe Umbrío', mult:1.00},
+          rostro_falso:{label:'Rostro Falso', mult:0.70, applies:{name:'Confusion', chance:0.16, duration:2}, cooldown:4},
+          ataque_mimetico:{label:'Ataque Mimético', mult:0.80, cooldown:3, condition:(ctx)=>ctx.targetStatusCount('Confusion')>=1, bonusVsTargetStatus:{name:'Confusion', mult:1.25}},
+        },
+        aiPriority:['rostro_falso','ataque_mimetico','golpe_umbrio']},
+      {id:'espejo_viviente', name:'Espejo Viviente', icon:'🪞', hp:0.95, atk:0.95, res:{fisico:5,fuego:5,hielo:5,veneno:5,aturdimiento:5}, frontline:true, reflectPct:0.20,
+        abilities:{
+          fragmento:{label:'Fragmento', mult:1.00},
+          reflejo_hostil:{label:'Reflejo Hostil', mult:0.70, applies:{name:'Confusion', chance:0.18, duration:2}, cooldown:3},
+          copia_defensiva:{label:'Copia Defensiva', utility:'self_buff', selfBuff:{name:'Copia Defensiva', duration:2, incomingDmgReduction:0.15}, cooldown:5},
+        },
+        aiPriority:['copia_defensiva','reflejo_hostil','fragmento']},
+      {id:'doble_corrupto', name:'Doble Corrupto', icon:'👥', hp:1.05, atk:1.12, res:{fisico:10,fuego:0,hielo:0,veneno:0,aturdimiento:0}, frontline:true,
+        abilities:{
+          golpe_dc:{label:'Golpe', mult:1.00},
+          golpe_espejo:{label:'Golpe Espejo', mult:1.15, cooldown:3},
+          doble_impacto:{label:'Doble Impacto', mult:1.20, cooldown:4, condition:(ctx)=>ctx.targetStatusCount('Confusion')>=1, bonusVsTargetStatus:{name:'Confusion', mult:1.20}},
+        },
+        hpThresholdBuff:{threshold:0.4, buff:{name:'Furia del Doble', duration:99, dmgMult:1.10}},
+        aiPriority:['doble_impacto','golpe_espejo','golpe_dc']},
+      {id:'farsante_menor', name:'Farsante Menor', icon:'🎭', hp:0.85, atk:0.95, res:{fisico:0,fuego:0,hielo:0,veneno:0,aturdimiento:0},
+        abilities:{
+          punalada:{label:'Puñalada', mult:1.00},
+          robo_identidad:{label:'Robo de Identidad', mult:0.60, applies:{name:'Confusion', chance:0.12, duration:2}, cooldown:4},
+          robar_fm:{label:'Robar', mult:0.70, cooldown:3, mpDrain:0.05},
+        },
+        aiPriority:['robo_identidad','robar_fm','punalada']},
     ],
-    elite: [{id:'impostor_mayor', name:'Impostor mayor', icon:'🎭', hp:2.2, atk:1.4, res:{fisico:10,fuego:5,hielo:5,veneno:5,aturdimiento:15}, moves:['pegar','confundir'], elite:true, frontline:true}],
-    guardians: [
-      {id:'reflejo_perfecto', name:'Reflejo perfecto', icon:'🪞', hp:3.7, atk:1.55, res:{fisico:15,fuego:10,hielo:10,veneno:10,aturdimiento:15}, moves:['pegar','confundir','aplastar'], boss:true, frontline:true},
-      {id:'mascara_viviente', name:'Máscara viviente', icon:'🎭', hp:3.6, atk:1.6, res:{fisico:10,fuego:10,hielo:10,veneno:10,aturdimiento:20}, moves:['pegar','confundir','aplastar'], boss:true, frontline:true}
+    elite: [
+      {id:'impostor_mayor', name:'Impostor Mayor', icon:'🎭', hp:1.90, atk:1.30, res:{fisico:10,fuego:5,hielo:5,veneno:5,aturdimiento:15}, elite:true, frontline:true,
+        abilities:{
+          estocada_im:{label:'Estocada', mult:1.05},
+          identidad_robada:{label:'Identidad Robada', mult:0.80, applies:{name:'Confusion', chance:0.25, duration:2}, cooldown:5},
+          golpe_oportunidad:{label:'Golpe de Oportunidad', mult:1.15, cooldown:3, condition:(ctx)=>ctx.targetStatusCount('Confusion')>=1, bonusVsTargetStatus:{name:'Confusion', mult:1.30}},
+        },
+        aiPriority:['identidad_robada','golpe_oportunidad','estocada_im']},
+      {id:'doble_perfecto', name:'Doble Perfecto', icon:'🪞', hp:2.00, atk:1.25, res:{fisico:15,fuego:10,hielo:10,veneno:10,aturdimiento:20}, elite:true, frontline:true,
+        abilities:{
+          golpe_copiado:{label:'Golpe Copiado', mult:1.05},
+          reflejo_perfecto_e:{label:'Reflejo Perfecto', mult:0.75, applies:{name:'Confusion', chance:0.22, duration:2}, cooldown:4},
+          replica:{label:'Réplica', utility:'self_buff', selfBuff:{name:'Réplica', duration:3, incomingDmgReduction:0.20}, cooldown:5},
+        },
+        aiPriority:['replica','reflejo_perfecto_e','golpe_copiado']},
     ],
+    guardians: [],
+    // Guardián único y determinista por piso (31 a 39).
+    guardianByFloor: {
+      1: {id:'reflejo_perfecto_g', name:'Reflejo Perfecto', icon:'🪞', hp:2.70, atk:1.20, res:{fisico:10,fuego:5,hielo:5,veneno:5,aturdimiento:10}, boss:true, frontline:true,
+        abilities:{
+          golpe_g31:{label:'Golpe', mult:1.00},
+          reflejo_perfecto_g31:{label:'Reflejo Perfecto', mult:0.75, applies:{name:'Confusion', chance:0.22, duration:2}, cooldown:4},
+          copia_defensiva_g31:{label:'Copia Defensiva', utility:'self_buff', selfBuff:{name:'Copia Defensiva', duration:2, incomingDmgReduction:0.15}, cooldown:5},
+        },
+        aiPriority:['copia_defensiva_g31','reflejo_perfecto_g31','golpe_g31']},
+      2: {id:'mascara_viviente_g', name:'Máscara Viviente', icon:'🎭', hp:2.80, atk:1.25, res:{fisico:10,fuego:10,hielo:10,veneno:10,aturdimiento:20}, boss:true, frontline:true,
+        abilities:{
+          estocada_g32:{label:'Estocada', mult:1.05},
+          mascara_g32:{label:'Máscara', mult:0.70, applies:{name:'Confusion', chance:0.25, duration:2}, cooldown:4},
+          golpe_brutal_g32:{label:'Golpe Brutal', mult:1.30, cooldown:3, condition:(ctx)=>ctx.targetStatusCount('Confusion')>=1, bonusVsTargetStatus:{name:'Confusion', mult:1.20}},
+        },
+        aiPriority:['mascara_g32','golpe_brutal_g32','estocada_g32']},
+      3: {id:'espejo_sombras', name:'Espejo de Sombras', icon:'🪞', hp:2.75, atk:1.22, res:{fisico:10,fuego:5,hielo:5,veneno:5,aturdimiento:10}, boss:true,
+        abilities:{
+          fragmento_g33:{label:'Fragmento', mult:1.00},
+          reflejo_oscuro:{label:'Reflejo Oscuro', mult:0.75, applies:{name:'Confusion', chance:0.20, duration:2}, cooldown:3},
+          clon_sombra:{label:'Clon de Sombra', utility:'self_buff', selfBuff:{name:'Clon de Sombra', duration:3, evasionDelta:10}, cooldown:5},
+        },
+        aiPriority:['clon_sombra','reflejo_oscuro','fragmento_g33']},
+      4: {id:'doble_traicionero', name:'Doble Traicionero', icon:'👥', hp:2.90, atk:1.28, res:{fisico:10,fuego:5,hielo:5,veneno:5,aturdimiento:10}, boss:true, frontline:true,
+        abilities:{
+          ataque_g34:{label:'Ataque', mult:1.05},
+          traicion:{label:'Traición', mult:0.75, applies:{name:'Confusion', chance:0.25, duration:2}, cooldown:4},
+          ataque_copiado:{label:'Ataque Copiado', mult:1.20, cooldown:3, condition:(ctx)=>ctx.targetStatusCount('Confusion')>=1, bonusVsTargetStatus:{name:'Confusion', mult:1.25}},
+        },
+        aiPriority:['traicion','ataque_copiado','ataque_g34']},
+      5: {id:'imitador_formacion', name:'Imitador de Formación', icon:'🎭', hp:3.00, atk:1.25, res:{fisico:10,fuego:5,hielo:5,veneno:5,aturdimiento:10}, boss:true, frontline:true,
+        abilities:{
+          ataque_g35:{label:'Ataque', mult:1.00},
+          imitacion:{label:'Imitación', mult:0.70, applies:{name:'Confusion', chance:0.22, duration:2}, cooldown:4},
+          formacion:{label:'Formación', utility:'self_buff', selfBuff:{name:'Formación', duration:3, incomingDmgReduction:0.10}, cooldown:5},
+        },
+        aiPriority:['formacion','imitacion','ataque_g35']},
+      6: {id:'falso_companero', name:'Falso Compañero', icon:'🎭', hp:3.10, atk:1.30, res:{fisico:10,fuego:5,hielo:5,veneno:5,aturdimiento:10}, boss:true, frontline:true,
+        abilities:{
+          ataque_g36:{label:'Ataque', mult:1.05},
+          identidad_robada_g36:{label:'Identidad Robada', mult:0.75, applies:{name:'Confusion', chance:0.28, duration:2}, cooldown:4},
+          punalada_traicionera:{label:'Puñalada Traicionera', mult:1.25, cooldown:3, condition:(ctx)=>ctx.targetStatusCount('Confusion')>=1, bonusVsTargetStatus:{name:'Confusion', mult:1.25}},
+        },
+        aiPriority:['identidad_robada_g36','punalada_traicionera','ataque_g36']},
+      7: {id:'maestro_reflejo', name:'Maestro del Reflejo', icon:'🪞', hp:3.20, atk:1.28, res:{fisico:10,fuego:5,hielo:5,veneno:5,aturdimiento:10}, boss:true,
+        abilities:{
+          fragmento_g37:{label:'Fragmento', mult:1.05},
+          confusion_g37:{label:'Confusión', mult:0.75, applies:{name:'Confusion', chance:0.28, duration:2}, cooldown:4},
+          reflexion:{label:'Reflexión', utility:'self_buff', selfBuff:{name:'Reflexión', duration:3, incomingDmgReduction:0.15}, cooldown:5},
+        },
+        aiPriority:['reflexion','confusion_g37','fragmento_g37']},
+      8: {id:'maestro_rostros', name:'Maestro de Rostros', icon:'🎭', hp:3.35, atk:1.35, res:{fisico:10,fuego:5,hielo:5,veneno:5,aturdimiento:10}, boss:true, frontline:true,
+        abilities:{
+          golpe_g38:{label:'Golpe', mult:1.05},
+          rostro_falso_g38:{label:'Rostro Falso', mult:0.75, applies:{name:'Confusion', chance:0.30, duration:2}, cooldown:4},
+          golpe_copiado_g38:{label:'Golpe Copiado', mult:1.20, cooldown:3, condition:(ctx)=>ctx.targetStatusCount('Confusion')>=1, bonusVsTargetStatus:{name:'Confusion', mult:1.25}},
+        },
+        aiPriority:['rostro_falso_g38','golpe_copiado_g38','golpe_g38']},
+      9: {id:'usurpador_fragmentado', name:'Usurpador Fragmentado', icon:'🎭', hp:3.50, atk:1.40, res:{fisico:15,fuego:10,hielo:10,veneno:10,aturdimiento:15}, boss:true, frontline:true,
+        abilities:{
+          ataque_g39:{label:'Ataque', mult:1.10},
+          confusion_profunda:{label:'Confusión Profunda', mult:0.80, applies:{name:'Confusion', chance:0.30, duration:2}, cooldown:4},
+          golpe_brutal_g39:{label:'Golpe Brutal', mult:1.35, cooldown:3, condition:(ctx)=>ctx.targetStatusCount('Confusion')>=1, bonusVsTargetStatus:{name:'Confusion', mult:1.20}},
+        },
+        hpThresholdBuff:{threshold:0.4, buff:{name:'Fragmentación', duration:99, dmgMult:1.15}},
+        aiPriority:['confusion_profunda','golpe_brutal_g39','ataque_g39']},
+    },
     decadeBoss: {id:'usurpador', name:'El Usurpador Sin Nombre', icon:'🎭', hp:4.8, atk:1.8, res:{fisico:20,fuego:10,hielo:10,veneno:10,aturdimiento:20}, moves:['pegar','confundir','aplastar'], boss:true, frontline:true}
   },
-  // Década 4 — pisos 41-50 — Isla Paraíso (supervivencia; ver reglas de
-  // generación especiales en generateDungeon() y enterNode())
+  // Década 4 — pisos 41-50 — Isla Paraíso (REWORK 2026-09-25, pedido
+  // explícito, PDF "Decada 4 - Isla Paraiso"). Ver reglas de generación
+  // especiales (5-6 normales, 3 élites, piso 41-49 = 5 regulares + 1 élite
+  // en vez de guardián individual) en generateDungeon()/enterNode() —
+  // ninguna de esas reglas es específica de esta década en el código, ya
+  // son genéricas por nivel/decadeIndex, así que no hace falta tocarlas.
   {
     regular: [
-      {id:'explorador_rival', name:'Explorador rival', icon:'🗡️', hp:1.0, atk:1.1, res:{fisico:5,fuego:0,hielo:0,veneno:0,aturdimiento:0}, moves:['pegar','robar'], frontline:true},
-      {id:'mercenario_desertor', name:'Mercenario desertor', icon:'🪓', hp:1.1, atk:1.15, res:{fisico:10,fuego:0,hielo:0,veneno:0,aturdimiento:0}, moves:['pegar','aplastar'], frontline:true},
-      {id:'cazarrecompensas', name:'Cazarrecompensas', icon:'🏹', hp:0.85, atk:1.1, res:{fisico:-5,fuego:0,hielo:0,veneno:0,aturdimiento:0}, moves:['pegar','robar']},
-      {id:'superviviente_curtido', name:'Superviviente curtido', icon:'🔪', hp:0.95, atk:1.15, res:{fisico:5,fuego:0,hielo:0,veneno:5,aturdimiento:0}, moves:['pegar','atemorizar']}
+      {id:'explorador_rival', name:'Explorador Rival', icon:'🗡️', hp:0.95, atk:1.05, res:{fisico:5,fuego:0,hielo:0,veneno:0,aturdimiento:5}, frontline:true,
+        abilities:{
+          estocada_er:{label:'Estocada', mult:1.00},
+          ataque_oportunista:{label:'Ataque Oportunista', mult:0.80, cooldown:3, condition:(ctx)=>ctx.targetHpPct<0.5},
+          robar_er:{label:'Robar', mult:0.65, cooldown:4, selfBuff:{name:'Tras Robar', duration:1, evasionDelta:10}},
+        },
+        aiPriority:['ataque_oportunista','robar_er','estocada_er']},
+      {id:'mercenario_desertor', name:'Mercenario Desertor', icon:'🪓', hp:1.08, atk:1.12, res:{fisico:10,fuego:0,hielo:0,veneno:0,aturdimiento:5}, frontline:true,
+        abilities:{
+          golpe_md:{label:'Golpe', mult:1.00},
+          golpe_brutal_md:{label:'Golpe Brutal', mult:1.25, cooldown:3},
+          corte_profundo_md:{label:'Corte Profundo', mult:0.85, applies:{name:'Sangrado', chance:0.25, duration:3, stack:true, maxStack:3}, cooldown:4},
+        },
+        hpThresholdBuff:{threshold:0.5, buff:{name:'Resistencia Final', duration:2, incomingDmgReduction:0.10}},
+        aiPriority:['golpe_brutal_md','corte_profundo_md','golpe_md']},
+      {id:'cazarrecompensas', name:'Cazarrecompensas', icon:'🏹', hp:0.85, atk:1.10, res:{fisico:-5,fuego:0,hielo:0,veneno:0,aturdimiento:0},
+        abilities:{
+          disparo_cr:{label:'Disparo', mult:1.00},
+          disparo_preciso:{label:'Disparo Preciso', mult:0.90, cooldown:3, condition:(ctx)=>ctx.targetHpPct<0.5},
+          marca_presa:{label:'Marca de Presa', mult:0.70, cooldown:4},
+        },
+        aiPriority:['disparo_preciso','marca_presa','disparo_cr']},
+      {id:'superviviente_curtido', name:'Superviviente Curtido', icon:'🔪', hp:1.00, atk:1.10, res:{fisico:5,fuego:0,hielo:0,veneno:5,aturdimiento:5},
+        abilities:{
+          corte_sc:{label:'Corte', mult:1.00, applies:{name:'Sangrado', chance:0.10, duration:2, stack:true, maxStack:3}},
+          atemorizar_sc:{label:'Atemorizar', mult:0.60, applies:{name:'Miedo', chance:0.20, duration:2}, cooldown:5},
+          golpe_sucio:{label:'Golpe Sucio', mult:0.80, applies:{name:'Sangrado', chance:0.20, duration:3, stack:true, maxStack:3}, cooldown:3},
+        },
+        hpThresholdBuff:{threshold:0.3, buff:{name:'Último Aliento', duration:2, dmgMult:1.15, incomingDmgReduction:0.10}},
+        aiPriority:['atemorizar_sc','golpe_sucio','corte_sc']},
+      {id:'asesino_isla', name:'Asesino de la Isla', icon:'🗡️', hp:0.80, atk:1.20, res:{fisico:0,fuego:0,hielo:0,veneno:5,aturdimiento:5},
+        abilities:{
+          doble_daga:{label:'Doble Daga', mult:1.00, applies:{name:'Sangrado', chance:0.15, duration:2, stack:true, maxStack:3}},
+          paso_sombrio:{label:'Paso Sombrío', mult:0.60, cooldown:4, selfBuff:{name:'Paso Sombrío', duration:1, evasionDelta:10}},
+          corte_ejecutor:{label:'Corte Ejecutor', mult:1.15, cooldown:4, condition:(ctx)=>ctx.targetHpPct<0.4},
+        },
+        aiPriority:['corte_ejecutor','paso_sombrio','doble_daga']},
+      {id:'medico_campana', name:'Médico de Campaña', icon:'⚕️', hp:0.75, atk:0.80, res:{fisico:-5,fuego:5,hielo:5,veneno:10,aturdimiento:5},
+        abilities:{
+          baston:{label:'Bastón', mult:0.80},
+          curacion_mc:{label:'Curación', utility:'heal_ally', healPct:0.10, cooldown:4, condition:(ctx)=>combat.enemies.some(e=>e.hp>0 && e.hp<e.maxHP)},
+          adrenalina:{label:'Adrenalina', utility:'self_buff', selfBuff:{name:'Adrenalina', duration:2, dmgMult:1.10}, cooldown:5},
+        },
+        aiPriority:['curacion_mc','adrenalina','baston']},
     ],
-    elite: [{id:'superviviente_despiadado', name:'Superviviente despiadado', icon:'⚔️', hp:2.0, atk:1.45, res:{fisico:10,fuego:0,hielo:0,veneno:5,aturdimiento:5}, moves:['pegar','aplastar','atemorizar'], elite:true, frontline:true}],
+    // 5 tipos de élite (el PDF pide 3 por encuentro, de un pool de 5 —
+    // pick() con reemplazo ya hace esa variedad). Superviviente Despiadado
+    // va primero: es el que escolta en solitario al jefe (bestiary.elite[0]
+    // en enterNode) y el escuadrón de "guardián" de 5+1.
+    elite: [
+      {id:'superviviente_despiadado', name:'Superviviente Despiadado', icon:'⚔️', hp:1.90, atk:1.38, res:{fisico:10,fuego:0,hielo:0,veneno:5,aturdimiento:5}, elite:true, frontline:true,
+        abilities:{
+          golpe_sd:{label:'Golpe', mult:1.05},
+          golpe_brutal_sd:{label:'Golpe Brutal', mult:1.35, cooldown:3},
+          desgarro_sd:{label:'Desgarro', mult:0.90, applies:{name:'Sangrado', chance:0.35, duration:3, stack:true, maxStack:3}, cooldown:3},
+          atemorizar_sd:{label:'Atemorizar', mult:0.70, applies:{name:'Miedo', chance:0.25, duration:2}, cooldown:5},
+        },
+        hpThresholdBuff:{threshold:0.35, buff:{name:'Furia Final', duration:2, dmgMult:1.15, incomingDmgReduction:0.10}},
+        aiPriority:['atemorizar_sd','desgarro_sd','golpe_brutal_sd','golpe_sd']},
+      {id:'cazador_veterano', name:'Cazador Veterano', icon:'🏹', hp:1.65, atk:1.35, res:{fisico:0,fuego:0,hielo:0,veneno:0,aturdimiento:5}, elite:true,
+        abilities:{
+          disparo_cv:{label:'Disparo', mult:1.00},
+          marca_mortal:{label:'Marca Mortal', mult:0.75, cooldown:4},
+          disparo_ejecutor:{label:'Disparo Ejecutor', mult:1.30, cooldown:4, condition:(ctx)=>ctx.targetHpPct<0.4},
+        },
+        aiPriority:['disparo_ejecutor','marca_mortal','disparo_cv']},
+      {id:'duelista_veterano', name:'Duelista Veterano', icon:'🤺', hp:1.80, atk:1.32, res:{fisico:5,fuego:0,hielo:0,veneno:0,aturdimiento:5}, elite:true, frontline:true,
+        abilities:{
+          estocada_dv:{label:'Estocada', mult:1.05},
+          corte_preciso:{label:'Corte Preciso', mult:1.00, applies:{name:'Sangrado', chance:0.25, duration:3, stack:true, maxStack:3}, cooldown:3},
+        },
+        aiPriority:['corte_preciso','estocada_dv']},
+      {id:'capitan_mercenario', name:'Capitán Mercenario', icon:'🎖️', hp:2.00, atk:1.30, res:{fisico:10,fuego:0,hielo:0,veneno:0,aturdimiento:10}, elite:true, frontline:true,
+        abilities:{
+          espadazo:{label:'Espadazo', mult:1.05},
+          orden_ataque:{label:'Orden de Ataque', mult:0.60, cooldown:5, selfBuff:{name:'Fortalecido', duration:2, stacks:4}},
+          guarda_alta:{label:'Guarda Alta', utility:'self_buff', selfBuff:{name:'Guarda Alta', duration:2, incomingDmgReduction:0.15}, cooldown:5},
+          golpe_mando:{label:'Golpe de Mando', mult:1.20, cooldown:3},
+        },
+        aiPriority:['orden_ataque','guarda_alta','golpe_mando','espadazo']},
+      {id:'asesino_elite_isla', name:'Asesino de Élite', icon:'🗡️', hp:1.70, atk:1.40, res:{fisico:0,fuego:0,hielo:0,veneno:5,aturdimiento:5}, elite:true,
+        abilities:{
+          doble_corte:{label:'Doble Corte', mult:1.00},
+          paso_letal:{label:'Paso Letal', mult:0.60, cooldown:4, selfBuff:{name:'Paso Letal', duration:1, evasionDelta:15}},
+          corte_mortal:{label:'Corte Mortal', mult:1.20, cooldown:4, condition:(ctx)=>ctx.targetHpPct<0.4},
+          silencio_ae:{label:'Silencio', mult:0.70, applies:{name:'Silencio', chance:0.15, duration:1}, cooldown:5},
+        },
+        aiPriority:['corte_mortal','silencio_ae','paso_letal','doble_corte']},
+    ],
     guardians: [], // sin plantilla propia de guardián — el piso 41-49 usa 5 regulares + 1 élite (ver enterNode)
     // El jefe de década llega escoltado (ver enterNode) y no busca hacer daño
     // directo: cura, se bufa solo y llama refuerzos. Débil en poder bruto
-    // frente al Usurpador, pero nunca solo.
+    // frente al Usurpador, pero nunca solo. Intacto por pedido explícito.
     decadeBoss: {id:'custodio_isla', name:'Custodio de la Isla', icon:'🏝️', hp:3.2, atk:1.2, res:{fisico:15,fuego:10,hielo:10,veneno:10,aturdimiento:15}, moves:['curar','buff_pasivo','invocar','area_debil'], boss:true, frontline:false}
   },
-  // Década 5 — pisos 51-60 — El Mar (Storm Gush / Tetrasea)
+  // Década 5 — pisos 51-60 — El Mar (Storm Gush / Tetrasea) (REWORK
+  // 2026-09-25, pedido explícito, PDF "Decada 6 - Storm Gush" — el propio
+  // documento aclara que el compendio interno la numera Década 5). Se
+  // mantienen los 4 enemigos ya existentes con kits nuevos y se suman Naga
+  // Arquero y Garvel para llegar a 5-6 por encuentro. Simplificaciones:
+  // "inmune a Retroceso" (Cangrejo) y "al morir genera un Garvel pequeño"
+  // (Garvel) no tienen gancho en el motor actual (ni chequeo de inmunidad a
+  // proc, ni evento on-death) — se omiten, documentado acá en vez de
+  // silencioso.
   {
     regular: [
-      {id:'triton_guerrero', name:'Tritón guerrero', icon:'🔱', hp:1.15, atk:1.15, res:{fisico:10,fuego:5,hielo:-10,veneno:0,aturdimiento:0}, moves:['pegar','aplastar'], frontline:true},
-      {id:'triton_hechicero', name:'Tritón hechicero', icon:'🌊', hp:0.85, atk:1.05, res:{fisico:-5,fuego:10,hielo:-10,veneno:5,aturdimiento:0}, moves:['pegar','debilitar']},
-      {id:'cangrejo_gigante', name:'Cangrejo gigante', icon:'🦀', hp:1.3, atk:1.05, res:{fisico:20,fuego:0,hielo:-5,veneno:0,aturdimiento:10}, moves:['pegar'], frontline:true},
-      {id:'sirena_corrupta', name:'Sirena corrupta', icon:'🧜', hp:0.8, atk:1.0, res:{fisico:-5,fuego:5,hielo:-5,veneno:5,aturdimiento:0}, moves:['pegar','confundir']}
+      {id:'triton_guerrero', name:'Tritón Guerrero', icon:'🔱', hp:1.10, atk:1.10, res:{fisico:10,fuego:5,hielo:-10,veneno:0,aturdimiento:0}, frontline:true,
+        abilities:{
+          tridente:{label:'Tridente', mult:1.00},
+          golpe_brutal_tg:{label:'Golpe Brutal', mult:1.25, cooldown:3},
+          estocada_marina:{label:'Estocada Marina', mult:0.90, applies:{name:'Ralentizado', chance:0.20, duration:2}, cooldown:4},
+        },
+        aiPriority:['golpe_brutal_tg','estocada_marina','tridente']},
+      {id:'triton_hechicero', name:'Tritón Hechicero', icon:'🌊', hp:0.80, atk:1.00, res:{fisico:-5,fuego:10,hielo:-10,veneno:5,aturdimiento:0},
+        abilities:{
+          descarga_acuatica:{label:'Descarga Acuática', mult:0.80},
+          debilitar_th:{label:'Debilitar', mult:0.70, applies:{name:'Debilitado', chance:0.20, duration:2}, cooldown:3},
+          corriente_inversa:{label:'Corriente Inversa', mult:0.60, cooldown:4},
+        },
+        aiPriority:['debilitar_th','corriente_inversa','descarga_acuatica']},
+      {id:'cangrejo_gigante', name:'Cangrejo Gigante', icon:'🦀', hp:1.30, atk:1.05, res:{fisico:20,fuego:0,hielo:-5,veneno:0,aturdimiento:10}, frontline:true,
+        abilities:{
+          pinza:{label:'Pinza', mult:1.00},
+          pinza_aplastante:{label:'Pinza Aplastante', mult:1.20, applies:{name:'Paralisis', chance:0.15, duration:1}, cooldown:4},
+          caparazon:{label:'Caparazón', utility:'self_buff', selfBuff:{name:'Caparazón', duration:2, incomingDmgReduction:0.20}, cooldown:5},
+        },
+        aiPriority:['caparazon','pinza_aplastante','pinza']},
+      {id:'sirena_corrupta', name:'Sirena Corrupta', icon:'🧜', hp:0.75, atk:0.95, res:{fisico:-5,fuego:5,hielo:-5,veneno:5,aturdimiento:0},
+        abilities:{
+          grito_cortante:{label:'Grito Cortante', mult:0.90},
+          canto_corrupto:{label:'Canto Corrupto', mult:0.70, applies:{name:'Confusion', chance:0.18, duration:1}, cooldown:4},
+          ola_maldita:{label:'Ola Maldita', mult:0.75, applies:{name:'Debilitado', chance:0.15, duration:2}, cooldown:3, bonusVsTargetStatus:{name:'Confusion', mult:1.15}},
+        },
+        aiPriority:['canto_corrupto','ola_maldita','grito_cortante']},
+      {id:'naga_arquero', name:'Naga Arquero', icon:'🏹', hp:0.80, atk:1.10, res:{fisico:0,fuego:0,hielo:-5,veneno:5,aturdimiento:0},
+        abilities:{
+          flecha_marina:{label:'Flecha Marina', mult:1.00},
+          flecha_perforante:{label:'Flecha Perforante', mult:0.85, cooldown:3},
+          flecha_entumecedora:{label:'Flecha Entumecedora', mult:0.65, applies:{name:'Ralentizado', chance:0.20, duration:2}, cooldown:4},
+        },
+        aiPriority:['flecha_entumecedora','flecha_perforante','flecha_marina']},
+      {id:'garvel', name:'Garvel', icon:'🦠', hp:0.75, atk:0.90, res:{fisico:-10,fuego:0,hielo:-5,veneno:15,aturdimiento:0},
+        abilities:{
+          mordida_garvel:{label:'Mordida', mult:1.00},
+          salpicadura_acida:{label:'Salpicadura Ácida', mult:0.65, applies:{name:'Veneno', chance:0.15, duration:3, stack:true, maxStack:3}, cooldown:3},
+        },
+        aiPriority:['salpicadura_acida','mordida_garvel']},
     ],
-    elite: [{id:'guardia_profundidades', name:'Guardia de las profundidades', icon:'🔱', hp:2.3, atk:1.45, res:{fisico:15,fuego:5,hielo:-10,veneno:5,aturdimiento:10}, moves:['pegar','aplastar'], elite:true, frontline:true}],
-    guardians: [
-      {id:'leviatan_menor', name:'Leviatán menor', icon:'🐋', hp:3.9, atk:1.6, res:{fisico:20,fuego:5,hielo:-10,veneno:10,aturdimiento:15}, moves:['pegar','aplastar'], boss:true, frontline:true},
-      {id:'centinela_coral', name:'Centinela de coral', icon:'🪸', hp:3.7, atk:1.55, res:{fisico:25,fuego:5,hielo:-15,veneno:15,aturdimiento:15}, moves:['pegar','aplastar','debilitar'], boss:true, frontline:true}
+    elite: [
+      {id:'guardia_profundidades', name:'Guardia de las Profundidades', icon:'🔱', hp:2.10, atk:1.35, res:{fisico:15,fuego:5,hielo:-10,veneno:5,aturdimiento:10}, elite:true, frontline:true,
+        abilities:{
+          tridente_gp:{label:'Tridente', mult:1.05},
+          golpe_brutal_gp:{label:'Golpe Brutal', mult:1.40, cooldown:3},
+          estocada_profunda:{label:'Estocada Profunda', mult:1.00, applies:{name:'Ralentizado', chance:0.25, duration:2}, cooldown:4},
+          guardia_marea:{label:'Guardia de Marea', utility:'self_buff', selfBuff:{name:'Guardia de Marea', duration:2, incomingDmgReduction:0.15}, cooldown:5},
+        },
+        aiPriority:['guardia_marea','golpe_brutal_gp','estocada_profunda','tridente_gp']},
+      {id:'naga_capitan', name:'Naga Capitán', icon:'🏹', hp:1.90, atk:1.35, res:{fisico:5,fuego:0,hielo:-10,veneno:5,aturdimiento:5}, elite:true,
+        abilities:{
+          ataque_nc:{label:'Ataque', mult:1.00},
+          flecha_perforante_nc:{label:'Flecha Perforante', mult:0.90, cooldown:3},
+          orden_ataque_nc:{label:'Orden de Ataque', mult:0.60, cooldown:5, selfBuff:{name:'Fortalecido', duration:2, stacks:4}},
+        },
+        aiPriority:['orden_ataque_nc','flecha_perforante_nc','ataque_nc']},
+      {id:'sacerdotisa_mareas', name:'Sacerdotisa de las Mareas', icon:'🌊', hp:1.70, atk:1.15, res:{fisico:0,fuego:5,hielo:-5,veneno:10,aturdimiento:5}, elite:true,
+        abilities:{
+          ataque_sm:{label:'Ataque', mult:0.80},
+          debilitamiento_oceanico:{label:'Debilitamiento Oceánico', mult:0.65, applies:{name:'Debilitado', chance:0.25, duration:2}, cooldown:3},
+          curacion_marina:{label:'Curación Marina', utility:'heal_ally', healPct:0.10, cooldown:4, condition:(ctx)=>combat.enemies.some(e=>e.hp>0 && e.hp<e.maxHP)},
+          canto_marea:{label:'Canto de Marea', mult:0.60, applies:{name:'Confusion', chance:0.15, duration:1}, cooldown:5},
+        },
+        aiPriority:['curacion_marina','debilitamiento_oceanico','canto_marea','ataque_sm']},
     ],
+    guardians: [],
+    // Guardián único y determinista por piso (51 a 59).
+    guardianByFloor: {
+      1: {id:'campeon_triton', name:'Campeón Tritón', icon:'🔱', hp:2.70, atk:1.25, res:{fisico:10,fuego:5,hielo:-10,veneno:5,aturdimiento:5}, boss:true, frontline:true,
+        abilities:{
+          tridente_g51:{label:'Tridente', mult:1.05},
+          estocada_g51:{label:'Estocada', mult:1.20, cooldown:3},
+          golpe_brutal_g51:{label:'Golpe Brutal', mult:1.35, applies:{name:'Ralentizado', chance:0.20, duration:2}, cooldown:4},
+        },
+        aiPriority:['golpe_brutal_g51','estocada_g51','tridente_g51']},
+      2: {id:'naga_maestro', name:'Naga Maestro', icon:'🏹', hp:2.65, atk:1.35, res:{fisico:0,fuego:0,hielo:-10,veneno:5,aturdimiento:5}, boss:true,
+        abilities:{
+          flecha_g52:{label:'Flecha', mult:1.05},
+          perforante_g52:{label:'Perforante', mult:0.95, cooldown:3},
+          entumecedora_g52:{label:'Entumecedora', mult:0.85, applies:{name:'Ralentizado', chance:0.25, duration:2}, cooldown:4},
+        },
+        aiPriority:['entumecedora_g52','perforante_g52','flecha_g52']},
+      3: {id:'guardian_abismo', name:'Guardián del Abismo', icon:'🌀', hp:3.00, atk:1.25, res:{fisico:10,fuego:5,hielo:-5,veneno:5,aturdimiento:10}, boss:true, frontline:true,
+        abilities:{
+          golpe_g53:{label:'Golpe', mult:1.00},
+          drenaje_marino:{label:'Drenaje Marino', mult:0.60, cooldown:4, mpDrain:0.10},
+          caparazon_g53:{label:'Caparazón', utility:'self_buff', selfBuff:{name:'Caparazón', duration:2, incomingDmgReduction:0.20}, cooldown:5},
+        },
+        aiPriority:['caparazon_g53','drenaje_marino','golpe_g53']},
+      4: {id:'sirena_matriarca', name:'Sirena Matriarca', icon:'🧜', hp:2.80, atk:1.20, res:{fisico:0,fuego:5,hielo:-5,veneno:10,aturdimiento:5}, boss:true,
+        abilities:{
+          canto_g54:{label:'Canto', mult:0.75, applies:{name:'Confusion', chance:0.25, duration:1}, cooldown:4},
+          ola_mental:{label:'Ola Mental', mult:0.80, applies:{name:'Debilitado', chance:0.20, duration:2}, cooldown:3},
+          whirlpool:{label:'Whirlpool', mult:0.70, applies:{name:'Ralentizado', chance:0.20, duration:2}, cooldown:4},
+        },
+        aiPriority:['canto_g54','whirlpool','ola_mental']},
+      5: {id:'gran_cangrejo_abisal', name:'Gran Cangrejo Abisal', icon:'🦀', hp:3.50, atk:1.20, res:{fisico:30,fuego:0,hielo:-5,veneno:5,aturdimiento:15}, boss:true, frontline:true,
+        abilities:{
+          pinza_g55:{label:'Pinza', mult:1.05},
+          aplastante_g55:{label:'Aplastante', mult:1.30, applies:{name:'Paralisis', chance:0.20, duration:1}, cooldown:4},
+          caparazon_g55:{label:'Caparazón', utility:'self_buff', selfBuff:{name:'Caparazón', duration:2, incomingDmgReduction:0.30}, cooldown:5},
+        },
+        aiPriority:['caparazon_g55','aplastante_g55','pinza_g55']},
+      6: {id:'serpiente_palpus', name:'Serpiente de Palpus', icon:'🐍', hp:2.90, atk:1.35, res:{fisico:10,fuego:0,hielo:-5,veneno:15,aturdimiento:5}, boss:true,
+        abilities:{
+          mordida_g56:{label:'Mordida', mult:1.05, applies:{name:'Veneno', chance:0.15, duration:3, stack:true, maxStack:3}},
+          constriccion:{label:'Constricción', mult:0.75, applies:{name:'Ralentizado', chance:0.20, duration:2}, cooldown:3},
+          emboscada:{label:'Emboscada', mult:1.35, cooldown:4},
+        },
+        aiPriority:['emboscada','constriccion','mordida_g56']},
+      7: {id:'centinela_coral_g', name:'Centinela de Coral', icon:'🪸', hp:3.50, atk:1.45, res:{fisico:20,fuego:5,hielo:-10,veneno:15,aturdimiento:10}, boss:true, frontline:true,
+        abilities:{
+          golpe_g57:{label:'Golpe', mult:1.05},
+          golpe_brutal_g57:{label:'Golpe Brutal', mult:1.35, cooldown:3},
+          debilitar_g57:{label:'Debilitar', mult:0.70, applies:{name:'Debilitado', chance:0.25, duration:2}, cooldown:3},
+          formacion_coralina:{label:'Formación Coralina', utility:'self_buff', selfBuff:{name:'Formación Coralina', duration:2, incomingDmgReduction:0.20}, cooldown:5},
+        },
+        aiPriority:['formacion_coralina','golpe_brutal_g57','debilitar_g57','golpe_g57']},
+      8: {id:'leviatan_abisal', name:'Leviatán Abisal', icon:'🐋', hp:3.80, atk:1.50, res:{fisico:25,fuego:5,hielo:-10,veneno:10,aturdimiento:15}, boss:true, frontline:true,
+        abilities:{
+          mordida_g58:{label:'Mordida', mult:1.10},
+          golpe_cola:{label:'Golpe de Cola', mult:1.25, cooldown:3},
+          embestida_g58:{label:'Embestida', mult:1.35, applies:{name:'Ralentizado', chance:0.15, duration:2}, cooldown:4},
+        },
+        aiPriority:['embestida_g58','golpe_cola','mordida_g58']},
+      9: {id:'heraldo_tormenta', name:'Heraldo de la Tormenta', icon:'⚡', hp:3.70, atk:1.45, res:{fisico:20,fuego:5,hielo:-15,veneno:10,aturdimiento:20}, boss:true, frontline:true,
+        abilities:{
+          tridente_g59:{label:'Tridente', mult:1.05},
+          rayo_marino:{label:'Rayo Marino', mult:0.90, applies:{name:'Debilitado', chance:0.20, duration:2}, cooldown:3},
+          tormenta_menor:{label:'Tormenta Menor', mult:0.60, cooldown:5, selfBuff:{name:'Tormenta Menor', duration:2, dmgMult:1.15}},
+        },
+        aiPriority:['tormenta_menor','rayo_marino','tridente_g59']},
+    },
     decadeBoss: {id:'storm_gush', name:'Storm Gush, Tetrasea el Señor de las Lágrimas', icon:'🔱', hp:5.4, atk:1.85, res:{fisico:25,fuego:5,hielo:-15,veneno:10,aturdimiento:20}, moves:['pegar','aplastar','debilitar'], boss:true, frontline:true}
   }
 ];
@@ -4954,16 +5407,29 @@ function computeCritEvasion(){
   const furioso = hasStatus(combat.playerStatuses,'Furioso');
   if(furioso) ev += furioso.evasionDelta/100;
   if(combat.playerDefending) ev = Math.max(ev, 0.5);
+  // Ralentizado (2026-09-25, décadas 21+): -15% de evasión plana mientras
+  // dure — antes el estado se aplicaba pero no hacía nada al jugador.
+  if(hasStatus(combat.playerStatuses,'Ralentizado')) ev -= 0.15;
   if(hasStatus(combat.playerStatuses,'Paralisis')) ev = 0; // indefenso: la Parálisis anula toda evasión, incluso defendiendo
   return {crit:d.critChance, evasion:clamp(ev,0.02,0.6)};
 }
 
+// Bono de evasión por estado en un ENEMIGO (2026-09-25, décadas 21+: varias
+// habilidades tipo "Paso Sombrío"/"Tras Picado" suben la evasión propia unos
+// turnos) — antes evasionDelta solo se leía del lado del jugador (Furioso);
+// los enemigos tenían la evasión fija de makeEnemy() sin forma de variar.
+function enemyStatusEvasionBonus(statuses){
+  let bonus = 0;
+  (statuses||[]).forEach(st=>{ if(st.evasionDelta) bonus += st.evasionDelta/100; });
+  return bonus;
+}
 // v1: los aliados no tienen Habilidad ni equipo propio todavía, solo una
 // base plana — la Parálisis igual los anula por completo, como al jugador.
 function computeAllyEvasion(ally){
   if(hasStatus(ally.statuses,'Paralisis')) return 0;
   const evasionFlat = (ally.specials||[]).filter(sp=>sp.type==='evasion_flat').reduce((sum,sp)=>sum+sp.value,0);
-  const ev = 0.06 + evasionFlat - levelGapEvasionBonus(monsterEffectiveLevel(), state.char.level);
+  let ev = 0.06 + evasionFlat - levelGapEvasionBonus(monsterEffectiveLevel(), state.char.level);
+  if(hasStatus(ally.statuses,'Ralentizado')) ev -= 0.15;
   return clamp(ev, 0.02, 0.6);
 }
 
@@ -5458,7 +5924,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
     // solo enemigos de verdad tienen tpl/evasion; un aliado hostil como
     // objetivo no esquiva por esta vía.
     if(target.tpl){
-      const dodgeChance = clamp((target.evasion||0) + levelGapEvasionBonus(monsterLevel, state.char.level) - d.precision, 0.02, 0.85);
+      const dodgeChance = clamp((target.evasion||0) + enemyStatusEvasionBonus(target.statuses) + levelGapEvasionBonus(monsterLevel, state.char.level) - d.precision, 0.02, 0.85);
       if(chance(dodgeChance)){
         log(`${target.name} esquiva tu ataque.`);
         return;
@@ -5606,6 +6072,15 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
     dmg = Math.max(1, Math.round(dmg));
     if(target.defending) dmg = Math.round(dmg*0.5);
     target.hp = Math.max(0, target.hp - dmg);
+    // Reflejo de daño (2026-09-25, pedido explícito, "Espejo Viviente" y
+    // similares): "100 de daño con 20% de reflejo = 20 de daño reflectado" —
+    // plano, sin resistencia ni escudo del lado del enemigo, sobre el golpe
+    // ya calculado.
+    if(target.tpl && target.tpl.reflectPct){
+      const reflected = Math.max(1, Math.round(dmg*target.tpl.reflectPct));
+      dealDamageToPlayer(reflected);
+      log(`${target.name} refleja ${reflected} de daño de vuelta.`);
+    }
     turnEffects.push(target.tpl
       ? {targetKind:'enemy', key: combat.enemies.indexOf(target), amount:dmg, kind:'dmg'}
       : {targetKind:'ally', key: target.id, amount:dmg, kind:'dmg'});
@@ -5930,7 +6405,7 @@ function resolveOneAllyTurn(ally){
     // Esquivar del enemigo: los aliados no tienen Precisión propia todavía
     // (el equipo general de un aliado no aporta ese stat), así que aquí se
     // tira contra la evasión cruda del objetivo, sin contrarresto.
-    if(chance(enemyTarget.evasion||0)){
+    if(chance((enemyTarget.evasion||0) + enemyStatusEvasionBonus(enemyTarget.statuses))){
       log(`${enemyTarget.name} esquiva el golpe de <b>${ally.name}</b>.`);
       combat.lastAction = {label:'¡Esquivado!', effects:[]};
       return;
@@ -5979,6 +6454,11 @@ function resolveOneAllyTurn(ally){
     log(skillText
       ? `<b>${ally.name}</b> ${skillText} ${enemyTarget.name}: ${dmg} de daño.`
       : `<b>${ally.name}</b> ataca a ${enemyTarget.name}: ${dmg} de daño.`);
+    if(enemyTarget.tpl && enemyTarget.tpl.reflectPct){
+      const reflected = Math.max(1, Math.round(dmg*enemyTarget.tpl.reflectPct));
+      dealDamageToAlly(ally, reflected);
+      log(`${enemyTarget.name} refleja ${reflected} de daño de vuelta a <b>${ally.name}</b>.`);
+    }
     applyAllySpecials(ally, enemyTarget, dmg);
     combat.lastAction = {label: skillName || 'Ataque', effects:[{targetKind:'enemy', key:fi, amount:dmg, kind:'dmg'}]};
 }
@@ -6454,6 +6934,25 @@ function resolveNewStyleEnemyMove(enemy, target){
     combat.lastAction = {label:ability.label, effects:[]};
     return;
   }
+  // Movimiento de soporte puro (no hace daño): cura al aliado vivo más
+  // herido del propio bando (2026-09-25, pedido explícito, "Médico de
+  // Campaña"/"Sacerdotisa de las Mareas") — a diferencia de buff_companion,
+  // no depende de un companionRef fijo: busca entre TODOS los enemigos vivos
+  // del combate, así sirve sin importar cómo se armó el grupo.
+  if(ability.utility==='heal_ally'){
+    const candidates = combat.enemies.filter(e=>e!==enemy && e.hp>0 && e.hp<e.maxHP);
+    if(candidates.length){
+      const woundedTarget = candidates.reduce((a,b)=> (b.hp/b.maxHP) < (a.hp/a.maxHP) ? b : a);
+      const healAmt = Math.max(1, Math.round(woundedTarget.maxHP * (ability.healPct||0.10)));
+      const before = woundedTarget.hp;
+      woundedTarget.hp = Math.min(woundedTarget.maxHP, woundedTarget.hp + healAmt);
+      log(`${enemy.name} usa ${ability.label}: cura a ${woundedTarget.name} por ${woundedTarget.hp-before}.`);
+    } else {
+      log(`${enemy.name} usa ${ability.label}, pero nadie necesita curación.`);
+    }
+    combat.lastAction = {label:ability.label, effects:[]};
+    return;
+  }
 
   let dmg = enemy.atk * (ability.mult!=null ? ability.mult : 1);
   const fortalecido = hasStatus(enemy.statuses,'Fortalecido');
@@ -6487,6 +6986,16 @@ function resolveNewStyleEnemyMove(enemy, target){
     finalDmg = Math.max(1, Math.round(finalDmg));
     dealDamageToPlayer(finalDmg);
     if(ability.applies) applyStatus(null, Object.assign({}, ability.applies), true);
+    // Robo de MP (2026-09-25, pedido explícito: "quitar un % del MP al que
+    // se atacó") — % de tu MP ACTUAL, no del máximo, para que nunca deje en
+    // negativo ni castigue más a quien ya viene gastado.
+    if(ability.mpDrain){
+      const drained = Math.round(state.char.curSta * ability.mpDrain);
+      if(drained>0){
+        state.char.curSta = Math.max(0, state.char.curSta - drained);
+        log(`${enemy.name} drena ${drained} de tu MP.`);
+      }
+    }
     log(`${enemy.name} usa ${ability.label}: ${finalDmg} de daño.`);
     combat.lastAction = {label:ability.label, effects:[{targetKind:'player', amount:finalDmg, kind:'dmg'}]};
   } else {
@@ -6508,6 +7017,13 @@ function resolveNewStyleEnemyMove(enemy, target){
     finalDmg = Math.max(1, Math.round(allyDmg));
     dealDamageToAlly(ally, finalDmg);
     if(ability.applies) applyStatus(ally, Object.assign({}, ability.applies), false);
+    if(ability.mpDrain){
+      const drained = Math.round((ally.mp||0) * ability.mpDrain);
+      if(drained>0){
+        ally.mp = Math.max(0, ally.mp - drained);
+        log(`${enemy.name} drena ${drained} de MP a <b>${ally.name}</b>.`);
+      }
+    }
     log(`${enemy.name} usa ${ability.label} sobre ${ally.name}: ${finalDmg} de daño.`);
     if(ally.hp<=0) log(`<b>${ally.name}</b> cae en combate y queda fuera de acción hasta que avances al siguiente nivel del laberinto.`);
     combat.lastAction = {label:ability.label, effects:[{targetKind:'ally', key:ally.id, amount:finalDmg, kind:'dmg'}]};
