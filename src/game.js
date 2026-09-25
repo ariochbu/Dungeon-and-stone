@@ -402,7 +402,10 @@ const DECADE_BESTIARY = [
         },
         hpThresholdBuff:{threshold:0.4, buff:{name:'Frenesí Voraz', duration:3, dmgMult:1.15}},
         aiPriority:['golpe_brutal_dn','picadura_voraz','mandibula_brutal']},
-      6: {id:'arana_caparazon', name:'Araña de Caparazón', icon:'🕷️', hp:3.50, atk:1.15, res:{fisico:35,fuego:0,hielo:10,veneno:20,aturdimiento:30}, boss:true, frontline:true,
+      // Física bajada de 35 a 18 (2026-09-26, pedido explícito): ningún
+      // guardián de piso puede resistir más golpe físico que el propio jefe
+      // de década (Matriarca escarlata, 20) — antes lo superaba por 15 puntos.
+      6: {id:'arana_caparazon', name:'Araña de Caparazón', icon:'🕷️', hp:3.50, atk:1.15, res:{fisico:18,fuego:0,hielo:10,veneno:20,aturdimiento:30}, boss:true, frontline:true,
         abilities:{
           golpe_patas:{label:'Golpe de Patas', mult:1.00},
           caparazon_endurecido:{label:'Caparazón Endurecido', utility:'self_buff', selfBuff:{name:'Caparazón Endurecido', duration:3, incomingDmgReduction:0.30}, cooldown:5},
@@ -726,16 +729,22 @@ const DECADE_BESTIARY = [
   // en vez de guardián individual) en generateDungeon()/enterNode() —
   // ninguna de esas reglas es específica de esta década en el código, ya
   // son genéricas por nivel/decadeIndex, así que no hace falta tocarlas.
+  // Resistencia física Y mágica (fuego) bajadas ~5 puntos en cada regular/
+  // élite (2026-09-26, pedido explícito: "los del piso 41 en adelante
+  // aguantan mucho" — el nerf anterior de -8% de HP/ATQ, ver
+  // FLOOR_41_59_NERF_MULT, nunca tocó resistencias). El jefe de década
+  // (Custodio de la Isla, 15 físico / 10 fuego) queda intacto y sigue
+  // siendo el techo de la década en ambas.
   {
     regular: [
-      {id:'explorador_rival', name:'Explorador Rival', icon:'🗡️', hp:0.95, atk:1.05, res:{fisico:5,fuego:0,hielo:0,veneno:0,aturdimiento:5}, frontline:true,
+      {id:'explorador_rival', name:'Explorador Rival', icon:'🗡️', hp:0.95, atk:1.05, res:{fisico:0,fuego:0,hielo:0,veneno:0,aturdimiento:5}, frontline:true,
         abilities:{
           estocada_er:{label:'Estocada', mult:1.00},
           ataque_oportunista:{label:'Ataque Oportunista', mult:0.80, cooldown:3, condition:(ctx)=>ctx.targetHpPct<0.5},
           robar_er:{label:'Robar', mult:0.65, cooldown:4, selfBuff:{name:'Tras Robar', duration:1, evasionDelta:10}},
         },
         aiPriority:['ataque_oportunista','robar_er','estocada_er']},
-      {id:'mercenario_desertor', name:'Mercenario Desertor', icon:'🪓', hp:1.08, atk:1.12, res:{fisico:10,fuego:0,hielo:0,veneno:0,aturdimiento:5}, frontline:true,
+      {id:'mercenario_desertor', name:'Mercenario Desertor', icon:'🪓', hp:1.08, atk:1.12, res:{fisico:5,fuego:0,hielo:0,veneno:0,aturdimiento:5}, frontline:true,
         abilities:{
           golpe_md:{label:'Golpe', mult:1.00},
           golpe_brutal_md:{label:'Golpe Brutal', mult:1.25, cooldown:3},
@@ -750,7 +759,7 @@ const DECADE_BESTIARY = [
           marca_presa:{label:'Marca de Presa', mult:0.70, cooldown:4},
         },
         aiPriority:['disparo_preciso','marca_presa','disparo_cr']},
-      {id:'superviviente_curtido', name:'Superviviente Curtido', icon:'🔪', hp:1.00, atk:1.10, res:{fisico:5,fuego:0,hielo:0,veneno:5,aturdimiento:5},
+      {id:'superviviente_curtido', name:'Superviviente Curtido', icon:'🔪', hp:1.00, atk:1.10, res:{fisico:0,fuego:0,hielo:0,veneno:5,aturdimiento:5},
         abilities:{
           corte_sc:{label:'Corte', mult:1.00, applies:{name:'Sangrado', chance:0.10, duration:2, stack:true, maxStack:3}},
           atemorizar_sc:{label:'Atemorizar', mult:0.60, applies:{name:'Miedo', chance:0.20, duration:2}, cooldown:5},
@@ -765,7 +774,7 @@ const DECADE_BESTIARY = [
           corte_ejecutor:{label:'Corte Ejecutor', mult:1.15, cooldown:4, condition:(ctx)=>ctx.targetHpPct<0.4},
         },
         aiPriority:['corte_ejecutor','paso_sombrio','doble_daga']},
-      {id:'medico_campana', name:'Médico de Campaña', icon:'⚕️', hp:0.75, atk:0.80, res:{fisico:-5,fuego:5,hielo:5,veneno:10,aturdimiento:5},
+      {id:'medico_campana', name:'Médico de Campaña', icon:'⚕️', hp:0.75, atk:0.80, res:{fisico:-5,fuego:0,hielo:0,veneno:10,aturdimiento:5},
         abilities:{
           baston:{label:'Bastón', mult:0.80},
           curacion_mc:{label:'Curación', utility:'heal_ally', healPct:0.10, cooldown:4, condition:(ctx)=>combat.enemies.some(e=>e.hp>0 && e.hp<e.maxHP)},
@@ -778,7 +787,7 @@ const DECADE_BESTIARY = [
     // va primero: es el que escolta en solitario al jefe (bestiary.elite[0]
     // en enterNode) y el escuadrón de "guardián" de 5+1.
     elite: [
-      {id:'superviviente_despiadado', name:'Superviviente Despiadado', icon:'⚔️', hp:1.90, atk:1.38, res:{fisico:10,fuego:0,hielo:0,veneno:5,aturdimiento:5}, elite:true, frontline:true,
+      {id:'superviviente_despiadado', name:'Superviviente Despiadado', icon:'⚔️', hp:1.90, atk:1.38, res:{fisico:5,fuego:0,hielo:0,veneno:5,aturdimiento:5}, elite:true, frontline:true,
         abilities:{
           golpe_sd:{label:'Golpe', mult:1.05},
           golpe_brutal_sd:{label:'Golpe Brutal', mult:1.35, cooldown:3},
@@ -794,13 +803,13 @@ const DECADE_BESTIARY = [
           disparo_ejecutor:{label:'Disparo Ejecutor', mult:1.30, cooldown:4, condition:(ctx)=>ctx.targetHpPct<0.4},
         },
         aiPriority:['disparo_ejecutor','marca_mortal','disparo_cv']},
-      {id:'duelista_veterano', name:'Duelista Veterano', icon:'🤺', hp:1.80, atk:1.32, res:{fisico:5,fuego:0,hielo:0,veneno:0,aturdimiento:5}, elite:true, frontline:true,
+      {id:'duelista_veterano', name:'Duelista Veterano', icon:'🤺', hp:1.80, atk:1.32, res:{fisico:0,fuego:0,hielo:0,veneno:0,aturdimiento:5}, elite:true, frontline:true,
         abilities:{
           estocada_dv:{label:'Estocada', mult:1.05},
           corte_preciso:{label:'Corte Preciso', mult:1.00, applies:{name:'Sangrado', chance:0.25, duration:3, stack:true, maxStack:3}, cooldown:3},
         },
         aiPriority:['corte_preciso','estocada_dv']},
-      {id:'capitan_mercenario', name:'Capitán Mercenario', icon:'🎖️', hp:2.00, atk:1.30, res:{fisico:10,fuego:0,hielo:0,veneno:0,aturdimiento:10}, elite:true, frontline:true,
+      {id:'capitan_mercenario', name:'Capitán Mercenario', icon:'🎖️', hp:2.00, atk:1.30, res:{fisico:5,fuego:0,hielo:0,veneno:0,aturdimiento:10}, elite:true, frontline:true,
         abilities:{
           espadazo:{label:'Espadazo', mult:1.05},
           orden_ataque:{label:'Orden de Ataque', mult:0.60, cooldown:5, selfBuff:{name:'Fortalecido', duration:2, stacks:4}},
@@ -832,30 +841,41 @@ const DECADE_BESTIARY = [
   // (Garvel) no tienen gancho en el motor actual (ni chequeo de inmunidad a
   // proc, ni evento on-death) — se omiten, documentado acá en vez de
   // silencioso.
+  // Resistencia física Y mágica (fuego) bajadas ~5 puntos en regulares/
+  // élites/guardianes de piso (2026-09-26, pedido explícito: "los del piso
+  // 41 en adelante aguantan mucho" — el nerf anterior de -8% de HP/ATQ
+  // nunca tocó resistencias). El hielo se deja intacto: ya está en negativo
+  // en absolutamente todos los enemigos de esta década (debilidad temática
+  // al frío, "El Mar") — bajarlo más no combate tankiness, solo exagera una
+  // vulnerabilidad que ya es real. Gran Cangrejo Abisal (piso 55) además
+  // corrige una violación real: tenía más física (30) que el propio Storm
+  // Gush (25) — ningún guardián puede superar a su jefe de década. El jefe
+  // queda intacto (25 físico / 5 fuego) y sigue siendo el techo de la
+  // década en ambas.
   {
     regular: [
-      {id:'triton_guerrero', name:'Tritón Guerrero', icon:'🔱', hp:1.10, atk:1.10, res:{fisico:10,fuego:5,hielo:-10,veneno:0,aturdimiento:0}, frontline:true,
+      {id:'triton_guerrero', name:'Tritón Guerrero', icon:'🔱', hp:1.10, atk:1.10, res:{fisico:5,fuego:0,hielo:-10,veneno:0,aturdimiento:0}, frontline:true,
         abilities:{
           tridente:{label:'Tridente', mult:1.00},
           golpe_brutal_tg:{label:'Golpe Brutal', mult:1.25, cooldown:3},
           estocada_marina:{label:'Estocada Marina', mult:0.90, applies:{name:'Ralentizado', chance:0.20, duration:2}, cooldown:4},
         },
         aiPriority:['golpe_brutal_tg','estocada_marina','tridente']},
-      {id:'triton_hechicero', name:'Tritón Hechicero', icon:'🌊', hp:0.80, atk:1.00, res:{fisico:-5,fuego:10,hielo:-10,veneno:5,aturdimiento:0},
+      {id:'triton_hechicero', name:'Tritón Hechicero', icon:'🌊', hp:0.80, atk:1.00, res:{fisico:-5,fuego:5,hielo:-10,veneno:5,aturdimiento:0},
         abilities:{
           descarga_acuatica:{label:'Descarga Acuática', mult:0.80},
           debilitar_th:{label:'Debilitar', mult:0.70, applies:{name:'Debilitado', chance:0.20, duration:2}, cooldown:3},
           corriente_inversa:{label:'Corriente Inversa', mult:0.60, cooldown:4},
         },
         aiPriority:['debilitar_th','corriente_inversa','descarga_acuatica']},
-      {id:'cangrejo_gigante', name:'Cangrejo Gigante', icon:'🦀', hp:1.30, atk:1.05, res:{fisico:20,fuego:0,hielo:-5,veneno:0,aturdimiento:10}, frontline:true,
+      {id:'cangrejo_gigante', name:'Cangrejo Gigante', icon:'🦀', hp:1.30, atk:1.05, res:{fisico:15,fuego:0,hielo:-5,veneno:0,aturdimiento:10}, frontline:true,
         abilities:{
           pinza:{label:'Pinza', mult:1.00},
           pinza_aplastante:{label:'Pinza Aplastante', mult:1.20, applies:{name:'Paralisis', chance:0.15, duration:1}, cooldown:4},
           caparazon:{label:'Caparazón', utility:'self_buff', selfBuff:{name:'Caparazón', duration:2, incomingDmgReduction:0.20}, cooldown:5},
         },
         aiPriority:['caparazon','pinza_aplastante','pinza']},
-      {id:'sirena_corrupta', name:'Sirena Corrupta', icon:'🧜', hp:0.75, atk:0.95, res:{fisico:-5,fuego:5,hielo:-5,veneno:5,aturdimiento:0},
+      {id:'sirena_corrupta', name:'Sirena Corrupta', icon:'🧜', hp:0.75, atk:0.95, res:{fisico:-5,fuego:0,hielo:-5,veneno:5,aturdimiento:0},
         abilities:{
           grito_cortante:{label:'Grito Cortante', mult:0.90},
           canto_corrupto:{label:'Canto Corrupto', mult:0.70, applies:{name:'Confusion', chance:0.18, duration:1}, cooldown:4},
@@ -877,7 +897,7 @@ const DECADE_BESTIARY = [
         aiPriority:['salpicadura_acida','mordida_garvel']},
     ],
     elite: [
-      {id:'guardia_profundidades', name:'Guardia de las Profundidades', icon:'🔱', hp:2.10, atk:1.35, res:{fisico:15,fuego:5,hielo:-10,veneno:5,aturdimiento:10}, elite:true, frontline:true,
+      {id:'guardia_profundidades', name:'Guardia de las Profundidades', icon:'🔱', hp:2.10, atk:1.35, res:{fisico:10,fuego:0,hielo:-10,veneno:5,aturdimiento:10}, elite:true, frontline:true,
         abilities:{
           tridente_gp:{label:'Tridente', mult:1.05},
           golpe_brutal_gp:{label:'Golpe Brutal', mult:1.40, cooldown:3},
@@ -885,14 +905,14 @@ const DECADE_BESTIARY = [
           guardia_marea:{label:'Guardia de Marea', utility:'self_buff', selfBuff:{name:'Guardia de Marea', duration:2, incomingDmgReduction:0.15}, cooldown:5},
         },
         aiPriority:['guardia_marea','golpe_brutal_gp','estocada_profunda','tridente_gp']},
-      {id:'naga_capitan', name:'Naga Capitán', icon:'🏹', hp:1.90, atk:1.35, res:{fisico:5,fuego:0,hielo:-10,veneno:5,aturdimiento:5}, elite:true,
+      {id:'naga_capitan', name:'Naga Capitán', icon:'🏹', hp:1.90, atk:1.35, res:{fisico:0,fuego:0,hielo:-10,veneno:5,aturdimiento:5}, elite:true,
         abilities:{
           ataque_nc:{label:'Ataque', mult:1.00},
           flecha_perforante_nc:{label:'Flecha Perforante', mult:0.90, cooldown:3},
           orden_ataque_nc:{label:'Orden de Ataque', mult:0.60, cooldown:5, selfBuff:{name:'Fortalecido', duration:2, stacks:4}},
         },
         aiPriority:['orden_ataque_nc','flecha_perforante_nc','ataque_nc']},
-      {id:'sacerdotisa_mareas', name:'Sacerdotisa de las Mareas', icon:'🌊', hp:1.70, atk:1.15, res:{fisico:0,fuego:5,hielo:-5,veneno:10,aturdimiento:5}, elite:true,
+      {id:'sacerdotisa_mareas', name:'Sacerdotisa de las Mareas', icon:'🌊', hp:1.70, atk:1.15, res:{fisico:0,fuego:0,hielo:-5,veneno:10,aturdimiento:5}, elite:true,
         abilities:{
           ataque_sm:{label:'Ataque', mult:0.80},
           debilitamiento_oceanico:{label:'Debilitamiento Oceánico', mult:0.65, applies:{name:'Debilitado', chance:0.25, duration:2}, cooldown:3},
@@ -904,7 +924,7 @@ const DECADE_BESTIARY = [
     guardians: [],
     // Guardián único y determinista por piso (51 a 59).
     guardianByFloor: {
-      1: {id:'campeon_triton', name:'Campeón Tritón', icon:'🔱', hp:2.70, atk:1.25, res:{fisico:10,fuego:5,hielo:-10,veneno:5,aturdimiento:5}, boss:true, frontline:true,
+      1: {id:'campeon_triton', name:'Campeón Tritón', icon:'🔱', hp:2.70, atk:1.25, res:{fisico:5,fuego:0,hielo:-10,veneno:5,aturdimiento:5}, boss:true, frontline:true,
         abilities:{
           tridente_g51:{label:'Tridente', mult:1.05},
           estocada_g51:{label:'Estocada', mult:1.20, cooldown:3},
@@ -918,35 +938,38 @@ const DECADE_BESTIARY = [
           entumecedora_g52:{label:'Entumecedora', mult:0.85, applies:{name:'Ralentizado', chance:0.25, duration:2}, cooldown:4},
         },
         aiPriority:['entumecedora_g52','perforante_g52','flecha_g52']},
-      3: {id:'guardian_abismo', name:'Guardián del Abismo', icon:'🌀', hp:3.00, atk:1.25, res:{fisico:10,fuego:5,hielo:-5,veneno:5,aturdimiento:10}, boss:true, frontline:true,
+      3: {id:'guardian_abismo', name:'Guardián del Abismo', icon:'🌀', hp:3.00, atk:1.25, res:{fisico:5,fuego:0,hielo:-5,veneno:5,aturdimiento:10}, boss:true, frontline:true,
         abilities:{
           golpe_g53:{label:'Golpe', mult:1.00},
           drenaje_marino:{label:'Drenaje Marino', mult:0.60, cooldown:4, mpDrain:0.10},
           caparazon_g53:{label:'Caparazón', utility:'self_buff', selfBuff:{name:'Caparazón', duration:2, incomingDmgReduction:0.20}, cooldown:5},
         },
         aiPriority:['caparazon_g53','drenaje_marino','golpe_g53']},
-      4: {id:'sirena_matriarca', name:'Sirena Matriarca', icon:'🧜', hp:2.80, atk:1.20, res:{fisico:0,fuego:5,hielo:-5,veneno:10,aturdimiento:5}, boss:true,
+      4: {id:'sirena_matriarca', name:'Sirena Matriarca', icon:'🧜', hp:2.80, atk:1.20, res:{fisico:0,fuego:0,hielo:-5,veneno:10,aturdimiento:5}, boss:true,
         abilities:{
           canto_g54:{label:'Canto', mult:0.75, applies:{name:'Confusion', chance:0.25, duration:1}, cooldown:4},
           ola_mental:{label:'Ola Mental', mult:0.80, applies:{name:'Debilitado', chance:0.20, duration:2}, cooldown:3},
           whirlpool:{label:'Whirlpool', mult:0.70, applies:{name:'Ralentizado', chance:0.20, duration:2}, cooldown:4},
         },
         aiPriority:['canto_g54','whirlpool','ola_mental']},
-      5: {id:'gran_cangrejo_abisal', name:'Gran Cangrejo Abisal', icon:'🦀', hp:3.50, atk:1.20, res:{fisico:30,fuego:0,hielo:-5,veneno:5,aturdimiento:15}, boss:true, frontline:true,
+      // Física bajada de 30 a 18 (2026-09-26, pedido explícito): superaba al
+      // propio jefe de década (Storm Gush, 25) — ningún guardián puede
+      // resistir más golpe físico que su jefe.
+      5: {id:'gran_cangrejo_abisal', name:'Gran Cangrejo Abisal', icon:'🦀', hp:3.50, atk:1.20, res:{fisico:18,fuego:0,hielo:-5,veneno:5,aturdimiento:15}, boss:true, frontline:true,
         abilities:{
           pinza_g55:{label:'Pinza', mult:1.05},
           aplastante_g55:{label:'Aplastante', mult:1.30, applies:{name:'Paralisis', chance:0.20, duration:1}, cooldown:4},
           caparazon_g55:{label:'Caparazón', utility:'self_buff', selfBuff:{name:'Caparazón', duration:2, incomingDmgReduction:0.30}, cooldown:5},
         },
         aiPriority:['caparazon_g55','aplastante_g55','pinza_g55']},
-      6: {id:'serpiente_palpus', name:'Serpiente de Palpus', icon:'🐍', hp:2.90, atk:1.35, res:{fisico:10,fuego:0,hielo:-5,veneno:15,aturdimiento:5}, boss:true,
+      6: {id:'serpiente_palpus', name:'Serpiente de Palpus', icon:'🐍', hp:2.90, atk:1.35, res:{fisico:5,fuego:0,hielo:-5,veneno:15,aturdimiento:5}, boss:true,
         abilities:{
           mordida_g56:{label:'Mordida', mult:1.05, applies:{name:'Veneno', chance:0.15, duration:3, stack:true, maxStack:3}},
           constriccion:{label:'Constricción', mult:0.75, applies:{name:'Ralentizado', chance:0.20, duration:2}, cooldown:3},
           emboscada:{label:'Emboscada', mult:1.35, cooldown:4},
         },
         aiPriority:['emboscada','constriccion','mordida_g56']},
-      7: {id:'centinela_coral_g', name:'Centinela de Coral', icon:'🪸', hp:3.50, atk:1.45, res:{fisico:20,fuego:5,hielo:-10,veneno:15,aturdimiento:10}, boss:true, frontline:true,
+      7: {id:'centinela_coral_g', name:'Centinela de Coral', icon:'🪸', hp:3.50, atk:1.45, res:{fisico:15,fuego:0,hielo:-10,veneno:15,aturdimiento:10}, boss:true, frontline:true,
         abilities:{
           golpe_g57:{label:'Golpe', mult:1.05},
           golpe_brutal_g57:{label:'Golpe Brutal', mult:1.35, cooldown:3},
@@ -954,14 +977,14 @@ const DECADE_BESTIARY = [
           formacion_coralina:{label:'Formación Coralina', utility:'self_buff', selfBuff:{name:'Formación Coralina', duration:2, incomingDmgReduction:0.20}, cooldown:5},
         },
         aiPriority:['formacion_coralina','golpe_brutal_g57','debilitar_g57','golpe_g57']},
-      8: {id:'leviatan_abisal', name:'Leviatán Abisal', icon:'🐋', hp:3.80, atk:1.50, res:{fisico:25,fuego:5,hielo:-10,veneno:10,aturdimiento:15}, boss:true, frontline:true,
+      8: {id:'leviatan_abisal', name:'Leviatán Abisal', icon:'🐋', hp:3.80, atk:1.50, res:{fisico:20,fuego:0,hielo:-10,veneno:10,aturdimiento:15}, boss:true, frontline:true,
         abilities:{
           mordida_g58:{label:'Mordida', mult:1.10},
           golpe_cola:{label:'Golpe de Cola', mult:1.25, cooldown:3},
           embestida_g58:{label:'Embestida', mult:1.35, applies:{name:'Ralentizado', chance:0.15, duration:2}, cooldown:4},
         },
         aiPriority:['embestida_g58','golpe_cola','mordida_g58']},
-      9: {id:'heraldo_tormenta', name:'Heraldo de la Tormenta', icon:'⚡', hp:3.70, atk:1.45, res:{fisico:20,fuego:5,hielo:-15,veneno:10,aturdimiento:20}, boss:true, frontline:true,
+      9: {id:'heraldo_tormenta', name:'Heraldo de la Tormenta', icon:'⚡', hp:3.70, atk:1.45, res:{fisico:15,fuego:0,hielo:-15,veneno:10,aturdimiento:20}, boss:true, frontline:true,
         abilities:{
           tridente_g59:{label:'Tridente', mult:1.05},
           rayo_marino:{label:'Rayo Marino', mult:0.90, applies:{name:'Debilitado', chance:0.20, duration:2}, cooldown:3},
@@ -2680,6 +2703,7 @@ let invOpen = false; // whether the inventory/equipment panel is showing
 let equipTarget = 'player'; // 'player' o el id de un aliado — a quién equipa el Inventario ahora mismo
 let invGearFilter = 'todos'; // 'todos' o un EQUIP_SLOTS — qué categoría de la mochila se muestra
 let invGearTierFilter = 'todos'; // 'todos' o una key de RARITIES — filtro de rareza en el inventario
+let invGearClassFilter = 'todos'; // 'todos' o una key de SHOP_ROLE_LABELS — filtro por senda en el inventario
 let invStoneTierFilter = 'todos'; // 'todos' o una letra E-SS — filtro de rango en piedras de alma
 let homeOpen = false; // whether the Hogar (home stash) panel is showing
 let shopOpen = false; // whether the Tienda (shop) panel is showing
@@ -3881,8 +3905,18 @@ function renderInventory(){
     <button class="nav-btn ${invGearTierFilter==='todos'?'active':''}" data-geartierfilter="todos">Todos los rangos</button>
     ${gearTiersPresent.map(rk=>`<button class="nav-btn ${invGearTierFilter===rk?'active':''}" data-geartierfilter="${rk}" style="${invGearTierFilter===rk?`border-color:${RARITIES[rk].color}; color:${RARITIES[rk].color};`:''}">${RARITIES[rk].name}</button>`).join('')}
   </div>` : '';
+  // Filtro por senda (2026-09-26, pedido explícito: "en el inventario
+  // tambien coloca por clase como filtro") — mismo patrón, tercera fila.
+  const gearClassesPresent = Object.keys(SHOP_ROLE_LABELS).filter(cid=> gearItems.some(it=>it.styleId===cid));
+  if(invGearClassFilter!=='todos' && !gearClassesPresent.includes(invGearClassFilter)) invGearClassFilter = 'todos';
+  const gearClassFilterHTML = gearClassesPresent.length>1 ? `<div class="inv-filter-bar">
+    <button class="nav-btn ${invGearClassFilter==='todos'?'active':''}" data-gearclassfilter="todos">Todas las sendas</button>
+    ${gearClassesPresent.map(cid=>`<button class="nav-btn ${invGearClassFilter===cid?'active':''}" data-gearclassfilter="${cid}">${SHOP_ROLE_LABELS[cid]}</button>`).join('')}
+  </div>` : '';
   const gearHTML = gearItems.length ? EQUIP_SLOTS.filter(slot=> invGearFilter==='todos' || slot===invGearFilter).map(slot=>{
-    const items = gearItems.filter(it=>it.slot===slot && (invGearTierFilter==='todos' || (it.rarity||'comun')===invGearTierFilter));
+    const items = gearItems.filter(it=>it.slot===slot
+      && (invGearTierFilter==='todos' || (it.rarity||'comun')===invGearTierFilter)
+      && (invGearClassFilter==='todos' || it.styleId===invGearClassFilter));
     if(!items.length) return '';
     const rows = items.map(it=>`
       <div class="inv-item-row" style="${rarityRowStyle(it)}">
@@ -3983,6 +4017,7 @@ function renderInventory(){
     <div class="section-label inv-section-label">🎒 Equipo en la mochila</div>
     ${gearFilterHTML}
     ${gearTierFilterHTML}
+    ${gearClassFilterHTML}
     ${gearHTML}
 
     <div class="section-label inv-section-label">🧪 Pociones</div>
@@ -4014,6 +4049,9 @@ function renderInventory(){
   });
   document.querySelectorAll('[data-geartierfilter]').forEach(btn=>{
     btn.onclick = ()=>{ invGearTierFilter = btn.dataset.geartierfilter; renderInventory(); };
+  });
+  document.querySelectorAll('[data-gearclassfilter]').forEach(btn=>{
+    btn.onclick = ()=>{ invGearClassFilter = btn.dataset.gearclassfilter; renderInventory(); };
   });
   document.querySelectorAll('[data-stonetierfilter]').forEach(btn=>{
     btn.onclick = ()=>{ invStoneTierFilter = btn.dataset.stonetierfilter; renderInventory(); };
