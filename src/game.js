@@ -999,14 +999,18 @@ const DECADE_BESTIARY = [
    checkPetTriggers) para su habilidad única/mítica.
 */
 const PET_RARITIES = {
-  poco_comun: {id:'poco_comun', name:'Poco Común', color:'#46c168', weight:80,    dupGold:1000},
-  raro:       {id:'raro',       name:'Raro',        color:'#3b8fe0', weight:15,    dupGold:4000},
-  unico:      {id:'unico',      name:'Único',       color:'#9350dd', weight:4,     dupGold:15000},
-  epico:      {id:'epico',      name:'Épico',       color:'#d6409f', weight:0.9,   dupGold:60000},
-  legendario: {id:'legendario', name:'Legendario',  color:'#e0b23f', weight:0.099, dupGold:300000},
-  mitico:     {id:'mitico',     name:'Mítico',      color:'#e0393f', weight:0.001, dupGold:2000000}
+  poco_comun: {id:'poco_comun', name:'Poco Común', color:'#46c168', weight:80},
+  raro:       {id:'raro',       name:'Raro',        color:'#3b8fe0', weight:15},
+  unico:      {id:'unico',      name:'Único',       color:'#9350dd', weight:4},
+  epico:      {id:'epico',      name:'Épico',       color:'#d6409f', weight:0.9},
+  legendario: {id:'legendario', name:'Legendario',  color:'#e0b23f', weight:0.099},
+  mitico:     {id:'mitico',     name:'Mítico',      color:'#e0393f', weight:0.001}
 };
 const PET_RARITY_ORDER = ['poco_comun','raro','unico','epico','legendario','mitico'];
+// Duplicado (2026-09-25, pedido explícito): oro fijo sin importar el rango,
+// no escalonado por rareza — el mensaje que ve el jugador ("+1000 de oro")
+// tiene que ser literalmente cierto para cualquier duplicado.
+const PET_DUP_GOLD = 1000;
 function petArtPath(id){ return `src/assets/mascotas/mascota_${String(id).padStart(3,'0')}.png`; }
 const PET_CATALOG = [
   {id:1, name:'Horn Rabbit', rarity:'poco_comun', bonuses:[{type:'evasion_flat', value:0.03}]},
@@ -1251,7 +1255,7 @@ function doPetPulls(count){
     const isDup = !!state.char.pets.owned[id];
     let goldRefund = 0;
     if(isDup){
-      goldRefund = PET_RARITIES[tpl.rarity].dupGold;
+      goldRefund = PET_DUP_GOLD;
       state.char.gold += goldRefund;
     } else {
       state.char.pets.owned[id] = 1;
@@ -4197,16 +4201,8 @@ function renderCity(){
    RENDER: OTORGAR OFRENDA — gacha de mascotas "Caídos del Laberinto"
    ============================================================ */
 function showPetRates(){
-  const rows = PET_RARITY_ORDER.map(r=>{
-    const t = PET_RARITIES[r];
-    return `<div style="display:flex; justify-content:space-between; gap:10px; padding:4px 0; border-bottom:1px solid var(--border);">
-      <span style="color:${t.color}; font-weight:bold;">${t.name}</span>
-      <span>${t.weight}%</span>
-    </div>`;
-  }).join('');
-  showOverlay('Tasas de invocación', `
-    <p style="margin-top:0;">Cada tirada es independiente — no hay tirada garantizada (sin pity). Si sale un Caído del Laberinto que ya tienes, se convierte automáticamente en oro según su rango en vez de acumularse.</p>
-    ${rows}
+  showOverlay('Cómo funciona la ofrenda', `
+    <p style="margin-top:0;">Si sale un Caído del Laberinto que ya tienes, se convierte automáticamente en ${PET_DUP_GOLD.toLocaleString('es')} de oro en vez de acumularse.</p>
   `, ()=>{});
 }
 function petCardHTML(id, opts){
@@ -4215,7 +4211,7 @@ function petCardHTML(id, opts){
   const r = PET_RARITIES[tpl.rarity];
   return `<div class="pet-reveal-card ${opts.big?'big':''}" style="animation-delay:${opts.delay||0}ms; box-shadow:0 0 0 2px ${r.color}bb, 0 0 ${opts.big?22:12}px ${r.color}99;">
     <img src="${petArtPath(id)}" alt="${tpl.name}" loading="lazy">
-    ${opts.dup ? `<div class="pet-dup-badge">Duplicado · +${PET_RARITIES[tpl.rarity].dupGold.toLocaleString('es')} oro</div>` : '<div class="pet-new-badge">¡Nuevo!</div>'}
+    ${opts.dup ? `<div class="pet-dup-badge">Duplicado · +${PET_DUP_GOLD.toLocaleString('es')} oro</div>` : '<div class="pet-new-badge">¡Nuevo!</div>'}
   </div>`;
 }
 // x11 (x10 con regalo): todas las de rango Único o menos se revelan juntas
@@ -4264,7 +4260,7 @@ function renderOfrenda(){
       <button class="btn-main secondary-choice" id="btn-pull-x10-sellos" ${(state.char.missionCurrency||0)<GACHA_COST_SELLOS_X10?'disabled':''}>Ofrenda x10 (+1 regalo) — ${GACHA_COST_SELLOS_X10.toLocaleString('es')} Sellos</button>
     </div>
     <button class="reset-btn" id="btn-buy-pulls" style="margin:6px auto 0; display:block;">💎 Recargar para más tiradas</button>
-    <button class="reset-btn" id="btn-pet-rates" style="margin:10px auto 0; display:block;">Ver tasas de invocación</button>
+    <button class="reset-btn" id="btn-pet-rates" style="margin:10px auto 0; display:block;">Cómo funciona</button>
     <div id="ofrenda-results"></div>
   `;
   document.getElementById('btn-close-ofrenda').onclick = ()=>{ ofrendaOpen=false; renderAll(); };
