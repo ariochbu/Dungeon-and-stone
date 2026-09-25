@@ -4205,33 +4205,86 @@ function showPetRates(){
     <p style="margin-top:0;">Si sale un Caído del Laberinto que ya tienes, se convierte automáticamente en ${PET_DUP_GOLD.toLocaleString('es')} de oro en vez de acumularse.</p>
   `, ()=>{});
 }
-function petCardHTML(id, opts){
-  opts = opts||{};
-  const tpl = petTpl(id);
-  const r = PET_RARITIES[tpl.rarity];
-  return `<div class="pet-reveal-card ${opts.big?'big':''}" style="animation-delay:${opts.delay||0}ms; box-shadow:0 0 0 2px ${r.color}bb, 0 0 ${opts.big?22:12}px ${r.color}99;">
-    <img src="${petArtPath(id)}" alt="${tpl.name}" loading="lazy">
-    ${opts.dup ? `<div class="pet-dup-badge">Duplicado · +${PET_DUP_GOLD.toLocaleString('es')} oro</div>` : '<div class="pet-new-badge">¡Nuevo!</div>'}
+function isRarePetResult(r){ return ['epico','legendario','mitico'].includes(r.tpl.rarity); }
+// Boca abajo, todas idénticas (nunca delatan el rango antes de voltearse).
+// Bloqueadas (Épico+) mientras queden comunes/raras/únicas sin voltear —
+// mismo espíritu que el "reveal" de espíritus de MIR4: se voltean las
+// normales primero, y hasta no acabar esas no se puede tocar la que
+// resultó especial, así que por descarte ya genera expectativa antes de
+// tocarla siquiera.
+function petFlipCardHTML(r, idx, locked){
+  const tpl = r.tpl;
+  const big = isRarePetResult(r);
+  if(r.flipped){
+    const rc = PET_RARITIES[tpl.rarity];
+    return `<div class="pet-flip-card ${big?'big':''} flipped">
+      <div class="pet-flip-inner">
+        <div class="pet-flip-back">🎴</div>
+        <div class="pet-flip-front" style="box-shadow:0 0 0 2px ${rc.color}bb, 0 0 ${big?22:12}px ${rc.color}99;">
+          <img src="${petArtPath(r.id)}" alt="${tpl.name}" loading="lazy">
+          ${r.isDup ? `<div class="pet-dup-badge">Duplicado · +${PET_DUP_GOLD.toLocaleString('es')} oro</div>` : '<div class="pet-new-badge">¡Nuevo!</div>'}
+        </div>
+      </div>
+    </div>`;
+  }
+  return `<div class="pet-flip-card ${big?'big':''} ${locked?'locked':''}" data-flip-idx="${idx}" title="${locked?'Voltea las demás primero':'Voltear'}">
+    <div class="pet-flip-inner">
+      <div class="pet-flip-back">${locked?'🔒':'🎴'}</div>
+      <div class="pet-flip-front"></div>
+    </div>
   </div>`;
 }
-// x11 (x10 con regalo): todas las de rango Único o menos se revelan juntas
-// primero; Épico en adelante se revela después, con más brillo — pedido
-// explícito ("cuando sale x11 aparecen todas de manera simultanea, pero
-// epico en adelante + se revelan al final"). Puro CSS animation-delay, sin
-// timers encadenados.
-function renderOfrendaResults(results){
+// Estado de la tanda de revelación actual — vive fuera del closure de
+// renderOfrenda() porque cada click voltea UNA carta con un re-render
+// parcial (refreshOfrendaResultsDOM), no toda la pantalla.
+let ofrendaPullResults = null;
+function renderOfrendaResultsHTML(){
+  if(!ofrendaPullResults || !ofrendaPullResults.length) return '';
+  const allNonRareFlipped = ofrendaPullResults.filter(r=>!isRarePetResult(r)).every(r=>r.flipped);
+  const cardsHTML = ofrendaPullResults.map((r,idx)=>{
+    const locked = isRarePetResult(r) && !r.flipped && !allNonRareFlipped;
+    return petFlipCardHTML(r, idx, locked);
+  }).join('');
+  const anyUnflipped = ofrendaPullResults.some(r=>!r.flipped);
+  return `<div class="pet-reveal-grid">${cardsHTML}</div>${anyUnflipped ? `<button class="btn-main" id="btn-flip-all" style="margin-top:10px;">Voltear todo</button>` : ''}`;
+}
+function refreshOfrendaResultsDOM(){
   const container = document.getElementById('ofrenda-results');
   if(!container) return;
-  if(!results || !results.length){ container.innerHTML=''; return; }
-  const common = results.filter(r=>!['epico','legendario','mitico'].includes(r.tpl.rarity));
-  const rare = results.filter(r=>['epico','legendario','mitico'].includes(r.tpl.rarity));
-  const commonHTML = common.map((r,i)=>petCardHTML(r.id, {dup:r.isDup, delay:i*100})).join('');
-  const rareDelayBase = common.length ? common.length*100 + 600 : 0;
-  const rareHTML = rare.map((r,i)=>petCardHTML(r.id, {big:true, dup:r.isDup, delay:rareDelayBase + i*400})).join('');
-  container.innerHTML = `<div class="pet-reveal-grid">${commonHTML}${rareHTML}</div>`;
+  container.innerHTML = renderOfrendaResultsHTML();
+  container.querySelectorAll('[data-flip-idx]').forEach(el=>{
+    el.onclick = ()=> flipOfrendaCard(parseInt(el.dataset.flipIdx, 10));
+  });
+  const flipAllBtn = document.getElementById('btn-flip-all');
+  if(flipAllBtn) flipAllBtn.onclick = flipAllOfrendaCards;
+}
+function flipOfrendaCard(idx){
+  const r = ofrendaPullResults && ofrendaPullResults[idx];
+  if(!r || r.flipped) return;
+  const allNonRareFlipped = ofrendaPullResults.filter(x=>!isRarePetResult(x)).every(x=>x.flipped);
+  if(isRarePetResult(r) && !allNonRareFlipped) return; // bloqueada todavía
+  r.flipped = true;
+  refreshOfrendaResultsDOM();
+}
+// "Voltear todo": primero las comunes/raras/únicas (todas a la vez), y solo
+// después de una pausa las Épico+ — mismo orden que ya pedías para el
+// reveal automático viejo, ahora como una animación de volteo en cadena.
+function flipAllOfrendaCards(){
+  if(!ofrendaPullResults) return;
+  const nonRare = ofrendaPullResults.filter(r=>!isRarePetResult(r) && !r.flipped);
+  const rare = ofrendaPullResults.filter(r=>isRarePetResult(r) && !r.flipped);
+  nonRare.forEach(r=> r.flipped = true);
+  refreshOfrendaResultsDOM();
+  if(rare.length){
+    setTimeout(()=>{
+      rare.forEach(r=> r.flipped = true);
+      refreshOfrendaResultsDOM();
+    }, 700);
+  }
 }
 function renderOfrenda(){
   ensurePets();
+  ofrendaPullResults = null;
   const ownedCount = Object.keys(state.char.pets.owned).length;
   document.getElementById('main-panel').innerHTML = `
     <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:4px;">
@@ -4239,6 +4292,7 @@ function renderOfrenda(){
       <button class="reset-btn" id="btn-close-ofrenda">Cerrar</button>
     </div>
     <p style="color:var(--text-dim); font-size:0.85em; margin-top:0;">Un Ygdrasil en miniatura crece en el corazón de la ciudad. Ofrécele oro, Sellos del Laberinto o una recarga y te devolverá un Caído del Laberinto para tu colección.</p>
+    <div id="ofrenda-results"></div>
     <div class="ygdrasil-stage" id="ygdrasil-stage">
       <div class="ygdrasil-glow"></div>
       <img class="ygdrasil-tree" src="src/assets/ofrenda/ygdrasil.jpg" alt="Ygdrasil" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'ygdrasil-tree-fallback', textContent:'🌳'}))">
@@ -4261,7 +4315,6 @@ function renderOfrenda(){
     </div>
     <button class="reset-btn" id="btn-buy-pulls" style="margin:6px auto 0; display:block;">💎 Recargar para más tiradas</button>
     <button class="reset-btn" id="btn-pet-rates" style="margin:10px auto 0; display:block;">Cómo funciona</button>
-    <div id="ofrenda-results"></div>
   `;
   document.getElementById('btn-close-ofrenda').onclick = ()=>{ ofrendaOpen=false; renderAll(); };
   document.getElementById('btn-pet-rates').onclick = showPetRates;
@@ -4289,7 +4342,8 @@ function renderOfrenda(){
     setTimeout(()=>{
       const results = pullGacha(kind, payWith);
       stage.classList.remove('shining');
-      renderOfrendaResults(results);
+      ofrendaPullResults = results ? results.map(r=>Object.assign({flipped:false}, r)) : null;
+      refreshOfrendaResultsDOM();
       renderSheet();
       refreshBtnStates();
       document.querySelector('.ofrenda-collection-line').textContent =
@@ -4314,7 +4368,8 @@ function renderOfrenda(){
         state.char.pets.pendingFreePulls = 0;
         const results = grantFreePetPulls(count);
         stage.classList.remove('shining');
-        renderOfrendaResults(results);
+        ofrendaPullResults = results ? results.map(r=>Object.assign({flipped:false}, r)) : null;
+        refreshOfrendaResultsDOM();
         refreshBtnStates();
         const pendingBox = document.querySelector('.ofrenda-pending-box');
         if(pendingBox) pendingBox.remove();

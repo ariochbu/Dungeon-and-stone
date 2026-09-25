@@ -619,18 +619,35 @@
   }
   .ofrenda-pending-box .btn-main{ padding:7px 16px; width:auto; flex:none; }
 
-  .pet-reveal-grid{ display:flex; flex-wrap:wrap; gap:10px; justify-content:center; margin-top:14px; }
-  .pet-reveal-card{
-    width:96px; border-radius:6px; overflow:hidden; opacity:0; position:relative;
-    animation:pet-reveal-pop 0.5s ease forwards;
+  .pet-reveal-grid{ display:flex; flex-wrap:wrap; gap:10px; justify-content:center; margin-top:4px; }
+
+  /* Tarjetas boca abajo, volteables (2026-09-25, pedido explícito: "tarjetas
+     negras... cuando le des click se voltea", inspirado en el reveal de
+     espíritus de MIR4) — las dos caras viven superpuestas todo el tiempo
+     (transform-style:preserve-3d + backface-visibility:hidden en cada una),
+     así que "voltear" es solo rotar el contenedor interno 180°, sin
+     recrear DOM. Épico+ queda bloqueada (sin cursor, con candado) hasta que
+     el resto de la tanda ya se volteó — ver flipOfrendaCard/allNonRareFlipped. */
+  .pet-flip-card{ width:96px; height:130px; cursor:pointer; perspective:800px; flex-shrink:0; }
+  .pet-flip-card.big{ width:130px; height:176px; }
+  .pet-flip-card.locked{ cursor:not-allowed; }
+  .pet-flip-inner{
+    position:relative; width:100%; height:100%; transition:transform 0.6s cubic-bezier(0.4,0.1,0.2,1);
+    transform-style:preserve-3d;
   }
-  .pet-reveal-card.big{ width:130px; }
-  .pet-reveal-card img{ display:block; width:100%; height:auto; }
-  @keyframes pet-reveal-pop{
-    0%{ opacity:0; transform:scale(0.55) translateY(10px); }
-    70%{ opacity:1; transform:scale(1.05); }
-    100%{ opacity:1; transform:scale(1); }
+  .pet-flip-card.flipped .pet-flip-inner{ transform:rotateY(180deg); }
+  .pet-flip-back, .pet-flip-front{
+    position:absolute; inset:0; border-radius:6px; overflow:hidden; backface-visibility:hidden;
   }
+  .pet-flip-back{
+    background:linear-gradient(160deg, #211c17, #100d0a); border:2px solid var(--border);
+    display:flex; align-items:center; justify-content:center; font-size:2em;
+    box-shadow:inset 0 0 20px rgba(0,0,0,0.5);
+  }
+  .pet-flip-card:not(.locked):hover .pet-flip-back{ border-color:var(--bronze); filter:brightness(1.15); }
+  .pet-flip-card.locked .pet-flip-back{ opacity:0.6; }
+  .pet-flip-front{ transform:rotateY(180deg); background:var(--stone); }
+  .pet-flip-front img{ display:block; width:100%; height:100%; object-fit:cover; }
   .pet-new-badge, .pet-dup-badge{
     position:absolute; left:0; right:0; bottom:0; text-align:center; font-size:0.62em; padding:2px 3px;
     background:rgba(14,12,10,0.82); color:var(--bronze-light); font-family:'Cinzel';
@@ -651,8 +668,8 @@
     position:absolute; top:1px; right:2px; color:var(--bronze-light); font-size:0.75em; text-shadow:0 0 3px #000, 0 0 3px #000;
   }
   @media (max-width:600px){
-    .pet-reveal-card{ width:78px; }
-    .pet-reveal-card.big{ width:104px; }
+    .pet-flip-card{ width:78px; height:106px; }
+    .pet-flip-card.big{ width:104px; height:141px; }
     .ygdrasil-stage{ height:160px; }
     .ygdrasil-tree-fallback{ font-size:4.2em; }
   }
