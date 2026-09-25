@@ -143,6 +143,16 @@
   .res-chip.neg{color:var(--blood-light); border-color:rgba(178,68,68,0.4);}
 
   .section-label{font-size:0.72em; text-transform:none; color:var(--text-dim); margin:12px 0 6px; border-top:1px solid var(--border); padding-top:10px;}
+  /* Encabezados de sección "grandes" del Inventario (2026-09-25, pedido
+     explícito: "algo que se vea más llamativo y comodo de ver") — mismo
+     patrón que .section-label, más grande y en bronce para que las 5
+     secciones principales (Equipado/Mochila/Pociones/Piedras/Caídos) se
+     distingan de un vistazo de los subtítulos internos (por slot, por
+     rango de mascota, etc). */
+  .inv-section-label{
+    font-size:0.95em; color:var(--bronze-light); font-family:'Cinzel', serif; letter-spacing:0.02em;
+    margin-top:18px; padding-top:14px; border-top:1px solid var(--bronze);
+  }
   .equip-row{display:flex; justify-content:space-between; font-size:0.85em; padding:3px 0; color:var(--text-dim);}
   /* "Equipo" colapsado por defecto en la ficha (2026-09-25, pedido
      explícito): era el bloque más largo de la columna de stats y en móvil
@@ -667,6 +677,24 @@
   .pet-equipped-badge{
     position:absolute; top:1px; right:2px; color:var(--bronze-light); font-size:0.75em; text-shadow:0 0 3px #000, 0 0 3px #000;
   }
+  .pet-equip-hint{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:1.4em;
+    color:#fff; background:rgba(70,193,104,0.35); opacity:0; transition:opacity 0.15s ease;
+  }
+  .pet-mini-tile:hover .pet-equip-hint{ opacity:1; }
+  .pet-slot-thumb{ width:36px; height:48px; border-radius:4px; overflow:hidden; flex-shrink:0; background:var(--stone); }
+  .pet-slot-thumb img{ width:100%; height:100%; object-fit:cover; object-position:top center; }
+
+  /* Zoom de Caído del Laberinto al pasar el cursor / mantener presionado
+     (2026-09-25, pedido explícito) — una sola capa fija reutilizada por
+     wirePetZoomEvents() para cualquier tile/slot/carta con data-pet-zoom. */
+  .pet-zoom-preview{
+    position:fixed; top:50%; left:50%; transform:translate(-50%,-50%) scale(0.9);
+    width:min(78vw, 300px); pointer-events:none; z-index:500; opacity:0;
+    transition:opacity 0.15s ease, transform 0.15s ease; border-radius:8px; overflow:hidden;
+  }
+  .pet-zoom-preview.visible{ opacity:1; transform:translate(-50%,-50%) scale(1); }
+  .pet-zoom-preview img{ display:block; width:100%; height:auto; }
   @media (max-width:600px){
     .pet-flip-card{ width:78px; height:106px; }
     .pet-flip-card.big{ width:104px; height:141px; }

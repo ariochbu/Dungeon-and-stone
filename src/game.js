@@ -1012,6 +1012,46 @@ const PET_RARITY_ORDER = ['poco_comun','raro','unico','epico','legendario','miti
 // tiene que ser literalmente cierto para cualquier duplicado.
 const PET_DUP_GOLD = 1000;
 function petArtPath(id){ return `src/assets/mascotas/mascota_${String(id).padStart(3,'0')}.png`; }
+// Zoom al pasar el cursor (o mantener presionado en celular) sobre una
+// carta de Caído del Laberinto (2026-09-25, pedido explícito: "se ven muy
+// diminutos... al pasar el puntero por encima... si estas en celular si se
+// mantiene presionado") — una sola capa reutilizada en toda la pantalla en
+// vez de un tooltip por tile, para no duplicar DOM. Cualquier elemento con
+// data-pet-zoom="<id>" queda enganchado por wirePetZoomEvents().
+function ensurePetZoomLayer(){
+  let el = document.getElementById('pet-zoom-preview');
+  if(!el){
+    el = document.createElement('div');
+    el.id = 'pet-zoom-preview';
+    el.className = 'pet-zoom-preview';
+    document.body.appendChild(el);
+  }
+  return el;
+}
+function showPetZoom(petId){
+  const tpl = petTpl(petId);
+  if(!tpl) return;
+  const r = PET_RARITIES[tpl.rarity];
+  const el = ensurePetZoomLayer();
+  el.innerHTML = `<img src="${petArtPath(petId)}" alt="${tpl.name}">`;
+  el.style.boxShadow = `0 0 0 3px ${r.color}, 0 0 34px ${r.color}99`;
+  el.classList.add('visible');
+}
+function hidePetZoom(){
+  const el = document.getElementById('pet-zoom-preview');
+  if(el) el.classList.remove('visible');
+}
+function wirePetZoomEvents(root){
+  if(!root) return;
+  root.querySelectorAll('[data-pet-zoom]').forEach(el=>{
+    const id = el.dataset.petZoom;
+    el.addEventListener('mouseenter', ()=> showPetZoom(id));
+    el.addEventListener('mouseleave', hidePetZoom);
+    el.addEventListener('touchstart', ()=> showPetZoom(id), {passive:true});
+    el.addEventListener('touchend', hidePetZoom);
+    el.addEventListener('touchcancel', hidePetZoom);
+  });
+}
 const PET_CATALOG = [
   {id:1, name:'Horn Rabbit', rarity:'poco_comun', bonuses:[{type:'evasion_flat', value:0.03}]},
   {id:2, name:'Blade Rabbit', rarity:'poco_comun', bonuses:[{type:'prob_critico', value:0.02}]},
@@ -2199,12 +2239,13 @@ function chooseAllyAutoGearArma2(allyId, name){
   renderAll();
 }
 
-function buyPotion(potionId){
-  const price = SHOP_POTION_PRICES[potionId] || 15;
-  if(state.char.gold < price){ log('No tienes suficiente oro para eso.'); return; }
-  state.char.gold -= price;
-  addToInventory({kind:'potion', potionId});
-  log(`Compras <b>${POTION_TEMPLATES[potionId].name}</b> por ${price} de oro.`);
+function buyPotion(potionId, qty){
+  qty = qty || 1;
+  const totalPrice = (SHOP_POTION_PRICES[potionId] || 15) * qty;
+  if(state.char.gold < totalPrice){ log('No tienes suficiente oro para eso.'); return; }
+  state.char.gold -= totalPrice;
+  for(let i=0;i<qty;i++) addToInventory({kind:'potion', potionId});
+  log(`Compras <b>${POTION_TEMPLATES[potionId].name}</b> x${qty} por ${totalPrice.toLocaleString('es')} de oro.`);
   renderAll(); save();
 }
 
@@ -2638,6 +2679,8 @@ let combat = null; // transient combat state, rebuilt each fight
 let invOpen = false; // whether the inventory/equipment panel is showing
 let equipTarget = 'player'; // 'player' o el id de un aliado — a quién equipa el Inventario ahora mismo
 let invGearFilter = 'todos'; // 'todos' o un EQUIP_SLOTS — qué categoría de la mochila se muestra
+let invGearTierFilter = 'todos'; // 'todos' o una key de RARITIES — filtro de rareza en el inventario
+let invStoneTierFilter = 'todos'; // 'todos' o una letra E-SS — filtro de rango en piedras de alma
 let homeOpen = false; // whether the Hogar (home stash) panel is showing
 let shopOpen = false; // whether the Tienda (shop) panel is showing
 let rankingOpen = false; // whether the Ranking panel is showing
@@ -3287,7 +3330,7 @@ function renderAll(){
     navEl.style.display = (inDungeonRun || inCombat) ? 'none' : 'flex';
     const navAdminBtn = document.getElementById('nav-admin-btn');
     if(navAdminBtn) navAdminBtn.style.display = (state.char.role==='admin') ? 'inline-flex' : 'none';
-    const activeNavKey = homeOpen?'home' : shopOpen?'shop' : tabernaOpen?'taberna' : missionsOpen?'missions' : rankingOpen?'ranking' : adminOpen?'admin' : 'city';
+    const activeNavKey = homeOpen?'home' : shopOpen?'shop' : tabernaOpen?'taberna' : missionsOpen?'missions' : ofrendaOpen?'ofrenda' : checkinOpen?'checkin' : rankingOpen?'ranking' : adminOpen?'admin' : 'city';
     navEl.querySelectorAll('.nav-btn').forEach(btn=>{
       btn.classList.toggle('active', btn.dataset.nav===activeNavKey);
     });
@@ -3383,6 +3426,7 @@ function renderSheet(){
   const potionCount = (state.char.inventory||[]).filter(i=>i.kind==='potion').reduce((a,i)=>a+i.qty,0);
   const gearCount = (state.char.inventory||[]).filter(i=>i.kind==='equip').length;
   const stunChance = totalStunChance();
+  const cs = combatStatsSummary();
 
   document.getElementById('sheet').innerHTML = `
     <div class="sheet-title">
@@ -3418,11 +3462,31 @@ function renderSheet(){
 
     <div class="section-label">Estadísticas de combate</div>
     <div class="res-list">
+      <span class="res-chip pos">Físico ${d.fis}</span>
+      <span class="res-chip pos">Habilidad ${d.hab}</span>
       <span class="res-chip pos">Crítico +${Math.round(d.critChance*100)}%</span>
+      ${cs.criticoDano>0?`<span class="res-chip pos">Daño crítico +${Math.round((1.5+cs.criticoDano)*100)}%</span>`:''}
       <span class="res-chip pos">Evasión ${Math.round(d.evasionBase*100)}%</span>
       <span class="res-chip ${stunChance>0?'pos':''}">Aturdir al golpear ${Math.round(stunChance*100)}%</span>
+      ${cs.aumentoDano>0?`<span class="res-chip pos">Aumento de daño +${Math.round(cs.aumentoDano*100)}%</span>`:''}
+      ${cs.reduccionDano>0?`<span class="res-chip pos">Reducción de daño recibido ${Math.round(cs.reduccionDano*100)}%</span>`:''}
+      ${cs.bloqueo>0?`<span class="res-chip pos">Bloqueo ${Math.round(cs.bloqueo*100)}%</span>`:''}
+      ${cs.retroceso>0?`<span class="res-chip pos">Retroceso ${Math.round(cs.retroceso*100)}%</span>`:''}
+      ${cs.robovida>0?`<span class="res-chip pos">Succión de vida ${Math.round(cs.robovida*100)}%</span>`:''}
+      ${cs.succionHechizo>0?`<span class="res-chip pos">Succión de hechizo ${Math.round(cs.succionHechizo*100)}%</span>`:''}
+      ${cs.penetracionFisica>0?`<span class="res-chip pos">Penetración física ${Math.round(cs.penetracionFisica*100)}%</span>`:''}
+      ${cs.penetracionMagica>0?`<span class="res-chip pos">Penetración mágica ${Math.round(cs.penetracionMagica*100)}%</span>`:''}
+      ${d.penetracionNivel>0?`<span class="res-chip pos">Penetración por nivel ${(d.penetracionNivel*100).toFixed(1)}%</span>`:''}
+      ${cs.segundoAtaque>0?`<span class="res-chip pos">Segundo ataque básico ${Math.round(cs.segundoAtaque*100)}%</span>`:''}
+      ${cs.dobleEncantamiento>0?`<span class="res-chip pos">Doble encantamiento ${Math.round(cs.dobleEncantamiento*100)}%</span>`:''}
+      ${d.resMagica!==0?`<span class="res-chip ${d.resMagica>0?'pos':'neg'}">Resistencia mágica ${d.resMagica>=0?'+':''}${Math.round(d.resMagica)}%</span>`:''}
+      ${d.resistenciaEstado>0?`<span class="res-chip pos">Resistencia a efectos de estado ${Math.round(d.resistenciaEstado*100)}%</span>`:''}
+      ${d.fortalezaMental>0?`<span class="res-chip pos">Fortaleza mental ${Math.round(d.fortalezaMental*100)}%</span>`:''}
+      ${Math.round(d.precision*100)>0?`<span class="res-chip pos">Precisión ${Math.round(d.precision*100)}%</span>`:''}
+      ${cs.razaBonuses.map(sp=>`<span class="res-chip pos">Daño vs ${RAZA_TAG_LABEL[sp.raza]||sp.raza} +${Math.round(sp.value*100)}%</span>`).join('')}
+      ${cs.posicionBonuses.map(sp=>`<span class="res-chip pos">Daño vs ${POSICION_TAG_LABEL[sp.posicion]||sp.posicion} +${Math.round(sp.value*100)}%</span>`).join('')}
     </div>
-    <div class="sheet-hint">Evasión mostrada fuera de combate; en combate varía según el nivel del enemigo y tus efectos activos. Aturdir al golpear depende del arma y las piedras de alma que lleves equipadas.</div>
+    <div class="sheet-hint">Evasión mostrada fuera de combate; en combate varía según el nivel del enemigo y tus efectos activos. Aturdir al golpear depende del arma, las piedras de alma y los Caídos del Laberinto que lleves equipados.</div>
 
     <div class="section-label">Resistencias</div>
     <div class="res-list">${resHTML}</div>
@@ -3640,7 +3704,13 @@ function potionRowWithArt(potionId, textHTML, px){
 // para no teñir el botón de Equipar/Vender del otro extremo de la fila.
 function rarityRowStyle(it){
   const r = RARITIES[it.rarity||'comun'];
-  return `border-left:3px solid ${r.color}; background:linear-gradient(90deg, ${r.color}1f, ${r.color}00 110px);`;
+  return rarityRowStyleColor(r.color);
+}
+// Mismo halo que rarityRowStyle(it), pero a partir de un color crudo — para
+// paletas que no viven en RARITIES (ej. PET_RARITIES de los Caídos del
+// Laberinto, que usan sus propios 6 rangos y colores).
+function rarityRowStyleColor(color){
+  return `border-left:3px solid ${color}; background:linear-gradient(90deg, ${color}1f, ${color}00 110px);`;
 }
 // Aviso visual de loot raro / subida de nivel (2026-09-25, pedido explícito):
 // antes la única señal de "te cayó algo bueno" era una línea más en la
@@ -3692,37 +3762,66 @@ function itemNameHTML(it){
   return `<b style="color:${r.color};${glow}">${it.name}</b> <span class="slot-tag" style="border-color:${r.color}; color:${r.color};">${r.name}</span>${roleTag}`;
 }
 
-// Sector de mascotas dentro del Inventario (2026-09-24, pedido explícito:
-// "un sector apartado para ellos... que no consuma tanto espacio visual y
-// separaciones por categoria") — solo se muestra lo que ya se ganó (nunca
-// pinta los 100 huecos vacíos, eso sí ocuparía muchísimo espacio), en
-// miniaturas chicas agrupadas por rango, con un check dorado sobre la
-// equipada. Clic en cualquiera togglea equipar/quitar respetando
-// maxPetSlots().
+// Sector de mascotas dentro del Inventario (2026-09-24/25, pedido explícito)
+// — rediseñado con espacios explícitos (2026-09-25, "no se da una sensación
+// real de equipamiento... similar a las piedras de alma"): arriba, un
+// .inv-slot por espacio disponible (igual que soulSlotsHTML), vacío o con
+// el Caído puesto y un botón "Quitar" explícito. Debajo, la bolsa de
+// Caídos SIN equipar en miniaturas compactas agrupadas por rango (se
+// mantiene el pedido original de "que no consuma tanto espacio visual") —
+// clic en una miniatura de la bolsa equipa directo al primer espacio libre.
+// Pasar el puntero (o mantener presionado en celular) sobre cualquier
+// carta la agranda — ver showPetZoom/hidePetZoom.
 function renderPetSectionHTML(){
   ensurePets();
   const slots = maxPetSlots();
   const eqIds = equippedPetIds();
-  const groupsHTML = PET_RARITY_ORDER.map(rarity=>{
-    const all = PET_CATALOG.filter(p=>p.rarity===rarity);
-    const owned = all.filter(p=>ownedPetCount(p.id)>0);
-    if(!owned.length) return '';
-    const r = PET_RARITIES[rarity];
-    const tiles = owned.map(p=>{
-      const equipped = eqIds.includes(p.id);
-      return `<div class="pet-mini-tile ${equipped?'equipped':''}" data-pet-toggle="${p.id}" title="${p.name}${equipped?' (equipada)':''}" style="box-shadow:0 0 0 2px ${equipped?'var(--bronze-light)':r.color+'88'} inset;">
-        <img src="${petArtPath(p.id)}" alt="${p.name}" loading="lazy">
-        ${equipped ? '<span class="pet-equipped-badge">✓</span>' : ''}
+  const slotsHTML = Array.from({length:slots}, (_,i)=>{
+    const petId = eqIds[i];
+    if(!petId){
+      return `<div class="inv-slot pet-slot">
+        <div class="inv-slot-label">Espacio de Caído ${i+1}</div>
+        <div class="inv-empty">— vacío —</div>
       </div>`;
-    }).join('');
+    }
+    const tpl = petTpl(petId);
+    const r = PET_RARITIES[tpl.rarity];
+    return `<div class="inv-slot pet-slot equipped">
+      <div class="inv-slot-label">Espacio de Caído ${i+1}</div>
+      <div class="inv-item-row" style="margin-bottom:0; ${rarityRowStyleColor(r.color)}">
+        <div style="display:flex; align-items:center; gap:10px; min-width:0; flex:1;">
+          <div class="pet-slot-thumb" data-pet-zoom="${petId}" style="box-shadow:0 0 0 2px ${r.color}bb;"><img src="${petArtPath(petId)}" alt="${tpl.name}"></div>
+          <div style="min-width:0; flex:1;"><b style="color:${r.color};">${tpl.name}</b> <span class="slot-tag" style="border-color:${r.color}; color:${r.color};">${r.name}</span></div>
+        </div>
+        <button class="inv-btn danger" data-pet-unequip="${petId}">Quitar</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  const bagGroupsHTML = PET_RARITY_ORDER.map(rarity=>{
+    const all = PET_CATALOG.filter(p=>p.rarity===rarity);
+    const ownedAll = all.filter(p=>ownedPetCount(p.id)>0);
+    const bag = ownedAll.filter(p=>!eqIds.includes(p.id));
+    if(!ownedAll.length) return '';
+    const r = PET_RARITIES[rarity];
+    const tiles = bag.map(p=>`
+      <div class="pet-mini-tile" data-pet-zoom="${p.id}" data-pet-equip-bag="${p.id}" title="${p.name} — clic para equipar" style="box-shadow:0 0 0 2px ${r.color}88 inset;">
+        <img src="${petArtPath(p.id)}" alt="${p.name}" loading="lazy">
+        <span class="pet-equip-hint">+</span>
+      </div>`).join('');
+    if(!bag.length) return ''; // todos los de este rango ya están equipados
     return `<div class="pet-rarity-row">
-      <div class="pet-rarity-label" style="color:${r.color};">${r.name} <span style="opacity:0.7;">(${owned.length}/${all.length})</span></div>
+      <div class="pet-rarity-label" style="color:${r.color};">${r.name} <span style="opacity:0.7;">(${ownedAll.length}/${all.length})</span></div>
       <div class="pet-mini-grid">${tiles}</div>
     </div>`;
   }).join('');
+
+  const ownedTotal = Object.keys(state.char.pets.owned).length;
   return `
-    <div class="section-label">Caídos del Laberinto <span style="font-weight:normal; color:var(--text-dim); font-size:0.8em;">(${eqIds.length}/${slots} equipadas)</span></div>
-    ${groupsHTML || `<p class="inv-empty-msg">Aún no tienes ninguna. Consigue tu primera en 🌳 Otorgar ofrenda, en la ciudad.</p>`}
+    <div class="section-label inv-section-label">🌳 Caídos del Laberinto <span style="font-weight:normal; color:var(--text-dim); font-size:0.8em;">(${eqIds.length}/${slots} equipados · ${ownedTotal}/${PET_CATALOG.length} en colección)</span></div>
+    ${slotsHTML}
+    ${ownedTotal>eqIds.length ? `<div class="section-label" style="margin-top:10px; font-size:0.85em;">En la mochila (clic para equipar)</div>${bagGroupsHTML}` : ''}
+    ${ownedTotal===0 ? `<p class="inv-empty-msg">Aún no tienes ninguno. Consigue el primero en 🌳 Otorgar ofrenda, en la ciudad.</p>` : ''}
   `;
 }
 
@@ -3773,8 +3872,17 @@ function renderInventory(){
     <button class="nav-btn ${invGearFilter==='todos'?'active':''}" data-gearfilter="todos">Todos</button>
     ${gearSlotsPresent.map(slot=>`<button class="nav-btn ${invGearFilter===slot?'active':''}" data-gearfilter="${slot}">${slotLabel(slot)}</button>`).join('')}
   </div>` : '';
+  // Filtro por rango (2026-09-25, pedido explícito: "Filtros tambien para
+  // el tema del inventario... tambien pon las Tier ahi") — misma barra de
+  // chips, ahora una segunda fila para el rango en vez del slot.
+  const gearTiersPresent = Object.keys(RARITIES).filter(rk=> gearItems.some(it=>(it.rarity||'comun')===rk));
+  if(invGearTierFilter!=='todos' && !gearTiersPresent.includes(invGearTierFilter)) invGearTierFilter = 'todos';
+  const gearTierFilterHTML = gearTiersPresent.length>1 ? `<div class="inv-filter-bar">
+    <button class="nav-btn ${invGearTierFilter==='todos'?'active':''}" data-geartierfilter="todos">Todos los rangos</button>
+    ${gearTiersPresent.map(rk=>`<button class="nav-btn ${invGearTierFilter===rk?'active':''}" data-geartierfilter="${rk}" style="${invGearTierFilter===rk?`border-color:${RARITIES[rk].color}; color:${RARITIES[rk].color};`:''}">${RARITIES[rk].name}</button>`).join('')}
+  </div>` : '';
   const gearHTML = gearItems.length ? EQUIP_SLOTS.filter(slot=> invGearFilter==='todos' || slot===invGearFilter).map(slot=>{
-    const items = gearItems.filter(it=>it.slot===slot);
+    const items = gearItems.filter(it=>it.slot===slot && (invGearTierFilter==='todos' || (it.rarity||'comun')===invGearTierFilter));
     if(!items.length) return '';
     const rows = items.map(it=>`
       <div class="inv-item-row" style="${rarityRowStyle(it)}">
@@ -3783,7 +3891,7 @@ function renderInventory(){
       </div>
     `).join('');
     return `<div class="section-label" style="margin-top:6px; font-size:0.85em;">${slotLabel(slot)}</div>${rows}`;
-  }).join('') : `<p class="inv-empty-msg">No llevas equipo suelto en la mochila.</p>`;
+  }).join('') || `<p class="inv-empty-msg">No hay equipo con ese filtro.</p>` : `<p class="inv-empty-msg">No llevas equipo suelto en la mochila.</p>`;
 
   const potionHTML = potionItems.length ? potionItems.map(it=>{
     const tpl = POTION_TEMPLATES[it.potionId];
@@ -3829,7 +3937,16 @@ function renderInventory(){
   }).join('') : soulSlotsEmptyMsg;
 
   const stoneItems = state.char.inventory.filter(i=>i.kind==='soulstone');
-  const stoneBagHTML = stoneItems.length ? stoneItems.map(it=>{
+  // Filtro por rango (2026-09-25, pedido explícito) — mismo patrón de chips
+  // que el equipo, ahora por letra E-SS en vez de rareza de gema.
+  const stoneTiersPresent = ['F','E','D','C','B','A','S','SS'].filter(t=> stoneItems.some(it=>it.tier===t));
+  if(invStoneTierFilter!=='todos' && !stoneTiersPresent.includes(invStoneTierFilter)) invStoneTierFilter = 'todos';
+  const stoneTierFilterHTML = stoneTiersPresent.length>1 ? `<div class="inv-filter-bar">
+    <button class="nav-btn ${invStoneTierFilter==='todos'?'active':''}" data-stonetierfilter="todos">Todos los rangos</button>
+    ${stoneTiersPresent.map(t=>`<button class="nav-btn ${invStoneTierFilter===t?'active':''}" data-stonetierfilter="${t}" style="${invStoneTierFilter===t?`border-color:${SOUL_TIER_COLORS[t]}; color:${SOUL_TIER_COLORS[t]};`:''}">${t}</button>`).join('')}
+  </div>` : '';
+  const stoneItemsFiltered = invStoneTierFilter==='todos' ? stoneItems : stoneItems.filter(it=>it.tier===invStoneTierFilter);
+  const stoneBagHTML = stoneItemsFiltered.length ? stoneItemsFiltered.map(it=>{
     const c = SOUL_TIER_COLORS[it.tier] || 'var(--text)';
     const sameFamily = soulSlotsSource.find(s=>s && s.family===it.family);
     const noRoom = soulSlotsSource.length===0 || soulSlotsSource.every(s=>s);
@@ -3840,7 +3957,7 @@ function renderInventory(){
       ${itemRowWithArt(it, `<b style="color:${c};">${it.name}</b> <span class="slot-tag" style="border-color:${c}; color:${c};">${it.tier}</span><div class="inv-item-bonus">${it.desc}</div>`)}
       <button class="inv-btn" ${socketAttr} ${blocked?'disabled':''}>${btnLabel} en ${targetName}</button>
     </div>`;
-  }).join('') : `<p class="inv-empty-msg">No tienes piedras de alma. Las dejan caer los guardianes de nivel 4 en adelante.</p>`;
+  }).join('') : (stoneItems.length ? `<p class="inv-empty-msg">No hay piedras con ese filtro.</p>` : `<p class="inv-empty-msg">No tienes piedras de alma. Las dejan caer los guardianes de nivel 4 en adelante.</p>`);
 
   const fragmentItems = state.char.inventory.filter(i=>i.kind==='fragmento');
   const fragmentHTML = fragmentItems.length ? `<div class="inv-item-row" style="flex-wrap:wrap; gap:8px;">
@@ -3860,31 +3977,46 @@ function renderInventory(){
     <p style="color:var(--text-dim); font-size:0.85em; margin-top:0;">Equipa y desequipa a tu gusto entre combates para ajustar tu estrategia. La mochila es una sola para todo el equipo — decides tú quién se queda con cada objeto.</p>
     ${targetSelectorHTML}
 
-    <div class="section-label" style="margin-top:6px;">Equipado (${targetName})</div>
+    <div class="section-label inv-section-label" style="margin-top:6px;">⚔️ Equipado (${targetName})</div>
     ${equippedHTML}
 
-    <div class="section-label">Equipo en la mochila</div>
+    <div class="section-label inv-section-label">🎒 Equipo en la mochila</div>
     ${gearFilterHTML}
+    ${gearTierFilterHTML}
     ${gearHTML}
 
-    <div class="section-label">Pociones</div>
+    <div class="section-label inv-section-label">🧪 Pociones</div>
     ${potionHTML}
 
-    <div class="section-label">Piedras de alma</div>
+    <div class="section-label inv-section-label">💎 Piedras de alma</div>
     ${soulSlotsHTML}
+    ${stoneTierFilterHTML}
     ${stoneBagHTML}
     ${fragmentSection}
     ${targetRow ? '' : renderPetSectionHTML()}
   `;
 
   document.getElementById('btn-close-inv').onclick = ()=>{ invOpen=false; renderAll(); };
-  document.querySelectorAll('[data-pet-toggle]').forEach(el=>{
-    el.onclick = ()=>{ togglePetEquip(el.dataset.petToggle); renderSheet(); renderInventory(); save(); };
+  document.querySelectorAll('[data-pet-unequip]').forEach(el=>{
+    el.onclick = ()=>{ togglePetEquip(el.dataset.petUnequip); renderSheet(); renderInventory(); save(); };
   });
+  document.querySelectorAll('[data-pet-equip-bag]').forEach(el=>{
+    el.onclick = ()=>{
+      const ok = togglePetEquip(el.dataset.petEquipBag);
+      if(ok){ renderSheet(); renderInventory(); save(); }
+    };
+  });
+  wirePetZoomEvents(document.getElementById('main-panel'));
   const targetSelect = document.getElementById('equip-target-select');
   if(targetSelect) targetSelect.onchange = ()=>{ equipTarget = targetSelect.value; renderInventory(); };
   document.querySelectorAll('[data-gearfilter]').forEach(btn=>{
     btn.onclick = ()=>{ invGearFilter = btn.dataset.gearfilter; renderInventory(); };
+  });
+  document.querySelectorAll('[data-geartierfilter]').forEach(btn=>{
+    btn.onclick = ()=>{ invGearTierFilter = btn.dataset.geartierfilter; renderInventory(); };
+  });
+  document.querySelectorAll('[data-stonetierfilter]').forEach(btn=>{
+    btn.onclick = ()=>{ invStoneTierFilter = btn.dataset.stonetierfilter; renderInventory(); };
   });
   document.querySelectorAll('[data-equip]').forEach(btn=>{
     btn.onclick = ()=> equipTarget==='player' ? equipItem(btn.dataset.equip) : equipItemOnAlly(btn.dataset.equip, equipTarget);
@@ -4220,7 +4352,7 @@ function petFlipCardHTML(r, idx, locked){
     return `<div class="pet-flip-card ${big?'big':''} flipped">
       <div class="pet-flip-inner">
         <div class="pet-flip-back">🎴</div>
-        <div class="pet-flip-front" style="box-shadow:0 0 0 2px ${rc.color}bb, 0 0 ${big?22:12}px ${rc.color}99;">
+        <div class="pet-flip-front" data-pet-zoom="${r.id}" style="box-shadow:0 0 0 2px ${rc.color}bb, 0 0 ${big?22:12}px ${rc.color}99;">
           <img src="${petArtPath(r.id)}" alt="${tpl.name}" loading="lazy">
           ${r.isDup ? `<div class="pet-dup-badge">Duplicado · +${PET_DUP_GOLD.toLocaleString('es')} oro</div>` : '<div class="pet-new-badge">¡Nuevo!</div>'}
         </div>
@@ -4257,6 +4389,7 @@ function refreshOfrendaResultsDOM(){
   });
   const flipAllBtn = document.getElementById('btn-flip-all');
   if(flipAllBtn) flipAllBtn.onclick = flipAllOfrendaCards;
+  wirePetZoomEvents(container);
 }
 function flipOfrendaCard(idx){
   const r = ofrendaPullResults && ofrendaPullResults[idx];
@@ -5109,6 +5242,9 @@ async function loadAdminList(){
    ============================================================ */
 const SHOP_ROLE_LABELS = {pesada:'Guerrero', doblefilo:'Asesino', tirador:'Arquero', mago:'Mago', sacerdote:'Sacerdote'};
 let shopWeaponRole = null; // null = usa tu propia senda por defecto
+let shopGoldTierFilter = 'todos'; // filtro de rareza de la tienda de oro (comun/poco_comun/raro)
+let shopSelloTierFilter = 'todos'; // filtro de rango de la tienda de Sellos (rango_b/rango_a)
+const shopPotionQty = {}; // potionId -> cantidad elegida en el desplegable (x1/x10/x100), default 1
 // Cada arma con nombre propio ahora tiene su propio bono/especial por rango
 // (ver WEAPON_CATALOG), así que la tienda ya no puede mostrar "una fila por
 // slot" con un bono genérico — lista cada nombre como su propia fila,
@@ -5139,8 +5275,7 @@ function renderShop(){
     </select>
     <p style="color:var(--text-dim); font-size:0.8em; margin:0 0 8px;">El arma se guarda en tu mochila compartida — luego decides tú a quién equipársela desde el Inventario.</p>`;
 
-  const weaponHTML = roleSelectorHTML
-    + weaponShopRows('arma', 'comun', '', 'buy-weapon', armaPrice)
+  const weaponHTML = weaponShopRows('arma', 'comun', '', 'buy-weapon', armaPrice)
     + weaponShopRows('arma2', 'comun', '', 'buy-weapon', arma2Price);
 
   const raroTag = `<span class="slot-tag" style="border-color:${RARITIES.raro.color}; color:${RARITIES.raro.color};">Raro</span>`;
@@ -5163,22 +5298,22 @@ function renderShop(){
   const raroTagGear = ` <span class="slot-tag" style="border-color:${RARITIES.raro.color}; color:${RARITIES.raro.color};">Raro</span>`;
   const raroHTML = SHOP_GEAR_SLOTS.map(slot=> gearShopRow(slot, 'raro', raroTagGear, 'buy-gear-raro', shopGearPriceRaro(slot))).join('');
 
-  const selloHTML = SELLO_SHOP_SLOTS.map(slot=>{
-    return ['rango_b','rango_a'].map(rarity=>{
-      const price = selloShopPrice(rarity);
-      const disabled = (state.char.missionCurrency||0) < price;
-      if(slot==='arma'){
-        const cat = WEAPON_CATALOG[shopWeaponRole];
-        if(!cat) return '';
-        return Object.keys(cat.arma).map(name=>{
-          const preview = makeWeaponItem('arma', shopWeaponRole, rarity, name);
-          if(!preview) return '';
-          return `<div class="inv-item-row" style="${rarityRowStyle(preview)}">
-            ${itemRowWithArt(preview, `${itemNameHTML(preview)}<div class="inv-item-bonus">${itemBonusText(preview)}</div>`)}
-            <button class="inv-btn" data-buy-sello="arma|${rarity}|${name}" ${disabled?'disabled':''}>Comprar (${price} Sellos)</button>
-          </div>`;
-        }).join('');
-      }
+  // Separado por rango Y por armas/equipo (2026-09-25, pedido explícito:
+  // "la misma separacion de armas / equipamiento y tier") — antes venía todo
+  // mezclado en una sola lista larga por slot.
+  const selloRarityBlock = (rarity)=>{
+    const price = selloShopPrice(rarity);
+    const disabled = (state.char.missionCurrency||0) < price;
+    const cat = WEAPON_CATALOG[shopWeaponRole];
+    const weaponRows = (cat && cat.arma) ? Object.keys(cat.arma).map(name=>{
+      const preview = makeWeaponItem('arma', shopWeaponRole, rarity, name);
+      if(!preview) return '';
+      return `<div class="inv-item-row" style="${rarityRowStyle(preview)}">
+        ${itemRowWithArt(preview, `${itemNameHTML(preview)}<div class="inv-item-bonus">${itemBonusText(preview)}</div>`)}
+        <button class="inv-btn" data-buy-sello="arma|${rarity}|${name}" ${disabled?'disabled':''}>Comprar (${price} Sellos)</button>
+      </div>`;
+    }).join('') : '';
+    const gearRows = SELLO_SHOP_SLOTS.filter(s=>s!=='arma').map(slot=>{
       const preview = makeGearItem(slot, shopWeaponRole, rarity);
       if(!preview) return '';
       return `<div class="inv-item-row" style="${rarityRowStyle(preview)}">
@@ -5186,7 +5321,27 @@ function renderShop(){
         <button class="inv-btn" data-buy-sello="${slot}|${rarity}" ${disabled?'disabled':''}>Comprar (${price} Sellos)</button>
       </div>`;
     }).join('');
-  }).join('');
+    return {weaponRows, gearRows};
+  };
+  const selloRangoB = selloRarityBlock('rango_b');
+  const selloRangoA = selloRarityBlock('rango_a');
+  const selloTierBlockHTML = (key, rows)=>{
+    if((shopSelloTierFilter!=='todos' && shopSelloTierFilter!==key)) return '';
+    const label = RARITIES[key].name;
+    return `<div class="section-label" style="margin-top:6px; font-size:0.85em; color:${RARITIES[key].color};">Armas — ${label}</div>
+      ${rows.weaponRows || '<p class="inv-empty-msg">No hay armas disponibles para tu senda.</p>'}
+      <div class="section-label" style="margin-top:6px; font-size:0.85em; color:${RARITIES[key].color};">Equipo — ${label}</div>
+      ${rows.gearRows}`;
+  };
+  const selloHTML = `
+    <select id="shop-sello-tier-select" class="auth-input" style="max-width:220px; margin-bottom:8px;">
+      <option value="todos" ${shopSelloTierFilter==='todos'?'selected':''}>Todos los rangos</option>
+      <option value="rango_b" ${shopSelloTierFilter==='rango_b'?'selected':''}>${RARITIES.rango_b.name}</option>
+      <option value="rango_a" ${shopSelloTierFilter==='rango_a'?'selected':''}>${RARITIES.rango_a.name}</option>
+    </select>
+    ${selloTierBlockHTML('rango_b', selloRangoB)}
+    ${selloTierBlockHTML('rango_a', selloRangoA)}
+  `;
 
   // Forja Legendaria (Tier S) — armas + piedras de alma de rango S, pagadas
   // con Sellos + fragmentos de jefe de década (ver TIER_S_RECIPE). Solo
@@ -5228,9 +5383,14 @@ function renderShop(){
 
   const potionHTML = Object.values(POTION_TEMPLATES).filter(t=>SHOP_POTION_PRICES[t.id]).map(t=>{
     const price = SHOP_POTION_PRICES[t.id];
+    const qty = shopPotionQty[t.id] || 1;
+    const total = price*qty;
     return `<div class="inv-item-row">
       ${potionRowWithArt(t.id, `<b>${t.name}</b><div class="inv-item-bonus neutral">${t.desc}</div>`)}
-      <button class="inv-btn" data-buy-potion="${t.id}" ${state.char.gold<price?'disabled':''}>Comprar (${price} oro)</button>
+      <select class="auth-input shop-qty-select" data-potion-qty="${t.id}" style="max-width:80px;">
+        ${[1,10,100].map(n=>`<option value="${n}" ${qty===n?'selected':''}>x${n}</option>`).join('')}
+      </select>
+      <button class="inv-btn" data-buy-potion="${t.id}" ${state.char.gold<total?'disabled':''}>Comprar (${total.toLocaleString('es')} oro)</button>
     </div>`;
   }).join('');
 
@@ -5261,21 +5421,31 @@ function renderShop(){
       <button class="reset-btn" id="btn-close-shop">Cerrar</button>
     </div>
     <p style="color:var(--text-dim); font-size:0.85em; margin-top:0;">Oro disponible: <b>${state.char.gold}</b>. Elige el rol para el que compras — cada arma solo la puede usar tu personaje o un aliado de ese mismo rol. Cada nombre de arma tiene su propio bono y su propio efecto especial a partir de Poco Común.</p>
+    ${roleSelectorHTML}
 
-    <div class="section-label">Armas de tu senda</div>
+    <div class="section-label" style="margin-top:0;">Filtrar por rango</div>
+    <select id="shop-gold-tier-select" class="auth-input" style="max-width:220px; margin-bottom:8px;">
+      <option value="todos" ${shopGoldTierFilter==='todos'?'selected':''}>Todos los rangos</option>
+      <option value="comun" ${shopGoldTierFilter==='comun'?'selected':''}>Común</option>
+      <option value="poco_comun" ${shopGoldTierFilter==='poco_comun'?'selected':''}>Poco Común</option>
+      <option value="raro" ${shopGoldTierFilter==='raro'?'selected':''}>Raro</option>
+    </select>
+
+    ${(shopGoldTierFilter==='todos'||shopGoldTierFilter==='comun') ? `
+    <div class="section-label">Armas — Común</div>
     ${weaponHTML || '<p class="inv-empty-msg">No hay armas disponibles para tu senda de combate.</p>'}
+    <div class="section-label">Equipo — Común</div>
+    ${gearHTML}` : ''}
 
-    <div class="section-label">Equipo común</div>
-    ${gearHTML}
+    ${(shopGoldTierFilter==='todos'||shopGoldTierFilter==='poco_comun') ? `
+    <div class="section-label">Equipo — Poco Común</div>
+    ${pocoComunHTML}` : ''}
 
-    <div class="section-label">Equipo poco común</div>
-    ${pocoComunHTML}
-
-    <div class="section-label">Armas de tu senda — Raro</div>
+    ${(shopGoldTierFilter==='todos'||shopGoldTierFilter==='raro') ? `
+    <div class="section-label">Armas — Raro</div>
     ${weaponRaroHTML || '<p class="inv-empty-msg">No hay armas disponibles para tu senda de combate.</p>'}
-
-    <div class="section-label">Equipo raro</div>
-    ${raroHTML}
+    <div class="section-label">Equipo — Raro</div>
+    ${raroHTML}` : ''}
 
     <div class="section-label">Tienda del Gremio (Sellos del Laberinto: ${state.char.missionCurrency||0})</div>
     ${selloHTML}
@@ -5299,6 +5469,10 @@ function renderShop(){
   });
   const shopRoleSelect = document.getElementById('shop-role-select');
   if(shopRoleSelect) shopRoleSelect.onchange = ()=>{ shopWeaponRole = shopRoleSelect.value; renderShop(); };
+  const shopGoldTierSelect = document.getElementById('shop-gold-tier-select');
+  if(shopGoldTierSelect) shopGoldTierSelect.onchange = ()=>{ shopGoldTierFilter = shopGoldTierSelect.value; renderShop(); };
+  const shopSelloTierSelect = document.getElementById('shop-sello-tier-select');
+  if(shopSelloTierSelect) shopSelloTierSelect.onchange = ()=>{ shopSelloTierFilter = shopSelloTierSelect.value; renderShop(); };
   document.querySelectorAll('[data-buy-gear]').forEach(btn=>{
     btn.onclick = ()=> buyGear(btn.dataset.buyGear);
   });
@@ -5330,7 +5504,10 @@ function renderShop(){
     btn.onclick = ()=> buyTierSStone(btn.dataset.buyTiersStone);
   });
   document.querySelectorAll('[data-buy-potion]').forEach(btn=>{
-    btn.onclick = ()=> buyPotion(btn.dataset.buyPotion);
+    btn.onclick = ()=> buyPotion(btn.dataset.buyPotion, shopPotionQty[btn.dataset.buyPotion]||1);
+  });
+  document.querySelectorAll('[data-potion-qty]').forEach(sel=>{
+    sel.onchange = ()=>{ shopPotionQty[sel.dataset.potionQty] = parseInt(sel.value,10); renderShop(); };
   });
   document.querySelectorAll('[data-sell]').forEach(btn=>{
     btn.onclick = ()=> sellEquipOrStone(btn.dataset.sell);
@@ -6234,14 +6411,44 @@ function computeAllyEvasion(ally){
 // probabilidad combinada de aturdir al golpear, sumando todas las fuentes
 // equipadas (arma(s) + piedras de alma engarzadas) que tengan ese proc.
 function totalStunChance(){
-  const sources = ['arma','arma2'].map(slot=>state.char.equip[slot])
+  const chances = ['arma','arma2'].map(slot=>state.char.equip[slot])
     .filter(it=>it && it.special && it.special.type==='aturdir')
-    .concat(socketedStones().filter(s=>s.special && s.special.type==='aturdir'));
-  if(!sources.length) return 0;
+    .map(it=>it.special.chance)
+    .concat(socketedStones().filter(s=>s.special && s.special.type==='aturdir').map(s=>s.special.chance))
+    .concat(specialsFromPets().filter(sp=>sp.type==='aturdir').map(sp=>sp.chance));
+  if(!chances.length) return 0;
   let noStun = 1;
-  sources.forEach(s=> noStun *= (1-s.special.chance));
+  chances.forEach(c=> noStun *= (1-c));
   return 1-noStun;
 }
+// Resumen "absolutamente todo" de estadísticas de combate (2026-09-25,
+// pedido explícito) — junta specialsFromEquip (arma+equipo+piedras+
+// mascotas, ya con las mascotas inyectadas ahí mismo) en un solo objeto
+// plano de totales, para que la Hoja de personaje pueda mostrar cada bono
+// real que el jugador ya tiene activo, no solo crítico/evasión/aturdir.
+// Cada campo es 0 si nadie lo aporta — renderSheet() solo pinta los que
+// sean >0 para no llenar la pantalla de chips en cero.
+function combatStatsSummary(){
+  const specials = specialsFromEquip(state.char.equip);
+  const sumBy = (type, field)=> specials.filter(sp=>sp.type===type).reduce((s,sp)=>s+(sp[field]||0), 0);
+  return {
+    aumentoDano: sumBy('aumento_dano','value'),
+    criticoDano: derived().critDmgBonus,
+    reduccionDano: sumBy('reduccion_dano','value'),
+    bloqueo: blockChance(specials),
+    retroceso: sumBy('retroceso','chance'),
+    robovida: sumBy('robovida','percent'),
+    succionHechizo: sumBy('succion_hechizo','percent'),
+    penetracionFisica: sumBy('penetracion_armadura','value'),
+    penetracionMagica: sumBy('penetracion_magica','value'),
+    segundoAtaque: sumBy('segundo_ataque_basico','chance'),
+    dobleEncantamiento: sumBy('doble_encantamiento','chance'),
+    razaBonuses: specials.filter(sp=>sp.type==='aumento_dano_raza'),
+    posicionBonuses: specials.filter(sp=>sp.type==='aumento_dano_posicion')
+  };
+}
+const RAZA_TAG_LABEL = {goblin:'Goblins', arana:'Arañas', bestia:'Bestias', humano:'Humanos', criatura_marina:'Criaturas Marinas'};
+const POSICION_TAG_LABEL = {frontline:'línea frontal', retaguardia:'retaguardia'};
 
 // Miedo/Confusión son "alteraciones mentales" (pedido explícito) — las
 // resiste Fortaleza mental (Accesorio). El resto de efectos con chance
@@ -8375,7 +8582,7 @@ function renderCombat(){
     ${equippedPets().length ? `
     <div class="combat-pets-strip" title="Caídos del Laberinto equipados: solo aportan sus bonificaciones pasivas, no pelean ni ocupan un puesto en la escena.">
       <span class="combat-pets-label">Caídos del Laberinto</span>
-      ${equippedPets().map(p=>`<div class="combat-pet-chip" style="box-shadow:0 0 0 2px ${PET_RARITIES[p.rarity].color}bb inset;"><img src="${petArtPath(p.id)}" alt="${p.name}" title="${p.name}" loading="lazy"></div>`).join('')}
+      ${equippedPets().map(p=>`<div class="combat-pet-chip" data-pet-zoom="${p.id}" style="box-shadow:0 0 0 2px ${PET_RARITIES[p.rarity].color}bb inset;"><img src="${petArtPath(p.id)}" alt="${p.name}" title="${p.name}" loading="lazy"></div>`).join('')}
     </div>` : ''}
     <div id="battle-stage-mount" style="margin-bottom:6px;"></div>
 
@@ -8418,6 +8625,7 @@ function renderCombat(){
   };
   const grid = document.getElementById('battle-menu-grid');
   const submenu = document.getElementById('battle-submenu');
+  wirePetZoomEvents(document.getElementById('main-panel'));
   document.getElementById('menu-basico').onclick = ()=> useSkillFromMenu('ataque_basico');
   document.getElementById('menu-defensa').onclick = ()=> useSkillFromMenu('defender');
   document.getElementById('menu-reposicionar').onclick = ()=> useSkillFromMenu('reposicionar');
@@ -8590,6 +8798,8 @@ document.querySelectorAll('#city-nav .nav-btn').forEach(btn=>{
     else if(key==='shop') shopOpen = true;
     else if(key==='taberna') tabernaOpen = true;
     else if(key==='missions') missionsOpen = true;
+    else if(key==='ofrenda') ofrendaOpen = true;
+    else if(key==='checkin') checkinOpen = true;
     else if(key==='ranking') rankingOpen = true;
     else if(key==='admin'){ if(state.char.role==='admin') adminOpen = true; }
     renderAll();
