@@ -321,6 +321,10 @@ function syncBattleStage(container, combat, playerInfo, onTargetClick){
   // enemigos: los de línea frontal (tanques/melee, tpl.frontline) se dibujan
   // más cerca del grupo del jugador; los de soporte/distancia quedan atrás.
   const enemyPos = layoutByDepth(combat.enemies||[], e=> !!(e.tpl && e.tpl.frontline), 100, 50, 340);
+  // Si ya no queda ningún enemigo de línea frontal vivo, la retaguardia
+  // queda desbloqueada para elegir objetivo (ver playerFrontTargetIndices en
+  // game.js) — el resaltado visual debe reflejar exactamente lo mismo.
+  const anyFrontAlive = (combat.enemies||[]).some(e=>e.hp>0 && e.tpl && e.tpl.frontline);
   (combat.enemies||[]).forEach((en, i)=>{
     const k = keyFor('enemy', en, i);
     seen.add(k);
@@ -332,9 +336,11 @@ function syncBattleStage(container, combat, playerInfo, onTargetClick){
       role: roleFor('enemy', en), hp: en.hp, maxHP: en.maxHP, alive: en.hp>0, showResources:false,
       statuses: en.statuses||[],
       // Con pendingTargetFilter==='front' (2026-09-25: elegir a cuál de 2+
-      // enemigos del frente atacar) solo se resalta a los que de verdad son
-      // frontline — el resto sigue sin poder recibir el click (ver onTarget).
-      targetable: en.hp>0 && (combat.pendingTargetFilter!=='front' || !!(en.tpl && en.tpl.frontline)),
+      // objetivos elegibles atacar) solo se resalta el conjunto elegible del
+      // momento: si sigue vivo algún frontline, solo esos; si ya no queda
+      // ninguno, toda la retaguardia queda desbloqueada — el resto sigue sin
+      // poder recibir el click (ver onTarget/playerFrontTargetIndices).
+      targetable: en.hp>0 && (combat.pendingTargetFilter!=='front' || !anyFrontAlive || !!(en.tpl && en.tpl.frontline)),
       side:'enemy',
     });
   });

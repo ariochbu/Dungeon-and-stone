@@ -2,7 +2,7 @@
 
 import { supabase } from './supabaseClient.js';
 import * as auth from './auth.js';
-import { syncBattleStage, playBattleAnim } from './battleStage.js?v=65';
+import { syncBattleStage, playBattleAnim } from './battleStage.js?v=66';
 import { CLASS_SPRITES, ENEMY_SPRITES } from './battleSprites.js?v=65';
 
 /* ============================================================
@@ -210,7 +210,9 @@ const SKILLS = {
     targetMode:'any'
   },
   lluvia_flechas: {
-    id:'lluvia_flechas', name:'Lluvia de flechas', cost:{tipo:'estamina', valor:20}, dmgType:'fisico', mult:0.55, aoe:true,
+    // Nerf explícito 2026-09-26: de 20 a 40 MP (era barata para ser daño en
+    // área a todos los enemigos vivos).
+    id:'lluvia_flechas', name:'Lluvia de flechas', cost:{tipo:'estamina', valor:40}, dmgType:'fisico', mult:0.55, aoe:true,
     bonusVsMarked:0.25,
     desc:'Daño a todos los enemigos vivos. +25% contra los Marcados.', targetMode:'all'
   },
@@ -745,22 +747,16 @@ const DECADE_BESTIARY = [
   // en vez de guardián individual) en generateDungeon()/enterNode() —
   // ninguna de esas reglas es específica de esta década en el código, ya
   // son genéricas por nivel/decadeIndex, así que no hace falta tocarlas.
-  // Resistencia física Y mágica (fuego) bajadas ~5 puntos en cada regular/
-  // élite (2026-09-26, pedido explícito: "los del piso 41 en adelante
-  // aguantan mucho" — el nerf anterior de -8% de HP/ATQ, ver
-  // FLOOR_41_59_NERF_MULT, nunca tocó resistencias). El jefe de década
-  // (Custodio de la Isla, 15 físico / 10 fuego) queda intacto y sigue
-  // siendo el techo de la década en ambas.
   {
     regular: [
-      {id:'explorador_rival', name:'Explorador Rival', icon:'🗡️', hp:0.95, atk:1.05, res:{fisico:0,fuego:0,hielo:0,veneno:0,aturdimiento:5}, frontline:true,
+      {id:'explorador_rival', name:'Explorador Rival', icon:'🗡️', hp:0.95, atk:1.05, res:{fisico:5,fuego:0,hielo:0,veneno:0,aturdimiento:5}, frontline:true,
         abilities:{
           estocada_er:{label:'Estocada', mult:1.00},
           ataque_oportunista:{label:'Ataque Oportunista', mult:0.80, cooldown:3, condition:(ctx)=>ctx.targetHpPct<0.5},
           robar_er:{label:'Robar', mult:0.65, cooldown:4, selfBuff:{name:'Tras Robar', duration:1, evasionDelta:10}},
         },
         aiPriority:['ataque_oportunista','robar_er','estocada_er']},
-      {id:'mercenario_desertor', name:'Mercenario Desertor', icon:'🪓', hp:1.08, atk:1.12, res:{fisico:5,fuego:0,hielo:0,veneno:0,aturdimiento:5}, frontline:true,
+      {id:'mercenario_desertor', name:'Mercenario Desertor', icon:'🪓', hp:1.08, atk:1.12, res:{fisico:10,fuego:0,hielo:0,veneno:0,aturdimiento:5}, frontline:true,
         abilities:{
           golpe_md:{label:'Golpe', mult:1.00},
           golpe_brutal_md:{label:'Golpe Brutal', mult:1.25, cooldown:3},
@@ -775,7 +771,7 @@ const DECADE_BESTIARY = [
           marca_presa:{label:'Marca de Presa', mult:0.70, cooldown:4},
         },
         aiPriority:['disparo_preciso','marca_presa','disparo_cr']},
-      {id:'superviviente_curtido', name:'Superviviente Curtido', icon:'🔪', hp:1.00, atk:1.10, res:{fisico:0,fuego:0,hielo:0,veneno:5,aturdimiento:5},
+      {id:'superviviente_curtido', name:'Superviviente Curtido', icon:'🔪', hp:1.00, atk:1.10, res:{fisico:5,fuego:0,hielo:0,veneno:5,aturdimiento:5},
         abilities:{
           corte_sc:{label:'Corte', mult:1.00, applies:{name:'Sangrado', chance:0.10, duration:2, stack:true, maxStack:3}},
           atemorizar_sc:{label:'Atemorizar', mult:0.60, applies:{name:'Miedo', chance:0.20, duration:2}, cooldown:5},
@@ -790,7 +786,7 @@ const DECADE_BESTIARY = [
           corte_ejecutor:{label:'Corte Ejecutor', mult:1.15, cooldown:4, condition:(ctx)=>ctx.targetHpPct<0.4},
         },
         aiPriority:['corte_ejecutor','paso_sombrio','doble_daga']},
-      {id:'medico_campana', name:'Médico de Campaña', icon:'⚕️', hp:0.75, atk:0.80, res:{fisico:-5,fuego:0,hielo:0,veneno:10,aturdimiento:5},
+      {id:'medico_campana', name:'Médico de Campaña', icon:'⚕️', hp:0.75, atk:0.80, res:{fisico:-5,fuego:5,hielo:5,veneno:10,aturdimiento:5},
         abilities:{
           baston:{label:'Bastón', mult:0.80},
           curacion_mc:{label:'Curación', utility:'heal_ally', healPct:0.10, cooldown:4, condition:(ctx)=>combat.enemies.some(e=>e.hp>0 && e.hp<e.maxHP)},
@@ -803,7 +799,7 @@ const DECADE_BESTIARY = [
     // va primero: es el que escolta en solitario al jefe (bestiary.elite[0]
     // en enterNode) y el escuadrón de "guardián" de 5+1.
     elite: [
-      {id:'superviviente_despiadado', name:'Superviviente Despiadado', icon:'⚔️', hp:1.90, atk:1.38, res:{fisico:5,fuego:0,hielo:0,veneno:5,aturdimiento:5}, elite:true, frontline:true,
+      {id:'superviviente_despiadado', name:'Superviviente Despiadado', icon:'⚔️', hp:1.90, atk:1.38, res:{fisico:10,fuego:0,hielo:0,veneno:5,aturdimiento:5}, elite:true, frontline:true,
         abilities:{
           golpe_sd:{label:'Golpe', mult:1.05},
           golpe_brutal_sd:{label:'Golpe Brutal', mult:1.35, cooldown:3},
@@ -819,13 +815,13 @@ const DECADE_BESTIARY = [
           disparo_ejecutor:{label:'Disparo Ejecutor', mult:1.30, cooldown:4, condition:(ctx)=>ctx.targetHpPct<0.4},
         },
         aiPriority:['disparo_ejecutor','marca_mortal','disparo_cv']},
-      {id:'duelista_veterano', name:'Duelista Veterano', icon:'🤺', hp:1.80, atk:1.32, res:{fisico:0,fuego:0,hielo:0,veneno:0,aturdimiento:5}, elite:true, frontline:true,
+      {id:'duelista_veterano', name:'Duelista Veterano', icon:'🤺', hp:1.80, atk:1.32, res:{fisico:5,fuego:0,hielo:0,veneno:0,aturdimiento:5}, elite:true, frontline:true,
         abilities:{
           estocada_dv:{label:'Estocada', mult:1.05},
           corte_preciso:{label:'Corte Preciso', mult:1.00, applies:{name:'Sangrado', chance:0.25, duration:3, stack:true, maxStack:3}, cooldown:3},
         },
         aiPriority:['corte_preciso','estocada_dv']},
-      {id:'capitan_mercenario', name:'Capitán Mercenario', icon:'🎖️', hp:2.00, atk:1.30, res:{fisico:5,fuego:0,hielo:0,veneno:0,aturdimiento:10}, elite:true, frontline:true,
+      {id:'capitan_mercenario', name:'Capitán Mercenario', icon:'🎖️', hp:2.00, atk:1.30, res:{fisico:10,fuego:0,hielo:0,veneno:0,aturdimiento:10}, elite:true, frontline:true,
         abilities:{
           espadazo:{label:'Espadazo', mult:1.05},
           orden_ataque:{label:'Orden de Ataque', mult:0.60, cooldown:5, selfBuff:{name:'Fortalecido', duration:2, stacks:4}},
@@ -857,41 +853,35 @@ const DECADE_BESTIARY = [
   // (Garvel) no tienen gancho en el motor actual (ni chequeo de inmunidad a
   // proc, ni evento on-death) — se omiten, documentado acá en vez de
   // silencioso.
-  // Resistencia física Y mágica (fuego) bajadas ~5 puntos en regulares/
-  // élites/guardianes de piso (2026-09-26, pedido explícito: "los del piso
-  // 41 en adelante aguantan mucho" — el nerf anterior de -8% de HP/ATQ
-  // nunca tocó resistencias). El hielo se deja intacto: ya está en negativo
-  // en absolutamente todos los enemigos de esta década (debilidad temática
-  // al frío, "El Mar") — bajarlo más no combate tankiness, solo exagera una
-  // vulnerabilidad que ya es real. Gran Cangrejo Abisal (piso 55) además
-  // corrige una violación real: tenía más física (30) que el propio Storm
-  // Gush (25) — ningún guardián puede superar a su jefe de década. El jefe
-  // queda intacto (25 físico / 5 fuego) y sigue siendo el techo de la
-  // década en ambas.
+  // Gran Cangrejo Abisal (piso 55, guardián de piso, más abajo) mantiene su
+  // física en 18 en vez de su valor original de 30 (2026-09-26): con 30
+  // superaba al propio jefe de década Storm Gush (25) — ningún guardián
+  // puede resistir más golpe físico que el jefe de su propia década. El
+  // resto de esta década vuelve a sus valores originales.
   {
     regular: [
-      {id:'triton_guerrero', name:'Tritón Guerrero', icon:'🔱', hp:1.10, atk:1.10, res:{fisico:5,fuego:0,hielo:-10,veneno:0,aturdimiento:0}, frontline:true,
+      {id:'triton_guerrero', name:'Tritón Guerrero', icon:'🔱', hp:1.10, atk:1.10, res:{fisico:10,fuego:5,hielo:-10,veneno:0,aturdimiento:0}, frontline:true,
         abilities:{
           tridente:{label:'Tridente', mult:1.00},
           golpe_brutal_tg:{label:'Golpe Brutal', mult:1.25, cooldown:3},
           estocada_marina:{label:'Estocada Marina', mult:0.90, applies:{name:'Ralentizado', chance:0.20, duration:2}, cooldown:4},
         },
         aiPriority:['golpe_brutal_tg','estocada_marina','tridente']},
-      {id:'triton_hechicero', name:'Tritón Hechicero', icon:'🌊', hp:0.80, atk:1.00, res:{fisico:-5,fuego:5,hielo:-10,veneno:5,aturdimiento:0},
+      {id:'triton_hechicero', name:'Tritón Hechicero', icon:'🌊', hp:0.80, atk:1.00, res:{fisico:-5,fuego:10,hielo:-10,veneno:5,aturdimiento:0},
         abilities:{
           descarga_acuatica:{label:'Descarga Acuática', mult:0.80},
           debilitar_th:{label:'Debilitar', mult:0.70, applies:{name:'Debilitado', chance:0.20, duration:2}, cooldown:3},
           corriente_inversa:{label:'Corriente Inversa', mult:0.60, cooldown:4},
         },
         aiPriority:['debilitar_th','corriente_inversa','descarga_acuatica']},
-      {id:'cangrejo_gigante', name:'Cangrejo Gigante', icon:'🦀', hp:1.30, atk:1.05, res:{fisico:15,fuego:0,hielo:-5,veneno:0,aturdimiento:10}, frontline:true,
+      {id:'cangrejo_gigante', name:'Cangrejo Gigante', icon:'🦀', hp:1.30, atk:1.05, res:{fisico:20,fuego:0,hielo:-5,veneno:0,aturdimiento:10}, frontline:true,
         abilities:{
           pinza:{label:'Pinza', mult:1.00},
           pinza_aplastante:{label:'Pinza Aplastante', mult:1.20, applies:{name:'Paralisis', chance:0.15, duration:1}, cooldown:4},
           caparazon:{label:'Caparazón', utility:'self_buff', selfBuff:{name:'Caparazón', duration:2, incomingDmgReduction:0.20}, cooldown:5},
         },
         aiPriority:['caparazon','pinza_aplastante','pinza']},
-      {id:'sirena_corrupta', name:'Sirena Corrupta', icon:'🧜', hp:0.75, atk:0.95, res:{fisico:-5,fuego:0,hielo:-5,veneno:5,aturdimiento:0},
+      {id:'sirena_corrupta', name:'Sirena Corrupta', icon:'🧜', hp:0.75, atk:0.95, res:{fisico:-5,fuego:5,hielo:-5,veneno:5,aturdimiento:0},
         abilities:{
           grito_cortante:{label:'Grito Cortante', mult:0.90},
           canto_corrupto:{label:'Canto Corrupto', mult:0.70, applies:{name:'Confusion', chance:0.18, duration:1}, cooldown:4},
@@ -913,7 +903,7 @@ const DECADE_BESTIARY = [
         aiPriority:['salpicadura_acida','mordida_garvel']},
     ],
     elite: [
-      {id:'guardia_profundidades', name:'Guardia de las Profundidades', icon:'🔱', hp:2.10, atk:1.35, res:{fisico:10,fuego:0,hielo:-10,veneno:5,aturdimiento:10}, elite:true, frontline:true,
+      {id:'guardia_profundidades', name:'Guardia de las Profundidades', icon:'🔱', hp:2.10, atk:1.35, res:{fisico:15,fuego:5,hielo:-10,veneno:5,aturdimiento:10}, elite:true, frontline:true,
         abilities:{
           tridente_gp:{label:'Tridente', mult:1.05},
           golpe_brutal_gp:{label:'Golpe Brutal', mult:1.40, cooldown:3},
@@ -921,14 +911,14 @@ const DECADE_BESTIARY = [
           guardia_marea:{label:'Guardia de Marea', utility:'self_buff', selfBuff:{name:'Guardia de Marea', duration:2, incomingDmgReduction:0.15}, cooldown:5},
         },
         aiPriority:['guardia_marea','golpe_brutal_gp','estocada_profunda','tridente_gp']},
-      {id:'naga_capitan', name:'Naga Capitán', icon:'🏹', hp:1.90, atk:1.35, res:{fisico:0,fuego:0,hielo:-10,veneno:5,aturdimiento:5}, elite:true,
+      {id:'naga_capitan', name:'Naga Capitán', icon:'🏹', hp:1.90, atk:1.35, res:{fisico:5,fuego:0,hielo:-10,veneno:5,aturdimiento:5}, elite:true,
         abilities:{
           ataque_nc:{label:'Ataque', mult:1.00},
           flecha_perforante_nc:{label:'Flecha Perforante', mult:0.90, cooldown:3},
           orden_ataque_nc:{label:'Orden de Ataque', mult:0.60, cooldown:5, selfBuff:{name:'Fortalecido', duration:2, stacks:4}},
         },
         aiPriority:['orden_ataque_nc','flecha_perforante_nc','ataque_nc']},
-      {id:'sacerdotisa_mareas', name:'Sacerdotisa de las Mareas', icon:'🌊', hp:1.70, atk:1.15, res:{fisico:0,fuego:0,hielo:-5,veneno:10,aturdimiento:5}, elite:true,
+      {id:'sacerdotisa_mareas', name:'Sacerdotisa de las Mareas', icon:'🌊', hp:1.70, atk:1.15, res:{fisico:0,fuego:5,hielo:-5,veneno:10,aturdimiento:5}, elite:true,
         abilities:{
           ataque_sm:{label:'Ataque', mult:0.80},
           debilitamiento_oceanico:{label:'Debilitamiento Oceánico', mult:0.65, applies:{name:'Debilitado', chance:0.25, duration:2}, cooldown:3},
@@ -940,7 +930,7 @@ const DECADE_BESTIARY = [
     guardians: [],
     // Guardián único y determinista por piso (51 a 59).
     guardianByFloor: {
-      1: {id:'campeon_triton', name:'Campeón Tritón', icon:'🔱', hp:2.70, atk:1.25, res:{fisico:5,fuego:0,hielo:-10,veneno:5,aturdimiento:5}, boss:true, frontline:true,
+      1: {id:'campeon_triton', name:'Campeón Tritón', icon:'🔱', hp:2.70, atk:1.25, res:{fisico:10,fuego:5,hielo:-10,veneno:5,aturdimiento:5}, boss:true, frontline:true,
         abilities:{
           tridente_g51:{label:'Tridente', mult:1.05},
           estocada_g51:{label:'Estocada', mult:1.20, cooldown:3},
@@ -954,14 +944,14 @@ const DECADE_BESTIARY = [
           entumecedora_g52:{label:'Entumecedora', mult:0.85, applies:{name:'Ralentizado', chance:0.25, duration:2}, cooldown:4},
         },
         aiPriority:['entumecedora_g52','perforante_g52','flecha_g52']},
-      3: {id:'guardian_abismo', name:'Guardián del Abismo', icon:'🌀', hp:3.00, atk:1.25, res:{fisico:5,fuego:0,hielo:-5,veneno:5,aturdimiento:10}, boss:true, frontline:true,
+      3: {id:'guardian_abismo', name:'Guardián del Abismo', icon:'🌀', hp:3.00, atk:1.25, res:{fisico:10,fuego:5,hielo:-5,veneno:5,aturdimiento:10}, boss:true, frontline:true,
         abilities:{
           golpe_g53:{label:'Golpe', mult:1.00},
           drenaje_marino:{label:'Drenaje Marino', mult:0.60, cooldown:4, mpDrain:0.10},
           caparazon_g53:{label:'Caparazón', utility:'self_buff', selfBuff:{name:'Caparazón', duration:2, incomingDmgReduction:0.20}, cooldown:5},
         },
         aiPriority:['caparazon_g53','drenaje_marino','golpe_g53']},
-      4: {id:'sirena_matriarca', name:'Sirena Matriarca', icon:'🧜', hp:2.80, atk:1.20, res:{fisico:0,fuego:0,hielo:-5,veneno:10,aturdimiento:5}, boss:true,
+      4: {id:'sirena_matriarca', name:'Sirena Matriarca', icon:'🧜', hp:2.80, atk:1.20, res:{fisico:0,fuego:5,hielo:-5,veneno:10,aturdimiento:5}, boss:true,
         abilities:{
           canto_g54:{label:'Canto', mult:0.75, applies:{name:'Confusion', chance:0.25, duration:1}, cooldown:4},
           ola_mental:{label:'Ola Mental', mult:0.80, applies:{name:'Debilitado', chance:0.20, duration:2}, cooldown:3},
@@ -978,14 +968,14 @@ const DECADE_BESTIARY = [
           caparazon_g55:{label:'Caparazón', utility:'self_buff', selfBuff:{name:'Caparazón', duration:2, incomingDmgReduction:0.30}, cooldown:5},
         },
         aiPriority:['caparazon_g55','aplastante_g55','pinza_g55']},
-      6: {id:'serpiente_palpus', name:'Serpiente de Palpus', icon:'🐍', hp:2.90, atk:1.35, res:{fisico:5,fuego:0,hielo:-5,veneno:15,aturdimiento:5}, boss:true,
+      6: {id:'serpiente_palpus', name:'Serpiente de Palpus', icon:'🐍', hp:2.90, atk:1.35, res:{fisico:10,fuego:0,hielo:-5,veneno:15,aturdimiento:5}, boss:true,
         abilities:{
           mordida_g56:{label:'Mordida', mult:1.05, applies:{name:'Veneno', chance:0.15, duration:3, stack:true, maxStack:3}},
           constriccion:{label:'Constricción', mult:0.75, applies:{name:'Ralentizado', chance:0.20, duration:2}, cooldown:3},
           emboscada:{label:'Emboscada', mult:1.35, cooldown:4},
         },
         aiPriority:['emboscada','constriccion','mordida_g56']},
-      7: {id:'centinela_coral_g', name:'Centinela de Coral', icon:'🪸', hp:3.50, atk:1.45, res:{fisico:15,fuego:0,hielo:-10,veneno:15,aturdimiento:10}, boss:true, frontline:true,
+      7: {id:'centinela_coral_g', name:'Centinela de Coral', icon:'🪸', hp:3.50, atk:1.45, res:{fisico:20,fuego:5,hielo:-10,veneno:15,aturdimiento:10}, boss:true, frontline:true,
         abilities:{
           golpe_g57:{label:'Golpe', mult:1.05},
           golpe_brutal_g57:{label:'Golpe Brutal', mult:1.35, cooldown:3},
@@ -993,14 +983,14 @@ const DECADE_BESTIARY = [
           formacion_coralina:{label:'Formación Coralina', utility:'self_buff', selfBuff:{name:'Formación Coralina', duration:2, incomingDmgReduction:0.20}, cooldown:5},
         },
         aiPriority:['formacion_coralina','golpe_brutal_g57','debilitar_g57','golpe_g57']},
-      8: {id:'leviatan_abisal', name:'Leviatán Abisal', icon:'🐋', hp:3.80, atk:1.50, res:{fisico:20,fuego:0,hielo:-10,veneno:10,aturdimiento:15}, boss:true, frontline:true,
+      8: {id:'leviatan_abisal', name:'Leviatán Abisal', icon:'🐋', hp:3.80, atk:1.50, res:{fisico:25,fuego:5,hielo:-10,veneno:10,aturdimiento:15}, boss:true, frontline:true,
         abilities:{
           mordida_g58:{label:'Mordida', mult:1.10},
           golpe_cola:{label:'Golpe de Cola', mult:1.25, cooldown:3},
           embestida_g58:{label:'Embestida', mult:1.35, applies:{name:'Ralentizado', chance:0.15, duration:2}, cooldown:4},
         },
         aiPriority:['embestida_g58','golpe_cola','mordida_g58']},
-      9: {id:'heraldo_tormenta', name:'Heraldo de la Tormenta', icon:'⚡', hp:3.70, atk:1.45, res:{fisico:15,fuego:0,hielo:-15,veneno:10,aturdimiento:20}, boss:true, frontline:true,
+      9: {id:'heraldo_tormenta', name:'Heraldo de la Tormenta', icon:'⚡', hp:3.70, atk:1.45, res:{fisico:20,fuego:5,hielo:-15,veneno:10,aturdimiento:20}, boss:true, frontline:true,
         abilities:{
           tridente_g59:{label:'Tridente', mult:1.05},
           rayo_marino:{label:'Rayo Marino', mult:0.90, applies:{name:'Debilitado', chance:0.20, duration:2}, cooldown:3},
@@ -1046,10 +1036,6 @@ const PET_RARITIES = {
   mitico:     {id:'mitico',     name:'Mítico',      color:'#e0393f', weight:0.001}
 };
 const PET_RARITY_ORDER = ['poco_comun','raro','unico','epico','legendario','mitico'];
-// Duplicado (2026-09-25, pedido explícito): oro fijo sin importar el rango,
-// no escalonado por rareza — el mensaje que ve el jugador ("+1000 de oro")
-// tiene que ser literalmente cierto para cualquier duplicado.
-const PET_DUP_GOLD = 1000;
 function petArtPath(id){ return `src/assets/mascotas/mascota_${String(id).padStart(3,'0')}.png`; }
 // Zoom al pasar el cursor (o mantener presionado en celular) sobre una
 // carta de Caído del Laberinto (2026-09-25, pedido explícito: "se ven muy
@@ -1310,10 +1296,13 @@ function petUniqueEffects(){
 // quedó en 100/1.000, misma proporción 10x que el oro (sin descuento real,
 // solo la tirada de regalo). Sin pity (confirmado explícito, "cada tirada
 // es independiente", igual que el espíritu real de MIR4). Duplicado (ya
-// tenías esa mascota exacta) SIGUE dando +1000 de oro (ver PET_DUP_GOLD),
-// pero desde 2026-09-26 (pedido explícito, de cara al futuro sistema de
-// "grabados" por colección completa) YA NO se descarta — `owned[id]` es
-// una cantidad real acumulable, no una presencia 0/1.
+// tenías esa mascota exacta): desde 2026-09-26 (pedido explícito, de cara
+// al futuro sistema de "grabados" por colección completa) YA NO se descarta
+// — `owned[id]` es una cantidad real acumulable, no una presencia 0/1. El
+// oro de +1000 por duplicado (que existía SOLO porque antes se descartaba
+// y había que compensar esa pérdida) se quitó el mismo día por el mismo
+// pedido: ya no hay pérdida real que compensar, un duplicado ahora vale
+// tanto como cualquier otra tirada (suma al contador).
 const GACHA_COST_X1 = 10000;
 const GACHA_COST_X10 = 100000; // entrega 11 tiradas
 const GACHA_COST_SELLOS_X1 = 100;
@@ -1323,8 +1312,9 @@ function rollPetId(){
   const pool = PET_CATALOG.filter(p=>p.rarity===rarity);
   return pick(pool).id;
 }
-// Núcleo compartido: tira `count` mascotas y resuelve duplicados en oro —
-// usado tanto por una tirada pagada (pullGacha) como por una tirada gratis
+// Núcleo compartido: tira `count` mascotas y acumula duplicados en el
+// contador de cada una (isDup solo queda para el badge "Duplicado" en el
+// reveal) — usado tanto por una tirada pagada (pullGacha) como por una tirada gratis
 // (grantFreePetPulls, ver el check-in diario) sin duplicar la lógica.
 function doPetPulls(count){
   ensurePets();
@@ -1333,22 +1323,29 @@ function doPetPulls(count){
     const id = rollPetId();
     const tpl = petTpl(id);
     const isDup = !!state.char.pets.owned[id];
-    let goldRefund = 0;
-    if(isDup){
-      goldRefund = PET_DUP_GOLD;
-      state.char.gold += goldRefund;
-    }
-    // Acumulable (2026-09-26, pedido explícito): un duplicado YA NO se
-    // descarta — sigue dando los +1000 de oro de siempre, pero además suma
-    // al contador (owned[id] pasa de presencia 0/1 a cantidad real), para
-    // que el futuro sistema de "grabados" pueda leer cuántas copias
-    // exactas tienes de cada Caído.
+    // Acumulable (2026-09-26, pedido explícito): un duplicado no se descarta
+    // — suma al contador (owned[id] pasa de presencia 0/1 a cantidad real),
+    // para que el futuro sistema de "grabados" pueda leer cuántas copias
+    // exactas tienes de cada Caído. Ya NO da oro (pedido explícito, mismo
+    // día): el oro solo existía para compensar el descarte de antes.
     state.char.pets.owned[id] = (state.char.pets.owned[id]||0) + 1;
-    results.push({id, tpl, isDup, goldRefund});
+    results.push({id, tpl, isDup});
   }
   return results;
 }
-function pullGacha(kind, payWith){
+// pullGacha/grantFreePetPulls guardan con flushSave() (INMEDIATO, no el
+// save() debounced de siempre) — pedido explícito 2026-09-26, bug urgente:
+// una invocación quedaba solo en memoria hasta que el debounce de 1.5s
+// disparara solo; si el jugador cambiaba de personaje o la pestaña se iba a
+// segundo plano (el navegador puede suspender/descargar la pestaña, sobre
+// todo en móvil) ANTES de que ese timer disparara, la invocación se perdía
+// por completo (a veces con el costo ya descontado sin nada a cambio, a
+// veces pareciendo que "se las devuelven" porque ni el costo llegó a
+// guardarse). Al ser la única acción del juego que gasta oro/Sellos/tiradas
+// gratis de forma irreversible para dar algo tan valioso como un Caído del
+// Laberinto, no puede depender de un temporizador — se escribe a Supabase
+// apenas se resuelve la tirada, antes de que el jugador pueda alejarse.
+async function pullGacha(kind, payWith){
   ensurePets();
   payWith = payWith==='sellos' ? 'sellos' : 'gold';
   const count = kind==='x10' ? 11 : 1;
@@ -1368,19 +1365,21 @@ function pullGacha(kind, payWith){
   const rareCount = results.filter(r=>['epico','legendario','mitico'].includes(r.tpl.rarity)).length;
   log(`Otorgas una ofrenda al árbol (${count===11?'x10 +1':'x1'}, -${costLabel}): consigues ${count} Caído(s) del Laberinto${rareCount?`, ¡${rareCount} de rango Épico o superior!`:''}.`);
   renderSheet();
-  save();
+  await flushSave();
   return results;
 }
 // Tiradas de regalo (check-in diario y otorgadas por admin, ver más abajo)
 // — mismo motor de doPetPulls, sin cobrar nada. resuelve YA MISMO (revela
 // las mascotas); las que llegan como "pendientes" (ver pets.pendingFreePulls)
 // se resuelven recién cuando el jugador las reclama a mano en la Ofrenda.
-function grantFreePetPulls(count){
+// También guarda con flushSave() inmediato — mismo motivo que pullGacha().
+async function grantFreePetPulls(count){
   ensurePets();
   const results = doPetPulls(count);
   const rareCount = results.filter(r=>['epico','legendario','mitico'].includes(r.tpl.rarity)).length;
   log(`El árbol te concede ${count} ofrenda(s) gratis: consigues ${count} Caído(s) del Laberinto${rareCount?`, ¡${rareCount} de rango Épico o superior!`:''}.`);
   renderSheet();
+  await flushSave();
   return results;
 }
 
@@ -1428,7 +1427,10 @@ function checkinPreviewDay(){
 function checkinCycleClaimedDay(){
   return checkinIsNewMonth() ? 0 : (state.char.checkin.day||0);
 }
-function claimCheckin(){
+// flushSave() inmediato — mismo motivo que pullGacha()/grantFreePetPulls():
+// las ofrendas pendientes que reparte esto son la materia prima de una
+// invocación real, así que tampoco deben quedar a merced del debounce.
+async function claimCheckin(){
   ensureCheckin();
   if(!checkinAvailable()) return null;
   const day = checkinPreviewDay();
@@ -1437,7 +1439,7 @@ function claimCheckin(){
   state.char.pets.pendingFreePulls = (state.char.pets.pendingFreePulls||0) + day;
   log(`Check-in diario (día ${day}/30 de este mes): se suman ${day} ofrenda(s) gratis pendientes en el árbol (total acumulado: ${state.char.pets.pendingFreePulls}).`);
   renderSheet();
-  save();
+  await flushSave();
   return {day, pending: state.char.pets.pendingFreePulls};
 }
 
@@ -2453,12 +2455,13 @@ const SOUL_STONES = {
 
   // Rangos D-A: mismas fórmulas de escalado documentadas arriba (se duplican
   // por rango), ya activas. El "efecto avanzado" prometido en A para
-  // Sabiduría/Voluntad/Instinto/Vitalidad/Furia/Sombra (escudo de maná, mitad
-  // de costo, doble lanzamiento, autocuración, revivir, invocar sombra) no
-  // tiene código de combate propio todavía — esas piedras se quedan con el
-  // efecto de F escalado hasta que se implemente esa mecánica nueva. Vigor sí
-  // cambia en A porque el robo de vida ya es un special genérico existente
-  // (aplica igual desde un arma o desde una piedra).
+  // Voluntad/Instinto/Vitalidad (mitad de costo, doble lanzamiento,
+  // autocuración) todavía no tiene código de combate propio — esas piedras
+  // se quedan con el efecto de F escalado hasta que se implemente esa
+  // mecánica nueva. Vigor/Sombra/Furia ya cambian en A (robo de vida/
+  // invocar sombra/buff de bajo HP, respectivamente) y Sabiduría también
+  // desde 2026-09-26 (escudo de maná — pedido explícito tras reportar que
+  // no hacía nada real, ver 'mana_shield' en playerUseSkill).
   vigor_d:     {id:'vigor_d',     family:'vigor',     name:'Piedra del Alma: Vigor (D)',            tier:'D', icon:'🟤', bonus:{stat:'fis', value:8},
     special:{type:'aturdir', chance:0.04},
     desc:'+8 Físico. 4% de probabilidad de aturdir al enemigo al golpear.', preview:'Desde A: roba vida (% del daño causado).'},
@@ -2474,16 +2477,16 @@ const SOUL_STONES = {
 
   sabiduria_d: {id:'sabiduria_d', family:'sabiduria', name:'Piedra del Alma: Sabiduría (D)',        tier:'D', icon:'📘', bonus:{stat:'maxsta', value:32},
     special:{type:'mp_refund', chance:0.10, amount:0.05},
-    desc:'+32 MP máximo. 10% de probabilidad de recuperar el 5% del MP gastado.', preview:'Desde A: probabilidad de escudo de maná (pendiente de implementar).'},
+    desc:'+32 MP máximo. 10% de probabilidad de recuperar el 5% del MP gastado.', preview:'Desde A: probabilidad de generar un escudo de maná que absorbe daño físico y mágico.'},
   sabiduria_c: {id:'sabiduria_c', family:'sabiduria', name:'Piedra del Alma: Sabiduría (C)',        tier:'C', icon:'📘', bonus:{stat:'maxsta', value:64},
     special:{type:'mp_refund', chance:0.20, amount:0.05},
-    desc:'+64 MP máximo. 20% de probabilidad de recuperar el 5% del MP gastado.', preview:'Desde A: probabilidad de escudo de maná (pendiente de implementar).'},
+    desc:'+64 MP máximo. 20% de probabilidad de recuperar el 5% del MP gastado.', preview:'Desde A: probabilidad de generar un escudo de maná que absorbe daño físico y mágico.'},
   sabiduria_b: {id:'sabiduria_b', family:'sabiduria', name:'Piedra del Alma: Sabiduría (B)',        tier:'B', icon:'📘', bonus:{stat:'maxsta', value:96},
     special:{type:'mp_refund', chance:0.40, amount:0.05},
-    desc:'+96 MP máximo. 40% de probabilidad de recuperar el 5% del MP gastado.', preview:'Desde A: probabilidad de escudo de maná (pendiente de implementar).'},
+    desc:'+96 MP máximo. 40% de probabilidad de recuperar el 5% del MP gastado.', preview:'Desde A: probabilidad de generar un escudo de maná que absorbe daño físico y mágico.'},
   sabiduria_a: {id:'sabiduria_a', family:'sabiduria', name:'Piedra del Alma: Sabiduría (A)',        tier:'A', icon:'📘', bonus:{stat:'maxsta', value:128},
-    special:{type:'mp_refund', chance:0.80, amount:0.05},
-    desc:'+128 MP máximo. 80% de probabilidad de recuperar el 5% del MP gastado. (El escudo de maná prometido en este rango todavía no está implementado.)'},
+    specials:[{type:'mp_refund', chance:0.80, amount:0.05}, {type:'mana_shield', chance:0.05, shieldPct:0.40}],
+    desc:'+128 MP máximo. 80% de probabilidad de recuperar el 5% del MP gastado. 5% de probabilidad de generar un escudo de maná (40% de tu MP máximo) que absorbe daño físico y mágico.'},
 
   voluntad_d:  {id:'voluntad_d',  family:'voluntad',  name:'Piedra del Alma: Voluntad (D)',         tier:'D', icon:'🔷', bonus:{stat:'esp', value:8},
     special:{type:'esp_refund', chance:0.10, amount:0.05},
@@ -2566,11 +2569,11 @@ const SOUL_STONES = {
     desc:'+50 Físico. Robas el 15% del daño físico que causas como vida.'},
 
   sabiduria_s: {id:'sabiduria_s', family:'sabiduria', name:'Piedra del Alma: Sabiduría (S)',        tier:'S', icon:'📘', bonus:{stat:'maxsta', value:160},
-    special:{type:'mp_refund', chance:1, amount:0.05},
-    desc:'+160 MP máximo. Recuperas siempre el 5% del MP gastado.'},
+    specials:[{type:'mp_refund', chance:1, amount:0.05}, {type:'mana_shield', chance:0.15, shieldPct:0.55}],
+    desc:'+160 MP máximo. Recuperas siempre el 5% del MP gastado. 15% de probabilidad de generar un escudo de maná (55% de tu MP máximo) que absorbe daño físico y mágico.'},
   sabiduria_ss:{id:'sabiduria_ss',family:'sabiduria', name:'Piedra del Alma: Sabiduría (SS)',       tier:'SS', icon:'📘', bonus:{stat:'maxsta', value:200},
-    special:{type:'mp_refund', chance:1, amount:0.05},
-    desc:'+200 MP máximo. Recuperas siempre el 5% del MP gastado.'},
+    specials:[{type:'mp_refund', chance:1, amount:0.05}, {type:'mana_shield', chance:0.25, shieldPct:0.70}],
+    desc:'+200 MP máximo. Recuperas siempre el 5% del MP gastado. 25% de probabilidad de generar un escudo de maná (70% de tu MP máximo) que absorbe daño físico y mágico.'},
 
   voluntad_s:  {id:'voluntad_s',  family:'voluntad',  name:'Piedra del Alma: Voluntad (S)',         tier:'S', icon:'🔷', bonus:{stat:'esp', value:40},
     special:{type:'esp_refund', chance:1, amount:0.05},
@@ -2734,6 +2737,7 @@ let missionsOpen = false; // whether the Gremio (missions board) panel is showin
 let tabernaOpen = false; // whether the Taberna (allies) panel is showing
 let ofrendaOpen = false; // whether the Otorgar Ofrenda (pet gacha) panel is showing
 let checkinOpen = false; // whether the check-in diario panel is showing
+let optionsOpen = false; // whether the Opciones (volumen + atajos de teclado) panel is showing
 let currentUser = null; // Supabase auth user
 let currentProfile = null; // {id, username, role, is_banned}
 
@@ -3120,6 +3124,21 @@ function mobXP(level){ return level; }        // mobs normales: 1 en piso 1, 2 e
 // calcula sobre estos nuevos valores, no sobre los viejos.
 function eliteXP(level){ return level+6; }    // élites: antes mob+1, ahora mob+6 (piso 1 = 7)
 function guardianXP(level){ return 2*level+10; } // guardianes/jefes de década: antes 2×mob+2, ahora 2×mob+10 (piso 1 = 12)
+// Nerf de XP en batallas grupales (2026-09-26, pedido explícito, urgente):
+// desde el piso 40 los combates traen 5-6 enemigos a la vez (ver enterNode),
+// y el multiplicador de xp por combate ANTES multiplicaba por
+// combat.enemies.length de forma lineal — un grupo de 5-6 pagaba 5-6 veces
+// el xp de un solo enemigo, encima del +50% global (XP_GLOBAL_BOOST) y la
+// recalibración de mobXP/eliteXP/guardianXP de ayer. El resultado real eran
+// combates de más de 400 xp en pisos 41-60, suficiente para llegar a nivel
+// 60 en muy pocas entradas al laberinto. Grupos de 1-4 (pisos 1-39) NO
+// cambian — ahí nunca hubo el problema y el ritmo ya estaba calibrado
+// (incluye el +60% de earlyXpBoost en pisos 1-10). Solo grupos de 5+ (pisos
+// 40+) dejan de multiplicar 1:1 y quedan en un tope fijo de 2.8, para que
+// una batalla grupal de pisos 41-60 ronde 200-220 xp en vez de 400+.
+function xpGroupMultiplier(enemyCount){
+  return enemyCount <= 4 ? enemyCount : 2.8;
+}
 // +50% de experiencia en TODO el juego (mobs, élites, guardianes, jefes de
 // década por igual) — pedido explícito 2026-09-25, se multiplica en
 // handleVictory() junto con el resto de bonos (raza, brecha, early boost).
@@ -3179,9 +3198,17 @@ function describeRecord(){
 // laberinto no se puede saltear de década, cada década por debajo de
 // checkpointLevel quedó necesariamente superada también — no hace falta
 // guardar la lista entera, alcanza con reconstruirla desde ese único número.
+// Tope defensivo en LEVEL_CAP (2026-09-26, bug real reportado: un personaje
+// derrotó a Storm Gush -piso 60, el jefe de la última década implementada-
+// y quedó con un botón de checkpoint "61" que no lleva a ningún lado real
+// (no hay bestiario para esa década todavía) — se quedaba en un bucle ahí.
+// handleVictory() ya no debería escribir un checkpointLevel por encima del
+// tope, pero esto protege también a cualquier cuenta que ya haya quedado
+// con ese valor guardado de antes del fix.
 function checkpointLevelsUnlocked(){
   const levels = [];
-  for(let lvl=1; lvl<=(state.char.checkpointLevel||1); lvl+=10) levels.push(lvl);
+  const cap = Math.min(LEVEL_CAP, state.char.checkpointLevel||1);
+  for(let lvl=1; lvl<=cap; lvl+=10) levels.push(lvl);
   return levels;
 }
 
@@ -3357,6 +3384,10 @@ function renderAll(){
   const musicBtn = document.getElementById('btn-music-toggle');
   musicBtn.style.display = 'inline-block';
   musicBtn.textContent = getLoginAudioMuted() ? '🔇 Música' : '🔊 Música';
+  const optionsBtn = document.getElementById('btn-options');
+  optionsBtn.style.display = 'inline-block';
+  optionsBtn.classList.toggle('active', optionsOpen);
+  optionsBtn.disabled = !!(combat && combat.active);
   document.getElementById('gold-badge').style.display = 'flex';
   document.getElementById('gold-amount').textContent = state.char.gold;
   const tierBadge = document.getElementById('tier-badge');
@@ -3400,6 +3431,7 @@ function renderAll(){
     tabernaOpen = false;
     ofrendaOpen = false;
     checkinOpen = false;
+    optionsOpen = false;
     renderCombat();
   } else if(invOpen){
     renderInventory();
@@ -3419,6 +3451,8 @@ function renderAll(){
     renderOfrenda();
   } else if(checkinOpen){
     renderCheckin();
+  } else if(optionsOpen){
+    renderOptions();
   } else if(state.dungeon && !state.dungeon.floors[state.dungeon.floors.length-1][0].done){
     renderMap();
   } else {
@@ -4394,7 +4428,7 @@ function renderCity(){
    ============================================================ */
 function showPetRates(){
   showOverlay('Cómo funciona la ofrenda', `
-    <p style="margin-top:0;">Si sale un Caído del Laberinto que ya tienes, se convierte automáticamente en ${PET_DUP_GOLD.toLocaleString('es')} de oro en vez de acumularse.</p>
+    <p style="margin-top:0;">Si sale un Caído del Laberinto que ya tienes, no se pierde: se suma a tu colección de ese Caído (verás su cantidad junto al nombre).</p>
   `, ()=>{});
 }
 function isRarePetResult(r){ return ['epico','legendario','mitico'].includes(r.tpl.rarity); }
@@ -4414,7 +4448,7 @@ function petFlipCardHTML(r, idx, locked){
         <div class="pet-flip-back">🎴</div>
         <div class="pet-flip-front" data-pet-zoom="${r.id}" style="box-shadow:0 0 0 2px ${rc.color}bb, 0 0 ${big?22:12}px ${rc.color}99;">
           <img src="${petArtPath(r.id)}" alt="${tpl.name}" loading="lazy">
-          ${r.isDup ? `<div class="pet-dup-badge">Duplicado · +${PET_DUP_GOLD.toLocaleString('es')} oro</div>` : '<div class="pet-new-badge">¡Nuevo!</div>'}
+          ${r.isDup ? '<div class="pet-dup-badge">Duplicado</div>' : '<div class="pet-new-badge">¡Nuevo!</div>'}
         </div>
       </div>
     </div>`;
@@ -4532,8 +4566,8 @@ function renderOfrenda(){
     stage.classList.add('shining');
     allPullBtns().forEach(b=>b.disabled = true);
     document.getElementById('ofrenda-results').innerHTML = '';
-    setTimeout(()=>{
-      const results = pullGacha(kind, payWith);
+    setTimeout(async ()=>{
+      const results = await pullGacha(kind, payWith);
       stage.classList.remove('shining');
       ofrendaPullResults = results ? results.map(r=>Object.assign({flipped:false}, r)) : null;
       refreshOfrendaResultsDOM();
@@ -4557,9 +4591,9 @@ function renderOfrenda(){
       claimBtn.disabled = true;
       allPullBtns().forEach(b=>b.disabled = true);
       document.getElementById('ofrenda-results').innerHTML = '';
-      setTimeout(()=>{
+      setTimeout(async ()=>{
         state.char.pets.pendingFreePulls = 0;
-        const results = grantFreePetPulls(count);
+        const results = await grantFreePetPulls(count);
         stage.classList.remove('shining');
         ofrendaPullResults = results ? results.map(r=>Object.assign({flipped:false}, r)) : null;
         refreshOfrendaResultsDOM();
@@ -4568,7 +4602,6 @@ function renderOfrenda(){
         if(pendingBox) pendingBox.remove();
         document.querySelector('.ofrenda-collection-line').textContent =
           `Colección: ${Object.keys(state.char.pets.owned).length} / ${PET_CATALOG.length} Caídos del Laberinto reunidos · ${equippedPetIds().length}/${maxPetSlots()} equipadas`;
-        save();
       }, 900);
     };
   }
@@ -4606,11 +4639,79 @@ function renderCheckin(){
   document.getElementById('btn-close-checkin').onclick = ()=>{ checkinOpen=false; renderAll(); };
   const claimBtn = document.getElementById('btn-claim-checkin');
   if(available){
-    claimBtn.onclick = ()=>{
-      claimCheckin();
+    claimBtn.onclick = async ()=>{
+      await claimCheckin();
       renderCheckin();
     };
   }
+}
+
+/* ============================================================
+   OPCIONES — volumen de música + atajos de teclado en combate
+   ============================================================ */
+function renderOptions(){
+  const vol = getMusicVolume();
+  const muted = getLoginAudioMuted();
+  const binds = getKeybinds();
+  const rowsHTML = KEYBIND_ACTIONS.map(a=>`
+    <div class="inv-item-row" data-keybind-row="${a.id}">
+      <div style="min-width:0; flex:1;"><b>${a.label}</b></div>
+      <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+        <span class="slot-tag" id="keybind-current-${a.id}">${binds[a.id].map(k=>k.toUpperCase()).join(' / ')}</span>
+        <button class="inv-btn" data-rebind="${a.id}">Cambiar</button>
+      </div>
+    </div>`).join('');
+  document.getElementById('main-panel').innerHTML = `
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:4px;">
+      <h3 style="color:var(--bronze-light);">⚙️ Opciones</h3>
+      <button class="reset-btn" id="btn-close-options">Cerrar</button>
+    </div>
+    <div class="section-label" style="margin-top:4px;">Volumen de música</div>
+    <div style="display:flex; align-items:center; gap:10px; margin:8px 0;">
+      <span>${muted ? '🔇' : '🔊'}</span>
+      <input type="range" id="opt-volume-slider" min="0" max="100" value="${vol}" style="flex:1;" ${muted?'disabled':''}>
+      <span id="opt-volume-value" style="min-width:3em; text-align:right;">${vol}%</span>
+    </div>
+    <button class="inv-btn" id="opt-mute-toggle">${muted ? 'Quitar silencio' : 'Silenciar'}</button>
+
+    <div class="section-label" style="margin-top:16px;">Atajos de teclado en combate</div>
+    <p style="color:var(--text-dim); font-size:0.82em; margin-top:0;">Solo funcionan durante un combate activo. "Cambiar" reemplaza ambas teclas por defecto de esa acción por la que presiones a continuación.</p>
+    ${rowsHTML}
+    <button class="reset-btn" id="opt-reset-keybinds" style="margin-top:10px;">Restablecer atajos por defecto</button>
+  `;
+  document.getElementById('btn-close-options').onclick = ()=>{ optionsOpen=false; renderAll(); };
+  const slider = document.getElementById('opt-volume-slider');
+  const valueLabel = document.getElementById('opt-volume-value');
+  slider.oninput = ()=>{
+    const v = parseInt(slider.value, 10);
+    valueLabel.textContent = v + '%';
+    setMusicVolume(v);
+  };
+  document.getElementById('opt-mute-toggle').onclick = ()=>{
+    toggleLoginAudioMuted();
+    renderOptions();
+  };
+  document.getElementById('opt-reset-keybinds').onclick = ()=>{
+    resetKeybinds();
+    renderOptions();
+  };
+  document.querySelectorAll('[data-rebind]').forEach(btn=>{
+    btn.onclick = ()=>{
+      const actionId = btn.dataset.rebind;
+      btn.textContent = 'Presiona una tecla… (Esc cancela)';
+      btn.disabled = true;
+      document.querySelectorAll('[data-rebind]').forEach(b=>{ if(b!==btn) b.disabled = true; });
+      const capture = (e)=>{
+        e.preventDefault();
+        document.removeEventListener('keydown', capture, true);
+        if(e.key !== 'Escape'){
+          setKeybind(actionId, e.key.length===1 ? e.key : e.key.toLowerCase());
+        }
+        renderOptions();
+      };
+      document.addEventListener('keydown', capture, true);
+    };
+  });
 }
 
 /* ============================================================
@@ -5878,7 +5979,15 @@ function enterNode(f,n){
     group.sort((a,b)=> (b.tpl.frontline?1:0) - (a.tpl.frontline?1:0));
     startCombat(group, node);
   } else if(node.type==='tesoro'){
-    const gold = rnd(8,18) + f*3;
+    // El oro de los cofres escalaba con `f` (el piso LOCAL dentro de esta
+    // entrada al laberinto, 0-8 según numFloorsForLevel/MAX_FLOORS) en vez
+    // de con el piso real (dg.level, 1-60) — por eso un cofre en el piso 51
+    // pagaba casi lo mismo que uno en el piso 1 (pedido explícito
+    // 2026-09-26: "piso 51+ dando solo 30 de oro"). El oro de combate
+    // (ver rewardMult en handleVictory) ya escalaba bien con dg.level; los
+    // cofres ahora usan el mismo +8% por piso real.
+    const rewardMult = 1 + (dg.level-1)*0.08;
+    const gold = Math.round((rnd(8,18) + f*3) * rewardMult);
     state.char.gold += gold;
     let msg = `Encuentras un cofre. +${gold} de oro.`;
     if(chance(0.6)){
@@ -6184,7 +6293,13 @@ function startCombat(enemyGroup, node){
     enemies:enemyGroup, // slot 0 = front
     allies,
     hostileAllies:[], // ids de aliados que te han atacado esta pelea — solo esos se pueden golpear de vuelta
-    playerPos:'frente',
+    // Arquero y Mago pelean a distancia — por defecto empiezan en
+    // Retaguardia, igual que cualquier aliado no-frontline (ver
+    // makeCombatAlly: pos = tpl.frontline ? 'frente' : 'retaguardia').
+    // Guerrero y Asesino siguen empezando en el Frente. Pedido explícito
+    // 2026-09-26. El jugador puede reposicionarse manualmente en cualquier
+    // momento con "Reposicionarse", esto solo cambia el punto de partida.
+    playerPos: isRangedStyle() ? 'retaguardia' : 'frente',
     playerStatuses:[],
     playerDefending:false,
     turnLog:[],
@@ -6192,7 +6307,7 @@ function startCombat(enemyGroup, node){
     lastActor:null, // quién actuó justo antes del último render - dispara la animación en battleStage.js
     lastAction:null, // {label, effects:[{targetKind:'enemy'|'ally'|'player', key, amount, kind:'dmg'|'heal'}]} de ese mismo actor
     pendingSkill:null, // skillId esperando click de objetivo en el canvas - ver syncBattleStage()
-    pendingTargetFilter:null, // 'front'|null — restringe el click a solo los enemigos del frente (ver useSkillFromMenu/onTarget)
+    pendingTargetFilter:null, // 'front'|null — restringe el click al conjunto elegible del momento: línea frontal si sigue viva, o toda la retaguardia si ya no queda nadie al frente (ver playerFrontTargetIndices/useSkillFromMenu/onTarget)
     openSubmenu:null, // 'habilidades'|'mochila'|null — qué submenú quedó abierto entre renders (ver renderCombat); solo se cierra con "Volver" o al terminar el combate
     // Marca qué pasivas de Tier S ya se activaron en ESTE combate — todas las
     // pasivas de Tier S (armas y equipo) valen 1 vez por combate y 4 turnos
@@ -6415,6 +6530,31 @@ function frontEnemyIndex(){
   if(frontIdxs.length) return frontIdxs[0];
   for(let i=0;i<combat.enemies.length;i++) if(combat.enemies[i].hp>0) return i;
   return -1;
+}
+// Objetivos que el JUGADOR puede elegir con una habilidad targetMode:'front'
+// (pedido explícito 2026-09-25): mientras quede al menos un enemigo de línea
+// frontal vivo, la retaguardia sigue bloqueada y solo se puede elegir entre
+// los del frente (igual que antes). En cuanto se derrota a toda la línea
+// frontal, se desbloquea la elección entre lo que quede vivo — que en ese
+// punto es pura retaguardia — en vez de auto-elegir sin dejar escoger.
+function playerFrontTargetIndices(){
+  const front = livingFrontlineEnemyIndices();
+  if(front.length) return front;
+  const idxs = [];
+  combat.enemies.forEach((e,i)=>{ if(e.hp>0) idxs.push(i); });
+  return idxs;
+}
+// El Arquero y el Mago atacan a distancia: su ataque básico (única habilidad
+// compartida con targetMode:'front') no debe respetar el bloqueo de línea
+// frontal — tienen el mismo alcance total que sus habilidades propias
+// (disparo_certero/bola_fuego, ya targetMode:'any') sin importar si la línea
+// frontal enemiga sigue viva. Pedido explícito 2026-09-25.
+function isRangedStyle(){
+  return state.char.style==='tirador' || state.char.style==='mago';
+}
+function resolvedTargetMode(skill){
+  if(skill.targetMode==='front' && isRangedStyle()) return 'any';
+  return skill.targetMode;
 }
 // IA de objetivo por aliado (2026-09-25, pedido explícito): un aliado de
 // Frente (frontline:true, hoy solo Aldric) sigue peleando cuerpo a cuerpo —
@@ -6876,6 +7016,19 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
           state.char.curSta = Math.min(d0.maxSta, state.char.curSta+refund);
           log(`<b>${it.name}</b> te devuelve ${refund} de MP.`);
         }
+        // Escudo de maná — el "efecto avanzado" de Sabiduría A+ que hasta
+        // ahora estaba solo prometido en el texto (pedido explícito
+        // 2026-09-26, tras dropear una Sabiduría A y no ver ningún escudo).
+        // Mismo gatillo que mp_refund (usar una habilidad que cuesta MP):
+        // genera un escudo que absorbe daño físico Y mágico por igual
+        // (combat.playerShield ya es agnóstico al tipo de daño, ver
+        // dealDamageToPlayer), tamaño = % del MP máximo.
+        if(sp.type==='mana_shield' && skill.cost.tipo==='estamina' && chance(sp.chance)){
+          const d0 = derived();
+          const shieldAmt = Math.round(d0.maxSta * sp.shieldPct);
+          grantShield(true, null, shieldAmt);
+          log(`<b>${it.name}</b> genera un escudo de maná que absorbe ${shieldAmt} de daño.`);
+        }
         if(sp.type==='esp_refund' && skill.cost.tipo==='espiritu' && chance(sp.chance)){
           const d0 = derived();
           const refund = Math.max(1, Math.round(skill.cost.valor*sp.amount));
@@ -6892,22 +7045,25 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
 
   // resolve target(s)
   let targets = [];
-  if(skill.targetMode==='front'){
-    // Si hay 2+ enemigos en el frente a la vez, el jugador ya eligió cuál
-    // por click (ver useSkillFromMenu/onTarget) y llega acá con targetIdx
-    // puesto — se valida que siga siendo un frontline vivo antes de usarlo,
-    // por si el objetivo murió/cambió entre el click y la resolución. Con
-    // un solo frontline vivo (el caso de siempre hasta ahora), targetIdx
-    // llega null y se sigue auto-eligiendo como antes.
+  const resolvedMode = resolvedTargetMode(skill);
+  if(resolvedMode==='front'){
+    // Si hay 2+ objetivos elegibles a la vez (ver playerFrontTargetIndices:
+    // línea frontal si sigue viva, o toda la retaguardia si ya no queda
+    // nadie al frente), el jugador ya eligió cuál por click (ver
+    // useSkillFromMenu/onTarget) y llega acá con targetIdx puesto — se
+    // valida que siga siendo un objetivo elegible antes de usarlo, por si
+    // murió/cambió entre el click y la resolución. Con un solo objetivo
+    // elegible, targetIdx llega null y se sigue auto-eligiendo como antes.
     let fi = -1;
-    if(targetIdx!=null && combat.enemies[targetIdx] && combat.enemies[targetIdx].hp>0 && combat.enemies[targetIdx].tpl && combat.enemies[targetIdx].tpl.frontline){
+    const idxs = playerFrontTargetIndices();
+    if(targetIdx!=null && idxs.includes(targetIdx) && combat.enemies[targetIdx] && combat.enemies[targetIdx].hp>0){
       fi = targetIdx;
     } else {
-      fi = frontEnemyIndex();
+      fi = idxs.length ? idxs[0] : -1;
     }
     if(fi<0){ log('No hay ningún enemigo al frente.'); return; }
     targets = [combat.enemies[fi]];
-  } else if(skill.targetMode==='any'){
+  } else if(resolvedMode==='any'){
     let t;
     if(typeof targetIdx==='string' && targetIdx.startsWith('ally:')){
       const allyIdx = parseInt(targetIdx.slice(5));
@@ -7333,6 +7489,84 @@ function getCombatSpeed(){
 function setCombatSpeed(speed){
   try{ localStorage.setItem('dsCombatSpeed', String(speed)); }catch(e){}
 }
+// Apuntado ON (manual, por defecto) = el jugador elige el objetivo con click
+// tal como ya funciona hoy (ver playerFrontTargetIndices/useSkillFromMenu/
+// onTarget). Apuntado OFF = vuelve al comportamiento automático de antes:
+// cada ataque/habilidad se resuelve solo, sin pedir click — 'front' cae en
+// el primer objetivo elegible de siempre (frente si vive, si no cualquiera
+// vivo) y 'any' apunta automáticamente al enemigo con menos vida (mismo
+// criterio que ya usa la IA de aliados a distancia, ver allyTargetEnemyIndex).
+// Pedido explícito 2026-09-26, junto al toggle de velocidad x1/x2.
+function getManualAim(){
+  try{ return localStorage.getItem('dsManualAim') !== '0'; }catch(e){ return true; }
+}
+function setManualAim(on){
+  try{ localStorage.setItem('dsManualAim', on ? '1' : '0'); }catch(e){}
+}
+function autoPickEnemyIndex(){
+  const living = livingEnemies();
+  if(!living.length) return -1;
+  const weakest = living.reduce((a,b)=> b.hp<a.hp ? b : a);
+  return combat.enemies.indexOf(weakest);
+}
+
+// Atajos de teclado en combate (pedido explícito 2026-09-26), configurables
+// desde ⚙️ Opciones (ver renderOptions). Cada acción trae 2 teclas por
+// defecto (ej. Habilidad 1 = Q o 1); al reasignarla a mano queda en una sola
+// tecla (más simple de reasignar que mantener listas de 2).
+const KEYBIND_ACTIONS = [
+  {id:'basico', label:'Ataque básico', default:['f']},
+  {id:'habilidades', label:'Abrir/cerrar Habilidades', default:['h']},
+  {id:'skill1', label:'Habilidad 1', default:['q','1']},
+  {id:'skill2', label:'Habilidad 2', default:['w','2']},
+  {id:'skill3', label:'Habilidad 3', default:['e','3']},
+  {id:'ultimate', label:'Ultimate (nivel 60+)', default:['r','4']},
+];
+function getKeybinds(){
+  let saved = {};
+  try{ saved = JSON.parse(localStorage.getItem('dsKeybinds')||'{}'); }catch(e){ saved = {}; }
+  const out = {};
+  KEYBIND_ACTIONS.forEach(a=>{ out[a.id] = Array.isArray(saved[a.id]) && saved[a.id].length ? saved[a.id] : a.default; });
+  return out;
+}
+function setKeybind(actionId, key){
+  const binds = {};
+  KEYBIND_ACTIONS.forEach(a=>{ binds[a.id] = getKeybinds()[a.id]; });
+  binds[actionId] = [key.toLowerCase()];
+  try{ localStorage.setItem('dsKeybinds', JSON.stringify(binds)); }catch(e){}
+}
+function resetKeybinds(){
+  try{ localStorage.removeItem('dsKeybinds'); }catch(e){}
+}
+// Un solo listener global (no uno por render de renderCombat) — lee el
+// estado vigente de combat/style/keybinds en el momento de la tecla, igual
+// que ya hace el click del canvas con combat.pendingSkill.
+document.addEventListener('keydown', (e)=>{
+  if(e.ctrlKey || e.metaKey || e.altKey) return;
+  const activeTag = document.activeElement && document.activeElement.tagName;
+  if(activeTag==='INPUT' || activeTag==='TEXTAREA') return;
+  if(!combat || !combat.active || combat.over || combat.turnBusy) return;
+  const key = e.key.toLowerCase();
+  const binds = getKeybinds();
+  const matches = (actionId)=> binds[actionId].includes(key);
+  if(matches('basico')){
+    e.preventDefault(); useSkillFromMenu('ataque_basico');
+  } else if(matches('habilidades')){
+    e.preventDefault();
+    combat.openSubmenu = combat.openSubmenu==='habilidades' ? null : 'habilidades';
+    renderCombat();
+  } else if(matches('skill1')){
+    e.preventDefault(); useSkillFromMenu(style().skills[0]);
+  } else if(matches('skill2')){
+    e.preventDefault(); useSkillFromMenu(style().skills[1]);
+  } else if(matches('skill3')){
+    e.preventDefault(); useSkillFromMenu(style().skills[2]);
+  } else if(matches('ultimate')){
+    e.preventDefault();
+    if(state.char.level < LEVEL_60_MILESTONE){ log('Tu Ultimate se desbloquea en el nivel 60.'); return; }
+    useSkillFromMenu(ULTIMATE_BY_STYLE[state.char.style]);
+  }
+});
 
 async function resolveAllyTurns(){
   // myCombat ancla esta llamada al combate que la disparó: a velocidad x1
@@ -8169,7 +8403,7 @@ function handleVictory(){
   const level = state.dungeon.level || 1;
   const rewardMult = 1 + (level-1)*0.08; // los niveles más duros pagan algo mejor (solo aplica al oro)
   const perKillXP = isBoss ? guardianXP(level) : isElite ? eliteXP(level) : mobXP(level);
-  const xpGain = Math.max(1, Math.round(perKillXP * combat.enemies.length * (race().id==='humano'?1.1:1) * xpGapMultiplier() * earlyXpBoost(level) * XP_GLOBAL_BOOST));
+  const xpGain = Math.max(1, Math.round(perKillXP * xpGroupMultiplier(combat.enemies.length) * (race().id==='humano'?1.1:1) * xpGapMultiplier() * earlyXpBoost(level) * XP_GLOBAL_BOOST));
   const goldGain = Math.round((rnd(6,14)*combat.enemies.length + (isBoss?60:isElite?20:0)) * rewardMult);
   state.char.xp += xpGain;
   state.char.gold += goldGain;
@@ -8302,9 +8536,13 @@ function handleVictory(){
     // Checkpoints: solo los jefes de década (piso 10, 20, 30...) habilitan un
     // punto de entrada nuevo, en el piso siguiente (11, 21, 31...). Si mueres
     // en el 15, tu próxima entrada igual arranca en el 11 - no hay checkpoint
-    // a mitad de década, solo al cerrarla.
+    // a mitad de década, solo al cerrarla. Tope en LEVEL_CAP (bug real
+    // 2026-09-26): derrotar a Storm Gush (piso 60, la última década
+    // implementada) escribía un checkpoint "61" sin bestiario real detrás —
+    // quien lo usaba quedaba atrapado en un bucle. Mismo Math.min que ya usa
+    // maxLevelUnlocked justo arriba.
     if(isDecadeFinal){
-      state.char.checkpointLevel = Math.max(state.char.checkpointLevel||1, clearedLevel+1);
+      state.char.checkpointLevel = Math.min(LEVEL_CAP, Math.max(state.char.checkpointLevel||1, clearedLevel+1));
     }
     // Jefe de la década 30: el Sacerdote desbloquea su equipo Épico (A)
     // completo, sin importar su propio nivel — a diferencia de Raro/Único,
@@ -8506,6 +8744,47 @@ async function guardedUsePotionInCombat(potionId){
     if(combat){ combat.turnBusy = false; if(!combat.over) renderCombat(); }
   }
 }
+// Nivel de módulo (no un closure de renderCombat) a propósito: tanto el
+// click de los botones del menú de combate como los atajos de teclado
+// (ver wireGlobalCombatShortcuts) necesitan poder llamar exactamente a la
+// misma lógica de "usar esta habilidad respetando Apuntado ON/OFF". El
+// objetivo pendiente vive en combat.pendingSkill (no en una variable local)
+// para que el click en el canvas de battleStage.js -que se registra una
+// sola vez, no en cada render- pueda leer el valor vigente en el momento
+// del click.
+function useSkillFromMenu(sid){
+  const sk = SKILLS[sid];
+  const tMode = resolvedTargetMode(sk);
+  combat.pendingSkill = null;
+  combat.pendingTargetFilter = null;
+  if(!getManualAim()){
+    // Apuntado OFF: se resuelve solo, nunca pide click. 'front'/'all'/
+    // 'self' ya se auto-resuelven al pasar targetIdx=null (ver
+    // playerUseSkill); 'any' necesita un objetivo elegido a mano.
+    if(tMode==='any'){
+      const idx = autoPickEnemyIndex();
+      if(idx<0){ log('No hay ningún objetivo disponible.'); return; }
+      guardedPlayerUseSkill(sid, idx);
+    } else {
+      guardedPlayerUseSkill(sid, null);
+    }
+    return;
+  }
+  if(tMode==='any'){
+    combat.pendingSkill = sid;
+    log(`Elige un objetivo para ${sk.name}.`);
+  } else if(tMode==='front' && playerFrontTargetIndices().length>1){
+    // Dos o más objetivos elegibles a la vez (línea frontal si sigue viva,
+    // o toda la retaguardia si ya no queda nadie al frente): se pide el
+    // mismo click de objetivo que 'any', pero restringido a ese conjunto
+    // (ver pendingTargetFilter, leído en onTarget más abajo).
+    combat.pendingSkill = sid;
+    combat.pendingTargetFilter = 'front';
+    log(`Elige a cuál enemigo atacar con ${sk.name}.`);
+  } else {
+    guardedPlayerUseSkill(sid, null);
+  }
+}
 
 function renderCombat(){
   const d = derived();
@@ -8561,6 +8840,7 @@ function renderCombat(){
   }).join('') : `<p class="inv-empty-msg">No tienes pociones para usar.</p>`;
 
   const combatSpeed = getCombatSpeed();
+  const manualAim = getManualAim();
   const playerShieldAmt = combat.playerShield||0;
   const hpScale = d.maxHP + playerShieldAmt;
   const hpPct = Math.max(0, state.char.curHP/hpScale*100);
@@ -8597,9 +8877,15 @@ function renderCombat(){
   document.getElementById('main-panel').innerHTML = `
     <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px;">
       <h3 style="color:var(--bronze-light); margin:0;">Combate</h3>
-      <div class="pos-toggle" id="combat-speed-toggle" style="margin:0;" title="Qué tan rápido se resuelven los turnos de aliados y enemigos">
-        <span class="pos-pill ${combatSpeed===1?'active':''}" data-speed="1">x1</span>
-        <span class="pos-pill ${combatSpeed===2?'active':''}" data-speed="2">x2</span>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <div class="pos-toggle" id="combat-aim-toggle" style="margin:0;" title="Apuntado ON: eliges tú el objetivo con click. Apuntado OFF: se ataca solo, como antes.">
+          <span class="pos-pill ${manualAim?'active':''}" data-aim="1">🎯 ON</span>
+          <span class="pos-pill ${!manualAim?'active':''}" data-aim="0">🎯 OFF</span>
+        </div>
+        <div class="pos-toggle" id="combat-speed-toggle" style="margin:0;" title="Qué tan rápido se resuelven los turnos de aliados y enemigos">
+          <span class="pos-pill ${combatSpeed===1?'active':''}" data-speed="1">x1</span>
+          <span class="pos-pill ${combatSpeed===2?'active':''}" data-speed="2">x2</span>
+        </div>
       </div>
     </div>
     <div class="pos-toggle" style="margin-bottom:2px;">
@@ -8661,28 +8947,6 @@ function renderCombat(){
     </div>
   `;
 
-  // El objetivo pendiente vive en combat.pendingSkill (no en una variable
-  // local del closure) para que el click en el canvas de battleStage.js
-  // -que se registra una sola vez, no en cada render- pueda leer el valor
-  // vigente en el momento del click.
-  const useSkillFromMenu = (sid)=>{
-    const sk = SKILLS[sid];
-    combat.pendingSkill = null;
-    combat.pendingTargetFilter = null;
-    if(sk.targetMode==='any'){
-      combat.pendingSkill = sid;
-      log(`Elige un objetivo para ${sk.name}.`);
-    } else if(sk.targetMode==='front' && livingFrontlineEnemyIndices().length>1){
-      // Dos o más enemigos en el frente a la vez: se pide el mismo click de
-      // objetivo que 'any', pero solo entre los que están al frente (ver
-      // pendingTargetFilter, leído en onTarget más abajo).
-      combat.pendingSkill = sid;
-      combat.pendingTargetFilter = 'front';
-      log(`Elige a cuál de los enemigos del frente atacar con ${sk.name}.`);
-    } else {
-      guardedPlayerUseSkill(sid, null);
-    }
-  };
   const grid = document.getElementById('battle-menu-grid');
   const submenu = document.getElementById('battle-submenu');
   wirePetZoomEvents(document.getElementById('main-panel'));
@@ -8730,6 +8994,16 @@ function renderCombat(){
       renderCombat();
     };
   });
+  document.querySelectorAll('#combat-aim-toggle [data-aim]').forEach(el=>{
+    el.onclick = ()=>{
+      setManualAim(el.dataset.aim==='1');
+      // Apagar Apuntado a mitad de una elección pendiente no debe dejar el
+      // click del canvas esperando un objetivo que ya nadie va a pedir.
+      combat.pendingSkill = null;
+      combat.pendingTargetFilter = null;
+      renderCombat();
+    };
+  });
 
   const playerInfo = {
     name: state.char.nickname || s.name, icon: race().icon, style: state.char.style,
@@ -8742,7 +9016,7 @@ function renderCombat(){
     isAllyHostile,
     onTarget: (idx)=>{
       if(!combat.pendingSkill) return;
-      if(combat.pendingTargetFilter==='front' && !livingFrontlineEnemyIndices().includes(idx)) return; // click fuera del frente, se ignora
+      if(combat.pendingTargetFilter==='front' && !playerFrontTargetIndices().includes(idx)) return; // click fuera del conjunto elegible, se ignora
       const sid = combat.pendingSkill;
       combat.pendingSkill = null;
       combat.pendingTargetFilter = null;
@@ -8848,7 +9122,22 @@ document.getElementById('btn-inventory').onclick = ()=>{
   adminOpen = false;
   ofrendaOpen = false;
   checkinOpen = false;
+  optionsOpen = false;
   invOpen = !invOpen;
+  renderAll();
+};
+
+document.getElementById('btn-options').onclick = ()=>{
+  if(!state) return;
+  if(combat && combat.active){ log('No puedes abrir Opciones en combate.'); return; }
+  invOpen = false;
+  homeOpen = false;
+  shopOpen = false;
+  rankingOpen = false;
+  adminOpen = false;
+  ofrendaOpen = false;
+  checkinOpen = false;
+  optionsOpen = !optionsOpen;
   renderAll();
 };
 
@@ -8909,6 +9198,22 @@ function getLoginAudioMuted(){
 function setLoginAudioMuted(muted){
   try{ localStorage.setItem('dsLoginAudioMuted', muted?'1':'0'); }catch(e){}
 }
+// Volumen de música (0-100, pedido explícito 2026-09-26: mover esto a una
+// pantalla de Opciones) — separado del mute de siempre, que sigue
+// funcionando igual (mute = volumen "de emergencia" a 0 sin perder el
+// número guardado). Se aplica en vivo a login/boss theme sin recargar.
+function getMusicVolume(){
+  try{
+    const v = parseInt(localStorage.getItem('dsMusicVolume'), 10);
+    return (Number.isFinite(v) && v>=0 && v<=100) ? v : 50;
+  }catch(e){ return 50; }
+}
+function setMusicVolume(v){
+  v = Math.max(0, Math.min(100, Math.round(v)));
+  try{ localStorage.setItem('dsMusicVolume', String(v)); }catch(e){}
+  if(loginAudio) loginAudio.volume = v/100;
+  if(bossAudio) bossAudio.volume = v/100;
+}
 function playAudioWithRetry(a){
   a.play().catch(()=>{});
   // Reintenta en cada click/tecla (no solo el primero) hasta confirmar que
@@ -8930,7 +9235,7 @@ function playAudioWithRetry(a){
 function makeLoopingAudio(src){
   const a = new Audio(src);
   a.loop = true;
-  a.volume = 0.5;
+  a.volume = getMusicVolume()/100;
   a.addEventListener('ended', ()=>{ a.currentTime = 0; a.play().catch(()=>{}); });
   return a;
 }
@@ -9189,7 +9494,7 @@ function updateClockBadge(){
 // inofensivo, pero no debería lanzar un error sin capturar).
 function hide(id){ const el=document.getElementById(id); if(el) el.style.display='none'; }
 function resetHeaderForLoggedOut(){
-  hide('clock-badge'); hide('gold-badge'); hide('tier-badge'); hide('btn-music-toggle');
+  hide('clock-badge'); hide('gold-badge'); hide('tier-badge'); hide('btn-music-toggle'); hide('btn-options');
   hide('btn-inventory'); hide('btn-switch-char'); hide('btn-slots'); hide('btn-reset');
   hide('city-nav');
   const sub = document.getElementById('header-sub');

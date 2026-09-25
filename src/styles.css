@@ -402,6 +402,8 @@
   .pos-pill.active{border-color:var(--bronze); color:var(--bronze-light);}
   #combat-speed-toggle .pos-pill{cursor:pointer;}
   #combat-speed-toggle .pos-pill:hover{border-color:var(--bronze); color:var(--bronze-light);}
+  #combat-aim-toggle .pos-pill{cursor:pointer;}
+  #combat-aim-toggle .pos-pill:hover{border-color:var(--bronze); color:var(--bronze-light);}
   .player-card{
     background:var(--panel-2); border:1px solid var(--border); border-radius:5px; padding:12px; text-align:center;
   }
