@@ -6425,11 +6425,6 @@ function generateLoot(floorIdx, level){
 /* ============================================================
    ENEMY FACTORY
    ============================================================ */
-// 2026-09-24, pedido explícito: bajar "de manera leve" la dificultad de los
-// pisos 41 a 59, sin tocar ningún jefe de década (piso 40 Usurpador, piso 50
-// Custodio de la Isla, piso 60 Storm Gush quedan intactos). -8% de HP y ATQ
-// es el recorte elegido — perceptible pero no un rework de la curva.
-const FLOOR_41_59_NERF_MULT = 0.92;
 function makeEnemy(tpl, floorIdx, level){
   const lvlMult = levelMult(level||1);
   const floorMult = 1 + floorIdx * floorDifficultyStep(level||1);
@@ -6467,14 +6462,6 @@ function makeEnemy(tpl, floorIdx, level){
     // objetivo en un mismo round).
     hp = Math.round(rnd(55,65) * tpl.hp * floorMult * regularHPMult(level||1));
     atk = Math.round(9 * tpl.atk * floorMult * monsterAtkMult(level||1));
-  }
-  // Nerf leve 41-59 (ver FLOOR_41_59_NERF_MULT) — se salta el jefe exacto de
-  // década (level%10===0), que es tpl.boss también, pero el resto de jefes
-  // de piso (guardianes intermedios) SÍ lo reciben igual que mobs/élites.
-  const isDecadeBossFight = tpl.boss && (level%10===0);
-  if(level>=41 && level<=59 && !isDecadeBossFight){
-    hp = Math.round(hp * FLOOR_41_59_NERF_MULT);
-    atk = Math.round(atk * FLOOR_41_59_NERF_MULT);
   }
   const res = Object.assign({}, tpl.res);
   if(tpl.boss && level===1) res.fisico = 5; // defensa física reducida solo para el guardián de nivel 1
