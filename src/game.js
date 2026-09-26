@@ -3107,8 +3107,7 @@ function rowToState(row){
       pityGear: row.pity_gear || 0,
       pityStone: row.pity_stone || 0,
       pets: row.pets || {owned:{}, equipped:[]},
-      checkin: row.checkin || {day:0, lastClaimDate:null},
-      bannedAllyTemplates: row.banned_ally_templates || []
+      checkin: row.checkin || {day:0, lastClaimDate:null}
     },
     dungeon: row.dungeon || null,
     log: loadLocalLog()
@@ -5117,7 +5116,6 @@ async function advanceAllyXp(xpGain){
 async function hireAlly(templateId){
   const tpl = ALLY_ROSTER.find(t=>t.templateId===templateId);
   if(!tpl) return;
-  if((state.char.bannedAllyTemplates||[]).includes(templateId)){ log(`${tpl.name} ya no quiere saber nada de ti — no puedes volver a reclutarlo.`); return; }
   const cost = allyHireCost(tpl, state.char.level);
   const { data, error } = await supabase.rpc('hire_ally', {
     p_character_id: state.char.id, p_template_id: tpl.templateId, p_role: tpl.role, p_name: tpl.name, p_cost: cost
@@ -5128,32 +5126,14 @@ async function hireAlly(templateId){
   log(`Reclutas a <b>${tpl.name}</b> por ${cost} de oro.`);
   renderAll();
 }
-// Pedido explícito 2026-09-27: despedir a un aliado con MÁS del 50% de
-// satisfacción ya no lo veta para siempre — se separaron en buenos
-// términos y se puede volver a reclutar (a nivel 1, ver hireAlly). Con 50%
-// o menos, sigue vetado como siempre. El servidor (dismiss_ally, ver
-// migración 0025) decide lo mismo con el mismo umbral — este chequeo local
-// solo espeja esa decisión para no tener que esperar la respuesta antes de
-// actualizar bannedAllyTemplates.
-const ALLY_DISMISS_REHIRE_SATISFACTION = 50;
+// Pedido explícito 2026-09-27: despedir a un aliado (o que deserte por
+// impago) ya no lo veta para siempre — siempre se puede volver a reclutar
+// más adelante (a nivel 1, ver hireAlly), sin importar en qué términos se fue.
 async function dismissAlly(allyId){
-  const row = (state.char.allies||[]).find(a=>a.id===allyId);
   const { error } = await supabase.rpc('dismiss_ally', {p_ally_id: allyId});
   if(error){ log('No se pudo despedir al aliado: '+error.message); return; }
   state.char.allies = (state.char.allies||[]).filter(a=>a.id!==allyId);
-  let stillWelcome = false;
-  if(row){
-    const satisfaction = row.satisfaction===undefined || row.satisfaction===null ? ALLY_SATISFACTION_DEFAULT : row.satisfaction;
-    if(satisfaction > ALLY_DISMISS_REHIRE_SATISFACTION){
-      stillWelcome = true;
-    } else {
-      if(!state.char.bannedAllyTemplates) state.char.bannedAllyTemplates = [];
-      if(!state.char.bannedAllyTemplates.includes(row.template_id)) state.char.bannedAllyTemplates.push(row.template_id);
-    }
-  }
-  log(stillWelcome
-    ? 'Despides a un aliado en buenos términos. Podrás volver a reclutarlo más adelante.'
-    : 'Despides a un aliado. No podrás volver a reclutarlo con este personaje.');
+  log('Despides a un aliado. Podrás volver a reclutarlo más adelante.');
   renderAll();
 }
 
@@ -5161,10 +5141,9 @@ async function dismissAlly(allyId){
 // del laberinto (retirada voluntaria tras un guardián, o expulsión por
 // derrota) - no se cobra por entrar ni mientras estás dentro. La satisfacción
 // solo se mueve por esto: sube (poco) si le pagas, baja (bastante, y cada vez
-// más) si no te alcanza el oro. Si cae a 15% o menos, el aliado deserta:
-// se va para siempre y nunca vuelve a estar disponible para este personaje
-// (mismo destino que despedirlo a propósito - ver dismiss_ally en el
-// servidor, que ahora también lo marca en characters.banned_ally_templates).
+// más) si no te alcanza el oro. Si cae a 15% o menos, el aliado deserta y
+// abandona el grupo (pedido explícito 2026-09-27: ya no queda vetado para
+// siempre, se puede volver a reclutar más adelante igual que si lo despides).
 const ALLY_SATISFACTION_DEFAULT = 50;
 const ALLY_WAGE_SATISFACTION_GAIN = 2;
 const ALLY_WAGE_SATISFACTION_LOSS_BASE = 7;
@@ -5177,9 +5156,7 @@ function allyWage(row){
 }
 function desertAlly(row, reason){
   state.char.allies = (state.char.allies||[]).filter(a=>a.id!==row.id);
-  if(!state.char.bannedAllyTemplates) state.char.bannedAllyTemplates = [];
-  if(!state.char.bannedAllyTemplates.includes(row.template_id)) state.char.bannedAllyTemplates.push(row.template_id);
-  log(`<b>${row.name}</b> ${reason} y abandona tu grupo. No volverá a unirse a ti.`);
+  log(`<b>${row.name}</b> ${reason} y abandona tu grupo. Podrás volver a reclutarlo más adelante.`);
   supabase.rpc('dismiss_ally', {p_ally_id: row.id}).then(({error})=>{
     if(error) console.error('No se pudo procesar la deserción del aliado:', error.message);
   });
@@ -5264,22 +5241,18 @@ function renderTaberna(){
     </div>`;
   }).join('') : `<p class="inv-empty-msg">Todavía no has reclutado a nadie.</p>`;
 
-  const bannedTemplates = state.char.bannedAllyTemplates || [];
   const rosterHTML = ALLY_ROSTER.map(tpl=>{
     const already = allies.some(a=>a.template_id===tpl.templateId);
-    const banned = bannedTemplates.includes(tpl.templateId);
     const cost = allyHireCost(tpl, state.char.level);
     const full = allies.length >= MAX_ALLIES;
-    const disabled = already || banned || full || state.char.gold < cost;
+    const disabled = already || full || state.char.gold < cost;
     let btnLabel = `Reclutar (${cost} oro)`;
-    if(banned) btnLabel = 'Ya no confía en ti';
-    else if(already) btnLabel = 'Ya reclutado';
+    if(already) btnLabel = 'Ya reclutado';
     return `<div class="inv-item-row">
       <div>
         <b>${tpl.icon} ${tpl.name}</b> <span class="slot-tag">${tpl.role}</span>
         <div class="inv-item-bonus neutral">${tpl.bio}</div>
         <div class="inv-item-bonus" style="margin-top:2px;"><b>${tpl.skillName}</b> — ${tpl.skillDesc}</div>
-        ${banned ? `<div class="inv-item-bonus" style="color:var(--blood-light); margin-top:2px;">Lo despediste o te traicionó antes — no volverá a unirse a este personaje.</div>` : ''}
       </div>
       <button class="inv-btn" data-hire="${tpl.templateId}" ${disabled?'disabled':''}>${btnLabel}</button>
     </div>`;
@@ -5290,7 +5263,7 @@ function renderTaberna(){
       <h3 style="color:var(--bronze-light);">Taberna</h3>
       <button class="reset-btn" id="btn-close-taberna">Cerrar</button>
     </div>
-    <p style="color:var(--text-dim); font-size:0.85em; margin-top:0;">Hasta ${MAX_ALLIES} aliados a la vez, ${MAX_ALLIES+1} contándote a ti. Pelean junto a ti automáticamente — el que tiene "frontline" ocupa tu lugar en el frente y absorbe los golpes. Cada uno cobra un salario cada vez que sales del laberinto: si no te alcanza el oro para pagarle varias veces seguidas, pierde la confianza en ti y se va para siempre. Un aliado despedido o que deserta no vuelve a estar disponible.</p>
+    <p style="color:var(--text-dim); font-size:0.85em; margin-top:0;">Hasta ${MAX_ALLIES} aliados a la vez, ${MAX_ALLIES+1} contándote a ti. Pelean junto a ti automáticamente — el que tiene "frontline" ocupa tu lugar en el frente y absorbe los golpes. Cada uno cobra un salario cada vez que sales del laberinto: si no te alcanza el oro para pagarle varias veces seguidas, pierde la confianza en ti y abandona el grupo. Un aliado despedido o que deserta siempre puede volver a reclutarse más adelante, a nivel 1.</p>
 
     <div class="section-label">Tu equipo (${allies.length}/${MAX_ALLIES})</div>
     ${hiredHTML}
