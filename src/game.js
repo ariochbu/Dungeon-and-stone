@@ -2263,12 +2263,12 @@ async function grantAllyAutoGear(row, tier){
   ['armadura','casco','botas','guantes','amuleto'].forEach(slot=>{
     const prior = row.equip[slot];
     row.equip[slot] = makeAutoGearItem(slot, tier);
-    if(prior) state.char.inventory.push(prior);
+    if(prior) state.char.inventory.push(ensureItemUid(prior));
   });
   if(row.auto_gear_arma2_name){
     const prior = row.equip.arma2;
     row.equip.arma2 = makeWeaponItem('arma2', 'sacerdote', tier, row.auto_gear_arma2_name);
-    if(prior) state.char.inventory.push(prior);
+    if(prior) state.char.inventory.push(ensureItemUid(prior));
     row.auto_gear_pending = false;
   } else {
     row.auto_gear_pending = true;
@@ -2294,7 +2294,7 @@ function chooseAllyAutoGearArma2(allyId, name){
   if(!row.equip) row.equip = {};
   const prior = row.equip.arma2;
   row.equip.arma2 = makeWeaponItem('arma2', 'sacerdote', row.auto_gear_tier, name);
-  if(prior) state.char.inventory.push(prior);
+  if(prior) state.char.inventory.push(ensureItemUid(prior));
   row.auto_gear_pending = false;
   log(`<b>${row.name}</b> equipa <b>${name}</b>.`);
   saveAllyAutoGear(row);
@@ -2968,11 +2968,24 @@ function migrateState(){
   if(state.dungeon && state.dungeon.level===undefined){
     state.dungeon.level = state.dungeon.tier || state.char.maxLevelUnlocked || 1;
   }
+  // Bug real reportado 2026-09-27 ("el equipamiento inicial no se puede
+  // vender", igual para el equipo automático de Sacerdote): equipItem/
+  // equipItemOnAlly/grantAllyAutoGear empujaban el equipo REEMPLAZADO a la
+  // mochila sin asegurarse de que tuviera uid (solo lo hacía al desequipar
+  // a mano) — ya corregido en el origen (ver ensureItemUid), pero cualquier
+  // objeto que ya haya quedado atascado así de antes necesita este arreglo
+  // retroactivo, o se queda para siempre sin poder venderse ni guardarse.
+  let backfilledUid = false;
+  [state.char.inventory, (state.char.stash||{}).items||[]].forEach(list=>{
+    list.forEach(it=>{
+      if(it && (it.kind==='equip'||it.kind==='soulstone') && !it.uid){ ensureItemUid(it); backfilledUid = true; }
+    });
+  });
   // Requisito de nivel para equipar (pedido explícito 2026-09-27, retroactivo):
   // ver stripUnmetLevelEquip/stripUnmetLevelStones más abajo.
   const strippedGear = stripUnmetLevelEquip(state.char.equip, state.char.level);
   const strippedStones = stripUnmetLevelStones(state.char.soulSlots, state.char.level);
-  if(strippedGear || strippedStones) save();
+  if(strippedGear || strippedStones || backfilledUid) save();
 }
 
 // El personaje vive en la tabla `characters` de Supabase (1 fila por cuenta).
@@ -4204,6 +4217,24 @@ function addToInventory(item){
     state.char.inventory.push(item);
   }
 }
+// El equipo inicial (grantStarterKit) y el equipo automático de Sacerdote
+// (grantAllyAutoGear) se asignan directo a un slot equipado sin pasar por
+// addToInventory, así que nunca reciben un uid al crearse. Si más tarde
+// vuelven a la mochila (al desequiparlos a mano, al REEMPLAZARLOS por otro
+// equipo — el camino más común, no solo "Quitar" — o al perder el
+// requisito de nivel) necesitan uno recién ahí, o quedan en la mochila sin
+// poder venderse ni guardarse en el Hogar (esos botones dependen de it.uid
+// para encontrarlo). Bug real reportado 2026-09-27: "el equipamiento
+// inicial no se puede vender" — pasaba sobre todo al reemplazarlo, ya que
+// equipItem()/equipItemOnAlly() empujaban el `prior` a la mochila sin
+// pasar por este chequeo.
+function ensureItemUid(item){
+  if(!item.uid){
+    state.char.itemCounter = (state.char.itemCounter||0) + 1;
+    item.uid = 'it'+state.char.itemCounter;
+  }
+  return item;
+}
 
 // Mago y Sacerdote comparten el Arma 1 (MAGO_ARMA1 en WEAPON_CATALOG) — un
 // arma con styleId 'mago' en el slot 'arma' debe poder equiparse en
@@ -4234,7 +4265,7 @@ function equipItem(uid){
   const prior = state.char.equip[item.slot];
   state.char.equip[item.slot] = item;
   state.char.inventory.splice(idx,1);
-  if(prior) state.char.inventory.push(prior);
+  if(prior) state.char.inventory.push(ensureItemUid(prior));
   log(`Equipas <b>${item.name}</b>${prior ? ` (guardas ${prior.name} en la mochila)` : ''}.`);
   renderSheet();
   if(invOpen) renderInventory();
@@ -4245,15 +4276,7 @@ function unequipItem(slot){
   const item = state.char.equip[slot];
   if(!item) return;
   state.char.equip[slot] = null;
-  // El equipo inicial (grantStarterKit) se asigna directo a state.char.equip
-  // sin pasar por addToInventory, así que nunca recibió un uid — sin esto,
-  // el item quedaba en la mochila pero sin poder venderse ni guardarse en
-  // el Hogar (los botones dependen de it.uid para encontrarlo).
-  if(!item.uid){
-    state.char.itemCounter = (state.char.itemCounter||0) + 1;
-    item.uid = 'it'+state.char.itemCounter;
-  }
-  state.char.inventory.push(item);
+  state.char.inventory.push(ensureItemUid(item));
   log(`Desequipas <b>${item.name}</b>.`);
   renderSheet();
   if(invOpen) renderInventory();
@@ -4287,7 +4310,7 @@ function equipItemOnAlly(uid, allyId){
   const prior = row.equip[item.slot];
   row.equip[item.slot] = item;
   state.char.inventory.splice(idx,1);
-  if(prior) state.char.inventory.push(prior);
+  if(prior) state.char.inventory.push(ensureItemUid(prior));
   log(`Equipas <b>${item.name}</b> en <b>${row.name}</b>${prior ? ` (guardas ${prior.name} en la mochila)` : ''}.`);
   saveAllyEquip(row);
   if(invOpen) renderInventory();
@@ -4299,11 +4322,7 @@ function unequipAllyItem(allyId, slot){
   const item = row.equip[slot];
   if(!item) return;
   row.equip[slot] = null;
-  if(!item.uid){
-    state.char.itemCounter = (state.char.itemCounter||0) + 1;
-    item.uid = 'it'+state.char.itemCounter;
-  }
-  state.char.inventory.push(item);
+  state.char.inventory.push(ensureItemUid(item));
   log(`Desequipas <b>${item.name}</b> de <b>${row.name}</b>.`);
   saveAllyEquip(row);
   if(invOpen) renderInventory();
@@ -6242,7 +6261,7 @@ function stripUnmetLevelEquip(equipObj, level, ownerName){
     const it = equipObj[slot];
     if(it && !meetsGearEquipLevel(it, level)){
       equipObj[slot] = null;
-      state.char.inventory.push(it);
+      state.char.inventory.push(ensureItemUid(it));
       changed = true;
       const who = ownerName ? ` (${ownerName} no alcanza el nivel ${gearEquipMinLevel(it.rarity)})` : ` (nivel ${gearEquipMinLevel(it.rarity)} requerido)`;
       log(`<b>${it.name}</b> vuelve a la mochila${who}.`);
@@ -6255,7 +6274,7 @@ function stripUnmetLevelStones(slotsArray, level, ownerName){
   (slotsArray||[]).forEach((st, i)=>{
     if(st && !meetsStoneEquipLevel(st, level)){
       slotsArray[i] = null;
-      state.char.inventory.push(st);
+      state.char.inventory.push(ensureItemUid(st));
       changed = true;
       const who = ownerName ? ` (${ownerName} no alcanza el nivel ${stoneEquipMinLevel(st.tier)})` : ` (nivel ${stoneEquipMinLevel(st.tier)} requerido)`;
       log(`<b>${st.name}</b> vuelve a la mochila${who}.`);
