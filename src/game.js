@@ -9620,9 +9620,10 @@ function stopBossAudio(){
 // (1-10, 11-20, ... 51-60), sonando mientras exploras y en los combates
 // normales de esos pisos — se detiene sola al entrar a un combate de jefe de
 // década (playBossAudio la reemplaza) y retoma al resolverse ese combate o
-// al avanzar de piso. Si el piso supera la última pista catalogada (pedido
-// explícito: el cap real es 100, ver roadmap), repite la última mientras no
-// se suban más pistas.
+// al avanzar de piso. Los pisos 61-100 todavía no tienen pista propia (esa
+// parte del laberinto no está habilitada todavía, pedido explícito de no
+// rellenarla con una repetida) — dungeonTrackFor() devuelve null ahí y
+// simplemente no suena nada hasta que se suban esas pistas.
 const DUNGEON_MUSIC_RANGES = [
   {max:10, src:'./src/assets/audio/dungeon-1-10.mp4'},
   {max:20, src:'./src/assets/audio/dungeon-11-20.mp4'},
@@ -9633,7 +9634,7 @@ const DUNGEON_MUSIC_RANGES = [
 ];
 function dungeonTrackFor(level){
   const range = DUNGEON_MUSIC_RANGES.find(r=>level<=r.max);
-  return (range || DUNGEON_MUSIC_RANGES[DUNGEON_MUSIC_RANGES.length-1]).src;
+  return range ? range.src : null;
 }
 let dungeonAudio = null;
 function ensureDungeonAudio(level){
@@ -9642,11 +9643,14 @@ function ensureDungeonAudio(level){
     dungeonAudio.pause();
     dungeonAudio = null;
   }
-  if(!dungeonAudio) dungeonAudio = makeLoopingAudio(src);
-  dungeonAudio.muted = getLoginAudioMuted();
+  if(!dungeonAudio && src){ dungeonAudio = makeLoopingAudio(src); }
+  if(dungeonAudio) dungeonAudio.muted = getLoginAudioMuted();
   return dungeonAudio;
 }
-function playDungeonAudio(level){ playAudioWithRetry(ensureDungeonAudio(level)); }
+function playDungeonAudio(level){
+  const a = ensureDungeonAudio(level);
+  if(a) playAudioWithRetry(a);
+}
 function stopDungeonAudio(){
   if(dungeonAudio) dungeonAudio.pause();
 }
