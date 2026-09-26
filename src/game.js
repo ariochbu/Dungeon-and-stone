@@ -4469,6 +4469,7 @@ function renderCity(){
         const d = derived();
         state.char.curHP = d.maxHP; state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi;
         state.dungeon = generateDungeon(startLevel);
+        playDungeonAudio(startLevel);
         // La "Descansar" de la ciudad se quitó por redundante (2026-09-25,
         // pedido explícito): entrar ya curaba al jugador a full, así que en
         // vez de un botón aparte, entrar ahora también cura a todo el
@@ -6545,7 +6546,7 @@ function startCombat(enemyGroup, node){
   invOpen = false;
   const allyText = allies.length ? ` A tu lado: ${allies.map(a=>a.name).join(', ')}.` : '';
   log(`¡Emboscada! Te enfrentas a: ${enemyGroup.map(e=>e.name).join(', ')}.${allyText}`);
-  if(node.type==='jefe' && state.dungeon.level % 10 === 0) playBossAudio();
+  if(node.type==='jefe' && state.dungeon.level % 10 === 0){ stopDungeonAudio(); playBossAudio(); }
   renderAll();
 }
 
@@ -8914,6 +8915,7 @@ function handleVictory(){
         updateRecord(clearedLevel+1, 0);
         const d = derived();
         state.char.curHP = d.maxHP; state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi;
+        playDungeonAudio(clearedLevel+1);
         log(`Avanzas al nivel ${clearedLevel+1} del laberinto.`);
         renderAll(); save();
       }});
@@ -8925,6 +8927,7 @@ function handleVictory(){
       combat = null;
       state.dungeon = null;
       payAlliesOnExit();
+      stopDungeonAudio();
       playLoginAudio();
       renderAll(); save();
     }});
@@ -8954,6 +8957,7 @@ function handleDefeat(){
     combat = null;
     state.dungeon = null;
     payAlliesOnExit();
+    stopDungeonAudio();
     playLoginAudio();
     if(lostItems>0) log(`Pierdes ${lostItems} objeto(s) de equipo que llevabas en la mochila.`);
     renderAll();
@@ -9547,6 +9551,7 @@ function setMusicVolume(v){
   try{ localStorage.setItem('dsMusicVolume', String(v)); }catch(e){}
   if(loginAudio) loginAudio.volume = v/100;
   if(bossAudio) bossAudio.volume = v/100;
+  if(dungeonAudio) dungeonAudio.volume = v/100;
 }
 function playAudioWithRetry(a){
   a.play().catch(()=>{});
@@ -9570,6 +9575,7 @@ function makeLoopingAudio(src){
   const a = new Audio(src);
   a.loop = true;
   a.volume = getMusicVolume()/100;
+  a._trackSrc = src;
   a.addEventListener('ended', ()=>{ a.currentTime = 0; a.play().catch(()=>{}); });
   return a;
 }
@@ -9587,6 +9593,7 @@ function toggleLoginAudioMuted(){
   setLoginAudioMuted(muted);
   if(loginAudio) loginAudio.muted = muted;
   if(bossAudio) bossAudio.muted = muted;
+  if(dungeonAudio) dungeonAudio.muted = muted;
   const label = muted ? '🔇 Música' : '🔊 Música';
   const authBtn = document.getElementById('auth-audio-toggle');
   if(authBtn) authBtn.textContent = label;
@@ -9607,6 +9614,41 @@ function ensureBossAudio(){
 function playBossAudio(){ playAudioWithRetry(ensureBossAudio()); }
 function stopBossAudio(){
   if(bossAudio) bossAudio.pause();
+}
+
+// Música de exploración del laberinto: una pista por cada década de pisos
+// (1-10, 11-20, ... 51-60), sonando mientras exploras y en los combates
+// normales de esos pisos — se detiene sola al entrar a un combate de jefe de
+// década (playBossAudio la reemplaza) y retoma al resolverse ese combate o
+// al avanzar de piso. Si el piso supera la última pista catalogada (pedido
+// explícito: el cap real es 100, ver roadmap), repite la última mientras no
+// se suban más pistas.
+const DUNGEON_MUSIC_RANGES = [
+  {max:10, src:'./src/assets/audio/dungeon-1-10.mp4'},
+  {max:20, src:'./src/assets/audio/dungeon-11-20.mp4'},
+  {max:30, src:'./src/assets/audio/dungeon-21-30.mp4'},
+  {max:40, src:'./src/assets/audio/dungeon-31-40.mp4'},
+  {max:50, src:'./src/assets/audio/dungeon-41-50.mp4'},
+  {max:60, src:'./src/assets/audio/dungeon-51-60.mp4'},
+];
+function dungeonTrackFor(level){
+  const range = DUNGEON_MUSIC_RANGES.find(r=>level<=r.max);
+  return (range || DUNGEON_MUSIC_RANGES[DUNGEON_MUSIC_RANGES.length-1]).src;
+}
+let dungeonAudio = null;
+function ensureDungeonAudio(level){
+  const src = dungeonTrackFor(level);
+  if(dungeonAudio && dungeonAudio._trackSrc !== src){
+    dungeonAudio.pause();
+    dungeonAudio = null;
+  }
+  if(!dungeonAudio) dungeonAudio = makeLoopingAudio(src);
+  dungeonAudio.muted = getLoginAudioMuted();
+  return dungeonAudio;
+}
+function playDungeonAudio(level){ playAudioWithRetry(ensureDungeonAudio(level)); }
+function stopDungeonAudio(){
+  if(dungeonAudio) dungeonAudio.pause();
 }
 
 function renderAuthScreen(message){
@@ -9756,9 +9798,10 @@ function renderCharacterSelect(rows){
 function enterCharacter(row){
   state = rowToState(row);
   migrateState();
-  // si ya tenía una corrida activa entra directo al laberinto (sin música de
-  // ciudad); si no, aterriza en la ciudad y la música debe sonar ahí también
-  if(state.dungeon) stopLoginAudio(); else playLoginAudio();
+  // si ya tenía una corrida activa entra directo al laberinto (con la
+  // música del piso donde se quedó, no la de ciudad); si no, aterriza en la
+  // ciudad y la música debe sonar ahí también
+  if(state.dungeon){ stopLoginAudio(); playDungeonAudio(state.dungeon.level||1); } else playLoginAudio();
   document.getElementById('btn-switch-char').style.display = 'inline-block';
   showScreen('screen-game');
   renderAll();
@@ -9841,6 +9884,7 @@ function showAuthScreen(message){
   currentUser = null; currentProfile = null;
   resetHeaderForLoggedOut();
   stopBossAudio();
+  stopDungeonAudio();
   renderAuthScreen(message);
   showScreen('screen-auth');
   playLoginAudio();
