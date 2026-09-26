@@ -5390,7 +5390,7 @@ async function loadAdminList(){
   const msg = document.getElementById('admin-msg');
   const [profilesRes, charsRes] = await Promise.all([
     supabase.from('profiles').select('id, username, is_banned, created_at').order('created_at', { ascending: false }).limit(100),
-    supabase.from('characters').select('id, user_id, nickname, role, hidden_from_leaderboard, level, record_level, record_floor_idx, pets').order('slot_number')
+    supabase.from('characters').select('id, user_id, nickname, role, hidden_from_leaderboard, level, record_level, record_floor_idx, pets, dungeon').order('slot_number')
   ]);
   const { data, error } = profilesRes;
   if(!list) return; // el jugador cerró el panel antes de que llegara la respuesta
@@ -5421,6 +5421,7 @@ async function loadAdminList(){
           <button class="inv-btn" data-toggle-role="${c.id}" ${isLoaded?'disabled title="No puedes quitarte el rol admin al personaje con el que jugaste esta sesión"':''}>${c.role==='admin'?'Quitar admin':'Hacer admin'}</button>
           <button class="inv-btn" data-toggle-ranking="${c.id}">${c.hidden_from_leaderboard?'Mostrar en ranking':'Ocultar del ranking'}</button>
           <button class="inv-btn" data-grant-pulls="${c.id}" title="Ofrendas gratis pendientes: ${(c.pets&&c.pets.pendingFreePulls)||0}">🎁 Dar tiradas</button>
+          <button class="inv-btn" data-return-city="${c.id}" ${c.dungeon?'':'disabled title="No está dentro del laberinto ahora mismo"'}>🏙️ Devolver a la ciudad</button>
           <button class="inv-btn danger" data-delete-char="${c.id}">Eliminar personaje</button>
         </div>
       </div>`;
@@ -5490,6 +5491,26 @@ async function loadAdminList(){
       const { error } = await supabase.from('characters').update({ pets: updatedPets }).eq('id', id);
       if(error) msg.textContent = 'No se pudo otorgar: ' + error.message;
       else msg.textContent = `Le diste ${n} ofrenda(s) gratis a ${target.nickname}.`;
+      await loadAdminList();
+    };
+  });
+  // Devolver a la ciudad (pedido explícito 2026-09-27, para no tener que
+  // correr SQL a mano cada vez que alguien queda atrapado en un piso sin
+  // contenido real, como pasó con el checkpoint 61): limpia dungeon por
+  // completo, exactamente lo mismo que ya le pedí a ariochbu correr en el
+  // caso de Trinity, ahora como botón. Si el personaje que tiene la sesión
+  // abierta ahora mismo es el afectado, no se refresca solo — recién se
+  // nota la próxima vez que cargue (no hay forma de "empujarle" el estado
+  // a su cliente desde acá).
+  list.querySelectorAll('[data-return-city]').forEach(btn=>{
+    btn.onclick = async ()=>{
+      const id = btn.dataset.returnCity;
+      const target = chars.find(c=>c.id===id);
+      if(!confirm(`¿Devolver a "${target.nickname}" a la ciudad? Sale del laberinto de inmediato (como si se hubiera retirado), sin perder equipo ni oro.`)) return;
+      btn.disabled = true;
+      const { error } = await supabase.from('characters').update({ dungeon: null }).eq('id', id);
+      if(error) msg.textContent = 'No se pudo devolver a la ciudad: ' + error.message;
+      else msg.textContent = `${target.nickname} vuelve a la ciudad.`;
       await loadAdminList();
     };
   });
