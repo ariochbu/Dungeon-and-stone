@@ -1093,6 +1093,19 @@ function wirePetZoomEvents(root){
     el.addEventListener('touchcancel', hidePetZoom);
   });
 }
+// Bug real reportado (2026-09-26): a veces la imagen agrandada se quedaba
+// flotando en pantalla "de largo", incluso cambiando de pestaña o entrando
+// al laberinto. Causa: #pet-zoom-preview es una sola capa fija reusada en
+// TODA la pantalla (ver ensurePetZoomLayer) que sobrevive a los re-renders
+// a propósito, pero solo se oculta con mouseleave/touchend/touchcancel del
+// tile que la abrió — si ese tile desaparece de un re-render (cambiaste de
+// pantalla, terminó un turno de combate, etc.) ANTES de que el mouse salga
+// de encima o termine el toque, ese evento nunca llega a dispararse y la
+// capa se queda visible para siempre. Dos redes de seguridad: se oculta
+// sola al cambiar de pestaña, y se oculta sola al principio de cada
+// renderAll() (cualquier navegación/re-render general implica que el hover
+// que la abrió ya no es válido).
+document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='hidden') hidePetZoom(); });
 const PET_CATALOG = [
   {id:1, name:'Horn Rabbit', rarity:'poco_comun', bonuses:[{type:'evasion_flat', value:0.03}]},
   {id:2, name:'Blade Rabbit', rarity:'poco_comun', bonuses:[{type:'prob_critico', value:0.02}]},
@@ -3420,6 +3433,12 @@ function showScreen(id){
 }
 
 function renderAll(){
+  // Ver el comentario en wirePetZoomEvents: cualquier navegación real
+  // (renderAll es el punto común de todas — combate por turno usa
+  // renderCombat() directo y no pasa por acá, así que esto no interfiere
+  // con tener el mouse quieto sobre un Caído mientras el combate sigue)
+  // invalida cualquier zoom de Caído que hubiera quedado abierto.
+  hidePetZoom();
   ensureSoulSlots();
   document.getElementById('clock-badge').style.display = 'flex';
   updateClockBadge();
