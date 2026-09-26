@@ -2641,6 +2641,10 @@ function socketStone(uid){
   const idx = state.char.inventory.findIndex(i=>i.kind==='soulstone' && i.uid===uid);
   if(idx<0) return;
   const stone = state.char.inventory[idx];
+  if(!meetsStoneEquipLevel(stone, state.char.level)){
+    log(`<b>${stone.name}</b> requiere nivel ${stoneEquipMinLevel(stone.tier)} para engarzarse.`);
+    return;
+  }
   // solo 1 piedra por familia a la vez: si ya tienes una de la misma familia,
   // la nueva la reemplaza SOLO si es de rango igual o superior; la anterior se destruye.
   const sameFamilySlot = state.char.soulSlots.findIndex(s=>s && s.family===stone.family);
@@ -2696,6 +2700,10 @@ function socketStoneOnAlly(uid, allyId){
   const idx = state.char.inventory.findIndex(i=>i.kind==='soulstone' && i.uid===uid);
   if(idx<0) return;
   const stone = state.char.inventory[idx];
+  if(!meetsStoneEquipLevel(stone, row.level)){
+    log(`<b>${stone.name}</b> requiere nivel ${stoneEquipMinLevel(stone.tier)} — ${row.name} todavía no lo alcanza.`);
+    return;
+  }
   const sameFamilySlot = row.soul_slots.findIndex(s=>s && s.family===stone.family);
   if(sameFamilySlot>=0){
     const old = row.soul_slots[sameFamilySlot];
@@ -2960,6 +2968,11 @@ function migrateState(){
   if(state.dungeon && state.dungeon.level===undefined){
     state.dungeon.level = state.dungeon.tier || state.char.maxLevelUnlocked || 1;
   }
+  // Requisito de nivel para equipar (pedido explícito 2026-09-27, retroactivo):
+  // ver stripUnmetLevelEquip/stripUnmetLevelStones más abajo.
+  const strippedGear = stripUnmetLevelEquip(state.char.equip, state.char.level);
+  const strippedStones = stripUnmetLevelStones(state.char.soulSlots, state.char.level);
+  if(strippedGear || strippedStones) save();
 }
 
 // El personaje vive en la tabla `characters` de Supabase (1 fila por cuenta).
@@ -3848,8 +3861,13 @@ function itemNameHTML(it){
   // Las armas y el equipo general comprados/generados para una senda
   // específica (Guerrero/Asesino/Arquero/Mago/Sacerdote) llevan su
   // etiqueta aquí — el equipo de botín/cofres sí puede venir sin styleId
-  // en casos viejos, en cuyo caso no se muestra ninguna etiqueta.
-  const roleTag = it.styleId ? ` <span class="slot-tag" style="border-color:var(--bronze); color:var(--bronze-light);">${SHOP_ROLE_LABELS[it.styleId]||it.styleId}</span>` : '';
+  // en casos viejos, en cuyo caso no se muestra ninguna etiqueta. El Arma 1
+  // de Mago/Sacerdote comparte catálogo (ver weaponStyleCompatible) — se
+  // rotula "Mago / Sacerdote" para no esconder que sirve para los dos.
+  const roleLabel = (it.slot==='arma' && (it.styleId==='mago'||it.styleId==='sacerdote'))
+    ? 'Mago / Sacerdote'
+    : (SHOP_ROLE_LABELS[it.styleId]||it.styleId);
+  const roleTag = it.styleId ? ` <span class="slot-tag" style="border-color:var(--bronze); color:var(--bronze-light);">${roleLabel}</span>` : '';
   // Rango A en adelante suma un halo de texto (además del color) — el color
   // solo a veces no basta para que un objeto especial se note al lado del
   // resto de la interfaz, sobre todo en pantallas chicas.
@@ -3927,6 +3945,7 @@ function renderInventory(){
   if(equipTarget!=='player' && !targetRow) equipTarget = 'player'; // el aliado ya no existe (lo despediste, etc.)
   const targetEquip = targetRow ? (targetRow.equip||{}) : state.char.equip;
   const targetName = targetRow ? targetRow.name : 'ti';
+  const targetLevel = targetRow ? targetRow.level : state.char.level;
 
   const targetSelectorHTML = allies.length ? `
     <div class="section-label" style="margin-top:6px;">Equipando a</div>
@@ -3990,12 +4009,17 @@ function renderInventory(){
       && (invGearTierFilter==='todos' || (it.rarity||'comun')===invGearTierFilter)
       && (invGearClassFilter==='todos' || it.styleId===invGearClassFilter));
     if(!items.length) return '';
-    const rows = items.map(it=>`
+    const rows = items.map(it=>{
+      const minLvl = gearEquipMinLevel(it.rarity);
+      const levelBlocked = minLvl>0 && targetLevel<minLvl;
+      const levelNote = minLvl>0 ? `<div class="inv-item-bonus" style="color:${levelBlocked?'var(--blood-light)':'var(--text-dim)'};">Nivel requerido: ${minLvl}</div>` : '';
+      return `
       <div class="inv-item-row" style="${rarityRowStyle(it)}">
-        ${itemRowWithArt(it, `${itemNameHTML(it)}<div class="inv-item-bonus">${itemBonusText(it)}</div>`)}
-        <button class="inv-btn" data-equip="${it.uid}">Equipar en ${targetName}</button>
+        ${itemRowWithArt(it, `${itemNameHTML(it)}<div class="inv-item-bonus">${itemBonusText(it)}</div>${levelNote}`)}
+        <button class="inv-btn" data-equip="${it.uid}" ${levelBlocked?'disabled':''}>Equipar en ${targetName}</button>
       </div>
-    `).join('');
+    `;
+    }).join('');
     return `<div class="section-label" style="margin-top:6px; font-size:0.85em;">${slotLabel(slot)}</div>${rows}`;
   }).join('') || `<p class="inv-empty-msg">No hay equipo con ese filtro.</p>` : `<p class="inv-empty-msg">No llevas equipo suelto en la mochila.</p>`;
 
@@ -4056,11 +4080,14 @@ function renderInventory(){
     const c = SOUL_TIER_COLORS[it.tier] || 'var(--text)';
     const sameFamily = soulSlotsSource.find(s=>s && s.family===it.family);
     const noRoom = soulSlotsSource.length===0 || soulSlotsSource.every(s=>s);
-    const blocked = sameFamily ? soulTierIdx(it.tier) < soulTierIdx(sameFamily.tier) : noRoom;
+    const minLvl = stoneEquipMinLevel(it.tier);
+    const levelBlocked = minLvl>0 && targetLevel<minLvl;
+    const blocked = (sameFamily ? soulTierIdx(it.tier) < soulTierIdx(sameFamily.tier) : noRoom) || levelBlocked;
     const btnLabel = sameFamily ? 'Reemplazar' : 'Engarzar';
     const socketAttr = isAllyTargetForStones ? `data-socket-ally="${it.uid}|${targetRow.id}"` : `data-socket="${it.uid}"`;
+    const levelNote = minLvl>0 ? `<div class="inv-item-bonus" style="color:${levelBlocked?'var(--blood-light)':'var(--text-dim)'};">Nivel requerido: ${minLvl}</div>` : '';
     return `<div class="inv-item-row">
-      ${itemRowWithArt(it, `<b style="color:${c};">${it.name}</b> <span class="slot-tag" style="border-color:${c}; color:${c};">${it.tier}</span><div class="inv-item-bonus">${it.desc}</div>`)}
+      ${itemRowWithArt(it, `<b style="color:${c};">${it.name}</b> <span class="slot-tag" style="border-color:${c}; color:${c};">${it.tier}</span><div class="inv-item-bonus">${it.desc}</div>${levelNote}`)}
       <button class="inv-btn" ${socketAttr} ${blocked?'disabled':''}>${btnLabel} en ${targetName}</button>
     </div>`;
   }).join('') : (stoneItems.length ? `<p class="inv-empty-msg">No hay piedras con ese filtro.</p>` : `<p class="inv-empty-msg">No tienes piedras de alma. Las dejan caer los guardianes de nivel 4 en adelante.</p>`);
@@ -4178,12 +4205,30 @@ function addToInventory(item){
   }
 }
 
+// Mago y Sacerdote comparten el Arma 1 (MAGO_ARMA1 en WEAPON_CATALOG) — un
+// arma con styleId 'mago' en el slot 'arma' debe poder equiparse en
+// cualquiera de los dos, y viceversa (pedido explícito 2026-09-27: al
+// quitarse el drop aleatorio de armas de Sacerdote, un aliado Sacerdote se
+// quedó sin ninguna forma de conseguir un Arma 1 de Rango B en adelante,
+// porque toda Arma 1 de Mago que cae tiene styleId 'mago' y el chequeo de
+// senda la rechazaba). El Arma 2 (Foco arcano vs. Grimorio) sigue siendo
+// exclusiva de cada uno — la excepción es solo para el slot 'arma'.
+function weaponStyleCompatible(itemStyleId, wearerStyleId, slot){
+  if(!itemStyleId) return true;
+  if(itemStyleId === wearerStyleId) return true;
+  if(slot==='arma' && (itemStyleId==='mago'||itemStyleId==='sacerdote') && (wearerStyleId==='mago'||wearerStyleId==='sacerdote')) return true;
+  return false;
+}
 function equipItem(uid){
   const idx = state.char.inventory.findIndex(i=>i.kind==='equip' && i.uid===uid);
   if(idx<0) return;
   const item = state.char.inventory[idx];
-  if(item.styleId && item.styleId !== state.char.style){
+  if(!weaponStyleCompatible(item.styleId, state.char.style, item.slot)){
     log(`<b>${item.name}</b> es un arma de ${SHOP_ROLE_LABELS[item.styleId]||item.styleId} — tu senda no puede usarla.`);
+    return;
+  }
+  if(!meetsGearEquipLevel(item, state.char.level)){
+    log(`<b>${item.name}</b> requiere nivel ${gearEquipMinLevel(item.rarity)} para equiparse.`);
     return;
   }
   const prior = state.char.equip[item.slot];
@@ -4228,8 +4273,14 @@ function equipItemOnAlly(uid, allyId){
   // Misma restricción que el jugador (equipItem): un arma comprada para un
   // rol no la puede llevar un aliado de otro rol. El equipo suelto de
   // combate/cofres nunca lleva styleId, así que sigue siendo universal.
-  if(item.styleId && item.styleId !== ALLY_ROLE_TO_WEAPON_STYLE[row.role]){
+  // Mago/Sacerdote son compatibles entre sí en el slot 'arma' — ver
+  // weaponStyleCompatible().
+  if(!weaponStyleCompatible(item.styleId, ALLY_ROLE_TO_WEAPON_STYLE[row.role], item.slot)){
     log(`<b>${item.name}</b> es un arma de ${SHOP_ROLE_LABELS[item.styleId]||item.styleId} — ${row.name} (${row.role}) no puede usarla.`);
+    return;
+  }
+  if(!meetsGearEquipLevel(item, row.level)){
+    log(`<b>${item.name}</b> requiere nivel ${gearEquipMinLevel(item.rarity)} — ${row.name} todavía no lo alcanza.`);
     return;
   }
   if(!row.equip) row.equip = {};
@@ -4982,6 +5033,19 @@ async function loadAllies(){
 }
 async function refreshAlliesState(){
   state.char.allies = await loadAllies();
+  // Requisito de nivel para equipar (pedido explícito 2026-09-27,
+  // retroactivo): cada aliado usa SU PROPIO nivel, no el del jugador — ver
+  // stripUnmetLevelEquip/stripUnmetLevelStones.
+  for(const row of state.char.allies){
+    const strippedGear = stripUnmetLevelEquip(row.equip||(row.equip={}), row.level, row.name);
+    const strippedStones = stripUnmetLevelStones(row.soul_slots, row.level, row.name);
+    if(strippedGear) await saveAllyEquip(row);
+    if(strippedStones) await saveAllySoulSlots(row);
+    if(strippedGear || strippedStones){
+      save();
+      if(invOpen) renderInventory();
+    }
+  }
 }
 
 // Cada aliado sube de nivel igual que el personaje (misma curva de
@@ -5025,16 +5089,32 @@ async function hireAlly(templateId){
   log(`Reclutas a <b>${tpl.name}</b> por ${cost} de oro.`);
   renderAll();
 }
+// Pedido explícito 2026-09-27: despedir a un aliado con MÁS del 50% de
+// satisfacción ya no lo veta para siempre — se separaron en buenos
+// términos y se puede volver a reclutar (a nivel 1, ver hireAlly). Con 50%
+// o menos, sigue vetado como siempre. El servidor (dismiss_ally, ver
+// migración 0025) decide lo mismo con el mismo umbral — este chequeo local
+// solo espeja esa decisión para no tener que esperar la respuesta antes de
+// actualizar bannedAllyTemplates.
+const ALLY_DISMISS_REHIRE_SATISFACTION = 50;
 async function dismissAlly(allyId){
   const row = (state.char.allies||[]).find(a=>a.id===allyId);
   const { error } = await supabase.rpc('dismiss_ally', {p_ally_id: allyId});
   if(error){ log('No se pudo despedir al aliado: '+error.message); return; }
   state.char.allies = (state.char.allies||[]).filter(a=>a.id!==allyId);
+  let stillWelcome = false;
   if(row){
-    if(!state.char.bannedAllyTemplates) state.char.bannedAllyTemplates = [];
-    if(!state.char.bannedAllyTemplates.includes(row.template_id)) state.char.bannedAllyTemplates.push(row.template_id);
+    const satisfaction = row.satisfaction===undefined || row.satisfaction===null ? ALLY_SATISFACTION_DEFAULT : row.satisfaction;
+    if(satisfaction > ALLY_DISMISS_REHIRE_SATISFACTION){
+      stillWelcome = true;
+    } else {
+      if(!state.char.bannedAllyTemplates) state.char.bannedAllyTemplates = [];
+      if(!state.char.bannedAllyTemplates.includes(row.template_id)) state.char.bannedAllyTemplates.push(row.template_id);
+    }
   }
-  log('Despides a un aliado. No podrás volver a reclutarlo con este personaje.');
+  log(stillWelcome
+    ? 'Despides a un aliado en buenos términos. Podrás volver a reclutarlo más adelante.'
+    : 'Despides a un aliado. No podrás volver a reclutarlo con este personaje.');
   renderAll();
 }
 
@@ -6129,6 +6209,60 @@ const FLAT_STONE_TABLE = [
 // un piso concreto), así que ese sigue usando maxLevelUnlocked a propósito.
 const GEAR_TIER_MIN_LEVEL = {rango_a:20, legendario:40, ss:50, rango_b:11, raro:11};
 const STONE_TIER_MIN_LEVEL = {A:20, S:40, SS:50, B:11, C:11};
+// Requisito de NIVEL PARA EQUIPAR (pedido explícito 2026-09-27) — distinto y
+// aparte del gate de arriba, que es sobre qué rango puede CAER según el piso
+// del laberinto. Este es sobre qué rango puede USARSE según el nivel de
+// quien se lo pone (el propio nivel del personaje, o el del aliado si es a
+// un aliado — cada uno el suyo, nunca el del otro). Aplica por igual a
+// equipo general, armas y piedras de alma. Rango B pide nivel 20, Rango A
+// pide 40, Tier S (y SS, que no tiene techo propio por encima de 60) pide
+// 60 — el propio tope de personaje/aliado. Se hace cumplir en el momento de
+// equipar (equipItem/equipItemOnAlly/socketStone/socketStoneOnAlly, ver más
+// abajo) y retroactivamente contra lo que ya estaba puesto antes de este
+// cambio (ver migrateState() y refreshAlliesState()): lo que ya no cumple
+// se desequipa solo, de vuelta a la mochila (las piedras NO se destruyen en
+// este caso — esa regla de "se pierden para siempre" es solo para cuando el
+// jugador elige retirarlas a mano, no para esta migración automática).
+const GEAR_EQUIP_MIN_LEVEL = {rango_b:20, rango_a:40, legendario:60, ss:60};
+const STONE_EQUIP_MIN_LEVEL = {B:20, A:40, S:60, SS:60};
+function gearEquipMinLevel(rarity){ return GEAR_EQUIP_MIN_LEVEL[rarity]||0; }
+function stoneEquipMinLevel(tier){ return STONE_EQUIP_MIN_LEVEL[tier]||0; }
+function meetsGearEquipLevel(item, level){ return (level||1) >= gearEquipMinLevel(item.rarity); }
+function meetsStoneEquipLevel(stone, level){ return (level||1) >= stoneEquipMinLevel(stone.tier); }
+// Migración retroactiva del requisito de nivel de arriba (pedido explícito
+// 2026-09-27, "inclusive las que ya están en juego"): cualquier equipo/arma/
+// piedra que ya estaba puesto ANTES de esta regla y ya no cumple el nivel
+// mínimo se desequipa solo, de vuelta a la mochila — nunca se destruye (a
+// diferencia de cuando el jugador retira una piedra a mano). Se llama una
+// vez al cargar el personaje (migrateState, sobre state.char) y una vez por
+// cada aliado al refrescarlos (refreshAlliesState, sobre cada row).
+function stripUnmetLevelEquip(equipObj, level, ownerName){
+  let changed = false;
+  EQUIP_SLOTS.forEach(slot=>{
+    const it = equipObj[slot];
+    if(it && !meetsGearEquipLevel(it, level)){
+      equipObj[slot] = null;
+      state.char.inventory.push(it);
+      changed = true;
+      const who = ownerName ? ` (${ownerName} no alcanza el nivel ${gearEquipMinLevel(it.rarity)})` : ` (nivel ${gearEquipMinLevel(it.rarity)} requerido)`;
+      log(`<b>${it.name}</b> vuelve a la mochila${who}.`);
+    }
+  });
+  return changed;
+}
+function stripUnmetLevelStones(slotsArray, level, ownerName){
+  let changed = false;
+  (slotsArray||[]).forEach((st, i)=>{
+    if(st && !meetsStoneEquipLevel(st, level)){
+      slotsArray[i] = null;
+      state.char.inventory.push(st);
+      changed = true;
+      const who = ownerName ? ` (${ownerName} no alcanza el nivel ${stoneEquipMinLevel(st.tier)})` : ` (nivel ${stoneEquipMinLevel(st.tier)} requerido)`;
+      log(`<b>${st.name}</b> vuelve a la mochila${who}.`);
+    }
+  });
+  return changed;
+}
 // A partir de qué nivel del laberinto ("piso") los rangos más bajos (E/F en
 // piedras, Común/Poco común en equipo) dejan de poder caer del todo — pedido
 // explícito, 2026-09-18: de ahí en adelante lo peor que puede tocar ya es un
