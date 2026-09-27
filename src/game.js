@@ -5012,14 +5012,16 @@ async function claimMissionReward(missionId){
   if(error){ log('No se pudo reclamar la misión: '+error.message); return; }
   const m = (state.missions||[]).find(x=>x.id===missionId);
   state.char.gold = data.gold;
-  state.char.xp = data.xp; // si esto ya alcanza para subir de nivel, el próximo combate lo aplica (mismo bucle de handleVictory)
+  state.char.xp = data.xp;
   state.char.missionCurrency = data.mission_currency;
   if(m){
     m.status = 'claimed';
     if(m.reward_item) addToInventory(m.reward_item);
   }
   log('Reclamas la recompensa de una misión del Gremio.');
+  applyCharLevelUps();
   renderAll();
+  save();
 }
 
 function renderMissions(){
@@ -8777,6 +8779,32 @@ function checkCombatEnd(){
 // cierra esa década), usados como ingrediente de la Forja Legendaria (ver
 // TIER_S_RECIPE). No se venden ni se compran con oro/Sellos, solo caen del
 // jefe de década correspondiente.
+// Sube de nivel al personaje si su xp ya alcanza, sin importar de dónde
+// vino esa xp (victoria en combate, misión del Gremio reclamada, etc.) —
+// antes solo handleVictory() lo hacía, así que reclamar una misión que
+// completaba la xp necesaria dejaba la xp acumulada sin aplicar hasta el
+// próximo combate. Pedido explícito 2026-09-27.
+function applyCharLevelUps(){
+  let leveled = false;
+  // curva pedida: nivel 1→2 necesita 5 exp, 2→3 necesita 10, 3→4 necesita 20 (se duplica cada nivel).
+  // Tope de nivel de personaje: 60.
+  let xpNeeded = xpNeededForLevel(state.char.level);
+  while(state.char.level < CHAR_LEVEL_CAP && state.char.xp >= xpNeeded){
+    state.char.xp -= xpNeeded;
+    state.char.level += 1;
+    leveled = true;
+    xpNeeded = xpNeededForLevel(state.char.level);
+  }
+  if(state.char.level >= CHAR_LEVEL_CAP) state.char.xp = 0;
+  if(leveled){
+    const d = derived();
+    state.char.curHP = d.maxHP; state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi;
+    log(`¡Subes a nivel ${state.char.level}! Tus estadísticas aumentan y te recuperas por completo.`);
+    flashLevelUp(state.char.level);
+  }
+  return leveled;
+}
+
 const DECADE_BOSS_FRAGMENTS = {
   10: {id:'ogro', name:'Fragmento del Ogro', icon:'👺'},
   20: {id:'matriarca_escarlata', name:'Fragmento de la Matriarca Escarlata', icon:'🕷️'},
@@ -8905,23 +8933,7 @@ function handleVictory(){
   // el umbral sin haber tenido ninguna chance real de soltar una.
   if(stonesAllowedThisFight) state.char.pityStone = gotRareStone ? 0 : (state.char.pityStone||0) + 1;
 
-  let leveled = false;
-  // curva pedida: nivel 1→2 necesita 5 exp, 2→3 necesita 10, 3→4 necesita 20 (se duplica cada nivel).
-  // Tope de nivel de personaje: 60.
-  let xpNeeded = xpNeededForLevel(state.char.level);
-  while(state.char.level < CHAR_LEVEL_CAP && state.char.xp >= xpNeeded){
-    state.char.xp -= xpNeeded;
-    state.char.level += 1;
-    leveled = true;
-    xpNeeded = xpNeededForLevel(state.char.level);
-  }
-  if(state.char.level >= CHAR_LEVEL_CAP) state.char.xp = 0;
-  if(leveled){
-    const d = derived();
-    state.char.curHP = d.maxHP; state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi;
-    log(`¡Subes a nivel ${state.char.level}! Tus estadísticas aumentan y te recuperas por completo.`);
-    flashLevelUp(state.char.level);
-  }
+  applyCharLevelUps();
 
   if(isBoss){
     const clearedLevel = level;
