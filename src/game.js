@@ -2767,6 +2767,20 @@ let invGearTierFilter = 'todos'; // 'todos' o una key de RARITIES — filtro de 
 let invGearClassFilter = 'todos'; // 'todos' o una key de SHOP_ROLE_LABELS — filtro por senda en el inventario
 let invStoneTierFilter = 'todos'; // 'todos' o una letra E-SS — filtro de rango en piedras de alma
 let homeOpen = false; // whether the Hogar (home stash) panel is showing
+// Filtros del Hogar (pedido explícito 2026-09-27, "ponle filtro al guardado,
+// asi como la tienda") — mismo patrón de chips que invGearFilter/invGearTierFilter
+// de arriba, pero por separado para la mochila y lo ya guardado en el Hogar,
+// ya que son dos listas independientes en la misma pantalla.
+let homeBagGearFilter = 'todos';
+let homeBagGearTierFilter = 'todos';
+let homeStashGearFilter = 'todos';
+let homeStashGearTierFilter = 'todos';
+// Tope de objetos guardados en el Hogar (pedido explícito 2026-09-27, junto
+// con "guardar todo el equipamiento") — antes no tenía límite; ahora que hay
+// un botón para volcar toda la mochila de una vez, hace falta un tope para
+// que el stash no crezca sin control (mismo criterio que el límite de 250
+// de la mochila misma, ver validate_character_update()).
+const STASH_ITEM_CAP = 100;
 let shopOpen = false; // whether the Tienda (shop) panel is showing
 let rankingOpen = false; // whether the Ranking panel is showing
 let adminOpen = false; // whether the Admin panel is showing
@@ -5816,26 +5830,59 @@ function renderHome(){
   const potionItems = state.char.inventory.filter(i=>i.kind==='potion');
   const stashGear = stash.items.filter(i=>i.kind==='equip');
   const stashPotions = stash.items.filter(i=>i.kind==='potion');
+  const stashFull = stash.items.length >= STASH_ITEM_CAP;
+  const stashRoom = Math.max(0, STASH_ITEM_CAP - stash.items.length);
 
-  const bagGearHTML = gearItems.length ? gearItems.map(it=>`
+  // Filtros por slot/rango (pedido explícito 2026-09-27, "ponle filtro al
+  // guardado, asi como la tienda") — mismo patrón de chips que ya usa
+  // renderInventory() (gearFilterHTML/gearTierFilterHTML), pero con su
+  // propio estado independiente porque acá son DOS listas (mochila y Hogar)
+  // en la misma pantalla, no una.
+  const bagSlotsPresent = EQUIP_SLOTS.filter(slot=> gearItems.some(it=>it.slot===slot));
+  if(homeBagGearFilter!=='todos' && !bagSlotsPresent.includes(homeBagGearFilter)) homeBagGearFilter = 'todos';
+  const bagFilterHTML = gearItems.length ? `<div class="inv-filter-bar">
+    <button class="nav-btn ${homeBagGearFilter==='todos'?'active':''}" data-homebaggearfilter="todos">Todos</button>
+    ${bagSlotsPresent.map(slot=>`<button class="nav-btn ${homeBagGearFilter===slot?'active':''}" data-homebaggearfilter="${slot}">${slotLabel(slot)}</button>`).join('')}
+  </div>` : '';
+  const bagTiersPresent = Object.keys(RARITIES).filter(rk=> gearItems.some(it=>(it.rarity||'comun')===rk));
+  if(homeBagGearTierFilter!=='todos' && !bagTiersPresent.includes(homeBagGearTierFilter)) homeBagGearTierFilter = 'todos';
+  const bagTierFilterHTML = bagTiersPresent.length>1 ? `<div class="inv-filter-bar">
+    <button class="nav-btn ${homeBagGearTierFilter==='todos'?'active':''}" data-homebaggeartierfilter="todos">Todos los rangos</button>
+    ${bagTiersPresent.map(rk=>`<button class="nav-btn ${homeBagGearTierFilter===rk?'active':''}" data-homebaggeartierfilter="${rk}" style="${homeBagGearTierFilter===rk?`border-color:${RARITIES[rk].color}; color:${RARITIES[rk].color};`:''}">${RARITIES[rk].name}</button>`).join('')}
+  </div>` : '';
+  const bagGearFiltered = gearItems.filter(it=> (homeBagGearFilter==='todos'||it.slot===homeBagGearFilter) && (homeBagGearTierFilter==='todos'||(it.rarity||'comun')===homeBagGearTierFilter));
+  const bagGearHTML = gearItems.length ? (bagGearFiltered.length ? bagGearFiltered.map(it=>`
     <div class="inv-item-row" style="${rarityRowStyle(it)}">
       ${itemRowWithArt(it, `${itemNameHTML(it)} <span class="slot-tag">${slotLabel(it.slot)}</span><div class="inv-item-bonus">${itemBonusText(it)}</div>`)}
-      <button class="inv-btn" data-stash-gear="${it.uid}">Guardar en Hogar</button>
-    </div>`).join('') : `<p class="inv-empty-msg">No llevas equipo suelto contigo.</p>`;
+      <button class="inv-btn" data-stash-gear="${it.uid}" ${stashFull?'disabled':''}>Guardar en Hogar</button>
+    </div>`).join('') : `<p class="inv-empty-msg">No hay equipo con ese filtro.</p>`) : `<p class="inv-empty-msg">No llevas equipo suelto contigo.</p>`;
 
   const bagPotionHTML = potionItems.length ? potionItems.map(it=>{
     const tpl = POTION_TEMPLATES[it.potionId];
     return `<div class="inv-item-row">
       ${potionRowWithArt(it.potionId, `<b>${tpl.name}</b> <span class="slot-tag">x${it.qty}</span>`)}
-      <button class="inv-btn" data-stash-potion="${it.potionId}">Guardar 1</button>
+      <button class="inv-btn" data-stash-potion="${it.potionId}" ${stashFull?'disabled':''}>Guardar 1</button>
     </div>`;
   }).join('') : `<p class="inv-empty-msg">No llevas pociones contigo.</p>`;
 
-  const stashGearHTML = stashGear.length ? stashGear.map(it=>`
+  const stashSlotsPresent = EQUIP_SLOTS.filter(slot=> stashGear.some(it=>it.slot===slot));
+  if(homeStashGearFilter!=='todos' && !stashSlotsPresent.includes(homeStashGearFilter)) homeStashGearFilter = 'todos';
+  const stashFilterHTML = stashGear.length ? `<div class="inv-filter-bar">
+    <button class="nav-btn ${homeStashGearFilter==='todos'?'active':''}" data-homestashgearfilter="todos">Todos</button>
+    ${stashSlotsPresent.map(slot=>`<button class="nav-btn ${homeStashGearFilter===slot?'active':''}" data-homestashgearfilter="${slot}">${slotLabel(slot)}</button>`).join('')}
+  </div>` : '';
+  const stashTiersPresent = Object.keys(RARITIES).filter(rk=> stashGear.some(it=>(it.rarity||'comun')===rk));
+  if(homeStashGearTierFilter!=='todos' && !stashTiersPresent.includes(homeStashGearTierFilter)) homeStashGearTierFilter = 'todos';
+  const stashTierFilterHTML = stashTiersPresent.length>1 ? `<div class="inv-filter-bar">
+    <button class="nav-btn ${homeStashGearTierFilter==='todos'?'active':''}" data-homestashgeartierfilter="todos">Todos los rangos</button>
+    ${stashTiersPresent.map(rk=>`<button class="nav-btn ${homeStashGearTierFilter===rk?'active':''}" data-homestashgeartierfilter="${rk}" style="${homeStashGearTierFilter===rk?`border-color:${RARITIES[rk].color}; color:${RARITIES[rk].color};`:''}">${RARITIES[rk].name}</button>`).join('')}
+  </div>` : '';
+  const stashGearFiltered = stashGear.filter(it=> (homeStashGearFilter==='todos'||it.slot===homeStashGearFilter) && (homeStashGearTierFilter==='todos'||(it.rarity||'comun')===homeStashGearTierFilter));
+  const stashGearHTML = stashGear.length ? (stashGearFiltered.length ? stashGearFiltered.map(it=>`
     <div class="inv-item-row" style="${rarityRowStyle(it)}">
       ${itemRowWithArt(it, `${itemNameHTML(it)} <span class="slot-tag">${slotLabel(it.slot)}</span><div class="inv-item-bonus">${itemBonusText(it)}</div>`)}
       <button class="inv-btn" data-retrieve-gear="${it.uid}">Retirar</button>
-    </div>`).join('') : `<p class="inv-empty-msg">El Hogar no guarda equipo todavía.</p>`;
+    </div>`).join('') : `<p class="inv-empty-msg">No hay equipo con ese filtro.</p>`) : `<p class="inv-empty-msg">El Hogar no guarda equipo todavía.</p>`;
 
   const stashPotionHTML = stashPotions.length ? stashPotions.map(it=>{
     const tpl = POTION_TEMPLATES[it.potionId];
@@ -5860,11 +5907,19 @@ function renderHome(){
       <button class="inv-btn" id="btn-retrieve-gold-all" ${stash.gold<=0?'disabled':''}>Retirar todo el oro del Hogar</button>
     </div>
 
-    <div class="section-label">Tu mochila</div>
+    <div class="section-label" style="display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap;">
+      <span>Tu mochila</span>
+      <button class="inv-btn" id="btn-stash-gear-all" ${(!gearItems.length || stashFull)?'disabled':''}>Guardar todo el equipamiento</button>
+    </div>
+    <p style="color:var(--text-dim); font-size:0.8em; margin-top:0;">El Hogar guarda hasta ${STASH_ITEM_CAP} objetos (${stash.items.length}/${STASH_ITEM_CAP}).</p>
+    ${bagFilterHTML}
+    ${bagTierFilterHTML}
     ${bagGearHTML}
     ${bagPotionHTML}
 
     <div class="section-label">Guardado en el Hogar</div>
+    ${stashFilterHTML}
+    ${stashTierFilterHTML}
     ${stashGearHTML}
     ${stashPotionHTML}
   `;
@@ -5882,8 +5937,22 @@ function renderHome(){
     log('Retiras todo el oro guardado en el Hogar.');
     renderAll(); save();
   };
+  const stashGearAllBtn = document.getElementById('btn-stash-gear-all');
+  if(stashGearAllBtn) stashGearAllBtn.onclick = ()=>{
+    const room = Math.max(0, STASH_ITEM_CAP - stash.items.length);
+    const toMove = gearItems.slice(0, room);
+    toMove.forEach(it=>{
+      const idx = state.char.inventory.indexOf(it);
+      if(idx>=0) state.char.inventory.splice(idx,1);
+      stash.items.push(it);
+    });
+    const leftover = gearItems.length - toMove.length;
+    if(toMove.length) log(`Guardas ${toMove.length} objeto(s) de equipo en el Hogar.${leftover>0?` El Hogar está lleno (${STASH_ITEM_CAP}/${STASH_ITEM_CAP}) — quedan ${leftover} en tu mochila.`:''}`);
+    renderAll(); save();
+  };
   document.querySelectorAll('[data-stash-gear]').forEach(btn=>{
     btn.onclick = ()=>{
+      if(stash.items.length >= STASH_ITEM_CAP){ log('El Hogar está lleno.'); return; }
       const idx = state.char.inventory.findIndex(i=>i.kind==='equip' && i.uid===btn.dataset.stashGear);
       if(idx<0) return;
       const it = state.char.inventory.splice(idx,1)[0];
@@ -5901,6 +5970,18 @@ function renderHome(){
       log(`Retiras <b>${it.name}</b> del Hogar.`);
       renderAll(); save();
     };
+  });
+  document.querySelectorAll('[data-homebaggearfilter]').forEach(btn=>{
+    btn.onclick = ()=>{ homeBagGearFilter = btn.dataset.homebaggearfilter; renderHome(); };
+  });
+  document.querySelectorAll('[data-homebaggeartierfilter]').forEach(btn=>{
+    btn.onclick = ()=>{ homeBagGearTierFilter = btn.dataset.homebaggeartierfilter; renderHome(); };
+  });
+  document.querySelectorAll('[data-homestashgearfilter]').forEach(btn=>{
+    btn.onclick = ()=>{ homeStashGearFilter = btn.dataset.homestashgearfilter; renderHome(); };
+  });
+  document.querySelectorAll('[data-homestashgeartierfilter]').forEach(btn=>{
+    btn.onclick = ()=>{ homeStashGearTierFilter = btn.dataset.homestashgeartierfilter; renderHome(); };
   });
   document.querySelectorAll('[data-stash-potion]').forEach(btn=>{
     btn.onclick = ()=>{
@@ -7561,7 +7642,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
     combat.lastActor = {kind:'player'};
     combat.lastAction = {label: skill.name, effects: turnEffects};
     renderCombat();
-    await playBattleAnim(combat.lastActor, combat.lastAction);
+    await withAnimTimeout(playBattleAnim(combat.lastActor, combat.lastAction));
     combat.lastActor = null; combat.lastAction = null;
   }
 
@@ -7662,6 +7743,24 @@ function allyMaybeSelfPreserve(ally){
 // Se guarda en localStorage, no en el personaje - es una preferencia de
 // pantalla, no de progreso.
 function sleep(ms){ return new Promise(resolve=> setTimeout(resolve, ms)); }
+// Red de seguridad para playBattleAnim() (bug real 2026-09-27, "el combate
+// no se acaba si estás en Retaguardia, sobre todo con Mago"): esa animación
+// se resuelve con requestAnimationFrame (battleStage.js), y los navegadores
+// PAUSAN rAF por completo mientras la pestaña/ventana no está visible (p.ej.
+// el jugador cambia de pestaña o de app un instante justo al rematar al
+// último enemigo). Como endPlayerTurn()/resolveAllyTurns()/processEnemyTurns()
+// esperan esa animación con await antes de poder llamar a checkCombatEnd(),
+// un rAF pausado dejaba el turno colgado indefinidamente - turnBusy seguía
+// en true y el combate parecía "no terminar nunca" hasta que el jugador
+// volvía a la pestaña (rAF se reanuda solo) y por fin se procesaba el golpe
+// que ya había matado al último enemigo. No es específico de Retaguardia ni
+// de Mago - pasa con cualquier golpe animado en cualquier clase - pero
+// coincide más seguido con Mago porque sus habilidades a distancia son las
+// que más gente deja correr con la pestaña en segundo plano. La animación en
+// sí es solo cosmética: nunca debe poder bloquear el avance real del turno
+// por más de este tope.
+const ANIM_TIMEOUT_MS = 1500;
+function withAnimTimeout(promise){ return Promise.race([promise, sleep(ANIM_TIMEOUT_MS)]); }
 const COMBAT_SPEED_DELAY_MS = {1: 650, 2: 0};
 function getCombatSpeed(){
   try{
@@ -7769,7 +7868,7 @@ async function resolveAllyTurns(){
     combat.lastAction = null;
     resolveOneAllyTurn(ally);
     if(!combat || combat.over) break;
-    if(stepDelay>0){ renderCombat(); await playBattleAnim(combat.lastActor, combat.lastAction); combat.lastActor = null; combat.lastAction = null; }
+    if(stepDelay>0){ renderCombat(); await withAnimTimeout(playBattleAnim(combat.lastActor, combat.lastAction)); combat.lastActor = null; combat.lastAction = null; }
     if(combat !== myCombat) return;
   }
 }
@@ -8152,7 +8251,7 @@ async function processEnemyTurns(){
     combat.lastAction = null;
     if(stunFlags.get(enemy)){ log(`${enemy.name} está aturdido y pierde su turno.`); combat.lastAction = {label:'Aturdido', effects:[]}; }
     else enemyAct(enemy);
-    if(stepDelay>0){ renderCombat(); await playBattleAnim(combat.lastActor, combat.lastAction); combat.lastActor = null; combat.lastAction = null; }
+    if(stepDelay>0){ renderCombat(); await withAnimTimeout(playBattleAnim(combat.lastActor, combat.lastAction)); combat.lastActor = null; combat.lastAction = null; }
     if(combat !== myCombat) return;
   }
   if(!combat || combat.over || combat!==myCombat) return;
@@ -8892,7 +8991,18 @@ function handleVictory(){
       renderAll(); save();
     }});
     showChoiceOverlay('Guardián derrotado', bodyText, buttons);
-    save();
+    // flushSave() inmediato, no el save() debounced de siempre (bug real
+    // reportado 2026-09-27, "SHOSHIROHOSHINA venció al guardián del piso 40
+    // pero nunca se le desbloqueó el checkpoint 41, y su nivel volvió a
+    // bajar de 34 a 27 al reingresar"): checkpointLevel y level suben acá
+    // mismo, arriba, pero con el save() de siempre esa escritura quedaba
+    // pendiente 1.5s en el timer — si el jugador cerraba la pestaña/la app
+    // pasaba a segundo plano (el navegador puede descargarla, sobre todo en
+    // móvil) antes de que el timer disparara, todo ese progreso se perdía
+    // por completo y el personaje volvía a la última versión SÍ guardada.
+    // Mismo motivo que pullGacha()/grantFreePetPulls(): un logro de este
+    // peso (cierre de década) no puede depender de un temporizador.
+    flushSave();
     return;
   }
 
@@ -9911,4 +10021,5 @@ async function boot(){
   });
 }
 boot();
+
 setInterval(updateClockBadge, 30000);
