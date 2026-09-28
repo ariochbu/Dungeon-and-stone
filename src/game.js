@@ -9990,7 +9990,7 @@ function renderCharacterSelect(rows){
   }
 }
 
-function enterCharacter(row){
+async function enterCharacter(row){
   state = rowToState(row);
   migrateState();
   // si ya tenía una corrida activa entra directo al laberinto (con la
@@ -9999,9 +9999,20 @@ function enterCharacter(row){
   if(state.dungeon){ stopLoginAudio(); playDungeonAudio(state.dungeon.level||1); } else playLoginAudio();
   document.getElementById('btn-switch-char').style.display = 'inline-block';
   showScreen('screen-game');
-  renderAll();
   refreshMissionsState();
-  refreshAlliesState();
+  // Bug real reportado 2026-09-28 ("se recarga a mitad de combate y vuelve
+  // sin los aliados"): con una corrida activa, este primer renderAll() de
+  // abajo puede caer en renderMap() -> recuperación automática de un combate
+  // interrumpido (ver ese comentario en renderMap) -> enterNode() ->
+  // startCombat(), que arma combat.allies leyendo state.char.allies EN ESE
+  // MISMO INSTANTE. state.char.allies no lo pone rowToState (llega vacío/
+  // undefined) — lo llena refreshAlliesState(), que es async. Antes se
+  // llamaba DESPUÉS de renderAll() sin esperarlo, así que el combate
+  // recuperado siempre arrancaba sin aliados, aunque sí los tuvieras. Sin
+  // corrida activa no hace falta esperar (nada en la Ciudad depende de
+  // allies para el primer pintado) — no vale la pena atrasarlo por gusto.
+  if(state.dungeon) await refreshAlliesState(); else refreshAlliesState();
+  renderAll();
   let tutorialSeen = false;
   try{ tutorialSeen = localStorage.getItem('dsTutorialSeen')==='1'; }catch(e){}
   if(!tutorialSeen) showTutorial();
