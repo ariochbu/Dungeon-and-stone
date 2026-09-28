@@ -7690,14 +7690,44 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
   // sola repetición gratuita del mismo golpe, sin volver a cobrar el costo.
   // Nunca aplica a un ultimate (evita una segunda ejecución gratis de algo
   // ya limitado por usos/enfriamiento) ni encadena una segunda repetición.
+  //
+  // Bug real reportado 2026-09-28 ("sigue pasando que no finaliza la
+  // batalla", Mago): si el primer golpe mataba al último enemigo (o al
+  // objetivo elegido), la repetición llegaba a playerUseSkill() con un
+  // objetivo muerto, respondía "Objetivo inválido." / "No hay ningún objetivo
+  // disponible." y salía con un return SIN llamar a endPlayerTurn() — el
+  // caller también hacía return, así que nadie revisaba checkCombatEnd() y el
+  // combate quedaba abierto con todos los enemigos en 0 de vida. Ahora (1) la
+  // repetición solo se intenta si queda algo a quien pegarle, re-apuntando al
+  // enemigo más débil si el objetivo original murió, y (2) si aun así la
+  // repetición no llega a terminar el turno, se termina acá.
   if(!isRepeat && !skill.ultimate){
+    const myCombat = combat;
+    let repTarget = targetIdx, canRepeat;
+    if(typeof targetIdx==='string'){
+      const al = (combat.allies||[])[parseInt(targetIdx.slice(5))];
+      canRepeat = !!al && al.hp>0;
+    } else if(resolvedMode==='any'){
+      const t = combat.enemies[targetIdx];
+      if(!t || t.hp<=0) repTarget = autoPickEnemyIndex();
+      canRepeat = repTarget>=0;
+    } else if(resolvedMode==='self'){
+      canRepeat = true;
+    } else {
+      canRepeat = livingEnemies().length>0;
+    }
+    const repeatAndClose = async ()=>{
+      const tc = combat.turnCount;
+      await playerUseSkill(skillId, repTarget, true);
+      if(combat && combat===myCombat && !combat.over && combat.turnCount===tc) await endPlayerTurn();
+    };
     const equipSpecials = specialsFromEquip(state.char.equip);
-    if(skill.cost && equipSpecials.some(sp=>sp.type==='doble_encantamiento' && chance(sp.chance))){
+    if(canRepeat && skill.cost && equipSpecials.some(sp=>sp.type==='doble_encantamiento' && chance(sp.chance))){
       log(`Tu arma realiza un <b>doble encantamiento</b>: ${skill.name} se relanza sin costo.`);
-      await playerUseSkill(skillId, targetIdx, true);
+      await repeatAndClose();
       return;
     }
-    if(skillId==='ataque_basico'){
+    if(canRepeat && skillId==='ataque_basico'){
       const segundoAtaque = equipSpecials.find(sp=>sp.type==='segundo_ataque_basico' && chance(sp.chance));
       if(segundoAtaque){
         log('Realizas un segundo ataque básico.');
@@ -7705,7 +7735,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
         // 50% de resistencia física — se arma acá, se consume una sola vez
         // en el cálculo de daño de abajo (ver combat.pendingIgnoreBoost).
         if(segundoAtaque.tierSProc==='carcaj_s' && chance(0.1)) combat.pendingIgnoreBoost = true;
-        await playerUseSkill(skillId, targetIdx, true);
+        await repeatAndClose();
         // Arco corto Tier S ('arcocorto_s'): cada segundo ataque cura un 3%
         // de tu vida máxima.
         if(segundoAtaque.tierSProc==='arcocorto_s'){
