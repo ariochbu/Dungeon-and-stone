@@ -5963,6 +5963,11 @@ function renderHome(){
       <button class="inv-btn" id="btn-stash-gold-all" ${state.char.gold<=0?'disabled':''}>Guardar todo mi oro</button>
       <button class="inv-btn" id="btn-retrieve-gold-all" ${stash.gold<=0?'disabled':''}>Retirar todo el oro del Hogar</button>
     </div>
+    <div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; align-items:center;">
+      <input type="number" id="home-gold-amount" class="auth-input" placeholder="Cantidad" min="1" step="1" style="max-width:140px; margin:0;">
+      <button class="inv-btn" id="btn-stash-gold-amount">Guardar cantidad</button>
+      <button class="inv-btn" id="btn-retrieve-gold-amount">Retirar cantidad</button>
+    </div>
 
     <div class="section-label" style="display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap;">
       <span>Tu mochila</span>
@@ -5992,6 +5997,33 @@ function renderHome(){
   if(retrieveAllBtn) retrieveAllBtn.onclick = ()=>{
     state.char.gold += stash.gold; stash.gold = 0;
     log('Retiras todo el oro guardado en el Hogar.');
+    renderAll(); save();
+  };
+  // Depositar/retirar una CANTIDAD elegida de oro (pedido explícito
+  // 2026-09-28: "sacar 1000, o solo 3000") — hasta ahora solo existían los
+  // botones de todo-o-nada de arriba.
+  const goldAmountInput = document.getElementById('home-gold-amount');
+  const readGoldAmount = ()=>{
+    const n = Math.floor(Number(goldAmountInput.value));
+    if(!Number.isFinite(n) || n<=0){ log('Ingresa una cantidad de oro válida.'); return null; }
+    return n;
+  };
+  const btnStashAmount = document.getElementById('btn-stash-gold-amount');
+  if(btnStashAmount) btnStashAmount.onclick = ()=>{
+    const n = readGoldAmount();
+    if(n===null) return;
+    if(n > state.char.gold){ log('No tienes esa cantidad de oro contigo.'); return; }
+    state.char.gold -= n; stash.gold += n;
+    log(`Depositas ${n.toLocaleString('es')} de oro en el Hogar.`);
+    renderAll(); save();
+  };
+  const btnRetrieveAmount = document.getElementById('btn-retrieve-gold-amount');
+  if(btnRetrieveAmount) btnRetrieveAmount.onclick = ()=>{
+    const n = readGoldAmount();
+    if(n===null) return;
+    if(n > stash.gold){ log('El Hogar no tiene guardada esa cantidad de oro.'); return; }
+    stash.gold -= n; state.char.gold += n;
+    log(`Retiras ${n.toLocaleString('es')} de oro del Hogar.`);
     renderAll(); save();
   };
   const stashGearAllBtn = document.getElementById('btn-stash-gear-all');
