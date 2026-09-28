@@ -2289,6 +2289,7 @@ async function grantAllyAutoGear(row, tier){
   row.auto_gear_tier = tier;
   log(`<b>${row.name}</b> desbloquea su equipo ${AUTO_GEAR_TIER_LABEL[tier]}${row.auto_gear_pending ? ' — elige su arma2 en la Taberna' : ''}.`);
   await saveAllyAutoGear(row);
+  save();
   if(invOpen) renderInventory();
 }
 // Llamada tras cada subida de nivel de aliado (ver advanceAllyXp) — solo
@@ -3002,12 +3003,7 @@ function migrateState(){
   // a mano) — ya corregido en el origen (ver ensureItemUid), pero cualquier
   // objeto que ya haya quedado atascado así de antes necesita este arreglo
   // retroactivo, o se queda para siempre sin poder venderse ni guardarse.
-  let backfilledUid = false;
-  [state.char.inventory, (state.char.stash||{}).items||[]].forEach(list=>{
-    list.forEach(it=>{
-      if(it && (it.kind==='equip'||it.kind==='soulstone') && !it.uid){ ensureItemUid(it); backfilledUid = true; }
-    });
-  });
+  const backfilledUid = normalizeItemUids().changed;
   // Requisito de nivel para equipar (pedido explícito 2026-09-27, retroactivo):
   // ver stripUnmetLevelEquip/stripUnmetLevelStones más abajo.
   const strippedGear = stripUnmetLevelEquip(state.char.equip, state.char.level);
@@ -4268,6 +4264,44 @@ function ensureItemUid(item){
   return item;
 }
 
+// Repara TODO el equipo/piedras del personaje (mochila, Hogar, equipado y el
+// de sus aliados): asigna uid a lo que no tiene y REEMPLAZA el uid de
+// cualquier objeto que lo repita con otro — sin un uid único, "Guardar en
+// Hogar"/"Vender" no encuentran el objeto correcto (o ninguno). Pedido
+// explícito 2026-09-28 tras seguir viendo equipo inicial y de Sacerdotes que
+// no se podía guardar. También sube itemCounter por encima del uid más alto
+// ya usado, para que los objetos nuevos nunca choquen con los existentes.
+// Devuelve {changed, allyRows}: allyRows son los aliados cuyo equipo cambió y
+// hay que volver a guardar en su propia tabla.
+function normalizeItemUids(){
+  const all = [];
+  const collect = (it, row)=>{ if(it && (it.kind==='equip' || it.kind==='soulstone')) all.push({it, row}); };
+  (state.char.inventory||[]).forEach(it=>collect(it, null));
+  ((state.char.stash||{}).items||[]).forEach(it=>collect(it, null));
+  EQUIP_SLOTS.forEach(slot=> collect((state.char.equip||{})[slot], null));
+  (state.char.soulSlots||[]).forEach(it=>collect(it, null));
+  (state.char.allies||[]).forEach(a=>{
+    Object.values(a.equip||{}).forEach(it=>collect(it, a));
+    (a.soul_slots||[]).forEach(it=>collect(it, a));
+  });
+  let max = 0;
+  all.forEach(({it})=>{ const m = /^it(\d+)$/.exec(it.uid||''); if(m) max = Math.max(max, +m[1]); });
+  if((state.char.itemCounter||0) < max) state.char.itemCounter = max;
+  const seen = new Set();
+  const allyRows = new Set();
+  let changed = false;
+  all.forEach(({it, row})=>{
+    if(!it.uid || seen.has(it.uid)){
+      delete it.uid;
+      ensureItemUid(it);
+      changed = true;
+      if(row) allyRows.add(row);
+    }
+    seen.add(it.uid);
+  });
+  return {changed, allyRows};
+}
+
 // Mago y Sacerdote comparten el Arma 1 (MAGO_ARMA1 en WEAPON_CATALOG) — un
 // arma con styleId 'mago' en el slot 'arma' debe poder equiparse en
 // cualquiera de los dos, y viceversa (pedido explícito 2026-09-27: al
@@ -5099,6 +5133,27 @@ async function refreshAlliesState(){
       save();
       if(invOpen) renderInventory();
     }
+  }
+  // Los aliados recién cargados pueden traer equipo sin uid o con uid repetido.
+  const norm = normalizeItemUids();
+  if(norm.changed){
+    for(const row of norm.allyRows) await saveAllyEquip(row);
+    save();
+    if(invOpen) renderInventory();
+  }
+  // Recompensas de equipo de TODOS los Sacerdotes (Delyth, Seraphina y
+  // cualquiera que se agregue, la regla es por rol): si por cualquier motivo
+  // (guardado perdido, jugador que ya había pasado el hito antes de que
+  // existiera el aliado) todavía no tienen el escalón que les corresponde por
+  // su nivel o por haber vencido al jefe del piso 30, se les otorga al cargar.
+  const tierOrder = ['none','raro','rango_b','rango_a','legendario'];
+  for(const row of state.char.allies){
+    if(row.role!=='sacerdote') continue;
+    const cur = tierOrder.indexOf(row.auto_gear_tier || 'none');
+    let want = 0;
+    if(row.level>=AUTO_GEAR_LEVEL.rango_b) want = 2; else if(row.level>=AUTO_GEAR_LEVEL.raro) want = 1;
+    if((state.char.checkpointLevel||1) > 30) want = Math.max(want, 3);
+    if(want > cur) await grantAllyAutoGear(row, tierOrder[want]);
   }
 }
 
@@ -6343,7 +6398,16 @@ const GEAR_EQUIP_MIN_LEVEL = {rango_b:20, rango_a:40, legendario:60, ss:60};
 const STONE_EQUIP_MIN_LEVEL = {B:20, A:40, S:60, SS:60};
 function gearEquipMinLevel(rarity){ return GEAR_EQUIP_MIN_LEVEL[rarity]||0; }
 function stoneEquipMinLevel(tier){ return STONE_EQUIP_MIN_LEVEL[tier]||0; }
-function meetsGearEquipLevel(item, level){ return (level||1) >= gearEquipMinLevel(item.rarity); }
+// El equipo automático de Sacerdote (armadura/casco/botas/guantes/amuleto y
+// arma2 con styleId 'sacerdote', ver grantAllyAutoGear) se otorga "sin
+// importar su propio nivel" (jefe de la década 30 = Épico, década 60 = Tier
+// S), así que el requisito de nivel para equipar no le aplica — antes el
+// aliado lo recibía y en la siguiente carga stripUnmetLevelEquip() lo mandaba
+// de vuelta a la mochila por no llegar al nivel 40/60. Ese equipo no se
+// consigue de ninguna otra forma, así que reconocerlo por styleId alcanza y
+// también cubre el que ya estaba guardado antes de este arreglo.
+function isSacerdoteAutoGear(item){ return !!item && item.styleId==='sacerdote' && item.slot!=='arma'; }
+function meetsGearEquipLevel(item, level){ return isSacerdoteAutoGear(item) || (level||1) >= gearEquipMinLevel(item.rarity); }
 function meetsStoneEquipLevel(stone, level){ return (level||1) >= stoneEquipMinLevel(stone.tier); }
 // Migración retroactiva del requisito de nivel de arriba (pedido explícito
 // 2026-09-27, "inclusive las que ya están en juego"): cualquier equipo/arma/
