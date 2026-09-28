@@ -2,7 +2,7 @@
 
 import { supabase } from './supabaseClient.js';
 import * as auth from './auth.js';
-import { syncBattleStage, playBattleAnim } from './battleStage.js?v=66';
+import { syncBattleStage, playBattleAnim } from './battleStage.js?v=67';
 import { CLASS_SPRITES, ENEMY_SPRITES } from './battleSprites.js?v=65';
 
 /* ============================================================
@@ -6600,6 +6600,21 @@ function livingAllies(){ return (combat.allies||[]).filter(a=>a.hp>0); }
 // retaguardia) antes que en el jugador — la Retaguardia lo saca de ser
 // blanco directo salvo que de verdad no quede nadie más vivo al lado.
 function frontlineTarget(){
+  // Pisos 1-60 (pedido explícito 2026-09-28): IA propia de los enemigos —
+  // acaban SÍ o SÍ con toda la línea frontal antes de tocar la retaguardia.
+  // El jugador cuenta como un combatiente más: si está en el Frente, es un
+  // blanco más de esa fila (igual que un aliado de frente); si está en la
+  // Retaguardia, solo se vuelve blanco cuando no queda nadie al frente.
+  // Sombra Cazadora y Brann con Muralla Viviente activa siguen atrayendo la
+  // atención por encima del resto de la fila (su texto ya lo prometía).
+  if(state.dungeon && (state.dungeon.level||1) <= 60){
+    const allies = livingAllies();
+    const front = allies.filter(a=>a.pos==='frente').map(a=>({kind:'ally', ally:a}));
+    if(combat.playerPos==='frente') front.push({kind:'player'});
+    const pool = front.length ? front : allies.map(a=>({kind:'ally', ally:a})).concat([{kind:'player'}]);
+    const taunter = pool.find(t=> t.kind==='ally' && (t.ally.isShadow || hasStatus(t.ally.statuses,'Bastión')));
+    return taunter || pick(pool);
+  }
   const tank = livingAllies().find(a=>a.pos==='frente');
   if(tank) return {kind:'ally', ally:tank};
   if(combat.playerPos==='retaguardia'){

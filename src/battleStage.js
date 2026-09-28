@@ -16,8 +16,17 @@
 import { CLASS_SPRITES, ALLY_SPRITES, ENEMY_SPRITES } from './battleSprites.js?v=65';
 
 const TILE = 16;
-const SCALE = 2.5;
-const SIZE = TILE * SCALE; // ~40px por actor a escala base
+const SCALE = 3;
+const SIZE = TILE * SCALE; // 48px por actor a escala base
+// Escena más grande (antes 480x300) para que quepan hasta 6 combatientes por
+// bando en filas separadas de frente/retaguardia sin encimarse — pedido
+// explícito 2026-09-28, tras ver enemigos y aliados montados unos sobre otros.
+const STAGE_W = 640;
+const STAGE_H = 440;
+// Cuatro filas fijas, de arriba abajo: retaguardia enemiga, frente enemigo,
+// frente aliado, retaguardia aliada. Los dos frentes quedan cara a cara en el
+// centro; cada retaguardia es UNA sola fila detrás de su frente.
+const ROW_Y = { enemyBack: 76, enemyFront: 176, partyFront: 286, partyBack: 384 };
 
 // --- estado de módulo: el canvas se crea UNA vez y se reinserta en cada
 // sync (renderCombat() destruye su contenedor con innerHTML= en cada
@@ -160,7 +169,7 @@ function ensureCanvas(container){
     // y el HUD de HP/MP/Espíritu en HTML (ver renderCombat en game.js)
     // sobraba espacio abajo que antes ocupaban las tarjetas viejas — se usa
     // ese espacio para agrandar la escena en vez de dejarlo vacío.
-    canvas.width = 480; canvas.height = 300;
+    canvas.width = STAGE_W; canvas.height = STAGE_H;
     canvas.style.width = '100%';
     canvas.style.maxWidth = '640px';
     canvas.style.height = 'auto';
@@ -206,53 +215,29 @@ function roleFor(kind, entity, playerStyle){
   return entity.tpl ? (entity.tpl.role || 'melee') : 'melee';
 }
 
-function layoutRow(count, baseY, spanX, rowOffset){
-  // reparte `count` actores en una sola fila, centrados; si son muchos
-  // (>4) usa dos filas para no amontonarlos horizontalmente.
-  const perRow = count > 4 ? Math.ceil(count/2) : count;
-  const positions = [];
+// Reparte `count` actores en UNA sola fila centrada, sin límite de cuántos
+// caben en frente o en retaguardia: el ancho de cada casilla se achica solo
+// cuando la fila se llena.
+function layoutRowAt(count, y){
+  const slot = Math.min(150, (STAGE_W - 24) / Math.max(1, count));
+  const span = slot * count;
+  const out = [];
   for(let i=0;i<count;i++){
-    const row = Math.floor(i/perRow);
-    const inRow = i - row*perRow;
-    const rowCount = Math.min(perRow, count - row*perRow);
-    const gap = spanX / (rowCount+1);
-    const x = 240 + gap*(inRow+1) - spanX/2; // 240 = centro horizontal del canvas (480px)
-    const y = baseY + row*(rowOffset||40);
-    // el nombre se recorta a un poco menos que el "gap" completo (no el
-    // 100%): dos actores vecinos maximizando su ancho justo hasta el borde
-    // de su columna terminan tocándose sin ningún margen visible entre
-    // ellos — se vio en 2 enemigos sin línea frontal (misma profundidad,
-    // columnas contiguas) con nombres largos en pantallas angostas.
-    positions.push({x, y, gap, nameMaxW: gap*0.82});
+    out.push({x: STAGE_W/2 - span/2 + slot*(i+0.5), y, gap: slot, nameMaxW: slot*0.9});
   }
-  return positions;
+  return out;
 }
 
-// Ubica a cada actor en una de dos "profundidades" (frente/retaguardia) según
-// su formación real de combate, en vez de una sola fila pareja — un aliado
-// en el frente (o un enemigo de línea frontal) se dibuja más cerca de la
-// otra línea que uno de retaguardia/soporte, como en el prototipo.
-//
-// El reparto en X sale de TODO el grupo junto (layoutRow con el total), no
-// de cada subgrupo por separado: si se calculara por separado, un subgrupo
-// de un solo actor (típico: un único enemigo de línea frontal, o Aldric
-// como único aliado de frente) siempre quedaría centrado en x=240 — y con
-// otro subgrupo de un solo actor (p.ej. un único enemigo de soporte atrás)
-// también centrado en x=240, los dos terminan exactamente superpuestos en
-// X, y el pequeño desplazamiento en Y no alcanza para separar sus nombres.
-// Repartiendo la X entre todos primero, cada actor cae en una columna
-// distinta y el desplazamiento de profundidad en Y ya no necesita evitar
-// esa coincidencia.
-function layoutByDepth(items, isFront, frontY, backY, spanX){
-  const baseY = (frontY + backY) / 2;
-  const deltaFront = frontY - baseY, deltaBack = backY - baseY;
-  const base = layoutRow(items.length, baseY, spanX);
-  return items.map((it, i)=> ({
-    x: base[i].x,
-    y: base[i].y + (isFront(it) ? deltaFront : deltaBack),
-    gap: base[i].gap,
-    nameMaxW: base[i].nameMaxW,
-  }));
+// Separa `items` en fila de frente y fila de retaguardia según isFront(it) y
+// devuelve la posición de cada uno en el mismo orden en que vinieron. Sin
+// topes por fila: 5 tanques van los 5 al frente, y así.
+function layoutByDepth(items, isFront, frontY, backY){
+  const frontIdx = [], backIdx = [];
+  items.forEach((it,i)=>{ (isFront(it) ? frontIdx : backIdx).push(i); });
+  const out = new Array(items.length);
+  layoutRowAt(frontIdx.length, frontY).forEach((p,k)=>{ out[frontIdx[k]] = p; });
+  layoutRowAt(backIdx.length, backY).forEach((p,k)=>{ out[backIdx[k]] = p; });
+  return out;
 }
 
 function syncBattleStage(container, combat, playerInfo, onTargetClick){
@@ -265,18 +250,14 @@ function syncBattleStage(container, combat, playerInfo, onTargetClick){
 
   const seen = new Set();
 
-  // Jugador + aliados se reparten la X juntos, como un solo grupo (ver
-  // layoutByDepth): si al jugador se lo dejaba fijo en x=240 por separado,
-  // terminaba cayendo siempre en la misma columna que el aliado del medio,
-  // y ahí la Y chica de la formación no alcanzaba para separar sus nombres.
-  // Se inserta en el medio de la fila (no al principio) para que de todas
-  // formas caiga en la columna central, como siempre — si quedara primero,
-  // el reparto en X lo mandaría a la columna más a la izquierda.
+  // El jugador es un combatiente más: se ubica en la fila de Frente o de
+  // Retaguardia según su formación real, igual que cualquier aliado, sin un
+  // lugar propio en el centro.
   const allies = combat.allies||[];
   const playerSlot = { isPlayer:true, pos: playerInfo.pos };
-  const party = [...allies.slice(0, Math.ceil(allies.length/2)), playerSlot, ...allies.slice(Math.ceil(allies.length/2))];
-  const playerPartyIdx = party.indexOf(playerSlot);
-  const partyPos = layoutByDepth(party, p=> p.isPlayer ? p.pos==='frente' : p.pos==='frente', 165, 205, 260);
+  const party = [playerSlot, ...allies];
+  const playerPartyIdx = 0;
+  const partyPos = layoutByDepth(party, p=> p.pos==='frente', ROW_Y.partyFront, ROW_Y.partyBack);
 
   // jugador: su Y también refleja su formación real (Frente/Retaguardia, el
   // mismo botón "Reposicionarse" de siempre) en vez de quedar siempre fijo
@@ -302,7 +283,7 @@ function syncBattleStage(container, combat, playerInfo, onTargetClick){
 
   // aliados: los que están en el frente (pos==='frente') se dibujan más
   // cerca de los enemigos que los de retaguardia, siguiendo su formación real.
-  const allyPos = [...partyPos.slice(0, playerPartyIdx), ...partyPos.slice(playerPartyIdx+1)];
+  const allyPos = partyPos.slice(1);
   (combat.allies||[]).forEach((ally, i)=>{
     const k = keyFor('ally', ally);
     seen.add(k);
@@ -320,7 +301,7 @@ function syncBattleStage(container, combat, playerInfo, onTargetClick){
 
   // enemigos: los de línea frontal (tanques/melee, tpl.frontline) se dibujan
   // más cerca del grupo del jugador; los de soporte/distancia quedan atrás.
-  const enemyPos = layoutByDepth(combat.enemies||[], e=> !!(e.tpl && e.tpl.frontline), 100, 50, 340);
+  const enemyPos = layoutByDepth(combat.enemies||[], e=> !!(e.tpl && e.tpl.frontline), ROW_Y.enemyFront, ROW_Y.enemyBack);
   // Si ya no queda ningún enemigo de línea frontal vivo, la retaguardia
   // queda desbloqueada para elegir objetivo (ver playerFrontTargetIndices en
   // game.js) — el resaltado visual debe reflejar exactamente lo mismo.
@@ -424,7 +405,7 @@ async function playBattleAnim(lastActor, lastAction){
     if(!target) return;
     target.flash = ef.kind==='dmg' ? 1 : 0;
     const label = (ef.kind==='heal'?'+':'-') + ef.amount;
-    effects.floats.push({x:target.x||target.baseX, y:(target.y||target.baseY)-38, text:label, color: ef.kind==='heal'?'#7ed957':'#ff6b6b', life:1});
+    effects.floats.push({x:target.x||target.baseX, y:(target.y||target.baseY)-(SIZE-2), text:label, color: ef.kind==='heal'?'#7ed957':'#ff6b6b', life:1});
     if(ef.kind==='heal') effects.healGlows.push({x:target.x||target.baseX, y:(target.y||target.baseY)-16, life:1});
     else effects.bursts.push({x:target.x||target.baseX, y:(target.y||target.baseY)-16, life:1});
   });
