@@ -273,6 +273,52 @@
   .inv-filter-bar{display:flex; flex-wrap:nowrap; gap:6px; overflow-x:auto; padding-bottom:6px; margin-bottom:2px;}
   .inv-filter-bar .nav-btn{flex-shrink:0;}
 
+  /* Tarjetas de aliado en fila horizontal (2026-09-28, pedido explícito:
+     "quiero que tengan su propio cuadro y vayan de manera horizontal, donde
+     verlos en realidad sea un deleite a la vista") — reemplaza la lista
+     vertical de siempre (.inv-item-row) solo en la Taberna. Scroll-snap para
+     que al arrastrar/deslizar (sobre todo en el celular) cada tarjeta quede
+     prolija en su lugar en vez de parar a mitad de camino. */
+  .ally-card-row{
+    display:flex; gap:14px; overflow-x:auto; overflow-y:hidden;
+    padding:6px 4px 16px; margin-bottom:4px; scroll-snap-type:x proximity;
+  }
+  .ally-card{
+    flex:0 0 210px; width:210px; display:flex; flex-direction:column;
+    background:var(--panel); border:1px solid var(--border); border-radius:10px; overflow:hidden;
+    scroll-snap-align:start; transition:transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+  }
+  .ally-card:hover{ transform:translateY(-4px); border-color:var(--bronze); box-shadow:0 10px 22px rgba(0,0,0,0.4); }
+  .ally-card.recruited{ opacity:0.72; }
+  .ally-card-portrait{ position:relative; width:100%; height:210px; background:var(--bg-2); flex-shrink:0; }
+  .ally-card-portrait img{ display:block; width:100%; height:100%; object-fit:cover; object-position:top center; }
+  .ally-card-portrait-fallback{ display:flex; align-items:center; justify-content:center; width:100%; height:100%; font-size:3.2em; }
+  .ally-card-portrait::after{
+    content:''; position:absolute; left:0; right:0; bottom:0; height:50%; pointer-events:none;
+    background:linear-gradient(0deg, var(--panel) 0%, transparent 100%);
+  }
+  .ally-card-role-badge{
+    position:absolute; top:8px; left:8px; z-index:1; background:rgba(14,12,10,0.75);
+    color:var(--bronze-light); font-family:'Cinzel'; font-size:0.62em; text-transform:uppercase; letter-spacing:0.03em;
+    padding:3px 8px; border-radius:20px; border:1px solid rgba(217,183,107,0.4);
+  }
+  .ally-card-owned-badge{
+    position:absolute; top:8px; right:8px; z-index:1; background:rgba(122,154,90,0.88); color:#12190d;
+    font-family:'Cinzel'; font-size:0.6em; text-transform:uppercase; letter-spacing:0.03em; font-weight:700;
+    padding:3px 8px; border-radius:20px;
+  }
+  .ally-card-body{ padding:10px 12px 12px; display:flex; flex-direction:column; gap:7px; flex:1; }
+  .ally-card-body h4{ font-size:1em; color:var(--bronze-light); font-family:'Cinzel', Georgia, serif; }
+  .ally-card-meta{ display:flex; flex-wrap:wrap; gap:4px; }
+  .ally-card-bio{ font-size:0.75em; color:var(--text-dim); font-style:italic; line-height:1.4; margin:0; }
+  .ally-card-skill{ font-size:0.75em; color:var(--good); background:var(--bg-2); border:1px solid var(--border); border-radius:4px; padding:7px 8px; }
+  .ally-card-skill b{ color:var(--text); }
+  .ally-card-body .inv-btn{ margin-top:auto; width:100%; }
+  @media (max-width:600px){
+    .ally-card{ flex-basis:168px; width:168px; }
+    .ally-card-portrait{ height:168px; }
+  }
+
   /* ---------- creation screen ---------- */
   .intro{text-align:center; margin-bottom:22px;}
   .intro h1{font-size:2.1em; color:var(--bronze-light);}

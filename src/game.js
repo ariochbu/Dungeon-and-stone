@@ -3847,20 +3847,6 @@ function potionArtTileHTML(potionId, px){
 function potionRowWithArt(potionId, textHTML, px){
   return `<div style="display:flex; align-items:center; gap:10px; min-width:0; flex:1;">${potionArtTileHTML(potionId, px)}<div style="min-width:0; flex:1;">${textHTML}</div></div>`;
 }
-// Retrato real de cada aliado reclutable (pedido explícito 2026-09-28,
-// "poner las imagenes de los aliados... mas o menos como cuando van a crear
-// personaje") — mismo respaldo a emoji que el resto del arte si la imagen
-// no carga. A diferencia de itemArtTileHTML (ítems, cuadrado, object-fit:
-// contain), el retrato es un busto rectangular y usa object-fit:cover,
-// mismo criterio que .pick-card-art en la pantalla de creación.
-function allyPortraitTileHTML(templateId, icon, w, h){
-  w = w||44; h = h||56;
-  const inner = `<img src="src/assets/aliados/${templateId}.jpg" alt="" style="width:100%; height:100%; object-fit:cover; object-position:top center;" onerror="this.replaceWith(Object.assign(document.createElement('span'),{style:'font-size:${Math.round(Math.min(w,h)*0.5)}px', textContent:'${icon}'}))">`;
-  return `<div class="item-art-tile" style="width:${w}px; height:${h}px; border-radius:6px;">${inner}</div>`;
-}
-function allyRowWithArt(templateId, icon, textHTML, w, h){
-  return `<div style="display:flex; align-items:center; gap:10px; min-width:0; flex:1;">${allyPortraitTileHTML(templateId, icon, w, h)}<div style="min-width:0; flex:1;">${textHTML}</div></div>`;
-}
 // Halo de color por rareza para toda la fila (no solo el nombre) — mismo
 // criterio que pedía distinguir de un vistazo un objeto Rango A/Legendario
 // del resto sin tener que leer el pill. El degradado se apaga a los ~110px
@@ -5214,9 +5200,9 @@ async function hireAlly(templateId){
 }
 // Revelación animada al reclutar (pedido explícito 2026-09-28: "añadir algo
 // mas animado al momento de reclutarlo"). Retrato real del aliado (ver
-// allyPortraitTileHTML/src/assets/aliados) + su bio como "mini-historia" —
-// ambos ya existían en ALLY_ROSTER, solo faltaba un momento propio para
-// mostrarlos en vez de una línea más en la Crónica.
+// src/assets/aliados/, mismas tarjetas horizontales que renderTaberna) + su
+// bio como "mini-historia" — ambos ya existían en ALLY_ROSTER, solo faltaba
+// un momento propio para mostrarlos en vez de una línea más en la Crónica.
 function showAllyRecruitReveal(tpl){
   const div = document.createElement('div');
   div.className = 'overlay-msg ally-reveal-backdrop';
@@ -5338,17 +5324,26 @@ function renderTaberna(){
         <div style="display:flex; flex-direction:column; gap:6px; margin-top:6px;">${optionsHTML}</div>
       </div>`;
     })() : '';
-    return `<div class="inv-item-row">
-      ${allyRowWithArt(a.template_id, tpl.icon||'⚔️', `
-        <b>${tpl.icon||'⚔️'} ${a.name}</b> <span class="slot-tag">${a.role} · nivel ${a.level}</span> <span class="slot-tag" style="border-color:${satColor}; color:${satColor};">Satisfacción ${satisfaction}%</span>
-        <div class="inv-item-bonus neutral">${tpl.bio||''}</div>
-        ${tpl.skillName ? `<div class="inv-item-bonus" style="margin-top:2px;"><b>${tpl.skillName}</b> — ${tpl.skillDesc}</div>` : ''}
-        <div class="bar-track" style="margin-top:6px;"><div class="bar-fill xp" style="width:${xpPct}%"></div></div>
-        <div style="font-size:0.7em; color:var(--text-dim); margin-top:2px;">${xpText}</div>
-        <div style="font-size:0.7em; color:var(--text-dim); margin-top:2px;">Paga ${allyWage(a)} de oro cada vez que sales del laberinto. Si no te alcanza el oro, su satisfacción baja.</div>
+    return `<div class="ally-card">
+      <div class="ally-card-portrait">
+        <img src="src/assets/aliados/${a.template_id}.jpg" alt=""
+          onerror="this.parentElement.insertAdjacentHTML('afterbegin', '<span class=\\'ally-card-portrait-fallback\\'>${tpl.icon||'⚔️'}</span>'); this.remove();">
+        <span class="ally-card-role-badge">${tpl.icon||'⚔️'} ${a.role}</span>
+      </div>
+      <div class="ally-card-body">
+        <h4>${a.name}</h4>
+        <div class="ally-card-meta">
+          <span class="slot-tag">Nivel ${a.level}</span>
+          <span class="slot-tag" style="border-color:${satColor}; color:${satColor};">Satisfacción ${satisfaction}%</span>
+        </div>
+        <p class="ally-card-bio">${tpl.bio||''}</p>
+        ${tpl.skillName ? `<div class="ally-card-skill"><b>${tpl.skillName}</b> — ${tpl.skillDesc}</div>` : ''}
+        <div class="bar-track" style="margin-top:2px;"><div class="bar-fill xp" style="width:${xpPct}%"></div></div>
+        <div style="font-size:0.7em; color:var(--text-dim);">${xpText}</div>
+        <div style="font-size:0.7em; color:var(--text-dim);">Paga ${allyWage(a)} de oro al salir del laberinto.</div>
         ${autoGearPromptHTML}
-      `, 48, 60)}
-      <button class="inv-btn danger" data-dismiss="${a.id}">Despedir</button>
+        <button class="inv-btn danger" data-dismiss="${a.id}">Despedir</button>
+      </div>
     </div>`;
   }).join('') : `<p class="inv-empty-msg">Todavía no has reclutado a nadie.</p>`;
 
@@ -5359,13 +5354,19 @@ function renderTaberna(){
     const disabled = already || full || state.char.gold < cost;
     let btnLabel = `Reclutar (${cost} oro)`;
     if(already) btnLabel = 'Ya reclutado';
-    return `<div class="inv-item-row">
-      ${allyRowWithArt(tpl.templateId, tpl.icon, `
-        <b>${tpl.icon} ${tpl.name}</b> <span class="slot-tag">${tpl.role}</span>
-        <div class="inv-item-bonus neutral">${tpl.bio}</div>
-        <div class="inv-item-bonus" style="margin-top:2px;"><b>${tpl.skillName}</b> — ${tpl.skillDesc}</div>
-      `, 56, 70)}
-      <button class="inv-btn" data-hire="${tpl.templateId}" ${disabled?'disabled':''}>${btnLabel}</button>
+    return `<div class="ally-card${already?' recruited':''}">
+      <div class="ally-card-portrait">
+        <img src="src/assets/aliados/${tpl.templateId}.jpg" alt=""
+          onerror="this.parentElement.insertAdjacentHTML('afterbegin', '<span class=\\'ally-card-portrait-fallback\\'>${tpl.icon}</span>'); this.remove();">
+        <span class="ally-card-role-badge">${tpl.icon} ${tpl.role}</span>
+        ${already ? `<span class="ally-card-owned-badge">En tu equipo</span>` : ''}
+      </div>
+      <div class="ally-card-body">
+        <h4>${tpl.name}</h4>
+        <p class="ally-card-bio">${tpl.bio}</p>
+        <div class="ally-card-skill"><b>${tpl.skillName}</b> — ${tpl.skillDesc}</div>
+        <button class="inv-btn" data-hire="${tpl.templateId}" ${disabled?'disabled':''}>${btnLabel}</button>
+      </div>
     </div>`;
   }).join('');
 
@@ -5377,10 +5378,10 @@ function renderTaberna(){
     <p style="color:var(--text-dim); font-size:0.85em; margin-top:0;">Hasta ${MAX_ALLIES} aliados a la vez, ${MAX_ALLIES+1} contándote a ti. Pelean junto a ti automáticamente — el que tiene "frontline" ocupa tu lugar en el frente y absorbe los golpes. Cada uno cobra un salario cada vez que sales del laberinto: si no te alcanza el oro para pagarle varias veces seguidas, pierde la confianza en ti y abandona el grupo. Un aliado despedido o que deserta siempre puede volver a reclutarse más adelante, a nivel 1.</p>
 
     <div class="section-label">Tu equipo (${allies.length}/${MAX_ALLIES})</div>
-    ${hiredHTML}
+    <div class="ally-card-row">${hiredHTML}</div>
 
     <div class="section-label">Disponibles para reclutar</div>
-    ${rosterHTML}
+    <div class="ally-card-row">${rosterHTML}</div>
   `;
   document.getElementById('btn-close-taberna').onclick = ()=>{ tabernaOpen=false; renderAll(); };
   document.querySelectorAll('[data-hire]').forEach(btn=>{
