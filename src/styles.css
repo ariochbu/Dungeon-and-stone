@@ -522,6 +522,64 @@
   }
   .overlay-card h2{color:var(--bronze-light); margin-bottom:10px;}
   .overlay-card p{color:var(--text-dim); font-size:0.9em; margin-bottom:18px;}
+
+  /* Revelación animada al reclutar un aliado (2026-09-28, pedido explícito)
+     — mismo .overlay-msg/.overlay-card de siempre, pero más ancha y con el
+     retrato real arriba sin padding, más una entrada con rebote (no solo un
+     fade) para que SE SIENTA como un evento, no una tarjeta más. */
+  .ally-reveal-card{
+    max-width:360px; padding:0; overflow:hidden;
+    animation:ally-reveal-in 0.5s cubic-bezier(0.34,1.56,0.64,1) both;
+  }
+  .ally-reveal-portrait-wrap{
+    position:relative; width:100%; height:240px; background:var(--bg-2); overflow:hidden;
+  }
+  .ally-reveal-portrait{
+    display:block; width:100%; height:100%; object-fit:cover; object-position:top center;
+    animation:ally-reveal-portrait-in 0.6s ease-out 0.1s both;
+  }
+  .ally-reveal-portrait-fallback{
+    display:flex; align-items:center; justify-content:center; width:100%; height:100%; font-size:4em;
+  }
+  /* Brillo diagonal que atraviesa el retrato una sola vez, mismo lenguaje
+     visual que un reveal de gacha — puramente decorativo (pointer-events:none). */
+  .ally-reveal-portrait-wrap::after{
+    content:''; position:absolute; inset:0; pointer-events:none;
+    background:linear-gradient(115deg, transparent 40%, rgba(255,255,255,0.35) 50%, transparent 60%);
+    background-size:250% 250%; background-position:120% 0;
+    animation:ally-reveal-shine 1s ease-out 0.35s both;
+  }
+  .ally-reveal-portrait-wrap::before{
+    content:''; position:absolute; left:0; right:0; bottom:0; height:60%;
+    background:linear-gradient(0deg, var(--panel) 0%, transparent 100%); pointer-events:none;
+  }
+  .ally-reveal-body{ padding:16px 22px 22px; text-align:center; }
+  .ally-reveal-kicker{
+    font-family:'Cinzel'; font-size:0.72em; letter-spacing:0.08em; text-transform:uppercase;
+    color:var(--bronze-light); margin-bottom:4px;
+  }
+  .ally-reveal-card h2{color:var(--bronze-light); margin-bottom:8px;}
+  .ally-reveal-bio{color:var(--text-dim); font-size:0.88em; font-style:italic; margin-bottom:12px;}
+  .ally-reveal-skill{
+    font-size:0.82em; color:var(--good); background:var(--bg-2); border:1px solid var(--border);
+    border-radius:4px; padding:8px 10px; margin-bottom:18px; text-align:left;
+  }
+  .ally-reveal-skill b{color:var(--text);}
+  @keyframes ally-reveal-in{
+    0%{ opacity:0; transform:scale(0.82) translateY(26px); }
+    100%{ opacity:1; transform:scale(1) translateY(0); }
+  }
+  @keyframes ally-reveal-portrait-in{
+    0%{ opacity:0; transform:scale(1.12); filter:brightness(1.6) saturate(0.6); }
+    100%{ opacity:1; transform:scale(1); filter:brightness(1) saturate(1); }
+  }
+  @keyframes ally-reveal-shine{
+    0%{ background-position:120% 0; } 100%{ background-position:-20% 0; }
+  }
+  @media (prefers-reduced-motion:reduce){
+    .ally-reveal-card, .ally-reveal-portrait{ animation:none; }
+    .ally-reveal-portrait-wrap::after{ animation:none; display:none; }
+  }
   .footer-note{text-align:center; color:var(--text-dim); font-size:0.72em; margin-top:22px;}
 
   /* ---------- auth / username forms ---------- */
