@@ -7570,8 +7570,10 @@ function generateLoot(floorIdx, level){
 // de su conjunto afín (Raro en nivel 10, Rango B en 20-30, Rango A en 40+),
 // piedras de alma del rango equivalente en todos sus espacios, 3 pociones
 // de vida y 4 aliados del mismo nivel y rango de equipo.
-// Con ese grupo la media de victorias queda en ~63-69% en los seis jefes
-// (con 2 aliados baja a ~20%). El Custodio (50) partía muy por debajo de la
+// Con ese grupo la media de victorias queda en ~63-69% en los jefes 10-50
+// y ~50% en Storm Gush (60) (con 2 aliados baja mucho más).
+// Meta pedida para las décadas futuras (con equipo Rango A; el S/SS y la
+// estrategia del jugador lo suben): 70 → 40%, 80 → 30%, 90 → 20%, 100 → 10%. El Custodio (50) partía muy por debajo de la
 // curva y se cura, así que se le sube más el ataque que la vida para no
 // alargar el combate.
 const DECADE_BOSS_TUNING = {
@@ -7580,7 +7582,7 @@ const DECADE_BOSS_TUNING = {
   30: {hp:1.44, atk:1.20},
   40: {hp:1.36, atk:1.17},
   50: {hp:2.00, atk:2.95},
-  60: {hp:2.80, atk:1.67},
+  60: {hp:3.20, atk:1.79},
 };
 function makeEnemy(tpl, floorIdx, level){
   const lvlMult = levelMult(level||1);
