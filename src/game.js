@@ -3712,9 +3712,14 @@ function migrateState(){
 // El personaje vive en la tabla `characters` de Supabase (1 fila por cuenta).
 // La Crónica (log) es solo sabor narrativo, no progreso: se queda en
 // localStorage por dispositivo para no generar escrituras de red por cada línea.
-function logStorageKey(){ return currentUser ? 'dns_log_'+currentUser.id : null; }
-function loadLocalLog(){
-  const key = logStorageKey();
+// Clave por PERSONAJE (2026-10-02): antes era por cuenta y, con varios
+// personajes por cuenta, la crónica de uno aparecía en la de otro.
+function logStorageKey(charId){
+  const id = charId || (state && state.char && state.char.id);
+  return currentUser && id ? 'dns_log_'+currentUser.id+'_'+id : null;
+}
+function loadLocalLog(charId){
+  const key = logStorageKey(charId);
   if(!key) return [];
   try{
     const raw = localStorage.getItem(key);
@@ -3849,7 +3854,7 @@ function rowToState(row){
       checkin: row.checkin || {day:0, lastClaimDate:null}
     },
     dungeon: row.dungeon || null,
-    log: loadLocalLog()
+    log: loadLocalLog(row.id)
   };
 }
 
@@ -5485,6 +5490,7 @@ function renderSideNav(){
         <div class="sn-bar xp" title="Experiencia ${state.char.xp}/${xpNeeded}"><i style="width:${xpPct}%"></i></div>
       </div>
     </div>
+    <div class="sn-nav">
     <div class="sn-sec"><h5>Inicio</h5>
       ${item('welcome','✨','Bienvenida')}
       ${item('map','🗺️','Mapa de la ciudad')}
@@ -5509,6 +5515,7 @@ function renderSideNav(){
     <div class="sn-sec"><h5>Cuenta</h5>
       ${item('tutorial','❓','¿Cómo jugar?')}
       ${item('options','⚙️','Opciones')}
+    </div>
     </div>`;
   el.querySelectorAll('.sn-item').forEach(it=>{ it.onclick = ()=> cityNavigate(it.dataset.sn); });
 }
@@ -5606,7 +5613,7 @@ function renderCityMap(){
       <div class="cm-plaza"></div>
       ${pins}
       <div class="cm-portal" id="cm-portal"><span>LABERINTO<small>Récord: nivel ${state.char.record ? state.char.record.level : 1}</small></span></div>
-      <div class="cm-hint">Toca un edificio o usa el menú de la izquierda.</div>
+      <div class="cm-hint">Toca un edificio o usa el menú.</div>
     </div>`;
   document.querySelectorAll('.cm-pin').forEach(pin=>{ pin.onclick = ()=> cityNavigate(pin.dataset.cm); });
   document.getElementById('cm-portal').onclick = ()=> cityNavigate('laberinto');

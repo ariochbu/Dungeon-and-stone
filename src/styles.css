@@ -956,13 +956,21 @@ details.admin-acc > summary > span{ flex:1; }
 
 @media (max-width:840px){
   .sheet.side-nav-mode{ position:static; }
-  .sheet.side-nav-mode .sn-sec{ display:flex; flex-wrap:wrap; gap:4px; padding:6px 10px; }
-  .sheet.side-nav-mode .sn-sec h5{ width:100%; margin:2px 0; }
-  .sheet.side-nav-mode .sn-item{ border-left:none; border:1px solid var(--border); border-radius:16px; padding:4px 10px; font-size:0.88em; }
+  .sheet.side-nav-mode .sn-me{ padding:10px; }
+  .sheet.side-nav-mode .sn-nav{ display:flex; gap:6px; overflow-x:auto; padding:8px 10px 10px; scrollbar-width:thin; -webkit-overflow-scrolling:touch; }
+  .sheet.side-nav-mode .sn-sec{ display:flex; gap:6px; padding:0; flex-shrink:0; }
+  .sheet.side-nav-mode .sn-sec h5{ display:none; }
+  .sheet.side-nav-mode .sn-item{ flex-shrink:0; white-space:nowrap; border-left:none; border:1px solid var(--border); border-radius:16px; padding:5px 11px; font-size:0.86em; gap:6px; }
+  .sheet.side-nav-mode .sn-ic{ width:auto; }
   .sheet.side-nav-mode .sn-item.on{ border-color:var(--bronze-light); }
-  .city-map{ height:440px; }
-  .cm-bld{ width:64px; height:52px; font-size:1.5em; }
-  .cm-portal{ width:100px; height:100px; }
+  .city-map{ height:560px; }
+  .cm-pin{ transform:translate(-50%,-100%) scale(0.72); }
+  .cm-pin:hover{ transform:translate(-50%,-100%) scale(0.76); }
+  .cm-bld{ width:72px; height:58px; font-size:1.6em; }
+  .cm-tag{ font-size:0.8em; }
+  .cm-portal{ width:96px; height:96px; }
+  .cm-portal span{ font-size:0.7em; }
+  .cm-hint{ display:none; }
   .cw-comic{ grid-template-columns:1fr 1fr; grid-template-rows:140px 140px 120px; }
   .cw-panel.big{ grid-row:auto; }
 }
