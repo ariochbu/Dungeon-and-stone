@@ -89,7 +89,7 @@ const STYLES = {
   doblefilo: {
     // 2026-10-02 (pedido explícito): Asesino pasa a ser 100% Físico — antes
     // promediaba Físico+Habilidad ('fishab'). Sus armas y guantes pasan a dar
-    // Físico en el mismo cambio (ver WEAPON_CATALOG.doblefilo/GEAR_CLASS_STAT).
+    // Físico en el mismo cambio (ver WEAPON_CATALOG.doblefilo).
     id:'doblefilo', name:'Asesino', icon:'🔪', scaleStat:'fis',
     desc:'Dagas gemelas. Desangra a tu presa y luego termina el trabajo.',
     skills:['corte_rapido','danza_cuchillas','golpe_gracia']
@@ -265,7 +265,7 @@ const SKILLS = {
   lluvia_flechas: {
     // Nerf explícito 2026-09-26: de 20 a 40 MP (era barata para ser daño en
     // área a todos los enemigos vivos).
-    id:'lluvia_flechas', name:'Lluvia de flechas', cost:{tipo:'estamina', valor:40}, dmgType:'fisico', mult:0.55, aoe:true,
+    id:'lluvia_flechas', name:'Lluvia de flechas', cost:{tipo:'estamina', valor:40}, dmgType:'fisico', mult:0.55,
     bonusVsMarked:0.25,
     // Nerf 2026-10-02 (pedido explícito, "borra a todos en 5 turnos"): ya no
     // pega a TODOS los enemigos vivos — solo a la línea frontal; recién
@@ -1386,7 +1386,6 @@ function ensurePets(){
 function ownedPetCount(id){ ensurePets(); return state.char.pets.owned[id]||0; }
 function equippedPetIds(){ ensurePets(); return state.char.pets.equipped; }
 function equippedPets(){ return equippedPetIds().map(petTpl).filter(Boolean); }
-function isPetEquipped(id){ return equippedPetIds().includes(Number(id)); }
 function togglePetEquip(id){
   ensurePets();
   id = Number(id);
@@ -1995,204 +1994,18 @@ function makeWeaponItem(slot, styleId, rank, name){
 }
 
 // ============================================================
-// CATÁLOGO DE EQUIPO GENERAL — recalibración 2026-09-16 (pedido explícito).
-// Igual que las armas: cada senda tiene su propio nombre por rango para
-// casco/armadura/botas/guantes/amuleto ("Accesorio" en pantalla — el slot
-// interno sigue llamándose 'amuleto', ver slotLabel(), mismo criterio que el
-// renombre Arma pesada -> Guerrero: solo cambia la etiqueta, no la clave).
-// Los NÚMEROS de casco/armadura/botas/amuleto son los mismos para las 5
-// sendas (solo el nombre cambia); guantes es la única pieza que de verdad
-// varía en stat: Físico para Guerrero/Arquero (pesada/tirador), Habilidad
-// para Asesino/Mago/Sacerdote (doblefilo/mago/sacerdote).
+// Orden de rangos del equipo (lo usan conjuntos, armas y el equipo
+// automático). El catálogo viejo de equipo por senda (Casco de piedra...
+// Placa de vacío, CASCO_TIERS/ARMADURA_TIERS/...) se ELIMINÓ el 2026-10-02:
+// quedó retirado al pasar todo el equipo general a Voluntad Inquebrantable
+// y ya nada lo leía.
 // ============================================================
-// 2026-09-24: se agrega 'legendario' (Tier S) como 6to escalón — su nombre
-// de material en GEAR_NAMES es "de vacío" en las 5 sendas (el material que
-// sigue después de piedra/bronce/plata/oro/platino, sin atarlo a la lore de
-// un único jefe ya que Tier S se puede desbloquear con fragmentos de
-// cualquier década — ver TIER_S_RECIPE). Hoy este rango NO se vende en la
-// Tienda/Gremio para equipo general (solo armas y piedras, pedido explícito
-// 2026-09-24) — vive acá sobre todo para que el set del aliado Sacerdote
-// pueda llegar a Tier S al vencer a Storm Gush (ver el hook en
-// handleVictory, isDecadeFinal && clearedLevel===60).
 const GEAR_RANK_ORDER = ['comun','poco_comun','raro','rango_b','rango_a','legendario'];
-const GEAR_NAMES = {
-  pesada: {
-    casco:['Casco de piedra','Casco de bronce','Casco de plata','Casco de oro','Casco de platino','Casco de vacío'],
-    armadura:['Placa de piedra','Placa de bronce','Placa de plata','Placa de oro','Placa de platino','Placa de vacío'],
-    botas:['Grevas de piedra','Grevas de bronce','Grevas de plata','Grevas de oro','Grevas de platino','Grevas de vacío'],
-    guantes:['Manoplas de piedra','Manoplas de bronce','Manoplas de plata','Manoplas de oro','Manoplas de platino','Manoplas de vacío'],
-    amuleto:['Talismán roto','Talismán','Talismán imbuido con magia','Talismán de sangre','Talismán despertado','Talismán del vacío'],
-  },
-  doblefilo: {
-    casco:['Máscara de piedra','Máscara de bronce','Máscara de plata','Máscara de oro','Máscara de platino','Máscara de vacío'],
-    armadura:['Manto de piedra','Manto de bronce','Manto de plata','Manto de oro','Manto de platino','Manto de vacío'],
-    botas:['Zapatillas de piedra','Zapatillas de bronce','Zapatillas de plata','Zapatillas de oro','Zapatillas de platino','Zapatillas de vacío'],
-    guantes:['Zarpas de piedra','Zarpas de bronce','Zarpas de plata','Zarpas de oro','Zarpas de platino','Zarpas de vacío'],
-    amuleto:['Anillo roto','Anillo','Anillo imbuido con magia','Anillo de sangre','Anillo despertado','Anillo del vacío'],
-  },
-  tirador: {
-    casco:['Capucha de piedra','Capucha de bronce','Capucha de plata','Capucha de oro','Capucha de platino','Capucha de vacío'],
-    armadura:['Cota de piedra','Cota de bronce','Cota de plata','Cota de oro','Cota de platino','Cota de vacío'],
-    botas:['Botas de piedra','Botas de bronce','Botas de plata','Botas de oro','Botas de platino','Botas de vacío'],
-    guantes:['Guantes de piedra','Guantes de bronce','Guantes de plata','Guantes de oro','Guantes de platino','Guantes de vacío'],
-    amuleto:['Amuleto roto','Amuleto','Amuleto imbuido con magia','Amuleto de sangre','Amuleto despertado','Amuleto del vacío'],
-  },
-  mago: {
-    casco:['Diadema de piedra','Diadema de bronce','Diadema de plata','Diadema de oro','Diadema de platino','Diadema de vacío'],
-    armadura:['Túnica de piedra','Túnica de bronce','Túnica de plata','Túnica de oro','Túnica de platino','Túnica de vacío'],
-    botas:['Sandalias de piedra','Sandalias de bronce','Sandalias de plata','Sandalias de oro','Sandalias de platino','Sandalias de vacío'],
-    guantes:['Mitones de piedra','Mitones de bronce','Mitones de plata','Mitones de oro','Mitones de platino','Mitones de vacío'],
-    amuleto:['Libro roto','Libro','Libro imbuido con magia','Libro de sangre','Libro despertado','Libro del vacío'],
-  },
-  // Sacerdote comparte los números de Mago (ambos escalan Habilidad) pero
-  // con nombres propios — evité repetir "Libro" en el amuleto para que no
-  // compita en nombre con el del Mago; le puse "Reliquia" en su lugar.
-  sacerdote: {
-    casco:['Corona de piedra','Corona de bronce','Corona de plata','Corona de oro','Corona de platino','Corona de vacío'],
-    armadura:['Sotana de piedra','Sotana de bronce','Sotana de plata','Sotana de oro','Sotana de platino','Sotana de vacío'],
-    botas:['Alpargatas de piedra','Alpargatas de bronce','Alpargatas de plata','Alpargatas de oro','Alpargatas de platino','Alpargatas de vacío'],
-    guantes:['Vendas de piedra','Vendas de bronce','Vendas de plata','Vendas de oro','Vendas de platino','Vendas de vacío'],
-    amuleto:['Reliquia rota','Reliquia','Reliquia imbuida con fe','Reliquia de sangre','Reliquia despertada','Reliquia del vacío'],
-  },
-  paladin: {
-    casco:['Yelmo de piedra','Yelmo de bronce','Yelmo de plata','Yelmo de oro','Yelmo de platino','Yelmo de vacío'],
-    armadura:['Coraza de piedra','Coraza de bronce','Coraza de plata','Coraza de oro','Coraza de platino','Coraza de vacío'],
-    botas:['Sabatones de piedra','Sabatones de bronce','Sabatones de plata','Sabatones de oro','Sabatones de platino','Sabatones de vacío'],
-    guantes:['Guanteletes de piedra','Guanteletes de bronce','Guanteletes de plata','Guanteletes de oro','Guanteletes de platino','Guanteletes de vacío'],
-    amuleto:['Sello roto','Sello','Sello imbuido con fe','Sello de sangre','Sello despertado','Sello del vacío'],
-  },
-  hechicero: {
-    casco:['Capirote de piedra','Capirote de bronce','Capirote de plata','Capirote de oro','Capirote de platino','Capirote de vacío'],
-    armadura:['Hopalanda de piedra','Hopalanda de bronce','Hopalanda de plata','Hopalanda de oro','Hopalanda de platino','Hopalanda de vacío'],
-    botas:['Botines de piedra','Botines de bronce','Botines de plata','Botines de oro','Botines de platino','Botines de vacío'],
-    guantes:['Manillas de piedra','Manillas de bronce','Manillas de plata','Manillas de oro','Manillas de platino','Manillas de vacío'],
-    amuleto:['Fetiche roto','Fetiche','Fetiche imbuido con magia','Fetiche de sangre','Fetiche despertado','Fetiche del vacío'],
-  },
-};
-// Casco: vida máxima (flat, SIN el ×8 que sí aplica al viejo bonus.stat==
-// 'maxhp' de Armadura — ver item.mods en derived()) + Precisión (nueva:
-// contrarresta la evasión enemiga) + a rango A, aumento de daño.
-// 2026-09-24, pedido explícito: Rango A sube su vida (35->50) y se agrega
-// Tier S (legendario) — pasiva propia: por debajo de 50% de vida, +5%
-// reducción de daño recibido (ver TIER_S_PASSIVE_EFFECTS/'casco_s').
-const CASCO_TIERS = [
-  {rank:'comun', mods:{maxhp_flat:15}},
-  {rank:'poco_comun', mods:{maxhp_flat:20, precision:5}},
-  {rank:'raro', mods:{maxhp_flat:25, precision:10}},
-  {rank:'rango_b', mods:{maxhp_flat:30, precision:15}},
-  {rank:'rango_a', mods:{maxhp_flat:50, precision:20}, specials:[{type:'aumento_dano', value:0.05, text:'de aumento de daño'}]},
-  {rank:'legendario', mods:{maxhp_flat:80, precision:25}, specials:[{type:'aumento_dano', value:0.07, text:'de aumento de daño'}, {type:'tier_s_passive', tierSProc:'casco_s', text:'por debajo del 50% de vida: +5% reducción de daño recibido'}]},
-];
-// Armadura: resistencia física de siempre (mismo canal que raza/amuleto,
-// dmgType 'fisico') + % de reducción de daño recibido + a rango A, bloqueo.
-// 2026-09-24: Rango A gana +20 HP (antes no daba nada de vida) y se agrega
-// Tier S — pasiva propia: el primer golpe recibido en cada combate, -10%
-// de daño (ver 'armadura_s').
-const ARMADURA_TIERS = [
-  {rank:'comun', bonus:{res:'fisico', value:10}},
-  {rank:'poco_comun', bonus:{res:'fisico', value:15}, specials:[{type:'reduccion_dano', value:0.05, text:'de reducción de daño recibido'}]},
-  {rank:'raro', bonus:{res:'fisico', value:20}, specials:[{type:'reduccion_dano', value:0.08, text:'de reducción de daño recibido'}]},
-  {rank:'rango_b', bonus:{res:'fisico', value:25}, specials:[{type:'reduccion_dano', value:0.12, text:'de reducción de daño recibido'}]},
-  {rank:'rango_a', bonus:{res:'fisico', value:30}, mods:{maxhp_flat:20}, specials:[{type:'reduccion_dano', value:0.12, text:'de reducción de daño recibido'},{type:'bloqueo', chance:0.05, text:'de bloquear ataque'}]},
-  {rank:'legendario', bonus:{res:'fisico', value:40}, mods:{maxhp_flat:40}, specials:[{type:'reduccion_dano', value:0.16, text:'de reducción de daño recibido'},{type:'bloqueo', chance:0.08, text:'de bloquear ataque'}, {type:'tier_s_passive', tierSProc:'armadura_s', text:'el primer golpe recibido en cada combate hace -10% de daño'}]},
-];
-// Botas: Resistencia mágica (canal nuevo, ver derived().resMagica — listo
-// para cuando el bestiario tenga ataques elementales propios, todavía casi
-// ningún enemigo pega distinto de físico) + resistencia a efectos de estado
-// "físicos" (Sangrado/Debilitado/Parálisis/Ceguera/Ralentizado/Tambaleo -
-// Miedo/Confusión son alteraciones MENTALES, esas las cubre el amuleto) + a
-// rango A, evasión.
-// 2026-09-24: ariochbu preguntó si Botas también debería ganar vida en Rango
-// A junto con Casco/Armadura/Amuleto — decisión: no, se deja Botas sin HP a
-// propósito para conservar su identidad de única pieza "mágica/estados" (así
-// lo dice el propio punto 9 del documento de diseño: "casco vida/precisión,
-// armadura resistencia/reducción, botas magia/estados, amuleto fortaleza
-// mental/recursos" — meterle vida a las 4 piezas hace que cualquier pieza dé
-// lo mismo y el inventario deja de tener sentido). Tier S sí se agrega, con
-// la misma identidad: pasiva propia, resistir la primera alteración de
-// estado negativa de cada combate (ver 'botas_s').
-const BOTAS_TIERS = [
-  {rank:'comun', mods:{res_magica:10}},
-  {rank:'poco_comun', mods:{res_magica:15, resistencia_estado:5}},
-  {rank:'raro', mods:{res_magica:20, resistencia_estado:8}},
-  {rank:'rango_b', mods:{res_magica:25, resistencia_estado:12}},
-  {rank:'rango_a', mods:{res_magica:30, resistencia_estado:12}, specials:[{type:'evasion_flat', value:0.05, text:'de evasión'}]},
-  {rank:'legendario', mods:{res_magica:40, resistencia_estado:16}, specials:[{type:'evasion_flat', value:0.07, text:'de evasión'}, {type:'tier_s_passive', tierSProc:'botas_s', text:'50% de resistir la primera alteración de estado negativa de cada combate'}]},
-];
-// Amuleto/Accesorio: % Fortaleza mental (resiste Miedo/Confusión
-// específicamente) + MP plano + a rango A, Espíritu plano también.
-// 2026-09-24: Rango A gana +15 HP (antes no daba nada de vida) y +15
-// Espíritu (antes +5). Tier S agrega +10% de resistencia adicional a
-// efectos de control (mentales Y físicos, ver 'amuleto_s').
-const AMULETO_TIERS = [
-  {rank:'comun', mods:{fortaleza_mental:5}},
-  {rank:'poco_comun', mods:{fortaleza_mental:8, mp_flat:5}},
-  {rank:'raro', mods:{fortaleza_mental:12, mp_flat:10}},
-  {rank:'rango_b', mods:{fortaleza_mental:15, mp_flat:15}},
-  {rank:'rango_a', mods:{fortaleza_mental:18, mp_flat:15, espiritu_flat:15, maxhp_flat:15}},
-  {rank:'legendario', mods:{fortaleza_mental:22, mp_flat:20, espiritu_flat:20, maxhp_flat:25}, specials:[{type:'tier_s_passive', tierSProc:'amuleto_s', text:'+10% de resistencia adicional a efectos de control'}]},
-];
-// Guantes: la única pieza donde el stat de verdad cambia por senda. A rango
-// A penetra la defensa contraria a su propio daño — física para
-// Guerrero/Arquero, mágica para Asesino/Mago/Sacerdote (reusa
-// 'penetracion_armadura' de las armas; 'penetracion_magica' es nuevo).
-// 2026-09-24: Tier S (legendario) agrega 'proc_next_skill' — 5% de
-// probabilidad al golpear de potenciar tu siguiente habilidad (ver
-// TIER_S_PROC_EFFECTS/'guantes_s' en applyEquippedSpecials), 1 vez por
-// combate.
-function guantesTiers(stat, penType, penText){
-  return [
-    {rank:'comun', bonus:{stat, value:5}},
-    {rank:'poco_comun', bonus:{stat, value:8}, specials:[{type:'aumento_dano', value:0.05, text:'de aumento de daño'}]},
-    {rank:'raro', bonus:{stat, value:12}, specials:[{type:'aumento_dano', value:0.08, text:'de aumento de daño'}]},
-    {rank:'rango_b', bonus:{stat, value:16}, specials:[{type:'aumento_dano', value:0.12, text:'de aumento de daño'}]},
-    {rank:'rango_a', bonus:{stat, value:20}, specials:[{type:'aumento_dano', value:0.12, text:'de aumento de daño'},{type:penType, value:0.05, text:penText}]},
-    {rank:'legendario', bonus:{stat, value:26}, specials:[{type:'aumento_dano', value:0.15, text:'de aumento de daño'},{type:penType, value:0.08, text:penText}, {type:'proc_chance', chance:0.05, tierSProc:'guantes_s', text:'de potenciar tu siguiente habilidad en +25% de daño durante 4 turnos'}]},
-  ];
-}
-// 2026-09-16: corregido tras revisar qué stat/penetración de verdad usa
-// cada senda para hacer daño (ariochbu preguntó "¿Habilidad aumenta el
-// daño mágico?" y la respuesta destapó dos desajustes):
-// - Mago/Sacerdote escalan su daño con ESPÍRITU, no Habilidad — sus
-//   guantes daban Habilidad (útil solo para crítico/evasión/MP, no para
-//   pegar más fuerte). Ahora dan Espíritu, como Guerrero/Arquero dan
-//   Físico (su propio stat de daño).
-// - Asesino sigue dando Habilidad en sus guantes (mismo criterio que ya
-//   usa su arma — su fórmula real es un promedio Físico+Habilidad, no se
-//   puede repartir un bono entre dos stats) PERO su daño es 100% físico
-//   (dmgType 'fisico' en sus 3 habilidades) — su penetración de guantes
-//   debía ser de armadura física, no de resistencia mágica (que para
-//   Asesino no hacía nada, nunca golpea con resKey!=='fisico').
-// 2026-10-02: Asesino -> Físico y Mago -> Habilidad (pedido explícito, junto
-// con el cambio de stat de daño de ambas sendas — ver STYLES).
-const GEAR_CLASS_STAT = {pesada:'fis', tirador:'fis', doblefilo:'fis', mago:'hab', sacerdote:'esp', paladin:'esp', hechicero:'hab'};
-const GEAR_PENETRATION = {
-  pesada:['penetracion_armadura','de penetración de armadura física'],
-  tirador:['penetracion_armadura','de penetración de armadura física'],
-  doblefilo:['penetracion_armadura','de penetración de armadura física'],
-  mago:['penetracion_magica','de penetración de resistencia mágica'],
-  sacerdote:['penetracion_magica','de penetración de resistencia mágica'],
-  // Paladín dañá con Espíritu (igual que Mago/Sacerdote) pero sus 3
-  // habilidades son dmgType 'fisico' (igual razonamiento que Asesino arriba:
-  // la penetración debe calzar con el tipo de daño real, no con el stat que
-  // lo alimenta) — penetración de armadura física, no mágica.
-  paladin:['penetracion_armadura','de penetración de armadura física'],
-  hechicero:['penetracion_magica','de penetración de resistencia mágica'],
-};
-const GEAR_CATALOG = {};
-Object.keys(GEAR_NAMES).forEach(cls=>{
-  const [penType, penText] = GEAR_PENETRATION[cls];
-  GEAR_CATALOG[cls] = {
-    casco: CASCO_TIERS, armadura: ARMADURA_TIERS, botas: BOTAS_TIERS, amuleto: AMULETO_TIERS,
-    guantes: guantesTiers(GEAR_CLASS_STAT[cls], penType, penText),
-  };
-});
 // 2026-10-02 (pedido explícito): el equipo general por senda (Casco de
 // piedra/bronce..., Túnica..., etc.) queda RETIRADO por completo. Todo lo que
 // antes generaba esa pieza (tienda de oro y de Sellos, botín, kit inicial,
 // equipo automático del Sacerdote) ahora da la pieza equivalente del conjunto
-// Voluntad Inquebrantable, del mismo slot y rango. styleId se ignora. Las
-// tablas viejas (GEAR_NAMES/CASCO_TIERS/...) quedan solo como referencia.
+// Voluntad Inquebrantable, del mismo slot y rango. styleId se ignora.
 function makeGearItem(slot, styleId, rank){
   return makeSetItem('voluntad', slot, rank);
 }
@@ -2637,7 +2450,7 @@ function buyWeapon(slot, styleId, name){
 
 // equipo común no ligado al arma: armadura, casco, botas, guantes y
 // amuleto ("Accesorio" en pantalla). Ahora cada senda tiene su propio
-// nombre y (para guantes) su propio stat — ver GEAR_CATALOG. El precio en
+// nombre y (para guantes) su propio stat — ver SET_CATALOG. El precio en
 // oro sigue siendo el mismo para las 5, solo el nombre/stat cambia.
 const SHOP_GEAR_SLOTS = ['armadura','casco','botas','guantes','amuleto'];
 function shopGearPrice(slot){ return slot==='armadura' ? 45 + state.char.level*4 : 35 + state.char.level*3; }
@@ -2738,7 +2551,7 @@ function makeSelloShopItem(slot, rarity, styleId, name){
     return item;
   }
   // El equipo general SÍ cambia de nombre por rango (de piedra/bronce/
-  // plata/oro/platino, ver GEAR_NAMES) — ese nombre ya deja claro el rango,
+  // plata/oro/platino — hoy son piezas de conjunto, ver SET_CATALOG) — ese nombre ya deja claro el rango,
   // no hace falta un sufijo "del Gremio" encima.
   return makeGearItem(slot, styleId, rarity);
 }
@@ -2946,7 +2759,7 @@ function itemSellValue(item){
   }
   // item.mods: estadísticas del equipo general nuevas (maxhp_flat, precision,
   // res_magica, resistencia_estado, fortaleza_mental, mp_flat, espiritu_flat
-  // — ver GEAR_CATALOG), cada una suma algo de valor aunque no pasen por bonus.
+  // — ver SET_CATALOG), cada una suma algo de valor aunque no pasen por bonus.
   Object.values(item.mods||{}).forEach(v=> bonusValue += v*1.5);
   const specialsCount = (item.specials||(item.special?[item.special]:[])).length;
   const specialBonus = specialsCount * 15;
@@ -2973,7 +2786,6 @@ function sellPotionStack(potionId){
   renderAll(); save();
 }
 
-const GUARDIAN_SLOT_STAT = {casco:'hab', guantes:'fis', botas:'hab'}; // themed stat for the new slots
 // Los guardianes (incluidos los jefes de década) ya no dan una recompensa
 // garantizada — sueltan botín igual que cualquier otro enemigo, tirando
 // contra la tabla plana de rareza (ver FLAT_GEAR_TABLE/FLAT_STONE_TABLE más
@@ -3020,18 +2832,6 @@ const SOUL_FAMILIES = {
   baluarte:  {name:'Baluarte',        statKey:'vig',    advLabel:'escudo al recibir un golpe crítico'},
   maleficio: {name:'Maleficio',       statKey:'hab',    advLabel:'cada estado del enemigo le baja todas las resistencias'}
 };
-function soulStatValue(famId, tier){
-  const fam = SOUL_FAMILIES[famId];
-  if(!fam || !fam.statKey) return 0;
-  return fam.baseE * Math.pow(2, soulTierIdx(tier)); // se duplica por cada categoría que sube
-}
-function soulProcChance(famId, tier){
-  const fam = SOUL_FAMILIES[famId];
-  if(!fam || !fam.procBaseAtF) return 0;
-  const idx = soulTierIdx(tier);
-  if(idx < 1) return 0; // sin proc en rango E
-  return fam.procBaseAtF * Math.pow(2, idx-1); // se duplica desde F en adelante
-}
 function soulAdvancedValue(famId, tier){
   const fam = SOUL_FAMILIES[famId];
   if(!fam) return 0;
@@ -3496,27 +3296,6 @@ let optionsOpen = false; // whether the Opciones (volumen + atajos de teclado) p
 let currentUser = null; // Supabase auth user
 let currentProfile = null; // {id, username, role, is_banned}
 
-function freshState(raceId, styleId){
-  return {
-    char:{
-      race:raceId, style:styleId,
-      level:1, xp:0,
-      gold:20,
-      curHP:null, curSta:null, curSpi:null, // set after derived calc
-      equip:{arma:null, arma2:null, armadura:null, amuleto:null, casco:null, botas:null, guantes:null},
-      inventory:[], // {kind:'equip', uid, slot, name, bonus} or {kind:'potion', potionId, qty} or {kind:'soulstone', uid, stoneId, ...}
-      itemCounter:0,
-      maxLevelUnlocked:1, // highest labyrinth level (1-10) unlocked so far
-      record:{level:1, floorIdx:0}, // deepest point ever reached (updates on every floor entered, not just guardian kills)
-      stash:{gold:0, items:[]}, // Hogar: safe storage, never touched by death penalties
-      soulSlots:[], // piedras de alma engarzadas; se desbloquea 1 espacio cada 10 niveles
-      pets:{owned:{}, equipped:[], pendingFreePulls:0}, // Caídos del Laberinto — owned:{petId:cantidad}, equipped:[petId,...], pendingFreePulls: tiradas gratis acumuladas sin reclamar (check-in / admin)
-      checkin:{day:0, lastClaimDate:null} // check-in diario 1-30, ver CHECKIN_REWARDS
-    },
-    dungeon:null, // {floors, atFloor, atNode, level, done}
-    log:[]
-  };
-}
 
 /* ============================================================
    UTIL
@@ -3584,7 +3363,7 @@ function totalRes(key){
 
 // Vida máxima (2026-09-16, pedido explícito): Físico deja de alimentar la
 // vida — ahora esa estadística solo importa para daño/otras cosas, y la
-// "Vida máxima" es un stat propio del equipo (Casco, ver GEAR_CATALOG).
+// "Vida máxima" es un stat propio del equipo (Casco, ver SET_CATALOG).
 // Lo que SÍ debe subir la vida es el nivel, y con más fuerza que antes: a
 // nivel 16 un Asesino no llegaba ni a 230 HP, que se sentía injusto contra
 // jefes de ~10 mil HP — la meta que dio ariochbu fue ~700-800 HP a nivel 20
@@ -3718,7 +3497,6 @@ function scaleStatValue(){
   if(sc==='fis') return d.fis;
   if(sc==='esp') return d.esp;
   if(sc==='hab') return d.hab;
-  if(sc==='fishab') return (d.fis+d.hab)/2;
   return d.fis;
 }
 
@@ -4591,7 +4369,7 @@ function specialDisplayText(sp){
 // describimos por rareza — "+19 de habilidad, 15% de aplicar sangrado 2
 // turnos." — sin adornos genéricos como "daño puro" ni texto de relleno.
 // item.mods: estadísticas del equipo general que no encajan en el molde
-// bonus.stat/bonus.res de siempre (ver GEAR_CATALOG) — cada objeto puede
+// bonus.stat/bonus.res de siempre (ver SET_CATALOG) — cada objeto puede
 // traer varias a la vez (ej. Casco: maxhp_flat + precision juntos).
 const MOD_LABELS = {maxhp_flat:'Vida máxima', precision:'Precisión', res_magica:'Resistencia mágica', resistencia_estado:'Resistencia a efectos de estado', fortaleza_mental:'Fortaleza mental', mp_flat:'MP', espiritu_flat:'Espíritu máximo',
   fis:'Físico', hab:'Habilidad', esp:'Espíritu', agi:'Agilidad', vig:'Vigor', res_fisica:'Resistencia física'};
@@ -4705,17 +4483,12 @@ function weaponArtPath(it){
 // "armadura - <clase>.png" / "guantes - <clase>.png" / "botas - <clase>.png"
 // en src/assets/equipo/<senda>_<slot>_<rareza>.png. Solo Accesorio (amuleto)
 // sigue sin arte propia — cae al SVG genérico de siempre.
-const GEAR_ART_SLOTS = new Set(['casco','armadura','guantes','botas','amuleto']);
 // Conjuntos con imagen recortada (src/assets/equipo/sets/<set>_<slot>_<rango>.png).
 // Los que no figuran acá caen a la silueta genérica sin pedir un 404.
 const SET_ART = {jack:SET_SLOTS, artemisa:SET_SLOTS, soberano:SET_SLOTS, bastion:SET_SLOTS, eclipse:SET_SLOTS, gracia:SET_SLOTS, guardian:SET_SLOTS, voluntad:SET_SLOTS};
 function gearArtPath(it){
-  if(it.setId){
-    if(!(SET_ART[it.setId]||[]).includes(it.slot) || !WEAPON_ART_RARITIES.has(it.rarity)) return null;
-    return `src/assets/equipo/sets/${it.setId}_${it.slot}_${it.rarity}.png`;
-  }
-  if(!GEAR_ART_SLOTS.has(it.slot) || !it.styleId || !WEAPON_ART_RARITIES.has(it.rarity)) return null;
-  return `src/assets/equipo/${it.styleId}_${it.slot}_${it.rarity}.png`;
+  if(!it.setId || !(SET_ART[it.setId]||[]).includes(it.slot) || !WEAPON_ART_RARITIES.has(it.rarity)) return null;
+  return `src/assets/equipo/sets/${it.setId}_${it.slot}_${it.rarity}.png`;
 }
 // Una piedra de alma SIEMPRE trae `.tier` (letra E-SS) y NUNCA `.rarity`; el
 // equipo es al revés — es el discriminante ya usado en todo el resto del
@@ -7871,7 +7644,7 @@ function allyMaxHP(row){
   return maxHP;
 }
 // MP y Espíritu de un aliado: mismo pool de nivel para los dos, más lo que
-// sume el Amuleto/Accesorio (mp_flat/espiritu_flat, ver GEAR_CATALOG) y una
+// sume el Amuleto/Accesorio (mp_flat/espiritu_flat, ver SET_CATALOG) y una
 // piedra de Sabiduría engarzada (su bonus.stat==='maxsta' se reusa acá como
 // MP, ya que el aliado no tiene un pool de "estamina" separado del MP).
 function allyMaxMP(row){
@@ -8543,7 +8316,7 @@ function itemSpecialsArr(it){ return it.specials || (it.special ? [it.special] :
 // Suma el valor de una clave de item.mods (estadísticas del equipo general
 // que no encajan en el molde bonus.stat/bonus.res de siempre: maxhp_flat,
 // precision, res_magica, resistencia_estado, fortaleza_mental, mp_flat,
-// espiritu_flat — ver GEAR_CATALOG) a través de TODO el equipo.
+// espiritu_flat — ver SET_CATALOG) a través de TODO el equipo.
 function equipModsSum(equip, key){
   let total = 0;
   EQUIP_SLOTS.forEach(slot=>{
@@ -8583,18 +8356,23 @@ function applyEquippedSpecials(target, dmgDealt, skill){
   equippedPets().forEach(p=> p.bonuses.forEach(sp=>{ if(sp.type) sources.push({it:{name:p.name}, sp}); }));
   // Regla de procs (pedido explícito 2026-10-02, tras ver a un Arquero
   // curarse entero con una sola Lluvia de flechas):
-  // - Sangrado del equipo y Robo de vida: SOLO con el ataque básico. El
-  //   Asesino es la excepción: a él le aplican también con sus habilidades.
+  // - Sangrado del equipo: SOLO con el ataque básico. El Asesino es la
+  //   excepción: a él le aplica también con sus habilidades.
+  // - Robo de vida: SOLO con el ataque básico, para todas las sendas (el
+  //   Asesino incluido — pedido explícito 2026-10-02).
   // - Succión de hechizo: lo contrario, SOLO con habilidades (nunca básico).
   // Única "Succión de vida" de algunos Caídos (effect.kind 'robovida'):
   // estaba en el catálogo pero nunca tuvo código — se suma como robo de vida.
   petUniqueEffects().forEach(({name, unique})=>{
     if(unique.effect && unique.effect.kind==='robovida') sources.push({it:{name}, sp:{type:'robovida', percent:unique.effect.percent}});
+    // Igual con la única "Succión de hechizo"/"Absorción Arcana" (tampoco tenía código).
+    if(unique.effect && unique.effect.kind==='succion_hechizo') sources.push({it:{name}, sp:{type:'succion_hechizo', percent:unique.effect.percent}});
   });
   const isBasicHit = !!skill && skill.id==='ataque_basico';
   const procOnThisHit = isBasicHit || state.char.style==='doblefilo';
   sources.forEach(({it, sp})=>{
-    if((sp.type==='sangrado' || sp.type==='robovida') && !procOnThisHit) return;
+    if(sp.type==='sangrado' && !procOnThisHit) return;
+    if(sp.type==='robovida' && !isBasicHit) return;
     if(sp.type==='succion_hechizo' && isBasicHit) return;
     if(sp.type==='aturdir'){
       // Piedras de alma únicamente (formato viejo) — inmediato, sin cambios.
@@ -8996,7 +8774,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
       log(`La Ceguera hace que tu golpe hacia ${target.name} no encuentre nada.`);
       return;
     }
-    // Esquivar del enemigo (equipo general: Precisión, ver GEAR_CATALOG) —
+    // Esquivar del enemigo (equipo general: Precisión, ver SET_CATALOG) —
     // solo enemigos de verdad tienen tpl/evasion; un aliado hostil como
     // objetivo no esquiva por esta vía. Parálisis en el ENEMIGO (pedido
     // explícito 2026-09-28, kit del Hechicero): mismo trato espejo que ya
@@ -9793,6 +9571,13 @@ function resolveOneAllyTurn(ally){
     (ally.specials||[]).forEach(sp=>{ if(sp.type==='aumento_dano') dmg *= (1+sp.value); });
     const blessedDebuff = hasStatus(enemyTarget.statuses,'Bendecido');
     if(blessedDebuff && blessedDebuff.incomingDmgMult) dmg *= blessedDebuff.incomingDmgMult;
+    // Bug corregido 2026-10-02: estos tres solo se aplicaban a los golpes del
+    // JUGADOR — contra los aliados, los autobuffs defensivos del enemigo
+    // (Caparazón, Seda Protectora...) no reducían nada, y Marcado/Parálisis
+    // no daban el daño extra que prometen ("recibe +20% de TODO el daño").
+    if(hasStatus(enemyTarget.statuses,'Marcado')) dmg *= 1.2;
+    (enemyTarget.statuses||[]).forEach(st=>{ if(st.incomingDmgReduction) dmg *= (1 - st.incomingDmgReduction); });
+    if(hasStatus(enemyTarget.statuses,'Paralisis')) dmg *= 1.25;
     let resKey = 'fisico';
     let skillText = null;
     let skillName = null;
@@ -9882,11 +9667,12 @@ function resolveOneAllyTurn(ally){
 // habilidades propio con costo variable, así que no aplican.
 // isSkill: el golpe fue la habilidad del aliado (no su ataque básico) —
 // misma regla de procs que el jugador (ver applyEquippedSpecials), con la
-// excepción del Asesino para Sangrado/Robo de vida.
+// excepción del Asesino solo para Sangrado (Robo de vida: siempre solo básico).
 function applyAllySpecials(ally, target, dmgDealt, isSkill){
   const procOnThisHit = !isSkill || ally.role==='asesino';
   (ally.specials||[]).forEach(sp=>{
-    if((sp.type==='sangrado' || sp.type==='robovida') && !procOnThisHit) return;
+    if(sp.type==='sangrado' && !procOnThisHit) return;
+    if(sp.type==='robovida' && isSkill) return;
     if(sp.type==='succion_hechizo' && !isSkill) return;
     if(sp.type==='retroceso'){
       if(chance(sp.chance)){
@@ -10862,18 +10648,24 @@ function handleVictory(){
 // (petición del 2026-09-14) para que la economía de aliados y el gasto en
 // pociones durante una corrida difícil pesen de verdad.
 const DEFEAT_GOLD_LOSS_PCT = 60;
+// Bug corregido 2026-10-02: la derrota se aplicaba recién al pulsar
+// "Continuar". Si el jugador recargaba en esa pantalla, volvía al combate con
+// 0 de vida (combate recuperado) y podía tomarse una poción para "revivir"
+// sin perder nada. Ahora la derrota se aplica y se guarda AL INSTANTE; el
+// aviso solo informa.
 function handleDefeat(){
   stopBossAudio();
+  const lostItems = state.char.inventory.filter(i=>i.kind==='equip').length;
+  state.char.inventory = state.char.inventory.filter(i=>i.kind!=='equip');
+  state.char.gold = Math.round(state.char.gold*(1-DEFEAT_GOLD_LOSS_PCT/100));
+  const d = derived();
+  state.char.curHP = Math.round(d.maxHP*0.5);
+  state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi;
+  state.dungeon = null;
+  payAlliesOnExit();
+  flushSave();
   showOverlay('Caído en el laberinto', `Tu cuerpo cede y el laberinto te expulsa antes del final. Pierdes el equipo suelto que llevabas en la mochila y el ${DEFEAT_GOLD_LOSS_PCT}% de tu oro. Lo que hayas guardado en el Hogar sigue a salvo.`, ()=>{
-    const lostItems = state.char.inventory.filter(i=>i.kind==='equip').length;
-    state.char.inventory = state.char.inventory.filter(i=>i.kind!=='equip');
-    state.char.gold = Math.round(state.char.gold*(1-DEFEAT_GOLD_LOSS_PCT/100));
-    const d = derived();
-    state.char.curHP = Math.round(d.maxHP*0.5);
-    state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi;
     combat = null;
-    state.dungeon = null;
-    payAlliesOnExit();
     stopDungeonAudio();
     playLoginAudio();
     if(lostItems>0) log(`Pierdes ${lostItems} objeto(s) de equipo que llevabas en la mochila.`);
@@ -11042,6 +10834,9 @@ function useSkillFromMenu(sid){
 }
 
 function renderCombat(){
+  // Tras una derrota el laberinto ya se cerró (handleDefeat) pero el combate
+  // sigue en pantalla hasta pulsar "Continuar": no hay nada que redibujar.
+  if(!state || !state.dungeon || !combat) return;
   const d = derived();
   const s = style();
   const skillIds = s.skills.concat(state.char.level>=LEVEL_60_MILESTONE ? [ULTIMATE_BY_STYLE[s.id]] : []);
@@ -11740,6 +11535,9 @@ async function enterCharacter(row){
   // corrida activa no hace falta esperar (nada en la Ciudad depende de
   // allies para el primer pintado) — no vale la pena atrasarlo por gusto.
   if(state.dungeon) await refreshAlliesState(); else refreshAlliesState();
+  // Partidas guardadas en plena pantalla de derrota (antes del arreglo de
+  // handleDefeat): dentro del laberinto con 0 de vida → se aplica la derrota.
+  if(state.dungeon && state.char.curHP<=0){ combat = null; handleDefeat(); }
   renderAll();
   let tutorialSeen = false;
   try{ tutorialSeen = localStorage.getItem('dsTutorialSeen')==='1'; }catch(e){}
