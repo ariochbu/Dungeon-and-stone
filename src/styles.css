@@ -858,3 +858,13 @@
   .combat-pets-label{ font-size:0.68em; color:var(--text-dim); text-transform:uppercase; letter-spacing:1px; margin-right:2px; }
   .combat-pet-chip{ width:28px; height:38px; border-radius:3px; overflow:hidden; flex-shrink:0; background:var(--stone); }
   .combat-pet-chip img{ width:100%; height:100%; object-fit:cover; object-position:top center; }
+/* Panel admin plegable (2026-10-02) */
+.admin-toolbar{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin:0 0 8px; font-size:0.85em; color:var(--text-dim); }
+.admin-toolbar input[type=search]{ flex:1; min-width:180px; background:var(--stone); color:inherit; border:1px solid rgba(255,255,255,0.12); border-radius:6px; padding:6px 8px; }
+.admin-toolbar select{ background:var(--stone); color:inherit; border:1px solid rgba(255,255,255,0.12); border-radius:4px; }
+details.admin-acc{ margin-bottom:6px; }
+details.admin-acc > summary{ display:flex; align-items:center; justify-content:space-between; gap:10px; cursor:pointer; list-style:none; padding:4px 0; }
+details.admin-acc > summary::-webkit-details-marker{ display:none; }
+details.admin-acc > summary::before{ content:'▸'; color:var(--bronze-light); margin-right:4px; transition:transform 0.15s; }
+details.admin-acc[open] > summary::before{ transform:rotate(90deg); }
+details.admin-acc > summary > span{ flex:1; }

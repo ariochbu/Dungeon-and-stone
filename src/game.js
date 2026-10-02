@@ -1235,7 +1235,7 @@ document.addEventListener('load', (e)=>{
     img.style.background = '#0d0b09';
   }
 }, true);
-function petArtPath(id){ return `src/assets/mascotas/mascota_${String(id).padStart(3,'0')}.png`; }
+function petArtPath(id){ return `src/assets/mascotas/mascota_${String(id).padStart(3,'0')}.png?v=2`; }
 // Zoom al pasar el cursor (o mantener presionado en celular) sobre una
 // carta de Caído del Laberinto (2026-09-25, pedido explícito: "se ven muy
 // diminutos... al pasar el puntero por encima... si estas en celular si se
@@ -3808,6 +3808,21 @@ function kickSession(){
 }
 setInterval(()=>{ if(state) checkSessionStillActive(); }, 15000);
 
+// Ofrendas regaladas por el admin (0029): llegan a characters.gift_pulls, una
+// columna que este cliente nunca escribe al guardar — así no se pisan si el
+// jugador estaba conectado. Se cobran al entrar y cada minuto.
+async function claimGiftPulls(){
+  if(!state || !state.char || !currentUser || sessionKicked) return;
+  const { data, error } = await supabase.rpc('claim_gift_pulls', { p_char: state.char.id });
+  if(error || !data || data<=0) return; // sin la función (SQL no corrido) o sin regalos
+  if(!state.char.pets) state.char.pets = {owned:{}, equipped:[], pendingFreePulls:0};
+  state.char.pets.pendingFreePulls = (state.char.pets.pendingFreePulls||0) + data;
+  log(`🎁 Recibiste <b>${data}</b> ofrenda(s) gratis de regalo. Reclámalas frente al árbol (total pendiente: ${state.char.pets.pendingFreePulls}).`);
+  await flushSave();
+  renderAll();
+}
+setInterval(()=>{ if(state) claimGiftPulls(); }, 60000);
+
 // ============================================================
 // AVISO DE ACTUALIZACIÓN (pedido explícito 2026-10-02). Cada deploy sube el
 // ?v= de game.js en index.html; esta pestaña compara el suyo con el del
@@ -6270,35 +6285,100 @@ async function renderAdmin(){
 
     <div class="section-label" style="margin-top:0;">Actividad sospechosa</div>
     <p style="color:var(--text-dim); font-size:0.82em; margin:0 0 8px;">Jefes de década o guardianes de piso (nivel 11+) derrotados en 4 turnos propios o menos — a ese ritmo no se puede ganar de forma legítima. Es una señal para revisar, no una prueba: el turno lo cuenta el propio cliente, así que confirmá antes de suspender.</p>
+    <div class="admin-toolbar">
+      <label><input type="checkbox" id="flag-only-decade" ${adminPrefs.onlyDecade?'checked':''}> Solo jefes de década</label>
+      <label>Turnos máx. <select id="flag-max-turns">${[4,3,2,1].map(n=>`<option value="${n}" ${adminPrefs.maxTurns===n?'selected':''}>${n}</option>`).join('')}</select></label>
+      <button class="inv-btn danger" id="flag-clear-visible">Descartar todo lo visible</button>
+    </div>
     <div id="flagged-kills-list"><p class="inv-empty-msg">Cargando alertas…</p></div>
 
     <div class="section-label">Cuentas</div>
+    <div class="admin-toolbar">
+      <input type="search" id="admin-search" placeholder="Buscar cuenta o personaje…" value="${(adminPrefs.search||'').replace(/"/g,'&quot;')}">
+      <button class="inv-btn" id="admin-collapse-all">Plegar todo</button>
+    </div>
     <div id="admin-list"><p class="inv-empty-msg">Cargando cuentas…</p></div>
   `;
+  document.getElementById('flag-only-decade').onchange = (e)=>{ adminPrefs.onlyDecade = e.target.checked; saveAdminPrefs(); loadFlaggedKills(); };
+  document.getElementById('flag-max-turns').onchange = (e)=>{ adminPrefs.maxTurns = parseInt(e.target.value,10); saveAdminPrefs(); loadFlaggedKills(); };
+  document.getElementById('flag-clear-visible').onclick = async ()=>{
+    const ids = (lastFlagsShown||[]).map(f=>f.id);
+    if(!ids.length) return;
+    if(!confirm(`¿Descartar las ${ids.length} alerta(s) visibles? Se borran de la base.`)) return;
+    await deleteFlags(ids);
+  };
+  let searchTimer = null;
+  document.getElementById('admin-search').oninput = (e)=>{
+    adminPrefs.search = e.target.value; saveAdminPrefs();
+    clearTimeout(searchTimer); searchTimer = setTimeout(loadAdminList, 250);
+  };
+  document.getElementById('admin-collapse-all').onclick = ()=>{ adminOpenAccounts.clear(); loadAdminList(); };
   document.getElementById('btn-close-admin').onclick = ()=>{ adminOpen=false; renderAll(); };
   await Promise.all([loadAdminList(), loadFlaggedKills()]);
 }
 
+// Preferencias del panel admin (por navegador): filtros de alertas y
+// búsqueda de cuentas. Las cuentas abiertas se recuerdan mientras dure la
+// sesión para que no se plieguen solas tras cada acción.
+const adminPrefs = (()=>{ try{ return Object.assign({onlyDecade:false, maxTurns:4, search:''}, JSON.parse(localStorage.getItem('dsAdminPrefs')||'{}')); }catch(e){ return {onlyDecade:false, maxTurns:4, search:''}; } })();
+function saveAdminPrefs(){ try{ localStorage.setItem('dsAdminPrefs', JSON.stringify(adminPrefs)); }catch(e){} }
+const adminOpenAccounts = new Set();
+const adminOpenFlagGroups = new Set();
+let lastFlagsShown = [];
+async function deleteFlags(ids){
+  const msg = document.getElementById('admin-msg');
+  const { error } = await supabase.from('flagged_boss_kills').delete().in('id', ids);
+  if(msg) msg.textContent = error ? ('No se pudo descartar: ' + error.message + ' (¿corriste la migración 0029?)') : '';
+  await loadFlaggedKills();
+}
+
+// Alertas agrupadas por personaje (2026-10-02, pedido explícito: con el
+// aumento de daño la lista crecía sin parar). Filtros: solo jefes de
+// década y un tope de turnos; cada grupo/alerta se puede descartar.
 async function loadFlaggedKills(){
   const el = document.getElementById('flagged-kills-list');
   if(!el) return;
-  const { data, error } = await supabase.from('flagged_boss_kills').select('*').order('created_at', {ascending:false}).limit(50);
+  let q = supabase.from('flagged_boss_kills').select('*').lte('turns', adminPrefs.maxTurns||4).order('created_at', {ascending:false}).limit(300);
+  if(adminPrefs.onlyDecade) q = q.eq('kind','jefe_decada');
+  const { data, error } = await q;
   if(error){ el.innerHTML = `<p class="inv-empty-msg">No se pudo cargar (¿corriste la migración 0017?): ${error.message}</p>`; return; }
-  if(!data || !data.length){ el.innerHTML = `<p class="inv-empty-msg">Sin alertas por ahora.</p>`; return; }
-  el.innerHTML = data.map(f=>{
-    const when = new Date(f.created_at).toLocaleString();
-    const kindLabel = f.kind==='jefe_decada' ? 'Jefe de década' : 'Guardián de piso';
-    return `<div class="inv-item-row">
-      <div>
-        <b>${f.nickname}</b> <span class="slot-tag" style="border-color:var(--blood-light); color:var(--blood-light);">${kindLabel}</span>
-        <div class="inv-item-bonus neutral">Nivel ${f.dungeon_level} derrotado en ${f.turns} turno(s) · ${when}</div>
+  lastFlagsShown = data || [];
+  if(!lastFlagsShown.length){ el.innerHTML = `<p class="inv-empty-msg">Sin alertas con estos filtros.</p>`; return; }
+  const groups = new Map();
+  lastFlagsShown.forEach(f=>{ if(!groups.has(f.character_id)) groups.set(f.character_id, []); groups.get(f.character_id).push(f); });
+  el.innerHTML = [...groups.entries()].map(([cid, fs])=>{
+    const decade = fs.filter(f=>f.kind==='jefe_decada').length;
+    const minTurns = Math.min(...fs.map(f=>f.turns));
+    const last = new Date(fs[0].created_at).toLocaleString();
+    return `<details class="admin-acc" data-flag-group="${cid}" ${adminOpenFlagGroups.has(cid)?'open':''}>
+      <summary>
+        <span><b>${fs[0].nickname}</b> <span class="slot-tag" style="border-color:var(--blood-light); color:var(--blood-light);">${fs.length} alerta(s)</span>
+        ${decade?`<span class="slot-tag">${decade} jefe(s) de década</span>`:''}
+        <span class="inv-item-bonus neutral" style="display:inline;">mín. ${minTurns} turno(s) · última ${last}</span></span>
+      </summary>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin:6px 0 6px 18px;">
+        <button class="inv-btn" data-flag-dismiss-group="${cid}">Descartar todas</button>
+        <button class="inv-btn danger" data-flag-ban="${fs[0].user_id}">Suspender cuenta</button>
       </div>
-      <button class="inv-btn danger" data-flag-ban="${f.user_id}">Suspender cuenta</button>
-    </div>`;
+      ${fs.map(f=>`<div class="inv-item-row" style="margin-left:18px;">
+        <div class="inv-item-bonus neutral">${f.kind==='jefe_decada'?'<b>Jefe de década</b>':'Guardián de piso'} · Nivel ${f.dungeon_level} en ${f.turns} turno(s) · ${new Date(f.created_at).toLocaleString()}</div>
+        <button class="inv-btn" data-flag-dismiss="${f.id}" title="Descartar esta alerta">✕</button>
+      </div>`).join('')}
+    </details>`;
   }).join('');
   const msg = document.getElementById('admin-msg');
+  el.querySelectorAll('details[data-flag-group]').forEach(d=>{
+    d.addEventListener('toggle', ()=>{ if(d.open) adminOpenFlagGroups.add(d.dataset.flagGroup); else adminOpenFlagGroups.delete(d.dataset.flagGroup); });
+  });
+  el.querySelectorAll('[data-flag-dismiss]').forEach(btn=>{
+    btn.onclick = async ()=>{ btn.disabled = true; await deleteFlags([btn.dataset.flagDismiss]); };
+  });
+  el.querySelectorAll('[data-flag-dismiss-group]').forEach(btn=>{
+    btn.onclick = async ()=>{ btn.disabled = true; await deleteFlags(groups.get(btn.dataset.flagDismissGroup).map(f=>f.id)); };
+  });
   el.querySelectorAll('[data-flag-ban]').forEach(btn=>{
     btn.onclick = async ()=>{
+      if(!confirm('¿Suspender esta cuenta?')) return;
       btn.disabled = true;
       const { error: banError } = await supabase.from('profiles').update({ is_banned: true }).eq('id', btn.dataset.flagBan);
       if(msg) msg.textContent = banError ? 'No se pudo suspender: ' + banError.message : '';
@@ -6307,12 +6387,15 @@ async function loadFlaggedKills(){
   });
 }
 
+// Pendientes = las del árbol (pets) + regaladas aún sin cobrar (gift_pulls).
+function pendingPullsOf(c){ return ((c.pets&&c.pets.pendingFreePulls)||0) + (c.gift_pulls||0); }
 async function loadAdminList(){
   const list = document.getElementById('admin-list');
   const msg = document.getElementById('admin-msg');
   const [profilesRes, charsRes] = await Promise.all([
     supabase.from('profiles').select('id, username, is_banned, created_at').order('created_at', { ascending: false }).limit(100),
-    supabase.from('characters').select('id, user_id, nickname, role, hidden_from_leaderboard, level, record_level, record_floor_idx, pets, dungeon').order('slot_number')
+    supabase.from('characters').select('id, user_id, nickname, role, hidden_from_leaderboard, level, record_level, record_floor_idx, pets, dungeon, gift_pulls').order('slot_number')
+      .then(r=> r.error ? supabase.from('characters').select('id, user_id, nickname, role, hidden_from_leaderboard, level, record_level, record_floor_idx, pets, dungeon').order('slot_number') : r)
   ]);
   const { data, error } = profilesRes;
   if(!list) return; // el jugador cerró el panel antes de que llegara la respuesta
@@ -6327,7 +6410,9 @@ async function loadAdminList(){
     charsByUser.get(c.user_id).push(c);
   });
 
-  list.innerHTML = data.map(p=>{
+  const term = (adminPrefs.search||'').trim().toLowerCase();
+  const visible = !term ? data : data.filter(p=> (p.username||'').toLowerCase().includes(term) || (charsByUser.get(p.id)||[]).some(c=>(c.nickname||'').toLowerCase().includes(term)));
+  list.innerHTML = visible.map(p=>{
     const isSelf = p.id === currentUser.id;
     const bannedLabel = p.is_banned ? 'Suspendida' : 'Activa';
     const created = new Date(p.created_at).toLocaleDateString();
@@ -6342,26 +6427,32 @@ async function loadAdminList(){
         <div style="display:flex; gap:8px; flex-shrink:0; flex-wrap:wrap;">
           <button class="inv-btn" data-toggle-role="${c.id}" ${isLoaded?'disabled title="No puedes quitarte el rol admin al personaje con el que jugaste esta sesión"':''}>${c.role==='admin'?'Quitar admin':'Hacer admin'}</button>
           <button class="inv-btn" data-toggle-ranking="${c.id}">${c.hidden_from_leaderboard?'Mostrar en ranking':'Ocultar del ranking'}</button>
-          <button class="inv-btn" data-grant-pulls="${c.id}" title="Ofrendas gratis pendientes: ${(c.pets&&c.pets.pendingFreePulls)||0}">🎁 Dar tiradas</button>
+          <button class="inv-btn" data-grant-pulls="${c.id}" title="Ofrendas gratis pendientes: ${pendingPullsOf(c)}">🎁 Dar tiradas</button>
           <button class="inv-btn" data-return-city="${c.id}" ${c.dungeon?'':'disabled title="No está dentro del laberinto ahora mismo"'}>🏙️ Devolver a la ciudad</button>
           <button class="inv-btn danger" data-delete-char="${c.id}">Eliminar personaje</button>
         </div>
       </div>`;
     }).join('') : `<p class="inv-empty-msg" style="margin-left:18px;">Sin personajes.</p>`;
-    return `<div class="inv-slot">
-      <div class="inv-item-row" style="background:none; border:none; padding:0; margin-bottom:8px;">
-        <div>
-          <b>${p.username}</b> <span class="slot-tag" style="${p.is_banned?'color:var(--blood-light); border-color:rgba(178,68,68,0.4);':'color:var(--good);'}">${bannedLabel}</span>
-          <div class="inv-item-bonus neutral">Creada: ${created} · ${myChars.length} personaje(s)</div>
-        </div>
+    // Plegable (2026-10-02): los personajes solo se muestran al abrir la
+    // cuenta; con búsqueda activa se abren solas las que coinciden.
+    const open = adminOpenAccounts.has(p.id) || (term && myChars.some(c=>(c.nickname||'').toLowerCase().includes(term)));
+    const names = myChars.map(c=>`${c.nickname} (${c.level})`).join(', ');
+    return `<details class="inv-slot admin-acc" data-acc="${p.id}" ${open?'open':''}>
+      <summary>
+        <span><b>${p.username}</b> <span class="slot-tag" style="${p.is_banned?'color:var(--blood-light); border-color:rgba(178,68,68,0.4);':'color:var(--good);'}">${bannedLabel}</span>
+        <span class="inv-item-bonus neutral" style="display:inline;">Creada: ${created} · ${myChars.length} personaje(s)${names?': '+names:''}</span></span>
         <button class="inv-btn ${p.is_banned?'':'danger'}" data-toggle-ban="${p.id}" ${isSelf?'disabled title="No puedes suspender tu propia cuenta"':''}>${p.is_banned?'Reactivar':'Suspender'}</button>
-      </div>
+      </summary>
       ${charsHTML}
-    </div>`;
-  }).join('') || `<p class="inv-empty-msg">No hay cuentas registradas.</p>`;
+    </details>`;
+  }).join('') || `<p class="inv-empty-msg">${term?'Ninguna cuenta coincide con la búsqueda.':'No hay cuentas registradas.'}</p>`;
+  list.querySelectorAll('details[data-acc]').forEach(d=>{
+    d.addEventListener('toggle', ()=>{ if(d.open) adminOpenAccounts.add(d.dataset.acc); else adminOpenAccounts.delete(d.dataset.acc); });
+  });
 
   list.querySelectorAll('[data-toggle-ban]').forEach(btn=>{
-    btn.onclick = async ()=>{
+    btn.onclick = async (ev)=>{
+      ev.preventDefault();
       const id = btn.dataset.toggleBan;
       const target = data.find(p=>p.id===id);
       btn.disabled = true;
@@ -6403,16 +6494,16 @@ async function loadAdminList(){
     btn.onclick = async ()=>{
       const id = btn.dataset.grantPulls;
       const target = chars.find(c=>c.id===id);
-      const typed = prompt(`¿Cuántas ofrendas gratis le das a "${target.nickname}"? (Pendientes actuales: ${(target.pets&&target.pets.pendingFreePulls)||0})`, '1');
+      const typed = prompt(`¿Cuántas ofrendas gratis le das a "${target.nickname}"? (Pendientes actuales: ${pendingPullsOf(target)})`, '1');
       if(typed === null) return;
       const n = parseInt(typed, 10);
       if(!Number.isFinite(n) || n<=0){ msg.textContent = 'Ingresa un número mayor a 0.'; return; }
       btn.disabled = true;
-      const currentPets = target.pets || {owned:{}, equipped:[], pendingFreePulls:0};
-      const updatedPets = Object.assign({}, currentPets, {pendingFreePulls: (currentPets.pendingFreePulls||0) + n});
-      const { error } = await supabase.from('characters').update({ pets: updatedPets }).eq('id', id);
-      if(error) msg.textContent = 'No se pudo otorgar: ' + error.message;
-      else msg.textContent = `Le diste ${n} ofrenda(s) gratis a ${target.nickname}.`;
+      // Vía RPC a gift_pulls (0029): el jugador las cobra solo, aunque esté
+      // conectado en este momento (antes su propio guardado las pisaba).
+      const { error } = await supabase.rpc('admin_grant_pulls', { p_char: id, p_n: n });
+      if(error) msg.textContent = 'No se pudo otorgar: ' + error.message + (/admin_grant_pulls/.test(error.message) ? ' (falta correr la migración 0029)' : '');
+      else msg.textContent = `Le diste ${n} ofrenda(s) gratis a ${target.nickname}. Le llegan en menos de 1 minuto si está conectado, o al entrar.`;
       await loadAdminList();
     };
   });
@@ -7473,6 +7564,24 @@ function generateLoot(floorIdx, level){
 /* ============================================================
    ENEMY FACTORY
    ============================================================ */
+// Ajuste de vida/ataque de cada JEFE DE DÉCADA (pedido explícito 2026-10-02:
+// "un jefe de década no debe ser un jefe más", meta 60-70% de victorias).
+// Calibrado con simulaciones de combate: jugador al nivel del jefe, equipo
+// de su conjunto afín (Raro en nivel 10, Rango B en 20-30, Rango A en 40+),
+// piedras de alma del rango equivalente en todos sus espacios, 3 pociones
+// de vida y 4 aliados del mismo nivel y rango de equipo.
+// Con ese grupo la media de victorias queda en ~63-69% en los seis jefes
+// (con 2 aliados baja a ~20%). El Custodio (50) partía muy por debajo de la
+// curva y se cura, así que se le sube más el ataque que la vida para no
+// alargar el combate.
+const DECADE_BOSS_TUNING = {
+  10: {hp:1.10, atk:1.05},
+  20: {hp:1.78, atk:1.33},
+  30: {hp:1.44, atk:1.20},
+  40: {hp:1.36, atk:1.17},
+  50: {hp:2.00, atk:2.95},
+  60: {hp:2.80, atk:1.67},
+};
 function makeEnemy(tpl, floorIdx, level){
   const lvlMult = levelMult(level||1);
   const floorMult = 1 + floorIdx * floorDifficultyStep(level||1);
@@ -7490,6 +7599,12 @@ function makeEnemy(tpl, floorIdx, level){
     } else {
       hp = Math.round(300 * tpl.hp * lvlMult);
       atk = Math.round(26 * tpl.atk * lvlMult);
+    }
+    // Jefe de década: ajuste propio de vida/ataque (ver DECADE_BOSS_TUNING).
+    const tune = DECADE_BOSS_TUNING[level];
+    if(tune && level % 10 === 0 && DECADE_BESTIARY[decadeIndexForLevel(level)].decadeBoss === tpl){
+      hp = Math.round(hp * tune.hp);
+      atk = Math.round(atk * tune.atk);
     }
   } else if(tpl.elite){
     // elite: 2026-09-16, pedido explícito — base sube de 100-110 a 125-135,
@@ -10161,7 +10276,11 @@ function enemyAct(enemy){
     enemy.cooldowns.invocar = 4;
     const toSummon = Math.min(2, 6 - combat.enemies.length);
     for(let i=0;i<toSummon;i++){
-      combat.enemies.push(makeEnemy(SUMMON_TEMPLATE, state.dungeon.atFloor, state.dungeon.level));
+      // Invocadas: no dan EXP/oro ni botín (solo cuentan los enemigos con
+      // los que empezó el combate — ver rewardEnemyCount en handleVictory).
+      const minion = makeEnemy(SUMMON_TEMPLATE, state.dungeon.atFloor, state.dungeon.level);
+      minion.summoned = true; minion.summoner = enemy;
+      combat.enemies.push(minion);
     }
     if(toSummon>0) log(`${enemy.name} invoca ${toSummon>1?'dos criaturas menores':'una criatura menor'}.`);
     combat.lastAction = {label:'Invoca', effects:[]};
@@ -11889,6 +12008,7 @@ async function enterCharacter(row){
   // handleDefeat): dentro del laberinto con 0 de vida → se aplica la derrota.
   if(state.dungeon && state.char.curHP<=0){ combat = null; handleDefeat(); }
   renderAll();
+  claimGiftPulls();
   let tutorialSeen = false;
   try{ tutorialSeen = localStorage.getItem('dsTutorialSeen')==='1'; }catch(e){}
   if(!tutorialSeen) showTutorial();
