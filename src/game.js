@@ -3063,10 +3063,10 @@ const SOUL_STONES = {
     special:{type:'esp_refund', chance:0.05, amount:0.05},
     desc:'+4 Espíritu. 5% de probabilidad de recuperar el 5% del espíritu gastado.', preview:'Desde A: probabilidad de que tu próxima habilidad cueste la mitad de espíritu.'},
   instinto_e:  {id:'instinto_e',  family:'instinto',  name:'Piedra del Alma: Instinto (E)',         tier:'E', icon:'🟢', bonus:{stat:'hab', value:2},
-    desc:'+2 Habilidad permanente.', preview:'Desde F: probabilidad de quemar, congelar/ralentizar o sangrar según la habilidad. Desde A: doble lanzamiento.'},
+    desc:'+2 Habilidad permanente.', preview:'Desde F: probabilidad de quemar, congelar/ralentizar o envenenar según la habilidad. Desde A: doble lanzamiento.'},
   instinto_f:  {id:'instinto_f',  family:'instinto',  name:'Piedra del Alma: Instinto (F)',         tier:'F', icon:'🟢', bonus:{stat:'hab', value:4},
     special:{type:'elemental_proc', chance:0.02},
-    desc:'+4 Habilidad. 2% de probabilidad de quemar (fuego), congelar/ralentizar (hielo) o sangrar (físico) al enemigo, según la habilidad usada.', preview:'Desde A: probabilidad de lanzar la habilidad dos veces (la segunda gratis, sin gastar turno).'},
+    desc:'+4 Habilidad. 2% de probabilidad de quemar (fuego), congelar/ralentizar (hielo) o envenenar (el resto de habilidades) al enemigo, según la habilidad usada.', preview:'Desde A: probabilidad de lanzar la habilidad dos veces (la segunda gratis, sin gastar turno).'},
   vitalidad_e: {id:'vitalidad_e', family:'vitalidad', name:'Piedra del Alma: Vitalidad (E)',        tier:'E', icon:'❤️', bonus:{stat:'maxhp', value:1},
     desc:'+8 Vida máxima aprox.', preview:'Desde F: refleja parte del daño recibido. Desde A: probabilidad de autocurarte.'},
   vitalidad_f: {id:'vitalidad_f', family:'vitalidad', name:'Piedra del Alma: Vitalidad (F)',        tier:'F', icon:'❤️', bonus:{stat:'maxhp', value:2},
@@ -3147,16 +3147,16 @@ const SOUL_STONES = {
 
   instinto_d:  {id:'instinto_d',  family:'instinto',  name:'Piedra del Alma: Instinto (D)',         tier:'D', icon:'🟢', bonus:{stat:'hab', value:8},
     special:{type:'elemental_proc', chance:0.04},
-    desc:'+8 Habilidad. 4% de probabilidad de quemar (fuego), congelar/ralentizar (hielo) o sangrar (físico) al enemigo, según la habilidad usada.', preview:'Desde A: doble lanzamiento (pendiente de implementar).'},
+    desc:'+8 Habilidad. 4% de probabilidad de quemar (fuego), congelar/ralentizar (hielo) o envenenar (el resto de habilidades) al enemigo, según la habilidad usada.', preview:'Desde A: doble lanzamiento (pendiente de implementar).'},
   instinto_c:  {id:'instinto_c',  family:'instinto',  name:'Piedra del Alma: Instinto (C)',         tier:'C', icon:'🟢', bonus:{stat:'hab', value:16},
     special:{type:'elemental_proc', chance:0.08},
-    desc:'+16 Habilidad. 8% de probabilidad de quemar (fuego), congelar/ralentizar (hielo) o sangrar (físico) al enemigo, según la habilidad usada.', preview:'Desde A: doble lanzamiento (pendiente de implementar).'},
+    desc:'+16 Habilidad. 8% de probabilidad de quemar (fuego), congelar/ralentizar (hielo) o envenenar (el resto de habilidades) al enemigo, según la habilidad usada.', preview:'Desde A: doble lanzamiento (pendiente de implementar).'},
   instinto_b:  {id:'instinto_b',  family:'instinto',  name:'Piedra del Alma: Instinto (B)',         tier:'B', icon:'🟢', bonus:{stat:'hab', value:24},
     special:{type:'elemental_proc', chance:0.16},
-    desc:'+24 Habilidad. 16% de probabilidad de quemar (fuego), congelar/ralentizar (hielo) o sangrar (físico) al enemigo, según la habilidad usada.', preview:'Desde A: doble lanzamiento (pendiente de implementar).'},
+    desc:'+24 Habilidad. 16% de probabilidad de quemar (fuego), congelar/ralentizar (hielo) o envenenar (el resto de habilidades) al enemigo, según la habilidad usada.', preview:'Desde A: doble lanzamiento (pendiente de implementar).'},
   instinto_a:  {id:'instinto_a',  family:'instinto',  name:'Piedra del Alma: Instinto (A)',         tier:'A', icon:'🟢', bonus:{stat:'hab', value:32},
     special:{type:'elemental_proc', chance:0.32},
-    desc:'+32 Habilidad. 32% de probabilidad de quemar (fuego), congelar/ralentizar (hielo) o sangrar (físico) al enemigo, según la habilidad usada. (El doble lanzamiento prometido en este rango todavía no está implementado.)'},
+    desc:'+32 Habilidad. 32% de probabilidad de quemar (fuego), congelar/ralentizar (hielo) o envenenar (el resto de habilidades) al enemigo, según la habilidad usada. (El doble lanzamiento prometido en este rango todavía no está implementado.)'},
 
   vitalidad_d: {id:'vitalidad_d', family:'vitalidad', name:'Piedra del Alma: Vitalidad (D)',        tier:'D', icon:'❤️', bonus:{stat:'maxhp', value:4},
     special:{type:'reflect', pct:0.02},
@@ -3228,10 +3228,10 @@ const SOUL_STONES = {
 
   instinto_s:  {id:'instinto_s',  family:'instinto',  name:'Piedra del Alma: Instinto (S)',         tier:'S', icon:'🟢', bonus:{stat:'hab', value:40},
     special:{type:'elemental_proc', chance:0.64},
-    desc:'+40 Habilidad. 64% de probabilidad de quemar (fuego), congelar/ralentizar (hielo) o sangrar (físico) al enemigo, según la habilidad usada.'},
+    desc:'+40 Habilidad. 64% de probabilidad de quemar (fuego), congelar/ralentizar (hielo) o envenenar (el resto de habilidades) al enemigo, según la habilidad usada.'},
   instinto_ss: {id:'instinto_ss', family:'instinto',  name:'Piedra del Alma: Instinto (SS)',        tier:'SS', icon:'🟢', bonus:{stat:'hab', value:50},
     special:{type:'elemental_proc', chance:1},
-    desc:'+50 Habilidad. Siempre quemas, congelas/ralentizas o sangras al enemigo, según la habilidad usada.'},
+    desc:'+50 Habilidad. Siempre quemas, congelas/ralentizas o envenenas al enemigo, según la habilidad usada.'},
 
   vitalidad_s: {id:'vitalidad_s', family:'vitalidad', name:'Piedra del Alma: Vitalidad (S)',        tier:'S', icon:'❤️', bonus:{stat:'maxhp', value:20},
     special:{type:'reflect', pct:0.32},
@@ -8632,9 +8632,12 @@ function applyEquippedSpecials(target, dmgDealt, skill){
       } else if(skill.dmgType==='hielo' && chance(sp.chance)){
         applyStatus(target, {name:'Ralentizado', duration:2}, false);
         log(`<b>${it.name}</b> congela a ${target.name}.`);
-      } else if(skill.dmgType==='fisico' && chance(sp.chance)){
-        applyStatus(target, {name:'Sangrado', duration:3, stack:true, maxStack:3}, false);
-        log(`<b>${it.name}</b> abre una herida en ${target.name}, que empieza a sangrar.`);
+      } else if(skill.dmgType && chance(sp.chance)){
+        // 2026-10-02 (pedido explícito): Instinto ya no hace sangrar — el
+        // resto de habilidades (físicas, arcanas, de veneno) envenenan, y el
+        // Veneno escala con Habilidad, el mismo stat que da la piedra.
+        applyStatus(target, {name:'Veneno', duration:3, stack:true, maxStack:3}, false);
+        log(`<b>${it.name}</b> envenena a ${target.name}.`);
       }
     } else if(sp.type==='debilitar_enemigo'){
       // Maza de combate Tier S ('maza_s'): además de su retroceso normal,
