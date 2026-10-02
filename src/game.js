@@ -2266,8 +2266,10 @@ const SET_CATALOG = {
         {res_fisica:7},{res_fisica:11, res_magica:3},{res_fisica:15, res_magica:5},{res_fisica:20, res_magica:8},{res_fisica:26, res_magica:11, evasion:0.03},{res_fisica:34, res_magica:15, evasion:0.05}]},
       botas:{noun:'Pasos', suffix:'de Whitechapel', g:'mp', tiers:[
         {agi:3},{agi:5, res_magica:3},{agi:7, res_magica:6},{agi:10, res_magica:9},{agi:13, res_magica:13, fortaleza_mental:5, evasion:0.03},{agi:17, res_magica:18, fortaleza_mental:8, evasion:0.05}]},
+      // +% de daño desde Poco Común (2026-10-02, pedido explícito: que el
+      // Asesino no pierda tanto daño tras retirarse el equipo por senda).
       guantes:{noun:'Guantes', suffix:'del Destripador', g:'mp', tiers:[
-        {fis:5},{fis:8, pen_fis:0.02},{fis:12, pen_fis:0.04},{fis:16, pen_fis:0.06},{fis:21, pen_fis:0.08, sangrado:0.03},{fis:28, pen_fis:0.11, sangrado:0.05}]},
+        {fis:5},{fis:8, pen_fis:0.02, dano:0.03},{fis:12, pen_fis:0.04, dano:0.05},{fis:16, pen_fis:0.06, dano:0.07},{fis:21, pen_fis:0.08, sangrado:0.03, dano:0.09},{fis:28, pen_fis:0.11, sangrado:0.05, dano:0.12}]},
       amuleto:{noun:'Recuerdo', suffix:'de la Última Víctima', g:'m', tiers:[
         {maxhp_flat:5, fortaleza_mental:3},{maxhp_flat:8, fortaleza_mental:5},{maxhp_flat:12, fortaleza_mental:8},{maxhp_flat:18, fortaleza_mental:11},{maxhp_flat:25, fortaleza_mental:15, dano:0.03},{maxhp_flat:35, fortaleza_mental:20, dano:0.05}]},
     },
@@ -2282,8 +2284,9 @@ const SET_CATALOG = {
         {res_fisica:7},{res_fisica:10, res_magica:4},{res_fisica:14, res_magica:7},{res_fisica:18, res_magica:10},{res_fisica:23, res_magica:14, reduccion:0.03},{res_fisica:30, res_magica:19, reduccion:0.05}]},
       botas:{noun:'Pasos', g:'mp', tiers:[
         {agi:3},{agi:5, res_magica:3},{agi:7, res_magica:6},{agi:10, res_magica:9},{agi:13, res_magica:13, fortaleza_mental:5, evasion:0.03},{agi:17, res_magica:18, fortaleza_mental:8, evasion:0.05}]},
+      // +% de daño desde Poco Común (mismo motivo, Arquero).
       guantes:{noun:'Guantes', g:'mp', tiers:[
-        {fis:5},{fis:8, precision:3},{fis:12, precision:5},{fis:16, precision:8},{fis:21, precision:11, pen_fis:0.04},{fis:28, precision:15, pen_fis:0.07}]},
+        {fis:5},{fis:8, precision:3, dano:0.03},{fis:12, precision:5, dano:0.05},{fis:16, precision:8, dano:0.07},{fis:21, precision:11, pen_fis:0.04, dano:0.09},{fis:28, precision:15, pen_fis:0.07, dano:0.12}]},
       amuleto:{noun:'Medallón', g:'m', tiers:[
         {maxhp_flat:5, fortaleza_mental:3},{maxhp_flat:8, fortaleza_mental:5},{maxhp_flat:12, fortaleza_mental:8},{maxhp_flat:18, fortaleza_mental:11},{maxhp_flat:25, fortaleza_mental:15, dano_basico:0.03},{maxhp_flat:35, fortaleza_mental:20, dano_basico:0.06}]},
     },
@@ -2330,8 +2333,10 @@ const SET_CATALOG = {
         {res_fisica:10},{res_fisica:14, res_magica:3},{res_fisica:19, res_magica:6},{res_fisica:24, res_magica:9},{res_fisica:30, res_magica:13, reduccion:0.05},{res_fisica:38, res_magica:18, reduccion:0.08}]},
       botas:{noun:'Grebas', g:'fp', tiers:[
         {res_magica:8},{res_magica:12, res_fisica:3},{res_magica:16, res_fisica:5},{res_magica:21, res_fisica:8},{res_magica:27, res_fisica:11, fortaleza_mental:5},{res_magica:35, res_fisica:15, fortaleza_mental:9}]},
+      // Recuperan el Físico del documento (Guerrero) y conservan algo de
+      // Vigor; +% de daño menor que Jack/Artemisa (es un set de tanque).
       guantes:{noun:'Guanteletes', g:'mp', tiers:[
-        {vig:4, maxhp_flat:5},{vig:7, maxhp_flat:8},{vig:10, maxhp_flat:12},{vig:14, maxhp_flat:18},{vig:18, maxhp_flat:25, bloqueo:0.03},{vig:24, maxhp_flat:35, bloqueo:0.06}]},
+        {fis:4, vig:2, maxhp_flat:5},{fis:7, vig:4, maxhp_flat:8, dano:0.02},{fis:10, vig:5, maxhp_flat:12, dano:0.03},{fis:14, vig:7, maxhp_flat:18, dano:0.04},{fis:18, vig:9, maxhp_flat:25, bloqueo:0.03, dano:0.05},{fis:24, vig:12, maxhp_flat:35, bloqueo:0.06, dano:0.06}]},
       amuleto:{noun:'Sello', g:'m', tiers:[
         {fortaleza_mental:4},{fortaleza_mental:7, maxhp_flat:5},{fortaleza_mental:10, maxhp_flat:10},{fortaleza_mental:14, maxhp_flat:15},{fortaleza_mental:18, maxhp_flat:22, reduccion:0.03},{fortaleza_mental:24, maxhp_flat:32, reduccion:0.05}]},
     },
@@ -2501,6 +2506,7 @@ function dealDamageToPlayer(amount){
   checkPetTriggers();
   if(shieldBroke && state.char.curHP>0) tryRenewShield(true, null);
   checkUltimoBastion(true, null);
+  checkVitalidadHeal();
 }
 // Habilidades únicas de mascota Épico+ (ver PET_CATALOG unique.effect) —
 // mismo choke point que checkFuriaContenidaTrigger (dealDamageToPlayer es
@@ -2810,7 +2816,7 @@ function buyTierSStone(family){
   const tpl = Object.values(SOUL_STONES).find(s=>s.family===family && s.tier==='S');
   if(!tpl) return;
   spendTierSMaterials();
-  addToInventory({kind:'soulstone', stoneId:tpl.id, family:tpl.family, name:tpl.name, tier:tpl.tier, icon:tpl.icon, desc:tpl.desc, preview:tpl.preview, bonus:tpl.bonus, special:tpl.special});
+  addToInventory(makeSoulStoneItem(tpl));
   log(`La Forja Legendaria termina: <b>${tpl.name}</b>.`);
   renderAll(); save();
 }
@@ -3000,13 +3006,19 @@ function soulTierIdx(tier){ return SOUL_STONE_TIERS.indexOf(tier); }
 // statValue: se duplica por cada rango. procChance: se duplica desde F en adelante.
 // advValue: "efecto avanzado" que arranca en rango A y sube +10 puntos/rango (o tabla fija).
 const SOUL_FAMILIES = {
-  vigor:     {name:'Vigor',           statKey:'fis',    baseE:2,  procBaseAtF:0.02, advBaseAtA:0.05, advLabel:'robo de vida (% del daño causado)'},
+  // 2026-10-02 (pedido explícito): Vigor deja de dar Físico — da solo Vida
+  // máxima (mismos números que Vitalidad); conserva aturdir/robo de vida.
+  vigor:     {name:'Vigor',           statKey:'maxhp',  baseE:1,  procBaseAtF:0.02, advBaseAtA:0.05, advLabel:'robo de vida (% del daño causado)'},
   sabiduria: {name:'Sabiduría',       statKey:'maxsta', baseE:8,  procBaseAtF:0.05, advBaseAtA:0.05, advLabel:'probabilidad de escudo de maná'},
   voluntad:  {name:'Voluntad',        statKey:'esp',    baseE:2,  procBaseAtF:0.05, advBaseAtA:0.05, advLabel:'probabilidad de que tu próxima habilidad cueste la mitad de espíritu'},
   instinto:  {name:'Instinto',        statKey:'hab',    baseE:2,  procBaseAtF:0.02, advBaseAtA:0.05, advLabel:'probabilidad de doble lanzamiento (el segundo gratis y sin turno)'},
   vitalidad: {name:'Vitalidad',       statKey:'maxhp',  baseE:1,  procBaseAtF:0.02, advBaseAtA:0.05, advLabel:'probabilidad de curar 10% de tu vida máxima'},
   furia:     {name:'Furia Contenida', statKey:null,     advTable:{A:0.25, S:0.50, SS:1.00}, advLabel:'probabilidad de revivir una vez por laberinto'},
-  sombra:    {name:'Sombra Cazadora', statKey:null,     advTable:{A:0.01, S:0.05, SS:0.10}, advLabel:'probabilidad de invocar una sombra que atrae el agro'}
+  sombra:    {name:'Sombra Cazadora', statKey:null,     advTable:{A:0.01, S:0.05, SS:0.10}, advLabel:'probabilidad de invocar una sombra que atrae el agro'},
+  // Piedras nuevas (pedido explícito 2026-10-02) — ver NEW_STONE_DEFS.
+  celeridad: {name:'Celeridad',       statKey:'agi',    advLabel:'golpe crítico garantizado tras esquivar'},
+  baluarte:  {name:'Baluarte',        statKey:'vig',    advLabel:'escudo al recibir un golpe crítico'},
+  maleficio: {name:'Maleficio',       statKey:'hab',    advLabel:'cada estado del enemigo le baja todas las resistencias'}
 };
 function soulStatValue(famId, tier){
   const fam = SOUL_FAMILIES[famId];
@@ -3242,6 +3254,86 @@ const SOUL_STONES = {
     specials:[{type:'evasion_flat', value:0.14}, {type:'sombra_summon', chance:0.10}],
     desc:'+14% de probabilidad de esquivar cualquier ataque. 10% de invocar una Sombra Cazadora que se planta al frente y atrae el agro (1 vez por combate).'}
 };
+// ---- Ajustes 2026-10-02 (pedido explícito) sobre el catálogo de arriba ----
+const STONE_TIER_LIST = ['E','F','D','C','B','A','S','SS'];
+// 1) Vigor: solo Vida máxima (misma escala que Vitalidad), sin Físico.
+const VIT_STONE_VALUES = {E:1, F:2, D:4, C:8, B:12, A:16, S:20, SS:25};
+STONE_TIER_LIST.forEach(t=>{
+  const st = SOUL_STONES['vigor_'+t.toLowerCase()];
+  if(!st) return;
+  const v = VIT_STONE_VALUES[t];
+  st.bonus = {stat:'maxhp', value:v};
+  st.desc = st.desc.replace(/^\+\d+ Físico( permanente)?\./, `+${v*8} Vida máxima aprox.`);
+});
+// 2) Efectos de rango A/S/SS que estaban prometidos y nunca se programaron
+//    (Voluntad: mitad de costo; Instinto: doble lanzamiento; Vitalidad:
+//    autocuración). Se agregan como un special más; probabilidades de
+//    soulAdvancedValue (A 5%, S 15%, SS 25%).
+const ADV_STONE_EFFECTS = {
+  voluntad: (c)=>({sp:{type:'esp_mitad_siguiente', chance:c}, text:`${Math.round(c*100)}% de que tu siguiente habilidad de Espíritu cueste la mitad.`}),
+  instinto: (c)=>({sp:{type:'doble_encantamiento', chance:c}, text:`${Math.round(c*100)}% de lanzar tu habilidad dos veces (la segunda gratis).`}),
+  vitalidad:(c)=>({sp:{type:'autocuracion', chance:c, pct:0.10}, text:`${Math.round(c*100)}% al recibir daño de recuperar el 10% de tu vida máxima (máx. 1 vez por turno).`}),
+};
+Object.entries(ADV_STONE_EFFECTS).forEach(([fam, mk])=>{
+  ['A','S','SS'].forEach(t=>{
+    const st = SOUL_STONES[fam+'_'+t.toLowerCase()];
+    if(!st) return;
+    const {sp, text} = mk(soulAdvancedValue(fam, t));
+    st.specials = (st.specials || (st.special ? [st.special] : [])).concat([sp]);
+    delete st.special;
+    st.desc = st.desc.replace(/ ?\([^)]*(no está implementad|pendiente)[^)]*\)/g, '') + ' ' + text;
+  });
+});
+STONE_TIER_LIST.forEach(t=>{
+  ['voluntad','instinto','vitalidad'].forEach(fam=>{
+    const st = SOUL_STONES[fam+'_'+t.toLowerCase()];
+    if(st && st.preview) st.preview = st.preview.replace(/ ?\(pendiente de implementar\)/g, '');
+  });
+});
+// 3) Piedras nuevas: Celeridad (Agilidad), Baluarte (Vigor), Maleficio
+//    (Habilidad). Stat con la misma escala que las piedras de stat viejas.
+const NEW_STONE_STAT = {E:2, F:4, D:8, C:16, B:24, A:32, S:40, SS:50};
+const NEW_STONE_DEFS = {
+  celeridad: {icon:'💨', statLabel:'Agilidad',
+    f:{E:0, F:0.05, D:0.08, C:0.12, B:0.16, A:0.20, S:0.25, SS:0.30}, fType:'critico_dano', fText:v=>`+${Math.round(v*100)}% de daño crítico.`,
+    adv:{A:3, S:2, SS:1}, advType:'celeridad_contraataque', advText:v=>`Al esquivar un ataque, tu siguiente golpe es crítico garantizado (como mucho cada ${v} turno${v>1?'s':''}).`,
+    preview:'Desde F: daño crítico. Desde A: crítico garantizado tras esquivar — combina con Sombra Cazadora (evasión).'},
+  baluarte: {icon:'🛡️', statLabel:'Vigor',
+    f:{E:0, F:0.02, D:0.03, C:0.04, B:0.05, A:0.06, S:0.08, SS:0.10}, fType:'reduccion_dano', fText:v=>`${Math.round(v*100)}% de reducción de daño recibido.`,
+    adv:{A:0.10, S:0.15, SS:0.20}, advType:'baluarte_escudo', advText:v=>`Al recibir un golpe crítico, ganas un escudo del ${Math.round(v*100)}% de tu vida máxima (1 vez por combate).`,
+    preview:'Desde F: reducción de daño. Desde A: escudo al recibir un golpe crítico.'},
+  maleficio: {icon:'🕯️', statLabel:'Habilidad',
+    f:{E:0, F:0.03, D:0.05, C:0.08, B:0.10, A:0.12, S:0.15, SS:0.20}, fType:'prob_estados', fText:v=>`+${Math.round(v*100)}% de probabilidad de aplicar estados con tus habilidades.`,
+    adv:{A:2, S:3, SS:4}, advType:'maleficio_res', advText:v=>`Cada estado negativo distinto del enemigo le quita ${v} puntos a todas sus resistencias (máx. 3 estados).`,
+    preview:'Desde F: probabilidad de aplicar estados. Desde A: los estados del enemigo bajan sus resistencias.'},
+};
+Object.entries(NEW_STONE_DEFS).forEach(([fam, def])=>{
+  STONE_TIER_LIST.forEach(t=>{
+    const statV = NEW_STONE_STAT[t];
+    const specials = [];
+    const parts = [`+${statV} ${def.statLabel}.`];
+    if(def.f[t]){ specials.push(def.fType==='critico_dano'||def.fType==='reduccion_dano'||def.fType==='prob_estados' ? {type:def.fType, value:def.f[t]} : {type:def.fType, chance:def.f[t]}); parts.push(def.fText(def.f[t])); }
+    if(def.adv[t]){
+      const a = def.adv[t];
+      specials.push(def.advType==='celeridad_contraataque' ? {type:a ? def.advType : '', cooldown:a}
+        : def.advType==='baluarte_escudo' ? {type:def.advType, shieldPct:a}
+        : {type:def.advType, perStatus:a});
+      parts.push(def.advText(a));
+    }
+    const id = fam+'_'+t.toLowerCase();
+    SOUL_STONES[id] = {id, family:fam, name:`Piedra del Alma: ${SOUL_FAMILIES[fam].name} (${t})`, tier:t, icon:def.icon,
+      bonus:{stat:SOUL_FAMILIES[fam].statKey, value:statV}, specials, desc:parts.join(' '), preview: def.adv[t] ? undefined : def.preview};
+  });
+});
+// Instancia de inventario de una piedra (antes cada lugar copiaba los campos a
+// mano y se olvidaba de `specials` — bug 2026-10-02: Sombra Cazadora A+ y
+// Sabiduría S+ nunca tuvieron sus efectos porque viven en `specials`).
+function makeSoulStoneItem(tpl){
+  const it = {kind:'soulstone', stoneId:tpl.id, family:tpl.family, name:tpl.name, tier:tpl.tier, icon:tpl.icon, desc:tpl.desc, preview:tpl.preview, bonus:tpl.bonus};
+  if(tpl.special) it.special = tpl.special;
+  if(tpl.specials) it.specials = tpl.specials;
+  return it;
+}
 
 function maxSoulSlots(level){ return Math.floor((level||1)/10); } // 1 espacio cada 10 niveles
 function ensureSoulSlots(){
@@ -3582,7 +3674,7 @@ function derived(){
   // cada una rinde menos por punto que cuando Habilidad solo alimentaba una.
   const AGI_CRIT_RATE = 0.0035, AGI_EVASION_RATE = 0.0035;
   const critChance = clamp(0.05 + agi*AGI_CRIT_RATE + (race().id==='bestia'?0.15:0) + petCritProc, 0, 0.6);
-  const critDmgBonus = specialsFromPets().filter(sp=>sp.type==='critico_dano').reduce((s,sp)=>s+sp.value,0);
+  const critDmgBonus = specialsFromPets().concat(stoneSpecials('critico_dano')).filter(sp=>sp.type==='critico_dano').reduce((s,sp)=>s+sp.value,0);
   // Esquivar: viene de Agilidad (ya no Habilidad), pero solo la parte
   // "natural" (raza + nivel) pesa completo — la que aporta EQUIPO pesa la
   // mitad (mismo freno que ya existía para Habilidad, ahora aplicado a
@@ -3724,10 +3816,13 @@ function refreshStoneFromTemplate(stone){
   if(!stone || stone.kind!=='soulstone') return stone;
   const tpl = SOUL_STONES[stone.stoneId];
   if(!tpl) return stone; // plantilla renombrada/eliminada - se deja como está, defensivo
-  return Object.assign({}, stone, {
+  const out = Object.assign({}, stone, {
     name: tpl.name, tier: tpl.tier, icon: tpl.icon, desc: tpl.desc,
-    preview: tpl.preview, bonus: tpl.bonus, special: tpl.special
+    preview: tpl.preview, bonus: tpl.bonus, special: tpl.special, specials: tpl.specials
   });
+  if(!tpl.special) delete out.special;
+  if(!tpl.specials) delete out.specials;
+  return out;
 }
 // Mismo criterio que refreshStoneFromTemplate, pero para equipo (armas y
 // equipo general): un objeto ya dropeado quedó guardado como una copia
@@ -7501,7 +7596,7 @@ function rollStoneDropForLevel(level, bypassTiers){
   if(!tier) return null;
   const pool = Object.values(SOUL_STONES).filter(s=>s.tier===tier);
   const tpl = pick(pool);
-  return {kind:'soulstone', stoneId:tpl.id, family:tpl.family, name:tpl.name, tier:tpl.tier, icon:tpl.icon, desc:tpl.desc, preview:tpl.preview, bonus:tpl.bonus, special:tpl.special};
+  return makeSoulStoneItem(tpl);
 }
 // Piedra de alma garantizada — el jefe de década (ver stonesAllowedThisFight
 // en handleVictory) siempre suelta una, respetando las mismas proporciones
@@ -7845,7 +7940,14 @@ function effectiveEnemyRes(enemy, resKey){
   // Ruina (Vara de la Ruina del Hechicero, 2026-10-02): resta puntos planos a
   // todas las resistencias mientras dura — se suma a la Bendición Sagrada.
   const ruina = hasStatus(enemy.statuses, 'Ruina');
-  return base - (blessed ? 20 : 0) - (ruina ? (ruina.resPenalty||0) : 0);
+  // Maleficio A/S/SS (piedra del jugador): cada estado negativo distinto del
+  // enemigo le resta puntos a todas sus resistencias (máx. 3 estados).
+  let maleficio = 0;
+  if(state && state.char && enemy.tpl){
+    const mal = stoneSpecials('maleficio_res').sort((a,b)=>b.perStatus-a.perStatus)[0];
+    if(mal) maleficio = mal.perStatus * Math.min(3, negativeStatusCount(enemy));
+  }
+  return base - (blessed ? 20 : 0) - (ruina ? (ruina.resPenalty||0) : 0) - maleficio;
 }
 // Mermado (armas de Paladín/Hechicero/Sacerdote, 2026-10-02): el enemigo pega
 // un X% más flojo. Es un estado aparte de Debilitado (fijo -15%) para que no
@@ -7906,6 +8008,7 @@ function playerStatusIncomingMult(){
   let m = 1;
   (combat.playerStatuses||[]).forEach(st=>{ if(st.name!=='Furioso' && st.incomingDmgReduction) m *= (1 - st.incomingDmgReduction); });
   m *= setProtectorMult((combat.playerShield||0)>0, specialsFromEquip(state.char.equip));
+  stoneSpecials('reduccion_dano').forEach(sp=>{ m *= (1 - sp.value); }); // Baluarte
   if(combat.vigiliaGuardPending){
     m *= (1 - combat.vigiliaGuardPending);
     combat.vigiliaGuardPending = 0;
@@ -7926,6 +8029,33 @@ function tryRenewShield(isPlayer, ally){
   grantShield(isPlayer, ally, amt);
   log(`<b>${src.name}</b> repone el escudo de ${isPlayer ? 'ti' : ally.name}: absorbe ${amt} de daño.`);
 }
+// Specials de las piedras engarzadas del JUGADOR de un tipo dado.
+function stoneSpecials(type){
+  return socketedStones().flatMap(s=>itemSpecialsArr(s)).filter(sp=>sp.type===type);
+}
+// Vitalidad A/S/SS: al recibir daño, probabilidad de curar 10% (máx. 1 vez
+// por turno del jugador).
+function checkVitalidadHeal(){
+  if(!combat || combat.over || state.char.curHP<=0) return;
+  const sp = stoneSpecials('autocuracion').sort((a,b)=>b.chance-a.chance)[0];
+  if(!sp || combat.vitalidadTurn===combat.turnCount || !chance(sp.chance)) return;
+  combat.vitalidadTurn = combat.turnCount;
+  const d = derived();
+  const before = state.char.curHP;
+  state.char.curHP = Math.min(d.maxHP, state.char.curHP + Math.round(d.maxHP*sp.pct));
+  if(state.char.curHP>before) log(`<b>Piedra de Vitalidad</b>: recuperas ${state.char.curHP-before} de vida.`);
+}
+// Baluarte A/S/SS: al recibir un golpe crítico, escudo (1 vez por combate).
+function checkBaluarteOnCrit(){
+  if(!combat || combat.over || combat.tierSFired.has('baluarte_escudo')) return;
+  const sp = stoneSpecials('baluarte_escudo').sort((a,b)=>b.shieldPct-a.shieldPct)[0];
+  if(!sp) return;
+  combat.tierSFired.add('baluarte_escudo');
+  const amt = Math.round(derived().maxHP*sp.shieldPct);
+  grantShield(true, null, amt);
+  log(`<b>Piedra de Baluarte</b>: el golpe crítico levanta un escudo de ${amt}.`);
+}
+
 // --- Bonos de conjunto en combate (2026-10-02) ---
 function playerSetSp(type){ return specialsFromEquip(state.char.equip).find(sp=>sp.type===type); }
 // Escudo que NO se acumula: si ya hay uno igual o mayor no hace nada (evita
@@ -8580,7 +8710,9 @@ function controlDiscountFor(skillId){
 }
 function effectiveSkillCost(skillId, skill){
   if(!skill || !skill.cost) return 0;
-  return Math.max(0, skill.cost.valor - controlDiscountFor(skillId));
+  let v = Math.max(0, skill.cost.valor - controlDiscountFor(skillId));
+  if(skill.cost.tipo==='espiritu' && combat && combat.espHalfNext) v = Math.ceil(v/2); // Piedra de Voluntad A+
+  return v;
 }
 
 // isRepeat: true solo para la repetición gratuita de doble encantamiento
@@ -8650,6 +8782,13 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
     const paid = effectiveSkillCost(skillId, skill);
     if(skill.cost.tipo==='estamina') state.char.curSta -= paid;
     else state.char.curSpi -= paid;
+    if(skill.cost.tipo==='espiritu'){
+      if(combat.espHalfNext){ combat.espHalfNext = false; log(`<b>Piedra de Voluntad</b>: ${skill.name} te costó la mitad de Espíritu.`); }
+      else {
+        const vol = stoneSpecials('esp_mitad_siguiente').sort((a,b)=>b.chance-a.chance)[0];
+        if(vol && chance(vol.chance)){ combat.espHalfNext = true; log('<b>Piedra de Voluntad</b>: tu siguiente habilidad de Espíritu costará la mitad.'); }
+      }
+    }
     if(discount>0){
       combat.tierSFired.add('control_descuento');
       log(`<b>${equipNameWithSpecial('control_descuento')}</b> abarata tu primer control del combate: ${skill.name} cuesta ${paid} de MP.`);
@@ -8982,6 +9121,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
     }
 
     let isCrit = skill.guaranteedCrit ? true : chance(crit);
+    if(combat.critNext && !isRepeat){ isCrit = true; combat.critNextUsed = true; }
     if(isCrit) base *= (1.5 + d.critDmgBonus);
 
     let ignore = skill.ignoreResist||0;
@@ -9094,7 +9234,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
       // Conjuntos (2026-10-02): probabilidad extra de aplicar estados.
       if(applyDef.chance!==undefined && applyDef.chance<1){
         const sps = specialsFromEquip(state.char.equip);
-        let bonus = sps.filter(sp=>sp.type==='prob_estados').reduce((sum,sp)=>sum+sp.value,0);
+        let bonus = sps.concat(stoneSpecials('prob_estados')).filter(sp=>sp.type==='prob_estados').reduce((sum,sp)=>sum+sp.value,0);
         if(applyDef.name==='Sangrado') bonus += sps.filter(sp=>sp.type==='set_sangrado_bonus').reduce((sum,sp)=>sum+sp.value,0);
         if(MENTAL_STATUSES.has(applyDef.name)){
           const mq = sps.find(sp=>sp.type==='set_mente_quebrada');
@@ -9112,6 +9252,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
     }
     applyEquippedSpecials(target, dmg, skill);
   });
+  if(combat.critNextUsed){ combat.critNext = false; combat.critNextUsed = false; }
   splashHits.forEach(sh=>{
     const pool = livingEnemies().filter(e=>e!==sh.exclude);
     const hit = sh.single ? (pool.length ? [pick(pool)] : []) : pool;
@@ -9154,7 +9295,8 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
       await playerUseSkill(skillId, repTarget, true);
       if(combat && combat===myCombat && !combat.over && combat.turnCount===tc) await endPlayerTurn();
     };
-    const equipSpecials = specialsFromEquip(state.char.equip);
+    // Incluye la Piedra de Instinto A+ (doble lanzamiento, mismo mecanismo).
+    const equipSpecials = specialsFromEquip(state.char.equip).concat(stoneSpecials('doble_encantamiento'));
     if(canRepeat && skill.cost && equipSpecials.some(sp=>sp.type==='doble_encantamiento' && chance(sp.chance))){
       log(`Tu arma realiza un <b>doble encantamiento</b>: ${skill.name} se relanza sin costo.`);
       await repeatAndClose();
@@ -9892,6 +10034,15 @@ function enemyAct(enemy){
   const evasion = Math.max(0.02, rawEvasion - (enemy.precision||0));
   if(chance(evasion)){
     log(`${enemy.name} ataca a ${target.kind==='ally' ? target.ally.name : 'ti'}, ¡pero esquiva!`);
+    // Celeridad A/S/SS: tras esquivar, el siguiente golpe propio es crítico.
+    if(target.kind==='player'){
+      const cel = stoneSpecials('celeridad_contraataque').sort((a,b)=>a.cooldown-b.cooldown)[0];
+      if(cel && !combat.critNext && (combat.turnCount||0) >= (combat.celeridadReadyAt||0)){
+        combat.critNext = true;
+        combat.celeridadReadyAt = (combat.turnCount||0) + cel.cooldown;
+        log('<b>Celeridad</b>: tu siguiente golpe será crítico.');
+      }
+    }
     combat.lastAction = {label:'¡Esquivado!', effects:[]};
     return;
   }
@@ -10118,6 +10269,7 @@ function enemyAct(enemy){
     finalDmg = Math.max(1, Math.round(finalDmg));
     dealDamageToPlayer(finalDmg);
     log(`${enemy.name} ${text}: ${finalDmg} de daño${enemyCrit?' (¡crítico!)':''}.`);
+    if(enemyCrit) checkBaluarteOnCrit();
     combat.lastAction = {label:moveLabel, effects:[{targetKind:'player', amount:finalDmg, kind:'dmg'}]};
   } else {
     const ally = target.ally;
@@ -10311,6 +10463,7 @@ function resolveNewStyleEnemyMove(enemy, target, enemyCrit){
     finalDmg *= levelDiffDamageMult(monsterEffectiveLevel(), state.char.level);
     finalDmg = Math.max(1, Math.round(finalDmg));
     dealDamageToPlayer(finalDmg);
+    if(enemyCrit) checkBaluarteOnCrit();
     if(ability.applies) applyStatus(null, Object.assign({}, ability.applies), true);
     // Robo de MP (2026-09-25, pedido explícito: "quitar un % del MP al que
     // se atacó") — % de tu MP ACTUAL, no del máximo, para que nunca deje en
