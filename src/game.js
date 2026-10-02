@@ -5534,6 +5534,7 @@ function cityNavigate(key){
   else if(key==='admin'){ if(state.char.role==='admin') adminOpen = true; }
   else if(CITY_PLACES[key]){ CITY_PLACES[key].open(); cityView = 'map'; }
   else cityView = key;
+  if(key==='welcome') welcomeStep = 0;
   if(key==='welcome') lsSet(charKey('welcome'),'1');
   renderAll();
   window.scrollTo({top:0, behavior:'smooth'});
@@ -5571,29 +5572,78 @@ function renderCity(){
   }
   return renderCityMap();
 }
+// Bienvenida narrada (2026-10-02, pedido explícito): un cronista cuenta el
+// origen del laberinto (inspirado en la novela, texto propio) y te pide
+// llegar al último piso. Escenas con arte provisional (degradados + sprites
+// del juego) hasta que haya ilustraciones propias.
+const WELCOME_STORY = [
+  {scene:'cursed', text:'Siéntate, forastero. Antes de bajar, debes saber dónde estás… y por qué esta ciudad sigue en pie.'},
+  {scene:'cursed', text:'Hace siglos, una bruja maldijo el mundo. El aire se volvió veneno, los ríos se pudrieron y los reinos cayeron uno tras otro, en silencio.'},
+  {scene:'barrier', text:'Solo esta ciudad resistió. Sus magos alzaron una barrera que aún hoy nos protege… pero fuera de ella no crece nada. Ni trigo, ni esperanza.'},
+  {scene:'portal', text:'Cuando el hambre llegó a las puertas del palacio, la familia real abrió un portal hacia otra dimensión. Del otro lado había riqueza: piedras cargadas de magia, criaturas, tesoros.'},
+  {scene:'labyrinth', text:'Ese portal se convirtió en el Laberinto. Los que bajan por él se llaman exploradores: viven de lo que traen de abajo… y muchos no vuelven.'},
+  {scene:'explorers', text:'Bosques de goblins, nidos de arañas, bestias, reflejos que roban tu rostro, una isla de traidores, un mar sin fondo… Cada década, un guardián más terrible que el anterior.'},
+  {scene:'deep', text:'Dicen que en el último piso está el corazón de la maldición. Nadie ha llegado. Nadie ha vuelto para contarlo.'},
+  {scene:'ask', text:'Pero tú… tú tienes algo distinto en la mirada. Baja, hazte fuerte, y llega donde nadie ha llegado. La ciudad entera te lo pide.'},
+];
+const WELCOME_SCENES = {
+  cursed:'linear-gradient(180deg,#2a3a1a 0%,#1a2410 50%,#0c1006 100%)',
+  barrier:'radial-gradient(ellipse at 50% 85%,rgba(150,110,255,0.55),transparent 55%),linear-gradient(180deg,#1b1530,#0d0a18)',
+  portal:'radial-gradient(circle at 50% 55%,#ffd76a 0%,#c47b1a 18%,#3a2410 36%,#120a05 60%)',
+  labyrinth:'linear-gradient(180deg,#1a1410,#0b0806)',
+  explorers:'linear-gradient(180deg,#2a1a10,#0d0805)',
+  deep:'radial-gradient(ellipse at 50% 70%,rgba(40,110,170,0.6),transparent 60%),linear-gradient(180deg,#06121e,#020509)',
+  ask:'radial-gradient(ellipse at 50% 40%,rgba(255,190,90,0.35),transparent 60%),linear-gradient(180deg,#2a1a10,#0d0805)',
+};
+let welcomeStep = 0;
+function welcomeSceneArt(scene){
+  const hd = id => `src/assets/enemigos/${id}.png?v=4`;
+  if(scene==='portal') return `<div class="ws-portal"></div>`;
+  if(scene==='barrier') return `<div class="ws-dome"></div><div class="ws-city">🏰</div>`;
+  if(scene==='cursed') return `<div class="ws-fog"></div><div class="ws-city dead">🏚️🏚️🏚️</div>`;
+  if(scene==='labyrinth') return `<div class="ws-stairs">🕳️</div>`;
+  if(scene==='explorers') return `<div class="ws-row">${['goblin_guerrero','viuda_alfa','rey_manada','duelista_veterano','triton_guerrero'].map(id=>`<img src="${hd(id)}" alt="">`).join('')}</div>`;
+  if(scene==='deep') return `<img class="ws-boss" src="${hd('storm_gush')}" alt="">`;
+  if(scene==='ask') return `<img class="ws-hero" src="${playerSpriteFor(state.char.style, state.char.race)||''}" alt="">`;
+  return '';
+}
 function renderCityWelcome(){
   lsSet(charKey('welcome'),'1');
-  const r = race();
+  const step = Math.max(0, Math.min(WELCOME_STORY.length-1, welcomeStep));
+  const cur = WELCOME_STORY[step];
+  const last = step === WELCOME_STORY.length-1;
   document.getElementById('main-panel').innerHTML = `
     <div class="city-welcome">
-      <h2 class="cw-title">¡Bienvenido a la Última Ciudad!</h2>
-      <p class="cw-sub">Lo único que queda en pie sobre el laberinto. Aquí descansas, te equipas y preparas tu próxima bajada.</p>
-      <div class="cw-comic">
-        <div class="cw-panel big" style="background-image:url(src/assets/aliados/aldric.jpg)"><span class="intro-cap">“Otro más que baja a buscar gloria…”</span></div>
-        <div class="cw-panel race" style="background-image:url(src/assets/razas/${r.id}.png)"><span class="intro-cap">Llegas con lo puesto.</span></div>
-        <div class="cw-panel" style="background-image:url(src/assets/aliados/delyth.jpg)"><span class="intro-cap">“Que la luz te acompañe ahí abajo.”</span></div>
-        <div class="cw-panel wide"><span class="intro-cap cw-poster">SE BUSCAN HÉROES — solo los muy valientes</span></div>
+      <h2 class="cw-title">La Última Ciudad</h2>
+      <div class="ws-scene" style="background:${WELCOME_SCENES[cur.scene]}">${welcomeSceneArt(cur.scene)}</div>
+      <div class="ws-dialog">
+        <div class="ws-narrator"><div class="ws-portrait">📜</div><b>El Cronista</b></div>
+        <p class="ws-text">${cur.text}</p>
+        <div class="ws-foot">
+          <div class="ws-dots">${WELCOME_STORY.map((_,i)=>`<i class="${i===step?'on':(i<step?'done':'')}"></i>`).join('')}</div>
+          <div class="ws-btns">
+            ${step>0?'<button class="reset-btn" id="ws-prev">‹ Atrás</button>':''}
+            ${last ? '' : '<button class="reset-btn" id="ws-skip">Saltar historia</button>'}
+            ${last ? '' : '<button class="btn-main" id="ws-next">Continuar ›</button>'}
+          </div>
+        </div>
       </div>
-      <div class="cw-actions">
+      ${last ? `<div class="cw-actions" style="margin-top:14px;">
         <button class="btn-main" id="cw-map">Recorrer la ciudad 🗺️</button>
-        <button class="reset-btn" id="cw-lab">Ir directo al laberinto</button>
+        <button class="reset-btn" id="cw-lab">Bajar al laberinto</button>
         <button class="reset-btn" id="cw-tut">¿Cómo jugar?</button>
-      </div>
+      </div>` : ''}
       <p class="cw-record">Tu récord: ${describeRecord()}.</p>
     </div>`;
-  document.getElementById('cw-map').onclick = ()=> cityNavigate('map');
-  document.getElementById('cw-lab').onclick = ()=> cityNavigate('laberinto');
-  document.getElementById('cw-tut').onclick = showTutorial;
+  const go = (d)=>{ welcomeStep = step + d; renderCityWelcome(); };
+  const prev = document.getElementById('ws-prev'), next = document.getElementById('ws-next'), skip = document.getElementById('ws-skip');
+  if(prev) prev.onclick = ()=> go(-1);
+  if(next) next.onclick = ()=> go(1);
+  if(skip) skip.onclick = ()=>{ welcomeStep = WELCOME_STORY.length-1; renderCityWelcome(); };
+  const m = document.getElementById('cw-map'), l = document.getElementById('cw-lab'), t = document.getElementById('cw-tut');
+  if(m) m.onclick = ()=>{ welcomeStep = 0; cityNavigate('map'); };
+  if(l) l.onclick = ()=>{ welcomeStep = 0; cityNavigate('laberinto'); };
+  if(t) t.onclick = showTutorial;
 }
 function renderCityMap(){
   const badges = navBadges();
