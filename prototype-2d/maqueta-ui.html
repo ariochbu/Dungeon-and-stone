@@ -1,0 +1,642 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dungeon & Stone — Maqueta de interfaz</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Crimson+Text:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0f0d0b; --panel:#1a1612; --panel2:#221d17; --stone:#4a433c; --edge:#3a3128;
+  --bronze:#b08a4a; --bronze-light:#d9b76b; --gold:#ffd76a; --text:#ece4d4; --text-dim:#a79e8e;
+  --blood:#b24444; --good:#6fbf73; --mp:#4f7fd1; --spi:#5fb7c9; --hp:#c0453f;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:'Crimson Text',Georgia,serif;font-size:16px}
+h1,h2,h3,h4{font-family:'Cinzel',Georgia,serif;margin:0;letter-spacing:.02em}
+button{font-family:inherit;cursor:pointer}
+img.px{image-rendering:pixelated}
+
+/* --------- barra de la maqueta --------- */
+.mock-bar{position:sticky;top:0;z-index:50;display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 14px;background:#090807;border-bottom:1px solid var(--edge)}
+.mock-bar .tag{font-family:'Cinzel';font-size:.75em;color:#111;background:var(--bronze-light);padding:2px 8px;border-radius:3px;font-weight:700}
+.mock-bar button{background:transparent;color:var(--text-dim);border:1px solid var(--edge);border-radius:4px;padding:5px 10px;font-family:'Cinzel';font-size:.8em}
+.mock-bar button.on{color:var(--bronze-light);border-color:var(--bronze-light);background:rgba(217,183,107,.08)}
+.mock-bar .note{margin-left:auto;color:var(--text-dim);font-size:.85em}
+.screen{display:none;min-height:calc(100vh - 46px)}
+.screen.on{display:block}
+
+/* --------- marco ornamentado --------- */
+.frame{border:1px solid var(--edge);background:linear-gradient(180deg,var(--panel2),var(--panel));border-radius:6px;box-shadow:inset 0 0 0 1px rgba(217,183,107,.06),0 8px 30px rgba(0,0,0,.4)}
+.title-orn{display:flex;align-items:center;justify-content:center;gap:12px;color:var(--bronze-light)}
+.title-orn::before,.title-orn::after{content:'';height:1px;width:90px;background:linear-gradient(90deg,transparent,var(--bronze),transparent)}
+
+/* =================== 1. CREACIÓN =================== */
+#s-crear{background:radial-gradient(ellipse at 50% 35%,#3a1d0c 0%,#1a0e08 45%,#0b0806 100%)}
+.cr-wrap{max-width:1200px;margin:0 auto;padding:18px 16px 30px}
+.stepper{display:flex;justify-content:center;gap:6px;margin:6px 0 14px}
+.stepper span{font-family:'Cinzel';font-size:.8em;color:var(--text-dim);padding:4px 12px;border:1px solid var(--edge);border-radius:20px;background:rgba(0,0,0,.3)}
+.stepper span.on{color:#111;background:var(--bronze-light);border-color:var(--bronze-light)}
+.stepper span.done{color:var(--bronze-light);border-color:var(--bronze)}
+.cr-title{font-size:1.7em;text-align:center;color:var(--gold);text-shadow:0 0 18px rgba(255,180,60,.35)}
+.emblems{display:flex;justify-content:center;gap:14px;margin:16px 0 10px;flex-wrap:wrap}
+.emblem{width:84px;height:84px;border-radius:50%;border:3px solid #4b4036;background:radial-gradient(circle at 50% 40%,#3b342c,#15120f);display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:pointer;transition:transform .15s,box-shadow .15s,filter .15s;filter:grayscale(.75) brightness(.75);position:relative}
+.emblem img{width:88%;height:88%;object-fit:contain}
+.emblem:hover{filter:none;transform:translateY(-2px)}
+.emblem.on{filter:none;border-color:var(--gold);box-shadow:0 0 0 3px rgba(255,215,106,.25),0 0 24px rgba(255,190,70,.55);transform:scale(1.08)}
+.emblem .lbl{position:absolute;bottom:-1px;left:0;right:0;font-family:'Cinzel';font-size:.62em;text-align:center;background:rgba(0,0,0,.65);color:var(--bronze-light);padding:1px 0}
+.cr-stage{display:grid;grid-template-columns:1.1fr 1fr;gap:20px;align-items:center;margin-top:8px}
+.hero{position:relative;height:440px;display:flex;align-items:flex-end;justify-content:center}
+.hero::before{content:'';position:absolute;inset:6% 12% 0;background:radial-gradient(ellipse at 50% 60%,rgba(255,200,90,.45),rgba(255,140,40,.12) 45%,transparent 70%);filter:blur(4px);animation:pulse 3.5s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:.75}50%{opacity:1}}
+.hero img.race-art{position:relative;height:370px;max-width:94%;object-fit:cover;border-radius:10px;border:3px solid var(--bronze);box-shadow:0 0 0 2px #120c07,0 0 40px rgba(255,170,60,.45),0 18px 30px rgba(0,0,0,.6);margin-bottom:30px}
+.hero img.sprite{position:relative;width:300px;height:300px;margin-bottom:24px;filter:drop-shadow(0 10px 18px rgba(0,0,0,.7))}
+.hero .class-bg{position:absolute;inset:auto 0 10px;margin:auto;opacity:.18;max-width:85%;filter:blur(1px)}
+.pedestal{position:absolute;bottom:14px;width:300px;height:34px;border-radius:50%;background:radial-gradient(ellipse,rgba(0,0,0,.6),transparent 70%)}
+.info{padding:18px 20px}
+.info h2{font-size:1.6em;color:var(--gold)}
+.info .sub{color:var(--bronze-light);font-family:'Cinzel';font-size:.85em;margin:4px 0 10px}
+.info p.desc{font-style:italic;color:var(--text);margin:0 0 12px;font-size:1.05em}
+.bars{display:grid;grid-template-columns:auto 1fr auto;gap:5px 10px;align-items:center;font-size:.9em;margin-bottom:12px}
+.bar{height:8px;border-radius:4px;background:#0c0a08;border:1px solid #2d261f;overflow:hidden}
+.bar i{display:block;height:100%;background:linear-gradient(90deg,var(--bronze),var(--gold))}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.chip{font-size:.8em;padding:2px 8px;border-radius:12px;border:1px solid var(--edge);background:rgba(0,0,0,.3)}
+.chip.pos{color:var(--good);border-color:rgba(111,191,115,.4)} .chip.neg{color:#e57c74;border-color:rgba(229,124,116,.4)}
+.passive{border-left:3px solid var(--bronze-light);padding:6px 10px;background:rgba(217,183,107,.07);margin-bottom:10px;border-radius:3px}
+.proscons{display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:.9em}
+.proscons div{padding:8px 10px;border-radius:4px;background:rgba(0,0,0,.25)}
+.proscons b{font-family:'Cinzel';font-size:.8em;display:block;margin-bottom:3px}
+.cta-row{display:flex;justify-content:space-between;gap:10px;margin-top:16px}
+.btn{background:linear-gradient(180deg,#5c3a1a,#3b2410);color:var(--gold);border:1px solid var(--bronze);padding:10px 18px;border-radius:5px;font-family:'Cinzel';font-weight:700;letter-spacing:.03em;box-shadow:0 0 0 1px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.08)}
+.btn:hover{filter:brightness(1.15)}
+.btn.ghost{background:transparent;color:var(--text-dim);border-color:var(--edge)}
+.skills{display:grid;gap:6px;margin-bottom:12px}
+.skill{display:flex;gap:10px;align-items:center;padding:6px 8px;background:rgba(0,0,0,.25);border-radius:4px;font-size:.9em}
+.skill .k{font-family:'Cinzel';font-size:.75em;color:#111;background:var(--bronze-light);border-radius:3px;padding:1px 6px}
+.name-box{display:flex;gap:8px;margin:10px 0}
+.name-box input{flex:1;background:#0c0a08;border:1px dashed var(--bronze);color:var(--text);padding:10px 12px;font-size:1.1em;font-family:'Cinzel';border-radius:4px}
+.name-box button{width:46px;background:#0c0a08;border:1px solid var(--edge);border-radius:4px;font-size:1.3em}
+
+/* =================== 2. CIUDAD =================== */
+.app{display:grid;grid-template-columns:270px 1fr;min-height:calc(100vh - 46px)}
+.side{background:#14110e;border-right:1px solid var(--edge);display:flex;flex-direction:column;overflow-y:auto}
+.side .me{display:flex;gap:10px;padding:14px;border-bottom:1px solid var(--edge);background:linear-gradient(180deg,#201a14,#14110e)}
+.side .me .ava{width:62px;height:62px;border:2px solid var(--bronze);border-radius:6px;background:#0b0907;display:flex;align-items:center;justify-content:center;position:relative}
+.side .me .ava img{width:58px;height:58px}
+.side .me .lvl{position:absolute;bottom:-8px;left:50%;transform:translateX(-50%);background:#0b0907;border:1px solid var(--bronze);font-family:'Cinzel';font-size:.7em;padding:0 6px;border-radius:3px;color:var(--gold)}
+.side .me .nm{font-family:'Cinzel';font-weight:700;color:var(--gold)}
+.renown{display:inline-block;font-size:.65em;padding:0 6px;border-radius:10px;border:1px solid rgba(201,162,93,.5);color:var(--bronze-light);margin-left:4px;vertical-align:2px;font-family:'Crimson Text'}
+.side .me .cur{font-size:.85em;color:var(--text-dim);display:flex;gap:10px;margin-top:4px}
+.side .me .mini{height:5px;border-radius:3px;background:#0c0a08;margin-top:5px;overflow:hidden}
+.side .me .mini i{display:block;height:100%}
+.sec{padding:10px 0 4px}
+.sec h5{margin:0 14px 4px;font-family:'Cinzel';font-size:.72em;color:var(--text-dim);letter-spacing:.12em;display:flex;align-items:center;gap:6px}
+.sec h5::after{content:'';flex:1;height:1px;background:var(--edge)}
+.nav{display:flex;align-items:center;gap:10px;padding:7px 14px;cursor:pointer;color:var(--text);border-left:3px solid transparent;position:relative}
+.nav:hover{background:rgba(217,183,107,.06)}
+.nav.on{background:rgba(217,183,107,.1);border-left-color:var(--bronze-light);color:var(--gold)}
+.nav .ic{width:26px;text-align:center;font-size:1.15em}
+.nav .lock{margin-left:auto;font-size:.8em;color:#7d7266}
+.nav.locked{color:#6f665b}
+.nav .badge{margin-left:auto;background:var(--blood);color:#fff;font-size:.7em;border-radius:10px;padding:0 6px;font-weight:700}
+.nav .bang{margin-left:auto;color:var(--gold);font-weight:900;font-family:'Cinzel'}
+.side .foot{margin-top:auto;padding:10px 14px;border-top:1px solid var(--edge);display:flex;gap:8px;color:var(--text-dim);font-size:.85em}
+.main{position:relative;overflow:hidden;background:#0d0b09}
+.welcome{max-width:880px;margin:26px auto;padding:22px}
+.welcome h2{color:var(--gold);font-size:1.6em;text-align:center}
+.comic{display:grid;grid-template-columns:1.2fr 1fr 1fr;grid-template-rows:170px 150px;gap:8px;margin:16px 0}
+.panel-c{border:3px solid #0b0907;outline:1px solid var(--edge);background-size:cover;background-position:center;position:relative;border-radius:2px;display:flex;align-items:flex-end}
+.panel-c .cap{background:rgba(250,240,215,.95);color:#2a1d10;font-size:.85em;padding:5px 8px;margin:6px;border-radius:3px;box-shadow:2px 2px 0 rgba(0,0,0,.4);font-weight:600}
+.panel-c.big{grid-row:span 2}
+.map{position:absolute;inset:0;background:
+  radial-gradient(ellipse at 30% 70%,rgba(80,110,50,.55),transparent 55%),
+  radial-gradient(ellipse at 75% 25%,rgba(60,90,45,.5),transparent 50%),
+  radial-gradient(ellipse at 60% 80%,rgba(120,95,60,.6),transparent 45%),
+  linear-gradient(160deg,#4d5e34,#5a5a35 40%,#6b5a3a 70%,#4a4a2f)}
+.map .river{position:absolute;left:62%;top:-5%;width:70px;height:115%;background:linear-gradient(180deg,#2f5f7a,#3b7896);border-radius:40px;transform:rotate(18deg);opacity:.85;box-shadow:inset 0 0 18px rgba(0,0,0,.35)}
+.map .road{position:absolute;background:#9b8158;opacity:.75;border-radius:20px}
+.map .plaza{position:absolute;left:38%;top:42%;width:190px;height:150px;border-radius:50%;background:radial-gradient(ellipse,#a88d63,#8a7150);opacity:.9}
+.pin{position:absolute;transform:translate(-50%,-100%);cursor:pointer;text-align:center;transition:transform .15s}
+.pin:hover{transform:translate(-50%,-104%) scale(1.06)}
+.pin .bld{width:96px;height:78px;border-radius:10px 10px 6px 6px;background:linear-gradient(180deg,#7a5734,#4f361f);border:2px solid #2b1d10;box-shadow:0 8px 0 #2b1d10,0 12px 18px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;font-size:2.2em;position:relative}
+.pin .roof{position:absolute;top:-22px;left:-8px;right:-8px;height:30px;background:linear-gradient(180deg,#3b5f9a,#294570);clip-path:polygon(8% 100%,50% 0,92% 100%);border-bottom:3px solid #1d2f4d}
+.pin .tag{display:inline-block;margin-top:12px;font-family:'Cinzel';font-size:.75em;background:rgba(10,8,6,.85);color:var(--bronze-light);padding:2px 8px;border-radius:3px;border:1px solid var(--edge)}
+.pin.locked .bld{filter:grayscale(1) brightness(.55)}
+.pin.locked .tag::after{content:' 🔒'}
+.pin .mark{position:absolute;top:-34px;right:-6px;background:var(--gold);color:#111;font-weight:900;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-family:'Cinzel';box-shadow:0 0 10px rgba(255,215,106,.8);animation:bob 1.2s ease-in-out infinite}
+@keyframes bob{50%{transform:translateY(-4px)}}
+.portal{position:absolute;transform:translate(-50%,-50%);width:150px;height:150px;border-radius:50%;background:radial-gradient(circle,#ffd76a 0%,#c47b1a 35%,#3a2410 62%,transparent 70%);box-shadow:0 0 40px rgba(255,190,70,.5);cursor:pointer;display:flex;align-items:center;justify-content:center;animation:pulse 2.8s infinite}
+.portal span{font-family:'Cinzel';font-weight:900;color:#2a1608;text-shadow:0 0 8px #ffe9a8;font-size:.95em;text-align:center}
+.tooltip{position:absolute;pointer-events:none;background:rgba(10,8,6,.95);border:1px solid var(--bronze);padding:6px 10px;border-radius:4px;font-size:.85em;max-width:220px;display:none;z-index:5}
+.map-hint{position:absolute;left:14px;top:12px;background:rgba(10,8,6,.8);border:1px solid var(--edge);padding:6px 10px;border-radius:4px;font-size:.85em;color:var(--text-dim)}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.7);display:none;align-items:center;justify-content:center;z-index:100}
+.modal.on{display:flex}
+.modal .box{width:min(860px,94vw);padding:18px}
+.modal .box h3{color:var(--gold);text-align:center;margin-bottom:8px}
+
+/* =================== 3. PERSONAJE =================== */
+.char{display:grid;grid-template-columns:minmax(380px,1fr) 1fr;gap:14px;padding:14px;max-width:1250px;margin:0 auto}
+.char .who{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;margin-bottom:8px}
+.char .who button{background:#0c0a08;border:1px solid var(--bronze);color:var(--gold);width:38px;height:38px;border-radius:50%;font-size:1.2em}
+.char .who .dots{display:flex;gap:6px}
+.char .who .dots i{width:9px;height:9px;border-radius:50%;background:#3b332a;display:block}
+.char .who .dots i.on{background:var(--gold)}
+.doll{display:grid;grid-template-columns:86px 1fr 86px;gap:10px;padding:12px}
+.slots{display:grid;gap:10px;align-content:start}
+.slot{width:86px;height:86px;border:2px solid #3b3128;border-radius:6px;background:radial-gradient(circle,#2a231c,#120f0c);display:flex;align-items:center;justify-content:center;position:relative;cursor:pointer}
+.slot img{max-width:76px;max-height:76px}
+.slot .r{position:absolute;bottom:2px;right:4px;font-family:'Cinzel';font-size:.6em;color:var(--gold)}
+.slot.empty{opacity:.45}
+.slot.empty::after{content:attr(data-slot);font-size:.65em;color:var(--text-dim);font-family:'Cinzel';text-transform:uppercase}
+.slot.rA{border-color:#8f6fd6;box-shadow:0 0 10px rgba(143,111,214,.35)}
+.portrait{border:2px solid var(--bronze);border-radius:8px;background:radial-gradient(ellipse at 50% 65%,#3d2a17,#120e0a 70%);display:flex;flex-direction:column;align-items:center;justify-content:flex-end;position:relative;min-height:290px;overflow:hidden}
+.portrait img.p{width:240px;height:240px}
+.portrait img.ally{width:100%;height:100%;object-fit:cover;position:absolute;inset:0}
+.portrait .plate{position:relative;width:100%;text-align:center;background:linear-gradient(0deg,rgba(0,0,0,.85),transparent);padding:16px 6px 8px}
+.portrait .plate b{font-family:'Cinzel';color:var(--gold);font-size:1.15em}
+.weap{display:flex;justify-content:center;gap:10px;margin-top:10px}
+.tabs{display:flex;gap:4px;padding:0 12px}
+.tabs button{flex:1;background:#0f0c0a;border:1px solid var(--edge);border-bottom:none;color:var(--text-dim);padding:7px;border-radius:5px 5px 0 0;font-family:'Cinzel';font-size:.8em}
+.tabs button.on{color:var(--gold);background:var(--panel2);border-color:var(--bronze)}
+.attrs{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:12px;border-top:1px solid var(--bronze);margin:0 12px 12px;background:var(--panel2)}
+.attr{display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:rgba(0,0,0,.3);border-radius:4px}
+.attr b{font-family:'Cinzel';font-size:.85em}
+.attr small{display:block;color:var(--text-dim);font-size:.75em}
+.attr span{font-family:'Cinzel';font-size:1.15em;color:var(--gold)}
+.right .head{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--edge)}
+.right .head h3{color:var(--gold)}
+.right .head .sw{margin-left:auto;display:flex;gap:4px}
+.right .head .sw button{background:#0c0a08;border:1px solid var(--edge);color:var(--text-dim);padding:5px 10px;border-radius:4px;font-family:'Cinzel';font-size:.75em}
+.right .head .sw button.on{color:var(--gold);border-color:var(--bronze)}
+.grid-inv{display:grid;grid-template-columns:repeat(auto-fill,minmax(78px,1fr));gap:8px;padding:14px}
+.grid-inv .slot{width:auto;height:84px}
+.shopkeep{display:flex;gap:12px;align-items:flex-end;padding:0 14px 14px}
+.shopkeep .bubble{background:#f3e7cc;color:#2a1d10;padding:8px 12px;border-radius:10px;position:relative;font-weight:600}
+.shopkeep .bubble::after{content:'';position:absolute;left:-10px;bottom:12px;border:6px solid transparent;border-right-color:#f3e7cc}
+
+/* =================== 4. COMBATE =================== */
+.arena-wrap{max-width:1100px;margin:14px auto;padding:0 14px}
+.arena{position:relative;height:520px;border-radius:8px;overflow:hidden;border:2px solid var(--edge);
+  background:
+   radial-gradient(ellipse at 70% 32%,rgba(255,80,60,.18),transparent 40%),
+   linear-gradient(180deg,#1b1020 0%,#2b1830 35%,#3a2235 55%,#22161c 56%,#3a2a24 100%)}
+.arena .ground-e{position:absolute;right:8%;top:36%;width:46%;height:70px;border-radius:50%;background:radial-gradient(ellipse,rgba(0,0,0,.45),transparent 70%)}
+.arena .ground-p{position:absolute;left:4%;bottom:12%;width:52%;height:80px;border-radius:50%;background:radial-gradient(ellipse,rgba(0,0,0,.5),transparent 70%)}
+.turn{position:absolute;left:12px;top:12px;font-family:'Cinzel';background:rgba(240,240,255,.12);border:1px solid rgba(255,255,255,.25);padding:4px 12px;border-radius:5px;color:#e8e3f5;font-weight:700}
+.fighter{position:absolute;text-align:center;transform:translateX(-50%)}
+.fighter .hpcard{min-width:150px}
+.fighter img{display:block;margin:0 auto}
+.hpcard{background:rgba(12,10,14,.82);border:1px solid rgba(255,255,255,.12);border-radius:6px;padding:5px 8px;min-width:170px;text-align:left;font-size:.82em;backdrop-filter:blur(2px)}
+.hpcard .n{display:flex;justify-content:space-between;font-family:'Cinzel';font-weight:700;font-size:.9em}
+.hpcard .n small{color:var(--text-dim);font-family:'Crimson Text'}
+.hpbar{height:7px;border-radius:4px;background:#2a2026;overflow:hidden;margin-top:3px}
+.hpbar i{display:block;height:100%;background:linear-gradient(90deg,#4ec25a,#8fe37a)}
+.hpbar.mid i{background:linear-gradient(90deg,#d6b23a,#f0d36a)} .hpbar.low i{background:linear-gradient(90deg,#c0453f,#e8665e)}
+.st{display:flex;gap:3px;flex-wrap:wrap;margin-top:3px}
+.st span{font-size:.75em;padding:0 5px;border-radius:3px;background:rgba(80,200,120,.2);border:1px solid rgba(80,200,120,.5);color:#9be7ad}
+.st span.bad{background:rgba(200,80,80,.2);border-color:rgba(220,90,90,.5);color:#f0a3a3}
+.msg{position:absolute;left:3%;right:3%;bottom:10px;background:rgba(12,10,14,.86);border:1px solid rgba(255,255,255,.15);border-radius:6px;padding:10px 14px;font-size:1.02em}
+.msg b{color:var(--gold)}
+.msg small{display:block;color:var(--text-dim)}
+.actions{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:10px}
+.actions button{background:linear-gradient(180deg,#2a221b,#17120e);border:1px solid var(--edge);color:var(--text);padding:12px 6px;border-radius:5px;font-family:'Cinzel';font-size:.85em}
+.actions button:hover{border-color:var(--bronze);color:var(--gold)}
+.actions button.main{border-color:var(--bronze);color:var(--gold)}
+@keyframes hit{0%,100%{transform:translateX(0)}25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}
+.shake{animation:hit .3s}
+.dmg{position:absolute;font-family:'Cinzel';font-weight:900;color:#ffdd77;text-shadow:0 2px 0 #000,0 0 10px rgba(255,120,60,.8);font-size:1.6em;animation:up 1s forwards;pointer-events:none}
+@keyframes up{to{transform:translateY(-50px);opacity:0}}
+
+/* =================== 5. LABERINTO =================== */
+.lab{display:grid;grid-template-columns:1fr 290px;gap:12px;padding:14px;max-width:1300px;margin:0 auto}
+.lab canvas{width:100%;image-rendering:pixelated;border:2px solid var(--edge);border-radius:6px;background:#000;cursor:pointer}
+.lab .side2{padding:14px}
+.lab .side2 h3{color:var(--gold);margin-bottom:6px}
+.legend{display:grid;gap:6px;margin:10px 0;font-size:.92em}
+.legend div{display:flex;align-items:center;gap:8px}
+.legend canvas{width:24px;height:24px;border:none;background:none}
+.minilog{font-size:.88em;color:var(--text-dim);max-height:200px;overflow:auto;border-top:1px solid var(--edge);padding-top:8px}
+.minilog p{margin:0 0 4px}
+
+@media (max-width:900px){
+  .cr-stage{grid-template-columns:1fr}
+  .hero{height:300px}
+  .app{grid-template-columns:1fr}
+  .side{max-height:none}
+  .char{grid-template-columns:1fr}
+  .lab{grid-template-columns:1fr}
+  .comic{grid-template-columns:1fr 1fr;grid-template-rows:auto}
+  .actions{grid-template-columns:repeat(3,1fr)}
+}
+</style>
+</head>
+<body>
+
+<div class="mock-bar">
+  <span class="tag">MAQUETA</span>
+  <button data-go="s-crear" class="on">1 · Creación</button>
+  <button data-go="s-ciudad">2 · Ciudad</button>
+  <button data-go="s-pj">3 · Personaje</button>
+  <button data-go="s-combate">4 · Combate</button>
+  <button data-go="s-lab">5 · Laberinto</button>
+  <span class="note">Navegable, con assets reales del juego. Nada se guarda.</span>
+</div>
+
+<!-- ======================= 1. CREACIÓN ======================= -->
+<section class="screen on" id="s-crear">
+  <div class="cr-wrap">
+    <div class="stepper"><span id="st1" class="on">1 · Raza</span><span id="st2">2 · Clase</span><span id="st3">3 · Nombre</span></div>
+    <h1 class="cr-title title-orn" id="cr-h">Elige tu raza</h1>
+    <div class="emblems" id="emblems"></div>
+    <div class="cr-stage">
+      <div class="hero" id="hero"></div>
+      <div class="info frame" id="info"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= 2. CIUDAD ======================= -->
+<section class="screen" id="s-ciudad">
+  <div class="app">
+    <aside class="side" id="side"></aside>
+    <main class="main" id="city-main"></main>
+  </div>
+</section>
+
+<!-- ======================= 3. PERSONAJE ======================= -->
+<section class="screen" id="s-pj"><div class="char" id="char"></div></section>
+
+<!-- ======================= 4. COMBATE ======================= -->
+<section class="screen" id="s-combate">
+  <div class="arena-wrap">
+    <div class="arena" id="arena">
+      <div class="ground-e"></div><div class="ground-p"></div>
+      <div class="turn" id="turn">Turno 4</div>
+    </div>
+    <div class="actions">
+      <button class="main" data-act="basic">⚔ Básico</button>
+      <button data-act="skill">💥 Habilidades</button>
+      <button data-act="bag">🎒 Mochila</button>
+      <button data-act="def">🛡 Defender</button>
+      <button data-act="pos">↔ Reposicionar</button>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= 5. LABERINTO ======================= -->
+<section class="screen" id="s-lab">
+  <div class="lab">
+    <canvas id="dung" width="640" height="384"></canvas>
+    <div class="side2 frame">
+      <h3>Nivel 14 · Arañas</h3>
+      <div style="color:var(--text-dim);font-size:.9em">Haz clic en una sala iluminada conectada a la tuya para avanzar por la senda. La niebla se despeja al explorar.</div>
+      <div class="legend" id="legend"></div>
+      <div class="minilog" id="minilog"><p>Entras al laberinto. El aire huele a seda y a sangre.</p></div>
+    </div>
+  </div>
+</section>
+
+<div class="modal" id="modal"><div class="box frame" id="modal-box"></div></div>
+<div class="tooltip" id="tip"></div>
+
+<script type="module">
+import { RACE_SPRITES, CLASS_SPRITES, ENEMY_SPRITES } from '../src/battleSprites.js';
+const A = p => '../' + p;                       // assets del juego
+const fix = p => p && p.startsWith('src/') ? A(p) : p;
+
+/* ---------------- datos (copiados de game.js) ---------------- */
+const RACES = {
+  barbaro:{name:'Bárbaro',desc:'Carne y furia. El más fuerte y el más despreciado fuera del combate.',stats:{fis:8,esp:3,hab:5,agi:3,vig:6},res:{fisico:15,fuego:-10,hielo:0,veneno:0,aturdimiento:20},passive:'Furia de sangre',passiveDesc:'Por debajo del 30% de vida, tu daño físico aumenta un 20%.',pros:'El Físico más alto del juego y gran resistencia a Aturdimiento.',cons:'Espíritu muy bajo y débil contra Fuego.'},
+  enano:{name:'Enano',desc:'Robusto y terco. Resiste lo que otros no soportarían.',stats:{fis:7,esp:4,hab:4,agi:2,vig:9},res:{fisico:10,fuego:0,hielo:10,veneno:25,aturdimiento:5},passive:'Piel de piedra',passiveDesc:'Reduce todo daño físico recibido en una cantidad plana adicional.',pros:'La raza más resistente; el Vigor más alto del juego.',cons:'Agilidad baja: menos crítico y evasión.'},
+  hada:{name:'Hada',desc:'Frágil pero certera. Vive de no ser tocada.',stats:{fis:3,esp:9,hab:6,agi:8,vig:1},res:{fisico:-10,fuego:15,hielo:15,veneno:5,aturdimiento:0},passive:'Gracia',passiveDesc:'+15% de probabilidad de esquivar cualquier ataque.',pros:'El Espíritu más alto y Agilidad muy alta.',cons:'El Físico y el Vigor más bajos; cada golpe duele más.'},
+  humano:{name:'Humano',desc:'Sin extremos, sin techo. Aprende más rápido que el resto.',stats:{fis:5,esp:5,hab:6,agi:5,vig:5},res:{fisico:5,fuego:5,hielo:5,veneno:5,aturdimiento:5},passive:'Adaptable',passiveDesc:'Ganas un 10% más de experiencia de cada victoria.',pros:'La más equilibrada, sin punto débil.',cons:'Ningún stat sobresale.'},
+  draconido:{name:'Dracónido',desc:'Sangre de bestia antigua. Poderoso, pero torpe con el hielo.',stats:{fis:7,esp:7,hab:3,agi:3,vig:6},res:{fisico:0,fuego:30,hielo:-15,veneno:0,aturdimiento:10},passive:'Sangre ancestral',passiveDesc:'Tus habilidades de fuego infligen un 15% adicional de daño.',pros:'Fuerte en Físico y Espíritu a la vez; casi inmune al Fuego.',cons:'Agilidad baja y vulnerable al Hielo.'},
+  bestia:{name:'Hombre bestia',desc:'Instinto puro. Golpea primero, golpea fuerte, golpea rápido.',stats:{fis:6,esp:2,hab:9,agi:9,vig:2},res:{fisico:5,fuego:0,hielo:0,veneno:-10,aturdimiento:15},passive:'Instinto cazador',passiveDesc:'+15% de probabilidad de golpe crítico.',pros:'La Agilidad más alta del juego + 15% de crítico.',cons:'El Espíritu más bajo y poca vida.'},
+};
+const STAT_N = {fis:'Físico',esp:'Espíritu',hab:'Habilidad',agi:'Agilidad',vig:'Vigor'};
+const CLASSES = {
+  pesada:{name:'Guerrero',main:'fis',pos:'Frente',desc:'Mazos y hachas. Rompe la guardia y remata al aturdido.',skills:['Golpe bruto','Machacar','Grito de guerra'],set:'guardian',w:['martillo_de_guerra','escudo_de_hierro']},
+  paladin:{name:'Paladín',main:'esp',pos:'Frente',desc:'Escudo y juramento. Encaja el golpe, protege al resto, nunca cae el primero.',skills:['Golpe consagrado','Muro de fe','Escudo del juramento'],set:'bastion',w:['maza_del_guardian','escudo_de_la_vigilia']},
+  doblefilo:{name:'Asesino',main:'fis',pos:'Retaguardia',desc:'Dagas gemelas. Desangra a tu presa y luego termina el trabajo.',skills:['Corte rápido','Danza de cuchillas','Golpe de gracia'],set:'jack',w:['cuchillo_largo','daga_gemela']},
+  tirador:{name:'Arquero',main:'fis',pos:'Retaguardia',desc:'Distancia y precisión. Marca, retrocede, dispara.',skills:['Disparo certero','Marca del cazador','Lluvia de flechas'],set:'artemisa',w:['arco_largo','carcaj_de_cuero']},
+  mago:{name:'Mago',main:'hab',pos:'Retaguardia',desc:'Fuego y hielo. Siembra el elemento y detónalo después.',skills:['Bola de fuego','Lanza de hielo','Explosión arcana'],set:'soberano',w:['vara_arcana','foco_arcano']},
+  hechicero:{name:'Hechicero',main:'hab',pos:'Retaguardia',desc:'Maldiciones y control. Envenena, aterra, confunde.',skills:['Toque venenoso','Grito de pánico','Mirada de locura'],set:'eclipse',w:['cetro_del_devorador','orbe_de_las_almas']},
+};
+const sprite = (style, race) => (RACE_SPRITES[style] && RACE_SPRITES[style][race]) || CLASS_SPRITES[style];
+const pick = (sel, all) => document.querySelectorAll(sel).forEach(e=>e.classList.remove('on')) || all;
+
+/* ---------------- navegación de la maqueta ---------------- */
+const go = id => {
+  document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('on', s.id===id));
+  document.querySelectorAll('.mock-bar button').forEach(b=>b.classList.toggle('on', b.dataset.go===id));
+  if(id==='s-ciudad') renderCity(); if(id==='s-pj') renderChar(); if(id==='s-combate') renderBattle(); if(id==='s-lab') drawDungeon();
+  window.scrollTo(0,0);
+};
+document.querySelectorAll('.mock-bar button').forEach(b=> b.onclick = ()=>go(b.dataset.go));
+
+/* ======================= 1. CREACIÓN ======================= */
+const C = {step:1, race:'barbaro', cls:'pesada', name:''};
+function renderCreate(){
+  ['st1','st2','st3'].forEach((id,i)=>{ const el=document.getElementById(id); el.className = i+1===C.step?'on':(i+1<C.step?'done':''); });
+  const h = document.getElementById('cr-h'), em = document.getElementById('emblems'), hero = document.getElementById('hero'), info = document.getElementById('info');
+  if(C.step===1){
+    h.textContent = 'Elige tu raza';
+    em.innerHTML = Object.entries(RACES).map(([id,r])=>`<div class="emblem ${id===C.race?'on':''}" data-r="${id}" title="${r.name}"><img src="${A('src/assets/razas/'+id+'.png')}"><span class="lbl">${r.name}</span></div>`).join('');
+    const r = RACES[C.race];
+    hero.innerHTML = `<div class="pedestal"></div><img class="race-art" src="${A('src/assets/razas/'+C.race+'.png')}" alt="">`;
+    info.innerHTML = `<h2>${r.name}</h2><div class="sub">RAZA · PASIVA: ${r.passive.toUpperCase()}</div>
+      <p class="desc">“${r.desc}”</p>
+      <div class="bars">${Object.entries(r.stats).map(([k,v])=>`<span>${STAT_N[k]}</span><div class="bar"><i style="width:${v*11}%"></i></div><b>${v}</b>`).join('')}</div>
+      <div class="chips">${Object.entries(r.res).filter(([,v])=>v).map(([k,v])=>`<span class="chip ${v>0?'pos':'neg'}">${k[0].toUpperCase()+k.slice(1)} ${v>0?'+':''}${v}%</span>`).join('')}</div>
+      <div class="passive"><b>${r.passive}:</b> ${r.passiveDesc}</div>
+      <div class="proscons"><div><b style="color:var(--good)">A FAVOR</b>${r.pros}</div><div><b style="color:#e57c74">EN CONTRA</b>${r.cons}</div></div>
+      <div class="cta-row"><span></span><button class="btn" id="next">Elegir ${r.name} →</button></div>`;
+    em.querySelectorAll('.emblem').forEach(e=> e.onclick = ()=>{ C.race=e.dataset.r; renderCreate(); });
+  } else if(C.step===2){
+    h.textContent = 'Elige tu clase';
+    em.innerHTML = Object.entries(CLASSES).map(([id,c])=>`<div class="emblem ${id===C.cls?'on':''}" data-c="${id}" title="${c.name}"><img src="${A('src/assets/clases/'+id+'.png')}"><span class="lbl">${c.name}</span></div>`).join('');
+    const c = CLASSES[C.cls], r = RACES[C.race];
+    hero.innerHTML = `<img class="class-bg" src="${A('src/assets/clases/'+C.cls+'.png')}"><div class="pedestal"></div><img class="sprite px" src="${sprite(C.cls,C.race)}" alt="">`;
+    info.innerHTML = `<h2>${c.name} <span style="font-size:.55em;color:var(--text-dim)">${r.name}</span></h2>
+      <div class="sub">ATRIBUTO PRINCIPAL · ${STAT_N[c.main].toUpperCase()} &nbsp;|&nbsp; POSICIÓN · ${c.pos.toUpperCase()}</div>
+      <p class="desc">“${c.desc}”</p>
+      <div class="skills">${c.skills.map((s,i)=>`<div class="skill"><span class="k">${i+1}</span>${s}</div>`).join('')}</div>
+      <div class="passive">Así se verá tu <b>${c.name} ${r.name.toLowerCase()}</b> en combate. Cambia de raza para ver otras variantes.</div>
+      <div class="cta-row"><button class="btn ghost" id="back">← Raza</button><button class="btn" id="next">Elegir ${c.name} →</button></div>`;
+    em.querySelectorAll('.emblem').forEach(e=> e.onclick = ()=>{ C.cls=e.dataset.c; renderCreate(); });
+  } else {
+    h.textContent = 'Tu nombre en el laberinto';
+    em.innerHTML = '';
+    const c = CLASSES[C.cls], r = RACES[C.race];
+    hero.innerHTML = `<div class="pedestal"></div><img class="sprite px" src="${sprite(C.cls,C.race)}" alt="">`;
+    info.innerHTML = `<h2>${C.name||'Sin nombre'}</h2><div class="sub">${r.name.toUpperCase()} · ${c.name.toUpperCase()}</div>
+      <div class="name-box"><input id="nm" maxlength="16" placeholder="Escribe tu nombre…" value="${C.name}"><button id="dice" title="Nombre al azar">🎲</button></div>
+      <div class="chips"><span class="chip">Pasiva: ${r.passive}</span><span class="chip">${STAT_N[c.main]}</span><span class="chip">${c.pos}</span></div>
+      <div class="passive">Comenzarás en la <b>Última Ciudad</b> con 100 de oro y el equipo inicial de tu clase.</div>
+      <div class="cta-row"><button class="btn ghost" id="back">← Clase</button><button class="btn" id="next">Comenzar aventura ⚔</button></div>`;
+    const nm = document.getElementById('nm');
+    nm.oninput = ()=>{ C.name = nm.value; info.querySelector('h2').textContent = C.name||'Sin nombre'; };
+    document.getElementById('dice').onclick = ()=>{ const a=['Kael','Brann','Ysolde','Torg','Mira','Vex','Orrin','Sable','Hilde','Ragn'], b=['el Rojo','Piedrafría','de Ceniza','Rompeyelmos','la Muda','Sangreviva']; C.name=a[Math.random()*a.length|0]+' '+b[Math.random()*b.length|0]; renderCreate(); };
+  }
+  const n = document.getElementById('next'), b = document.getElementById('back');
+  if(n) n.onclick = ()=>{ if(C.step<3){ C.step++; renderCreate(); } else { CITY.first=true; go('s-ciudad'); } };
+  if(b) b.onclick = ()=>{ C.step--; renderCreate(); };
+}
+renderCreate();
+
+/* ======================= 2. CIUDAD ======================= */
+const CITY = {first:true, view:'welcome', visited:{}};
+const PLACES = [
+  {id:'taberna', name:'Taberna', ic:'🍺', sec:'CIUDAD', x:30, y:40, keeper:'Bruno el tabernero', intro:['“¡Otro novato que viene a morir al laberinto!”','“Aquí se contratan espadas… si tienes fama y oro.”','“Derrota al Ogro y los mercenarios empezarán a escucharte.”']},
+  {id:'tienda', name:'Tienda', ic:'⚒️', sec:'CIUDAD', x:18, y:70, keeper:'Gerd el herrero', intro:['“¿Nuevo? Se nota por cómo agarras esa espada.”','“Vendo armas, armaduras y pociones. Compro lo que encuentres abajo.”','“Vuelve con oro… o con Sellos del Laberinto.”']},
+  {id:'hogar', name:'Hogar', ic:'🏠', sec:'CIUDAD', x:50, y:82, keeper:'Tu casera', intro:['“Tu cuarto está arriba. Guarda aquí lo que no quieras perder.”','“Lo que dejes en el Hogar no se pierde al morir.”']},
+  {id:'gremio', name:'Gremio', ic:'📜', sec:'CIUDAD', x:47, y:30, mark:true, keeper:'La maestra del Gremio', intro:['“El Gremio paga por trabajo bien hecho.”','“Cada 12 horas hay contratos nuevos en el tablón.”']},
+  {id:'arbol', name:'Árbol de ofrendas', ic:'🌳', sec:'CIUDAD', x:80, y:62, badge:3, keeper:'Yggdrasil', intro:['Las raíces del árbol brillan al acercarte…','Una ofrenda puede traer de vuelta a los Caídos del Laberinto.']},
+  {id:'ranking', name:'Ranking', ic:'🏆', sec:'PROGRESO', x:86, y:26, keeper:'El pregonero', intro:['“¡Escuchad, escuchad! Los nombres de los más valientes, aquí.”']},
+];
+function sideHTML(active){
+  const r = RACES[C.race], c = CLASSES[C.cls];
+  const item = (p,extra='') => `<div class="nav ${active===p.id?'on':''} ${p.locked?'locked':''}" data-place="${p.id}"><span class="ic">${p.ic}</span>${p.name}${p.locked?`<span class="lock" title="${p.lockWhy}">🔒</span>`:p.badge?`<span class="badge">${p.badge}</span>`:p.mark?'<span class="bang">!</span>':''}${extra}</div>`;
+  return `<div class="me"><div class="ava"><img class="px" src="${sprite(C.cls,C.race)}"><span class="lvl">12</span></div>
+    <div style="min-width:0;flex:1"><div class="nm">${C.name||'Aventurero'}<span class="renown">Aventurero</span></div>
+    <div style="font-size:.8em;color:var(--text-dim)">${r.name} · ${c.name}</div>
+    <div class="cur"><span>🪙 1.240</span><span>🔷 18</span><span>💎 0</span></div>
+    <div class="mini"><i style="width:82%;background:var(--hp)"></i></div><div class="mini"><i style="width:60%;background:var(--mp)"></i></div></div></div>
+    <div class="sec"><h5>INICIO</h5>${item({id:'welcome',name:'Bienvenida',ic:'✨'})}${item({id:'map',name:'Mapa de la ciudad',ic:'🗺️'})}</div>
+    <div class="sec"><h5>CIUDAD</h5>${PLACES.filter(p=>p.sec==='CIUDAD').map(p=>item(Object.assign({},p,{locked:p.id==='taberna',lockWhy:'Nivel 10 y derrotar al Ogro'}))).join('')}</div>
+    <div class="sec"><h5>LABERINTO</h5>${item({id:'lab',name:'Entrar al laberinto',ic:'🕳️'})}${item({id:'pj',name:'Personaje e inventario',ic:'🎒'})}</div>
+    <div class="sec"><h5>PROGRESO</h5>${item(PLACES.find(p=>p.id==='ranking'))}${item({id:'misiones',name:'Misiones',ic:'📌',mark:true})}${item({id:'logros',name:'Logros',ic:'🎖️',locked:true,lockWhy:'Próximamente'})}</div>
+    <div class="foot"><span>⚙️ Opciones</span><span>❓ Ayuda</span><span style="margin-left:auto">↩ Personajes</span></div>`;
+}
+function renderCity(){
+  const side = document.getElementById('side'), main = document.getElementById('city-main');
+  side.innerHTML = sideHTML(CITY.view);
+  side.querySelectorAll('.nav').forEach(n=> n.onclick = ()=>{
+    const id = n.dataset.place;
+    if(n.classList.contains('locked')) return toast(n.querySelector('.lock').title);
+    if(id==='lab') return go('s-lab'); if(id==='pj') return go('s-pj');
+    if(id==='welcome'||id==='map'){ CITY.view=id; return renderCity(); }
+    openPlace(id);
+  });
+  if(CITY.view==='welcome'){
+    main.style.overflow='auto';
+    main.innerHTML = `<div class="welcome"><h2 class="title-orn">¡Bienvenido a la Última Ciudad!</h2>
+      <p style="text-align:center;color:var(--text-dim)">Lo único que queda en pie sobre el laberinto. Aquí descansas, te equipas y preparas tu próxima bajada.</p>
+      <div class="comic">
+        <div class="panel-c big" style="background-image:url(${A('src/assets/aliados/aldric.jpg')})"><span class="cap">“Otro más que baja a buscar gloria…”</span></div>
+        <div class="panel-c" style="background-image:url(${A('src/assets/razas/'+C.race+'.png')});background-size:contain;background-repeat:no-repeat;background-color:#3a2a1a"><span class="cap">Tú llegas con lo puesto.</span></div>
+        <div class="panel-c" style="background-image:url(${A('src/assets/aliados/delyth.jpg')})"><span class="cap">“Que la luz te acompañe ahí abajo.”</span></div>
+        <div class="panel-c" style="grid-column:span 2;background:linear-gradient(180deg,#2a1a10,#0d0805);justify-content:center;align-items:center"><span class="cap" style="font-size:1.05em">“SE BUSCAN HÉROES — solo los muy valientes”</span></div>
+      </div>
+      <div style="display:flex;gap:10px;justify-content:center"><button class="btn" id="to-map">Recorrer la ciudad 🗺️</button><button class="btn ghost" id="to-lab">Ir directo al laberinto</button></div>
+      <p style="text-align:center;color:var(--text-dim);font-size:.85em;margin-top:10px">Las viñetas son marcadores: aquí irán ilustraciones propias.</p></div>`;
+    document.getElementById('to-map').onclick = ()=>{ CITY.view='map'; renderCity(); };
+    document.getElementById('to-lab').onclick = ()=> go('s-lab');
+  } else {
+    main.style.overflow='hidden';
+    main.innerHTML = `<div class="map">
+      <div class="river"></div>
+      <div class="road" style="left:10%;top:56%;width:78%;height:22px;transform:rotate(-6deg)"></div>
+      <div class="road" style="left:44%;top:18%;width:22px;height:70%"></div>
+      <div class="plaza"></div>
+      ${PLACES.map(p=>`<div class="pin ${p.id==='taberna'?'locked':''}" data-place="${p.id}" style="left:${p.x}%;top:${p.y}%"><div class="bld"><div class="roof"></div>${p.ic}${p.mark?'<span class="mark">!</span>':''}${p.badge?`<span class="mark" style="background:var(--blood);color:#fff">${p.badge}</span>`:''}</div><div class="tag">${p.name}</div></div>`).join('')}
+      <div class="portal" style="left:55%;top:60%" id="portal"><span>LABERINTO<br><small>Nivel 14</small></span></div>
+      </div><div class="map-hint">🖱️ Haz clic en un edificio, o usa el menú de la izquierda.</div>`;
+    main.querySelectorAll('.pin').forEach(p=>{
+      p.onclick = ()=> p.classList.contains('locked') ? toast('Taberna: requiere nivel 10 y derrotar al Ogro') : openPlace(p.dataset.place);
+    });
+    document.getElementById('portal').onclick = ()=> go('s-lab');
+  }
+}
+function openPlace(id){
+  const p = PLACES.find(x=>x.id===id); if(!p) return toast('Pantalla de ejemplo');
+  CITY.view = id; renderCity();
+  const main = document.getElementById('city-main');
+  main.style.overflow='auto';
+  main.innerHTML = `<div class="welcome frame" style="margin-top:24px"><h2 class="title-orn">${p.ic} ${p.name}</h2><p style="text-align:center;color:var(--text-dim)">Aquí iría la pantalla de ${p.name} (la actual del juego, dentro del nuevo marco).</p></div>`;
+  if(!CITY.visited[id]){ CITY.visited[id]=true; intro(p); }
+}
+function intro(p){
+  const m = document.getElementById('modal'), box = document.getElementById('modal-box');
+  let i = 0;
+  const draw = ()=>{
+    box.innerHTML = `<h3>${p.ic} Primera visita: ${p.name}</h3>
+      <div class="comic" style="grid-template-rows:200px">
+        ${p.intro.map((t,k)=>`<div class="panel-c" style="opacity:${k<=i?1:.15};transition:opacity .4s;background:${k===0?'linear-gradient(160deg,#5a3a20,#24160c)':k===1?'linear-gradient(160deg,#3a2a40,#160f1c)':'linear-gradient(160deg,#20384a,#0c1820)'};justify-content:center;align-items:center"><span class="cap">${t}</span></div>`).join('')}
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center"><span style="color:var(--text-dim);font-size:.9em">${p.keeper}</span>
+      <div style="display:flex;gap:8px"><button class="btn ghost" id="skip">Saltar</button><button class="btn" id="nx">${i<p.intro.length-1?'Continuar ›':'Entrar'}</button></div></div>`;
+    document.getElementById('skip').onclick = ()=> m.classList.remove('on');
+    document.getElementById('nx').onclick = ()=>{ if(i<p.intro.length-1){ i++; draw(); } else m.classList.remove('on'); };
+  };
+  draw(); m.classList.add('on');
+}
+function toast(t){ const tip=document.getElementById('tip'); tip.textContent=t; tip.style.display='block'; tip.style.left='50%'; tip.style.top='70px'; tip.style.transform='translateX(-50%)'; tip.style.position='fixed'; clearTimeout(toast._t); toast._t=setTimeout(()=>tip.style.display='none',1800); }
+
+/* ======================= 3. PERSONAJE ======================= */
+const ALLIES = [{id:'aldric',name:'Aldric de la Muralla',role:'Guerrero'},{id:'delyth',name:'Hermana Delyth',role:'Sacerdote'},{id:'neira',name:'Neira la Certera',role:'Arquero'}];
+let who = 0, rightTab = 'mochila';
+function renderChar(){
+  const el = document.getElementById('char'); const c = CLASSES[C.cls], r = RACES[C.race];
+  const isMe = who===0, ally = ALLIES[who-1];
+  const setImg = slot => A(`src/assets/equipo/sets/${c.set}_${slot}_rango_a.png`);
+  const slot = (s,lbl)=> isMe ? `<div class="slot rA" title="${lbl} (Rango A)"><img src="${setImg(s)}"><span class="r">A</span></div>` : `<div class="slot empty" data-slot="${lbl}"></div>`;
+  el.innerHTML = `<div class="frame">
+      <div class="who"><button id="prev">‹</button><div style="text-align:center"><div style="font-family:'Cinzel';color:var(--gold)">${isMe?(C.name||'Tú'):ally.name}</div><div style="font-size:.85em;color:var(--text-dim)">${isMe?`${r.name} · ${c.name} · Nivel 12`:`Aliado · ${ally.role} · Nivel 12`}</div><div class="dots" style="justify-content:center;margin-top:4px">${[0,1,2,3].map(k=>`<i class="${k===who?'on':''}"></i>`).join('')}</div></div><button id="nxt">›</button></div>
+      <div class="doll">
+        <div class="slots">${slot('casco','Casco')}${slot('armadura','Armadura')}${slot('guantes','Guantes')}</div>
+        <div><div class="portrait">${isMe?`<img class="p px" src="${sprite(C.cls,C.race)}">`:`<img class="ally" src="${A('src/assets/aliados/'+ally.id+'.jpg')}">`}<div class="plate"><b>${isMe?(C.name||'Tú'):ally.name.split(' ')[0]}</b><div style="font-size:.8em;color:var(--text-dim)">${isMe?'Aventurero':'Lealtad 82%'}</div></div></div>
+          <div class="weap">${isMe?c.w.map((w,i)=>`<div class="slot rA" title="${i?'Arma 2':'Arma'}"><img src="${A('src/assets/armas/'+w+'_rango_a.png')}"><span class="r">A</span></div>`).join(''):'<div class="slot empty" data-slot="Arma"></div><div class="slot empty" data-slot="Arma 2"></div>'}</div></div>
+        <div class="slots">${slot('amuleto','Amuleto')}${slot('botas','Botas')}<div class="slot" title="Piedra de alma"><img src="${A('src/assets/piedras/A.png')}"><span class="r">A</span></div></div>
+      </div>
+      <div class="tabs"><button class="on">Atributos</button><button>Descripción</button><button>Resistencias</button><button>Piedras</button></div>
+      <div class="attrs">${Object.entries(r.stats).map(([k,v])=>`<div class="attr"><div><b>${STAT_N[k]}</b><small>${{fis:'Daño físico',esp:'Espíritu / curación',hab:'MP / magia',agi:'Crítico y evasión',vig:'Vida'}[k]}</small></div><span>${v+11+(k===c.main?24:0)}</span></div>`).join('')}<div class="attr"><div><b>Vida</b><small>Puntos de vida</small></div><span>${isMe?612:540}</span></div></div>
+    </div>
+    <div class="frame right">
+      <div class="head"><h3>${rightTab==='mochila'?'🎒 Mochila':'⚒️ Tienda'}</h3><div class="sw"><button data-t="mochila" class="${rightTab==='mochila'?'on':''}">Mochila</button><button data-t="tienda" class="${rightTab==='tienda'?'on':''}">Tienda</button><button data-t="hogar">Hogar</button></div></div>
+      <div class="grid-inv">${(rightTab==='mochila'
+        ? ['armas/espadon_pesado_rango_b','armas/daga_curva_raro','equipo/sets/voluntad_casco_rango_b','equipo/sets/artemisa_botas_raro','pociones/vida_mayor','pociones/vida_menor','pociones/estamina','piedras/B','piedras/C','pociones/antidoto']
+        : ['armas/martillo_de_guerra_rango_a','armas/arco_largo_rango_a','armas/vara_arcana_rango_a','equipo/sets/guardian_armadura_rango_b','equipo/sets/jack_guantes_rango_b','equipo/sets/eclipse_amuleto_rango_b'])
+        .map(p=>`<div class="slot" title="${p.split('/').pop()}"><img src="${A('src/assets/'+p+'.png')}"></div>`).join('')}${'<div class="slot empty" data-slot=""></div>'.repeat(rightTab==='mochila'?6:0)}</div>
+      ${rightTab==='tienda'?`<div class="shopkeep"><div style="font-size:3em">🧔</div><div class="bubble">“Mercancía nueva cada día. ¡Mira este martillo!”</div></div>`:''}
+      <div style="padding:0 14px 14px;color:var(--text-dim);font-size:.88em">Arrastra un objeto a una ranura (o haz clic) para equiparlo. Con ‹ › cambias entre tú y tus aliados para equiparlos desde aquí.</div>
+    </div>`;
+  document.getElementById('prev').onclick = ()=>{ who=(who+3)%4; renderChar(); };
+  document.getElementById('nxt').onclick = ()=>{ who=(who+1)%4; renderChar(); };
+  el.querySelectorAll('.sw button[data-t]').forEach(b=> b.onclick = ()=>{ if(b.dataset.t==='hogar') return toast('Hogar: mismo panel, con tu baúl'); rightTab=b.dataset.t; renderChar(); });
+}
+
+/* ======================= 4. COMBATE ======================= */
+let turn = 4;
+const FOES = [
+  {id:'riakis',name:'Señor del Caos Riakis',lvl:30,hp:.62,st:[['Fortalecido x4',0],['Caos',0]],x:68,y:3,size:220,boss:true},
+  {id:'lince_sombrio',name:'Lince Sombrío',lvl:30,hp:.35,st:[['Sangrado',1]],x:44,y:24,size:115},
+  {id:'buitre_corrupto',name:'Buitre Corrupto',lvl:30,hp:.9,st:[],x:87,y:28,size:115},
+];
+function renderBattle(){
+  const ar = document.getElementById('arena');
+  ar.querySelectorAll('.fighter,.msg,.dmg').forEach(e=>e.remove());
+  const card = (n,l,hp,st,me)=>`<div class="hpcard"><div class="n"><span>${n}</span><small>Nv ${l}</small></div><div class="hpbar ${hp<.25?'low':hp<.5?'mid':''}"><i style="width:${hp*100}%"></i></div>${me?`<div class="hpbar" style="height:4px"><i style="width:60%;background:var(--mp)"></i></div>`:''}<div class="st">${st.map(([s,b])=>`<span class="${b?'bad':''}">${s}</span>`).join('')}</div></div>`;
+  FOES.forEach((f,i)=>{
+    const d = document.createElement('div'); d.className='fighter'; d.dataset.i=i;
+    d.style.left=f.x+'%'; d.style.top=f.y+'%';
+    d.innerHTML = `${card(f.name,f.lvl,f.hp,f.st)}<img src="${fix(ENEMY_SPRITES[f.id])}" style="width:${f.size}px;height:${f.size}px;transform:scaleX(-1)">`;
+    ar.appendChild(d);
+  });
+  const party = [{img:sprite(C.cls,C.race),name:C.name||'Tú',hp:.71,st:[['Muro de fe',0],['Corrosión',1]],x:32,y:42,size:150,me:true,px:true},
+                 {img:A('src/assets/aliados/aldric.jpg'),name:'Aldric',hp:.48,st:[],x:12,y:46,size:90,ally:true},
+                 {img:A('src/assets/aliados/delyth.jpg'),name:'Delyth',hp:.95,st:[['Bendición',0]],x:52,y:50,size:90,ally:true}];
+  party.forEach(p=>{
+    const d = document.createElement('div'); d.className='fighter'; d.style.left=p.x+'%'; d.style.top=p.y+'%';
+    d.innerHTML = `<img class="${p.px?'px':''}" src="${p.img}" style="width:${p.size}px;height:${p.size}px;${p.ally?'border-radius:50%;object-fit:cover;border:2px solid var(--bronze);':''}">${card(p.name,30,p.hp,p.st,p.me)}`;
+    ar.appendChild(d);
+  });
+  const m = document.createElement('div'); m.className='msg';
+  m.innerHTML = `<b>Riakis</b> usa <b>Grieta del Mal</b>: 312 de daño a ${C.name||'ti'} y aplica Corrosión.<small>Aldric se interpone · Delyth te cura 140</small>`;
+  ar.appendChild(m);
+  document.getElementById('turn').textContent = 'Turno '+turn;
+}
+document.querySelectorAll('.actions button').forEach(b=> b.onclick = ()=>{
+  const ar = document.getElementById('arena');
+  if(b.dataset.act!=='basic'){ return toast({skill:'Submenú de habilidades',bag:'Submenú de mochila',def:'Te preparas para el golpe',pos:'Cambias de posición'}[b.dataset.act]); }
+  turn++; const foe = ar.querySelector('.fighter[data-i="0"]'); foe.classList.add('shake'); setTimeout(()=>foe.classList.remove('shake'),300);
+  const dmg = document.createElement('div'); dmg.className='dmg'; dmg.textContent = '-'+(380+Math.random()*120|0); dmg.style.left='66%'; dmg.style.top='22%'; ar.appendChild(dmg);
+  FOES[0].hp = Math.max(.05, FOES[0].hp-.06);
+  setTimeout(()=>{ renderBattle(); ar.querySelector('.msg').innerHTML = `Usas <b>Ataque básico</b> sobre <b>Riakis</b>: ${dmg.textContent.slice(1)} de daño.<small>Turno ${turn} · Riakis prepara su siguiente movimiento…</small>`; }, 450);
+});
+
+/* ======================= 5. LABERINTO (estilo Stone Soup) ======================= */
+const TILE = 16, TW = 40, TH = 24;
+const tiles = new Image(); tiles.src = 'assets/tilemap_packed.png';
+const T = id => [ (id%12)*16, Math.floor(id/12)*16 ];
+const NODE_TILE = {start:45, monstruo:122, elite:110, cofre:89, descanso:29, jefe:111};
+const NODE_NAME = {start:'Entrada', monstruo:'Combate', elite:'Élite', cofre:'Cofre', descanso:'Descanso', jefe:'Guardián'};
+// misma estructura de "sendas" que el mapa actual: columnas de pisos con caminos
+const NODES = [
+  {id:0,c:0,r:1,t:'start'},
+  {id:1,c:1,r:0,t:'monstruo'},{id:2,c:1,r:1,t:'cofre'},{id:3,c:1,r:2,t:'monstruo'},
+  {id:4,c:2,r:0,t:'elite'},{id:5,c:2,r:1,t:'monstruo'},{id:6,c:2,r:2,t:'descanso'},
+  {id:7,c:3,r:0,t:'monstruo'},{id:8,c:3,r:1,t:'elite'},{id:9,c:3,r:2,t:'cofre'},
+  {id:10,c:4,r:1,t:'jefe'},
+];
+const EDGES = [[0,1],[0,2],[0,3],[1,4],[1,5],[2,5],[3,5],[3,6],[4,7],[5,7],[5,8],[6,8],[6,9],[7,10],[8,10],[9,10]];
+const room = n => ({x: 2 + n.c*9, y: 2 + n.r*8, w:5, h:4});
+let grid, D = {at:0, seen:new Set([0]), visited:new Set([0])};
+function buildGrid(){
+  grid = Array.from({length:TH},()=>Array(TW).fill(0)); // 0 vacío, 1 suelo, 2 muro
+  const owner = Array.from({length:TH},()=>Array(TW).fill(-1));
+  const floor = (x,y,o)=>{ if(x>=0&&y>=0&&x<TW&&y<TH){ grid[y][x]=1; if(o!=null && owner[y][x]<0) owner[y][x]=o; } };
+  NODES.forEach(n=>{ const r=room(n); for(let y=r.y;y<r.y+r.h;y++) for(let x=r.x;x<r.x+r.w;x++) floor(x,y,n.id); });
+  EDGES.forEach(([a,b],k)=>{
+    const A1=room(NODES[a]), B1=room(NODES[b]);
+    const ax=A1.x+A1.w, ay=A1.y+1+(k%2), bx=B1.x-1, by=B1.y+1+((k+1)%2), mx=Math.floor((ax+bx)/2);
+    for(let x=ax;x<=mx;x++) floor(x,ay,'e'+k);
+    for(let y=Math.min(ay,by);y<=Math.max(ay,by);y++) floor(mx,y,'e'+k);
+    for(let x=mx;x<=bx;x++) floor(x,by,'e'+k);
+  });
+  for(let y=0;y<TH;y++) for(let x=0;x<TW;x++) if(grid[y][x]===0){
+    for(let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++){ const X=x+dx,Y=y+dy; if(X>=0&&Y>=0&&X<TW&&Y<TH&&grid[Y][X]===1){ grid[y][x]=2; } }
+  }
+  grid.owner = owner;
+}
+const lit = (x,y)=>{
+  // visible si pertenece a una sala vista o a un pasillo que toca una sala visitada
+  const o = grid.owner[y] && grid.owner[y][x];
+  if(typeof o==='number') return D.seen.has(o);
+  if(typeof o==='string'){ const [a,b]=EDGES[+o.slice(1)]; return D.visited.has(a)||D.visited.has(b); }
+  for(let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++){ const oo=grid.owner[y+dy]&&grid.owner[y+dy][x+dx]; if(oo!=null&&oo!==-1&&((typeof oo==='number'&&D.seen.has(oo))||(typeof oo==='string'&&(D.visited.has(EDGES[+oo.slice(1)][0])||D.visited.has(EDGES[+oo.slice(1)][1]))))) return true; }
+  return false;
+};
+const reachable = ()=> new Set(EDGES.filter(([a])=>a===D.at).map(([,b])=>b));
+function drawDungeon(){
+  if(!grid) buildGrid();
+  const cv = document.getElementById('dung'), g = cv.getContext('2d'); g.imageSmoothingEnabled=false;
+  if(!tiles.complete){ tiles.onload = drawDungeon; return; }
+  g.fillStyle='#000'; g.fillRect(0,0,cv.width,cv.height);
+  const reach = reachable();
+  for(let y=0;y<TH;y++) for(let x=0;x<TW;x++){
+    const v = grid[y][x]; if(!v) continue;
+    const L = lit(x,y);
+    const [sx,sy] = T(v===1 ? ((x*7+y*3)%9===0?49:48) : 40);
+    g.globalAlpha = L ? 1 : 0.13;
+    g.drawImage(tiles,sx,sy,16,16,x*16,y*16,16,16);
+    if(v===1){ g.fillStyle='rgba(18,12,10,.55)'; g.fillRect(x*16,y*16,16,16); } // suelo oscuro, estilo Stone Soup
+  }
+  g.globalAlpha=1;
+  NODES.forEach(n=>{
+    const r = room(n), cx = r.x+2, cy = r.y+1;
+    const seen = D.seen.has(n.id);
+    if(!seen){ return; }
+    if(reach.has(n.id)){ g.strokeStyle='rgba(255,215,106,.9)'; g.lineWidth=2; g.strokeRect(r.x*16+1,r.y*16+1,r.w*16-2,r.h*16-2); }
+    const [sx,sy] = T(D.visited.has(n.id) && n.t!=='start' ? 48 : NODE_TILE[n.t]);
+    if(!(D.visited.has(n.id) && n.t!=='start')) g.drawImage(tiles,sx,sy,16,16,cx*16,cy*16,16,16);
+  });
+  const here = room(NODES[D.at]); const [px,py] = T(97);
+  g.drawImage(tiles,px,py,16,16,(here.x+1)*16,(here.y+2)*16,16,16);
+}
+document.getElementById('dung').onclick = e=>{
+  const cv = e.currentTarget, rect = cv.getBoundingClientRect();
+  const x = Math.floor((e.clientX-rect.left)/rect.width*TW), y = Math.floor((e.clientY-rect.top)/rect.height*TH);
+  const n = NODES.find(n=>{ const r=room(n); return x>=r.x&&x<r.x+r.w&&y>=r.y&&y<r.y+r.h; });
+  if(!n) return;
+  if(!reachable().has(n.id)) return toast(D.seen.has(n.id)?'No hay un camino directo desde tu sala':'Aún no exploras esa zona');
+  D.at = n.id; D.visited.add(n.id); D.seen.add(n.id);
+  EDGES.filter(([a])=>a===n.id).forEach(([,b])=>D.seen.add(b));
+  const log = document.getElementById('minilog');
+  const txt = {monstruo:'Un grupo de arañas cae del techo. ¡Combate!',elite:'Una Matriarca Telaraña bloquea el paso. ¡Élite!',cofre:'Encuentras un cofre: 84 de oro y una Poción de vida menor.',descanso:'Una hoguera tranquila. Recuperas fuerzas.',jefe:'La Reina Telaraña despierta. ¡Guardián del nivel!'}[n.t];
+  log.insertAdjacentHTML('afterbegin', `<p><b style="color:var(--bronze-light)">${NODE_NAME[n.t]}:</b> ${txt}</p>`);
+  drawDungeon();
+  if(n.t==='monstruo'||n.t==='elite'||n.t==='jefe') setTimeout(()=>toast('Aquí empezaría el combate (pantalla 4)'),200);
+};
+EDGES.filter(([a])=>a===0).forEach(([,b])=>D.seen.add(b));
+(function legend(){
+  const lg = document.getElementById('legend');
+  lg.innerHTML = Object.entries(NODE_TILE).map(([k,id])=>`<div><canvas width="16" height="16" data-t="${id}"></canvas>${NODE_NAME[k]}</div>`).join('') + `<div><canvas width="16" height="16" data-t="97"></canvas>Tú</div>`;
+  const paint = ()=> lg.querySelectorAll('canvas').forEach(c=>{ const g=c.getContext('2d'); g.imageSmoothingEnabled=false; const [sx,sy]=T(+c.dataset.t); g.drawImage(tiles,sx,sy,16,16,0,0,16,16); });
+  tiles.complete ? paint() : tiles.addEventListener('load', paint);
+})();
+</script>
+</body>
+</html>
