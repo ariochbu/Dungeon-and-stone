@@ -1143,6 +1143,26 @@ const PET_RARITIES = {
   mitico:     {id:'mitico',     name:'Mítico',      color:'#e0393f', weight:0.001}
 };
 const PET_RARITY_ORDER = ['poco_comun','raro','unico','epico','legendario','mitico'];
+// Las imágenes de Caídos Épico/Legendario/Mítico (y algunos Únicos) no son
+// verticales como el resto (512x341, 512x512, 768x512, 307x1024...): con
+// object-fit:cover la carta las recortaba y se veían desproporcionadas.
+// Al cargar, si la proporción de la imagen se aleja de la de su caja, pasa a
+// "contain" (se ve entera, con fondo oscuro) — las verticales de siempre
+// siguen igual. Listener en captura porque 'load' no burbujea.
+document.addEventListener('load', (e)=>{
+  const img = e.target;
+  if(!img || img.tagName!=='IMG' || !(img.getAttribute('src')||'').includes('/mascotas/')) return;
+  const box = img.parentElement && img.parentElement.getBoundingClientRect();
+  if(!box || !box.width || !box.height || !img.naturalWidth || !img.naturalHeight) return;
+  const imgRatio = img.naturalWidth/img.naturalHeight, boxRatio = box.width/box.height;
+  // Solo si la imagen es bastante más ANCHA que su caja, o el doble de alta:
+  // los retratos verticales de siempre (0.6) siguen con el recorte de antes.
+  if(imgRatio > boxRatio*1.25 || imgRatio < boxRatio*0.5){
+    img.style.objectFit = 'contain';
+    img.style.objectPosition = 'center';
+    img.style.background = '#0d0b09';
+  }
+}, true);
 function petArtPath(id){ return `src/assets/mascotas/mascota_${String(id).padStart(3,'0')}.png`; }
 // Zoom al pasar el cursor (o mantener presionado en celular) sobre una
 // carta de Caído del Laberinto (2026-09-25, pedido explícito: "se ven muy
@@ -3787,10 +3807,38 @@ const SAVE_DEBOUNCE_MS = 1500;
 // vez y, si vuelve a fallar, se avisa en pantalla con el motivo exacto del
 // servidor (sirve para saber QUÉ regla lo rechaza).
 let lastSaveErrorShown = 0;
+// Causa real del "perdí la ofrenda al recargar" (2026-10-02, visto en los
+// logs de Postgres: "checkpoint_level no puede bajar" en ráfaga): si el mismo
+// personaje avanza en OTRA pestaña/dispositivo, esta sesión queda con un
+// checkpoint/récord/nivel más viejo que el de la base, y el trigger anti-
+// trampa rechaza TODOS sus guardados desde ahí — la ofrenda (y todo lo
+// demás) solo existía en memoria y se perdía al recargar. Ahora, ante esos
+// rechazos de "no puede bajar/retroceder", se leen los valores de progreso
+// de la base, se toma el MAYOR de cada uno y se reintenta: se conserva lo de
+// esta sesión (oro, objetos, Caídos) sin pisar el progreso de la otra.
+const STALE_SESSION_ERR = /no puede bajar|no puede retroceder|no puede superar max_level_unlocked/;
+async function mergeServerProgress(){
+  const { data, error } = await supabase.from('characters')
+    .select('level, xp, checkpoint_level, max_level_unlocked, record_level, record_floor_idx')
+    .eq('id', state.char.id).single();
+  if(error || !data) return false;
+  const c = state.char;
+  if((data.level||1) > c.level){ c.level = data.level; c.xp = data.xp||0; }
+  c.checkpointLevel = Math.max(c.checkpointLevel||1, data.checkpoint_level||1);
+  c.maxLevelUnlocked = Math.max(c.maxLevelUnlocked||1, data.max_level_unlocked||1);
+  const sv = {level: data.record_level||1, floorIdx: data.record_floor_idx||0};
+  if(!c.record || sv.level > c.record.level || (sv.level===c.record.level && sv.floorIdx > c.record.floorIdx)) c.record = sv;
+  c.maxLevelUnlocked = Math.max(c.maxLevelUnlocked, c.record.level);
+  return true;
+}
 async function flushSave(){
   if(!state || !currentUser) return;
   pendingSave = false;
   let { error } = await supabase.from('characters').update(characterToRow()).eq('id', state.char.id);
+  if(error && STALE_SESSION_ERR.test(error.message||'') && await mergeServerProgress()){
+    ({ error } = await supabase.from('characters').update(characterToRow()).eq('id', state.char.id));
+    if(!error) log('Se detectó progreso guardado desde otra pestaña o dispositivo con este personaje: se combinó con esta sesión. Evita jugar el mismo personaje en dos lugares a la vez.');
+  }
   if(error){
     await new Promise(r=>setTimeout(r, 1200));
     ({ error } = await supabase.from('characters').update(characterToRow()).eq('id', state.char.id));
@@ -4743,8 +4791,8 @@ function renderInventory(){
   const gearClassesPresent = Object.keys(SHOP_ROLE_LABELS).filter(cid=> gearItems.some(it=>it.styleId===cid))
     .concat(SET_IDS.filter(id=> gearItems.some(it=>it.setId===id)).map(id=>'set:'+id));
   if(invGearClassFilter!=='todos' && !gearClassesPresent.includes(invGearClassFilter)) invGearClassFilter = 'todos';
-  const gearClassLabel = (cid)=> cid.startsWith('set:') ? SET_CATALOG[cid.slice(4)].name : SHOP_ROLE_LABELS[cid];
-  const gearClassFilterHTML = gearClassesPresent.length>1 ? `<div class="inv-filter-bar">
+  const gearClassLabel = (cid)=> cid.startsWith('set:') ? 'Conjunto: '+SET_CATALOG[cid.slice(4)].name : SHOP_ROLE_LABELS[cid];
+  const gearClassFilterHTML = gearClassesPresent.length>=1 ? `<div class="inv-filter-bar">
     <button class="nav-btn ${invGearClassFilter==='todos'?'active':''}" data-gearclassfilter="todos">Todas las sendas y conjuntos</button>
     ${gearClassesPresent.map(cid=>`<button class="nav-btn ${invGearClassFilter===cid?'active':''}" data-gearclassfilter="${cid}">${gearClassLabel(cid)}</button>`).join('')}
   </div>` : '';
@@ -11364,6 +11412,8 @@ function renderCharacterSelect(rows){
 }
 
 async function enterCharacter(row){
+  // Nunca arrastrar el combate de otro personaje (2026-10-02).
+  combat = null;
   state = rowToState(row);
   migrateState();
   // si ya tenía una corrida activa entra directo al laberinto (con la
