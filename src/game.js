@@ -4336,7 +4336,7 @@ function renderAll(){
   if(navEl){
     const inDungeonRun = !!(state.dungeon && !state.dungeon.floors[state.dungeon.floors.length-1][0].done);
     const inCombat = !!(combat && combat.active);
-    navEl.style.display = (inDungeonRun || inCombat) ? 'none' : 'flex';
+    navEl.style.display = 'none'; // reemplazada por el menú lateral (renderSideNav)
     const navAdminBtn = document.getElementById('nav-admin-btn');
     if(navAdminBtn) navAdminBtn.style.display = (state.char.role==='admin') ? 'inline-flex' : 'none';
     const activeNavKey = homeOpen?'home' : shopOpen?'shop' : tabernaOpen?'taberna' : missionsOpen?'missions' : ofrendaOpen?'ofrenda' : checkinOpen?'checkin' : rankingOpen?'ranking' : adminOpen?'admin' : 'city';
@@ -4403,7 +4403,21 @@ function renderLog(){
 /* ============================================================
    RENDER: CHARACTER SHEET
    ============================================================ */
+// Nueva interfaz (2026-10-02, maqueta aprobada): en la ciudad la columna
+// izquierda es el menú lateral (renderSideNav); en el laberinto y en combate
+// sigue mostrando la ficha del personaje como siempre.
+function inCityMode(){
+  if(!state) return false;
+  if(combat && combat.active) return false;
+  return !(state.dungeon && !state.dungeon.floors[state.dungeon.floors.length-1][0].done);
+}
 function renderSheet(){
+  const el = document.getElementById('sheet');
+  if(inCityMode()){ el.classList.add('side-nav-mode'); renderSideNav(); return; }
+  el.classList.remove('side-nav-mode');
+  renderSheetPanel('sheet');
+}
+function renderSheetPanel(targetId){
   const d = derived();
   const r = race(), s = style();
   const xpNeeded = xpNeededForLevel(state.char.level);
@@ -4440,7 +4454,7 @@ function renderSheet(){
   const stunChance = totalStunChance();
   const cs = combatStatsSummary();
 
-  document.getElementById('sheet').innerHTML = `
+  document.getElementById(targetId).innerHTML = `
     <div class="sheet-title">
       <div class="sheet-emblem"><img src="src/assets/razas/${r.id}.png" alt="" onerror="this.replaceWith('${r.icon}')"></div>
       <div>
@@ -5343,69 +5357,215 @@ async function usePotionInCombat(potionId){
 /* ============================================================
    RENDER: CITY
    ============================================================ */
+// ============================================================
+// CIUDAD — menú lateral, bienvenida, mapa y primeras visitas
+// (2026-10-02, maqueta "prototype-2d/maqueta-ui.html" aprobada por ariochbu)
+// ============================================================
+let cityView = null; // 'welcome' | 'map' | 'laberinto' | 'ficha'
+function charKey(k){ return `ds:${k}:${state && state.char ? state.char.id : 'x'}`; }
+function lsGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
+function lsSet(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
+function closeAllPanels(){
+  invOpen = false; homeOpen = false; shopOpen = false; rankingOpen = false; adminOpen = false;
+  missionsOpen = false; tabernaOpen = false; ofrendaOpen = false; checkinOpen = false; optionsOpen = false;
+}
+// Lugares de la ciudad: clave del menú, panel que abre y su introducción de
+// primera visita (viñetas provisionales hasta que haya ilustraciones).
+const CITY_PLACES = {
+  shop:    {name:'Tienda', ic:'⚒️', open:()=>{ shopOpen = true; }, x:20, y:68, keeper:'Gerd el herrero',
+            intro:['“¿Nuevo? Se nota por cómo agarras esa espada.”','“Vendo armas, armaduras y pociones. Compro lo que traigas de abajo.”','“Vuelve con oro… o con Sellos del Laberinto.”']},
+  home:    {name:'Hogar', ic:'🏠', open:()=>{ homeOpen = true; }, x:47, y:84, keeper:'Tu casera',
+            intro:['“Tu cuarto está arriba. Guarda aquí lo que no quieras perder.”','“Lo que dejes en el Hogar no se pierde aunque caigas en el laberinto.”']},
+  taberna: {name:'Taberna', ic:'🍺', open:()=>{ tabernaOpen = true; }, x:30, y:38, keeper:'Bruno el tabernero',
+            intro:['“¡Otro valiente que viene a morir al laberinto!”','“Aquí se contratan espadas… si tienes fama y oro.”','“Cada aliado cobra su salario al salir del laberinto. No lo olvides.”']},
+  missions:{name:'Gremio', ic:'📜', open:()=>{ missionsOpen = true; }, x:44, y:34, keeper:'La maestra del Gremio',
+            intro:['“El Gremio paga por trabajo bien hecho.”','“Cada 12 horas hay contratos nuevos en el tablón.”','“Cúmplelos y cobra oro, experiencia y Sellos del Laberinto.”']},
+  ofrenda: {name:'Árbol de ofrendas', ic:'🌳', open:()=>{ ofrendaOpen = true; }, x:80, y:62, keeper:'Yggdrasil',
+            intro:['Las raíces del pequeño árbol brillan al acercarte…','Ofrécele oro o Sellos y te devolverá a uno de los Caídos del Laberinto.']},
+  checkin: {name:'Check-in diario', ic:'📅', open:()=>{ checkinOpen = true; }, x:68, y:30, keeper:'El campanero',
+            intro:['“Cada día que vuelvas a la ciudad, el árbol te regala ofrendas.”','“El día 1 de cada mes empieza un calendario nuevo.”']},
+  ranking: {name:'Ranking', ic:'🏆', open:()=>{ rankingOpen = true; }, x:88, y:34, keeper:'El pregonero',
+            intro:['“¡Escuchad! Aquí se graban los nombres de los que más hondo bajaron.”']},
+};
+function navBadges(){
+  const missionsReady = (state.missions||[]).filter(m=>m.status==='completed').length;
+  const pulls = (state.char.pets && state.char.pets.pendingFreePulls) || 0;
+  return {missions: missionsReady ? '!' : '', ofrenda: pulls ? String(pulls) : '', checkin: checkinAvailable() ? '!' : ''};
+}
+function activeNavKey(){
+  if(invOpen) return 'inv';
+  if(homeOpen) return 'home'; if(shopOpen) return 'shop'; if(tabernaOpen) return 'taberna';
+  if(missionsOpen) return 'missions'; if(ofrendaOpen) return 'ofrenda'; if(checkinOpen) return 'checkin';
+  if(rankingOpen) return 'ranking'; if(adminOpen) return 'admin'; if(optionsOpen) return 'options';
+  ensureCityView();
+  return cityView;
+}
+function ensureCityView(){ if(!cityView) cityView = lsGet(charKey('welcome')) ? 'map' : 'welcome'; }
+function renderSideNav(){
+  const el = document.getElementById('sheet');
+  const d = derived(), r = race(), st = style();
+  const active = activeNavKey(), badges = navBadges();
+  const hpPct = clamp(state.char.curHP/d.maxHP*100,0,100), mpPct = clamp(state.char.curSta/d.maxSta*100,0,100);
+  const xpNeeded = xpNeededForLevel(state.char.level), xpPct = clamp(state.char.xp/xpNeeded*100,0,100);
+  const tavernLocked = !tavernUnlocked();
+  const item = (key, ic, name, opts={})=>{
+    const right = opts.locked ? `<span class="sn-lock" title="${opts.lockWhy||''}">🔒</span>`
+      : opts.badge ? `<span class="sn-badge${opts.badge==='!'?' bang':''}">${opts.badge}</span>` : '';
+    return `<div class="sn-item ${active===key?'on':''} ${opts.locked?'locked':''}" data-sn="${key}" ${opts.locked?`title="${opts.lockWhy||''}"`:''}><span class="sn-ic">${ic}</span><span class="sn-txt">${name}</span>${right}</div>`;
+  };
+  el.innerHTML = `
+    <div class="sn-me">
+      <div class="sn-ava"><img src="${playerSpriteFor(state.char.style, state.char.race)||''}" alt=""><span class="sn-lvl">${state.char.level}</span></div>
+      <div class="sn-who">
+        <div class="sn-name">${state.char.nickname}${renownBadge(myBossesBeaten())}</div>
+        <div class="sn-sub">${r.name} · ${st.name}</div>
+        <div class="sn-cur"><span title="Oro">⛁ ${state.char.gold}</span><span title="Sellos del Laberinto">🔷 ${state.char.missionCurrency||0}</span></div>
+        <div class="sn-bar hp" title="Vida ${state.char.curHP}/${d.maxHP}"><i style="width:${hpPct}%"></i></div>
+        <div class="sn-bar mp" title="MP ${state.char.curSta}/${d.maxSta}"><i style="width:${mpPct}%"></i></div>
+        <div class="sn-bar xp" title="Experiencia ${state.char.xp}/${xpNeeded}"><i style="width:${xpPct}%"></i></div>
+      </div>
+    </div>
+    <div class="sn-sec"><h5>Inicio</h5>
+      ${item('welcome','✨','Bienvenida')}
+      ${item('map','🗺️','Mapa de la ciudad')}
+    </div>
+    <div class="sn-sec"><h5>Ciudad</h5>
+      ${item('shop','⚒️','Tienda')}
+      ${item('home','🏠','Hogar')}
+      ${item('taberna','🍺','Taberna', tavernLocked ? {locked:true, lockWhy: state.char.level < ALLY_MIN_LEVEL ? `Requiere nivel ${ALLY_MIN_LEVEL}${BETA_ALLY_UNLOCKS?' y derrotar al Ogro':''}` : 'Derrota al Ogro (nivel 10)'} : {})}
+      ${item('missions','📜','Gremio',{badge:badges.missions})}
+      ${item('ofrenda','🌳','Árbol de ofrendas',{badge:badges.ofrenda})}
+      ${item('checkin','📅','Check-in diario',{badge:badges.checkin})}
+    </div>
+    <div class="sn-sec"><h5>Laberinto</h5>
+      ${item('laberinto','🕳️','Entrar al laberinto')}
+      ${item('ficha','🧝','Ficha del personaje')}
+      ${item('inv','🎒','Inventario')}
+    </div>
+    <div class="sn-sec"><h5>Progreso</h5>
+      ${item('ranking','🏆','Ranking')}
+      ${state.char.role==='admin' ? item('admin','🛠️','Panel admin') : ''}
+    </div>
+    <div class="sn-sec"><h5>Cuenta</h5>
+      ${item('tutorial','❓','¿Cómo jugar?')}
+      ${item('options','⚙️','Opciones')}
+    </div>`;
+  el.querySelectorAll('.sn-item').forEach(it=>{ it.onclick = ()=> cityNavigate(it.dataset.sn); });
+}
+function cityNavigate(key){
+  if(!state || (combat && combat.active)) return;
+  if(key==='tutorial'){ showTutorial(); return; }
+  if(key==='taberna' && !tavernUnlocked()){
+    showOverlay('Taberna cerrada', state.char.level < ALLY_MIN_LEVEL
+      ? `La Taberna abre a partir del nivel ${ALLY_MIN_LEVEL}${BETA_ALLY_UNLOCKS?' y tras derrotar al Ogro':''}.`
+      : 'Nadie en la Taberna se arriesga con un desconocido. Derrota al Ogro (nivel 10) y los mercenarios empezarán a escucharte.', ()=>{});
+    return;
+  }
+  closeAllPanels();
+  if(key==='inv') invOpen = true;
+  else if(key==='options') optionsOpen = true;
+  else if(key==='admin'){ if(state.char.role==='admin') adminOpen = true; }
+  else if(CITY_PLACES[key]){ CITY_PLACES[key].open(); cityView = 'map'; }
+  else cityView = key;
+  if(key==='welcome') lsSet(charKey('welcome'),'1');
+  renderAll();
+  window.scrollTo({top:0, behavior:'smooth'});
+  if(CITY_PLACES[key]) maybeShowPlaceIntro(key);
+}
+function maybeShowPlaceIntro(key){
+  const p = CITY_PLACES[key];
+  if(!p || lsGet(charKey('intro-'+key))) return;
+  lsSet(charKey('intro-'+key), '1');
+  let i = 0;
+  const div = document.createElement('div');
+  div.className = 'overlay-msg';
+  const draw = ()=>{
+    div.innerHTML = `<div class="overlay-card intro-card">
+      <h2>${p.ic} ${p.name}</h2>
+      <div class="intro-comic">${p.intro.map((t,k)=>`<div class="intro-panel ip${k%3} ${k<=i?'shown':''}"><span class="intro-cap">${t}</span></div>`).join('')}</div>
+      <div class="intro-foot"><span>${p.keeper}</span><span style="display:flex; gap:8px;">
+        <button class="reset-btn" data-intro="skip">Saltar</button>
+        <button class="btn-main" data-intro="next">${i<p.intro.length-1?'Continuar ›':'Entrar'}</button></span></div>
+    </div>`;
+    div.querySelector('[data-intro="skip"]').onclick = ()=> div.remove();
+    div.querySelector('[data-intro="next"]').onclick = ()=>{ if(i<p.intro.length-1){ i++; draw(); } else div.remove(); };
+  };
+  draw();
+  document.body.appendChild(div);
+}
 function renderCity(){
-  const adminCardHTML = (state.char.role === 'admin') ? `
-      <div class="action-card">
-        <h3>Panel admin</h3>
-        <p>Gestiona cuentas de jugadores: banear, restaurar y otorgar rol de administrador.</p>
-        <button id="btn-open-admin">Abrir panel admin</button>
-      </div>` : '';
+  ensureCityView();
+  if(cityView==='welcome') return renderCityWelcome();
+  if(cityView==='laberinto') return renderCityDungeonEntry();
+  if(cityView==='ficha'){
+    renderSheetPanel('main-panel');
+    document.getElementById('main-panel').insertAdjacentHTML('afterbegin', `<h3 style="color:var(--bronze-light); margin-bottom:10px;">Ficha del personaje</h3>`);
+    return;
+  }
+  return renderCityMap();
+}
+function renderCityWelcome(){
+  lsSet(charKey('welcome'),'1');
+  const r = race();
+  document.getElementById('main-panel').innerHTML = `
+    <div class="city-welcome">
+      <h2 class="cw-title">¡Bienvenido a la Última Ciudad!</h2>
+      <p class="cw-sub">Lo único que queda en pie sobre el laberinto. Aquí descansas, te equipas y preparas tu próxima bajada.</p>
+      <div class="cw-comic">
+        <div class="cw-panel big" style="background-image:url(src/assets/aliados/aldric.jpg)"><span class="intro-cap">“Otro más que baja a buscar gloria…”</span></div>
+        <div class="cw-panel race" style="background-image:url(src/assets/razas/${r.id}.png)"><span class="intro-cap">Llegas con lo puesto.</span></div>
+        <div class="cw-panel" style="background-image:url(src/assets/aliados/delyth.jpg)"><span class="intro-cap">“Que la luz te acompañe ahí abajo.”</span></div>
+        <div class="cw-panel wide"><span class="intro-cap cw-poster">SE BUSCAN HÉROES — solo los muy valientes</span></div>
+      </div>
+      <div class="cw-actions">
+        <button class="btn-main" id="cw-map">Recorrer la ciudad 🗺️</button>
+        <button class="reset-btn" id="cw-lab">Ir directo al laberinto</button>
+        <button class="reset-btn" id="cw-tut">¿Cómo jugar?</button>
+      </div>
+      <p class="cw-record">Tu récord: ${describeRecord()}.</p>
+    </div>`;
+  document.getElementById('cw-map').onclick = ()=> cityNavigate('map');
+  document.getElementById('cw-lab').onclick = ()=> cityNavigate('laberinto');
+  document.getElementById('cw-tut').onclick = showTutorial;
+}
+function renderCityMap(){
+  const badges = navBadges();
+  const tavernLocked = !tavernUnlocked();
+  const pins = Object.entries(CITY_PLACES).map(([key,p])=>{
+    const locked = key==='taberna' && tavernLocked;
+    const b = badges[key];
+    return `<div class="cm-pin ${locked?'locked':''}" data-cm="${key}" style="left:${p.x}%; top:${p.y}%;">
+      <div class="cm-bld"><div class="cm-roof"></div>${p.ic}${b?`<span class="cm-mark ${b==='!'?'':'num'}">${b}</span>`:''}</div>
+      <div class="cm-tag">${p.name}${locked?' 🔒':''}</div></div>`;
+  }).join('');
+  document.getElementById('main-panel').innerHTML = `
+    <div class="city-map">
+      <div class="cm-river"></div>
+      <div class="cm-road" style="left:8%; top:56%; width:80%; height:20px; transform:rotate(-6deg);"></div>
+      <div class="cm-road" style="left:45%; top:14%; width:20px; height:74%;"></div>
+      <div class="cm-plaza"></div>
+      ${pins}
+      <div class="cm-portal" id="cm-portal"><span>LABERINTO<small>Récord: nivel ${state.char.record ? state.char.record.level : 1}</small></span></div>
+      <div class="cm-hint">Toca un edificio o usa el menú de la izquierda.</div>
+    </div>`;
+  document.querySelectorAll('.cm-pin').forEach(pin=>{ pin.onclick = ()=> cityNavigate(pin.dataset.cm); });
+  document.getElementById('cm-portal').onclick = ()=> cityNavigate('laberinto');
+}
+function renderCityDungeonEntry(){
   document.getElementById('main-panel').innerHTML = `
     <div class="city-art">
-      <div class="icon">🏙️</div>
-      <h2>La última ciudad</h2>
-      <p>Solo queda una ciudad en pie en todo Dungeon &amp; Stone. El laberinto tiene 60 pisos conocidos, repartidos en décadas con su propia temática; cada uno esconde su propio guardián.</p>
+      <div class="icon">🕳️</div>
+      <h2>Entrar al laberinto</h2>
+      <p>${state.char.checkpointLevel>1
+        ? 'Elige desde qué checkpoint entrar — se libera uno nuevo cada vez que derrotas al jefe de una década.'
+        : 'Siempre se entra desde el nivel 1, piso 1.'}</p>
       <p style="color:var(--bronze-light); font-size:0.85em; margin-top:8px;">Nivel de récord: ${describeRecord()}.</p>
-      <button class="reset-btn" id="btn-open-tutorial" style="margin-top:10px;">¿Cómo jugar?</button>
-    </div>
-    <div class="city-actions">
-      <div class="action-card">
-        <h3>Entrar al laberinto</h3>
-        <p>${state.char.checkpointLevel>1
-          ? 'Elige desde qué checkpoint entrar — se libera uno nuevo cada vez que derrotas al jefe de una década.'
-          : 'Siempre se entra desde el nivel 1, piso 1.'}</p>
-        <div class="checkpoint-grid">
-          ${checkpointLevelsUnlocked().map(lvl=>`<button class="checkpoint-btn ${lvl===state.char.checkpointLevel?'current':''}" data-level="${lvl}">${lvl}</button>`).join('')}
-        </div>
-      </div>
-      <div class="action-card">
-        <h3>Hogar</h3>
-        <p>Guarda equipo, pociones y oro a salvo. Nada de lo guardado aquí se pierde si mueres en el laberinto.</p>
-        <button id="btn-open-home">Entrar al Hogar</button>
-      </div>
-      <div class="action-card">
-        <h3>Tienda</h3>
-        <p>Compra pociones y armas básicas acordes a tu senda de combate.</p>
-        <button id="btn-open-shop">Entrar a la tienda</button>
-      </div>
-      <div class="action-card">
-        <h3>Ranking</h3>
-        <p>Tu récord personal y los 10 mejores pisos alcanzados entre todos los jugadores.</p>
-        <button id="btn-open-ranking">Ver ranking</button>
-      </div>${adminCardHTML}
-      <div class="action-card">
-        <h3>Taberna</h3>
-        <p>Recluta aliados para acompañarte en el laberinto (equipo de hasta 5, contándote a ti). Requiere nivel ${ALLY_MIN_LEVEL}.</p>
-        <button id="btn-open-taberna">Entrar a la Taberna</button>
-      </div>
-      <div class="action-card">
-        <h3>Gremio</h3>
-        <p>Acepta misiones de exploradores a cambio de oro, experiencia y Sellos del Laberinto.</p>
-        <button id="btn-open-missions">Ver misiones</button>
-      </div>
-      <div class="action-card ofrenda-card">
-        <h3>🌳 Otorgar ofrenda</h3>
-        <p>Un Ygdrasil en miniatura crece en el corazón de la ciudad. Ofrécele oro, Sellos del Laberinto o una recarga y te devolverá un Caído del Laberinto para tu colección.</p>
-        <button id="btn-open-ofrenda">Acercarse al árbol</button>
-      </div>
-      <div class="action-card checkin-card">
-        <h3>📅 Check-in diario${checkinAvailable()?' <span class="checkin-badge">¡Disponible!</span>':''}</h3>
-        <p>Entra cada día para reclamar ofrendas gratis para el árbol — el día ${checkinPreviewDay()} te daría ${checkinPreviewDay()} tirada${checkinPreviewDay()===1?'':'s'} gratis. Se reinicia el día 1 de cada mes.</p>
-        <button id="btn-open-checkin">${checkinAvailable()?'Reclamar recompensa de hoy':'Ver calendario'}</button>
+      <div class="checkpoint-grid" style="justify-content:center; margin-top:10px;">
+        ${checkpointLevelsUnlocked().map(lvl=>`<button class="checkpoint-btn ${lvl===state.char.checkpointLevel?'current':''}" data-level="${lvl}">${lvl}</button>`).join('')}
       </div>
     </div>
     <div class="section-label">Antes de partir</div>
-    <p style="color:var(--text-dim); font-size:0.85em; margin-top:0;">Revisa tu 🎒 Inventario (arriba) para equipar mejor equipo o comprobar cuántas pociones llevas antes de entrar al laberinto. Si mueres dentro perderás el equipo suelto de tu mochila y el ${DEFEAT_GOLD_LOSS_PCT}% de tu oro; si te retiras tras vencer a un guardián, conservas todo.</p>
+    <p style="color:var(--text-dim); font-size:0.85em; margin-top:0;">Revisa tu inventario para equipar mejor equipo o comprobar cuántas pociones llevas. Si mueres dentro perderás el equipo suelto de tu mochila y el ${DEFEAT_GOLD_LOSS_PCT}% de tu oro; si te retiras tras vencer a un guardián, conservas todo.</p>
   `;
   const enterDungeonAt = (startLevel)=>{
     showOverlay(
@@ -5416,6 +5576,7 @@ function renderCity(){
         const d = derived();
         state.char.curHP = d.maxHP; state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi;
         state.dungeon = generateDungeon(startLevel);
+        cityView = 'map'; // al volver a la ciudad se ve el mapa
         playDungeonAudio(startLevel);
         // La "Descansar" de la ciudad se quitó por redundante (2026-09-25,
         // pedido explícito): entrar ya curaba al jugador a full, así que en
@@ -5438,42 +5599,6 @@ function renderCity(){
   document.querySelectorAll('.checkpoint-btn').forEach(btn=>{
     btn.onclick = ()=> enterDungeonAt(parseInt(btn.dataset.level, 10));
   });
-  document.getElementById('btn-open-home').onclick = ()=>{
-    invOpen = false; homeOpen = true; shopOpen = false; rankingOpen = false; adminOpen = false;
-    renderAll();
-  };
-  document.getElementById('btn-open-shop').onclick = ()=>{
-    invOpen = false; homeOpen = false; shopOpen = true; rankingOpen = false; adminOpen = false;
-    renderAll();
-  };
-  document.getElementById('btn-open-ranking').onclick = ()=>{
-    invOpen = false; homeOpen = false; shopOpen = false; rankingOpen = true; adminOpen = false;
-    renderAll();
-  };
-  const adminBtn = document.getElementById('btn-open-admin');
-  if(adminBtn){
-    adminBtn.onclick = ()=>{
-      invOpen = false; homeOpen = false; shopOpen = false; rankingOpen = false; adminOpen = true;
-      renderAll();
-    };
-  }
-  document.getElementById('btn-open-missions').onclick = ()=>{
-    invOpen = false; homeOpen = false; shopOpen = false; rankingOpen = false; adminOpen = false; missionsOpen = true;
-    renderAll();
-  };
-  document.getElementById('btn-open-tutorial').onclick = showTutorial;
-  document.getElementById('btn-open-taberna').onclick = ()=>{
-    invOpen = false; homeOpen = false; shopOpen = false; rankingOpen = false; adminOpen = false; missionsOpen = false; tabernaOpen = true;
-    renderAll();
-  };
-  document.getElementById('btn-open-ofrenda').onclick = ()=>{
-    invOpen = false; homeOpen = false; shopOpen = false; rankingOpen = false; adminOpen = false; missionsOpen = false; tabernaOpen = false; ofrendaOpen = true;
-    renderAll();
-  };
-  document.getElementById('btn-open-checkin').onclick = ()=>{
-    invOpen = false; homeOpen = false; shopOpen = false; rankingOpen = false; adminOpen = false; missionsOpen = false; tabernaOpen = false; ofrendaOpen = false; checkinOpen = true;
-    renderAll();
-  };
 }
 
 /* ============================================================
@@ -11779,6 +11904,7 @@ document.getElementById('btn-begin').onclick = async ()=>{
     }
     const row = await createCharacterOnServer(selRace, selStyle, nickname);
     state = rowToState(row);
+    cityView = null;
     grantStarterKit();
     const d = derived();
     state.char.curHP = d.maxHP; state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi;
@@ -12148,6 +12274,7 @@ async function enterCharacter(row){
   // Nunca arrastrar el combate de otro personaje (2026-10-02).
   combat = null;
   state = rowToState(row);
+  cityView = null;
   migrateState();
   // si ya tenía una corrida activa entra directo al laberinto (con la
   // música del piso donde se quedó, no la de ciudad); si no, aterriza en la
