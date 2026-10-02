@@ -2,8 +2,8 @@
 
 import { supabase } from './supabaseClient.js';
 import * as auth from './auth.js';
-import { syncBattleStage, playBattleAnim } from './battleStage.js?v=72';
-import { CLASS_SPRITES, ENEMY_SPRITES, playerSpriteFor } from './battleSprites.js?v=70';
+import { syncBattleStage, playBattleAnim } from './battleStage.js?v=73';
+import { CLASS_SPRITES, ENEMY_SPRITES, playerSpriteFor } from './battleSprites.js?v=71';
 
 /* ============================================================
    DATA
@@ -154,6 +154,36 @@ const ALLY_ROSTER = [
 ];
 const ALLY_MIN_LEVEL = 10;
 const MAX_ALLIES = 4;
+// ============================================================
+// FAMA Y CUPOS DE ALIADOS (pedido explícito 2026-10-02, entra con la BETA)
+// Cada jefe de década derrotado da un título y, con BETA_ALLY_UNLOCKS
+// encendido, un cupo de aliado:
+//   Ogro (10)      → Aventurero  · abre la Taberna (además de nivel 10) · 1 aliado
+//   Matriarca (20) → Renombrado  · 2 aliados
+//   Riakis (30)    → Héroe       · 3 aliados
+//   Usurpador (40) → Leyenda     · 4 aliados (tope)
+// Mientras BETA_ALLY_UNLOCKS sea false (alfa) los títulos se muestran igual,
+// pero la Taberna y los cupos funcionan como siempre (nivel 10, 4 aliados).
+// Al lanzar la beta: poner true (y el límite equivalente en hire_ally).
+// ============================================================
+let BETA_ALLY_UNLOCKS = false;
+const RENOWN_TITLES = ['', 'Aventurero', 'Renombrado', 'Héroe', 'Leyenda'];
+// Jefes de década derrotados (0-4) a partir del checkpoint y del récord:
+// llegar al nivel 11 implica haber vencido al Ogro, al 21 a la Matriarca...
+function decadeBossesBeaten(checkpointLevel, recordLevel){
+  const n = Math.max(Math.floor(((checkpointLevel||1)-1)/10), Math.floor(((recordLevel||1)-1)/10));
+  return Math.max(0, Math.min(4, n));
+}
+function myBossesBeaten(){
+  return decadeBossesBeaten(state.char.checkpointLevel, state.char.record && state.char.record.level);
+}
+function renownTitle(n){ return RENOWN_TITLES[Math.max(0, Math.min(4, n||0))] || ''; }
+function renownBadge(n){
+  const t = renownTitle(n);
+  return t ? ` <span class="renown-badge renown-${n}" title="Título por jefes de década derrotados">${t}</span>` : '';
+}
+function allyCap(){ return BETA_ALLY_UNLOCKS ? Math.min(MAX_ALLIES, myBossesBeaten()) : MAX_ALLIES; }
+function tavernUnlocked(){ return state.char.level >= ALLY_MIN_LEVEL && (!BETA_ALLY_UNLOCKS || myBossesBeaten() >= 1); }
 function allyHireCost(tpl, charLevel){ return tpl.baseCost + charLevel*tpl.costPerLevel; }
 
 // skill definitions
@@ -3617,8 +3647,19 @@ const CLASS_CURVE = {
   paladin:   {hp:[1.00,1.19,1.10,1.02,0.95,0.88,0.81], dmg:[1.00,1.09,1.05,1.01,0.97,0.94,0.90]},
   hechicero: {hp:[1.00,0.55,0.60,0.67,0.76,0.85,0.95], dmg:[1.00,0.73,0.77,0.82,0.87,0.92,0.97]},
 };
+// Curva de la BETA (con BETA_ALLY_UNLOCKS): en las décadas 0-3 se juega con
+// menos aliados (0-3), así que las clases frágiles necesitan otro ajuste;
+// niveles 50 y 60 (4 aliados) quedan iguales que en CLASS_CURVE.
+const CLASS_CURVE_BETA = {
+  pesada:    {hp:[1.00,0.55,0.98,0.75,0.61,0.55,0.49], dmg:[1.00,0.67,0.99,0.86,0.61,0.74,0.70]},
+  tirador:   {hp:[1.00,0.82,0.69,0.77,1.21,1.10,1.24], dmg:[1.00,0.90,0.83,0.88,1.10,1.05,1.11]},
+  doblefilo: {hp:[1.00,1.22,0.85,1.26,1.03,0.93,0.90], dmg:[1.00,1.11,0.90,1.12,0.92,0.96,0.95]},
+  mago:      {hp:[1.00,0.93,0.77,0.83,0.94,0.95,1.60], dmg:[1.00,0.97,0.93,0.89,0.94,0.93,1.14]},
+  paladin:   {hp:[1.00,0.58,0.77,1.26,1.02,0.88,0.81], dmg:[1.00,0.76,0.88,1.12,1.00,0.94,0.90]},
+  hechicero: {hp:[1.00,1.25,1.14,0.88,1.01,0.85,0.95], dmg:[1.00,1.10,1.06,0.72,1.01,0.92,0.97]},
+};
 function classCurve(kind){
-  const c = CLASS_CURVE[state.char.style];
+  const c = (BETA_ALLY_UNLOCKS ? CLASS_CURVE_BETA : CLASS_CURVE)[state.char.style];
   if(!c) return 1;
   const v = c[kind], L = CLASS_CURVE_LEVELS, lvl = state.char.level||1;
   if(lvl <= L[0]) return v[0];
@@ -4403,7 +4444,7 @@ function renderSheet(){
     <div class="sheet-title">
       <div class="sheet-emblem"><img src="src/assets/razas/${r.id}.png" alt="" onerror="this.replaceWith('${r.icon}')"></div>
       <div>
-        <div class="name">${state.char.nickname} · ${r.name} · <img src="src/assets/clases/${s.id}.png" alt="" style="width:1.1em; height:1.1em; object-fit:contain; vertical-align:-2px;" onerror="this.replaceWith('${s.icon} ')"> ${s.name}</div>
+        <div class="name">${state.char.nickname}${renownBadge(myBossesBeaten())} · ${r.name} · <img src="src/assets/clases/${s.id}.png" alt="" style="width:1.1em; height:1.1em; object-fit:contain; vertical-align:-2px;" onerror="this.replaceWith('${s.icon} ')"> ${s.name}</div>
         <div class="tag">Nivel ${state.char.level}</div>
       </div>
     </div>
@@ -6171,13 +6212,16 @@ function payAlliesOnExit(){
 
 function renderTaberna(){
   const panel = document.getElementById('main-panel');
-  if(state.char.level < ALLY_MIN_LEVEL){
+  if(!tavernUnlocked()){
+    const why = state.char.level < ALLY_MIN_LEVEL
+      ? `La Taberna abre sus puertas a partir del nivel ${ALLY_MIN_LEVEL}${BETA_ALLY_UNLOCKS?' y tras derrotar al Ogro':''}. Vuelve cuando tu personaje sea más experimentado.`
+      : 'Nadie en la Taberna se arriesga con un desconocido. Derrota al <b>Ogro</b> (nivel 10) y los mercenarios empezarán a escucharte.';
     panel.innerHTML = `
       <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:4px;">
         <h3 style="color:var(--bronze-light);">Taberna</h3>
         <button class="reset-btn" id="btn-close-taberna">Cerrar</button>
       </div>
-      <p class="inv-empty-msg">La Taberna abre sus puertas a partir del nivel ${ALLY_MIN_LEVEL}. Vuelve cuando tu personaje sea más experimentado.</p>
+      <p class="inv-empty-msg">${why}</p>
     `;
     document.getElementById('btn-close-taberna').onclick = ()=>{ tabernaOpen=false; renderAll(); };
     return;
@@ -6234,7 +6278,7 @@ function renderTaberna(){
   const rosterHTML = ALLY_ROSTER.map(tpl=>{
     const already = allies.some(a=>a.template_id===tpl.templateId);
     const cost = allyHireCost(tpl, state.char.level);
-    const full = allies.length >= MAX_ALLIES;
+    const full = allies.length >= allyCap();
     const disabled = already || full || state.char.gold < cost;
     let btnLabel = `Reclutar (${cost} oro)`;
     if(already) btnLabel = 'Ya reclutado';
@@ -6259,9 +6303,10 @@ function renderTaberna(){
       <h3 style="color:var(--bronze-light);">Taberna</h3>
       <button class="reset-btn" id="btn-close-taberna">Cerrar</button>
     </div>
-    <p style="color:var(--text-dim); font-size:0.85em; margin-top:0;">Hasta ${MAX_ALLIES} aliados a la vez, ${MAX_ALLIES+1} contándote a ti. Pelean junto a ti automáticamente — el que tiene "frontline" ocupa tu lugar en el frente y absorbe los golpes. Cada uno cobra un salario cada vez que sales del laberinto: si no te alcanza el oro para pagarle varias veces seguidas, pierde la confianza en ti y abandona el grupo. Un aliado despedido o que deserta siempre puede volver a reclutarse más adelante, a nivel 1.</p>
+    ${BETA_ALLY_UNLOCKS ? `<p class="renown-note">Tu fama: <b>${renownTitle(myBossesBeaten())||'Desconocido'}</b>. Cada jefe de década que derrotes te da un cupo más (máximo ${MAX_ALLIES}).${allyCap()<MAX_ALLIES?` Próximo cupo: derrota al <b>${['Ogro','la Matriarca Escarlata','Riakis','el Usurpador'][myBossesBeaten()]}</b>.`:''}</p>` : ''}
+    <p style="color:var(--text-dim); font-size:0.85em; margin-top:0;">Hasta ${allyCap()} aliados a la vez, ${allyCap()+1} contándote a ti. Pelean junto a ti automáticamente — el que tiene "frontline" ocupa tu lugar en el frente y absorbe los golpes. Cada uno cobra un salario cada vez que sales del laberinto: si no te alcanza el oro para pagarle varias veces seguidas, pierde la confianza en ti y abandona el grupo. Un aliado despedido o que deserta siempre puede volver a reclutarse más adelante, a nivel 1.</p>
 
-    <div class="section-label">Tu equipo (${allies.length}/${MAX_ALLIES})</div>
+    <div class="section-label">Tu equipo (${allies.length}/${allyCap()})</div>
     <div class="ally-card-row">${hiredHTML}</div>
 
     <div class="section-label">Disponibles para reclutar</div>
@@ -6313,7 +6358,7 @@ async function renderRanking(){
   list.innerHTML = data.map((row,i)=>{
     const mine = row.nickname.toLowerCase() === state.char.nickname.toLowerCase();
     return `<div class="equip-row" style="${mine?'color:var(--bronze-light);':''}">
-      <span>#${i+1} ${row.nickname}${mine ? ' (tú)' : ''}</span>
+      <span>#${i+1} ${row.nickname}${renownBadge(decadeBossesBeaten(1, row.record_level))}${mine ? ' (tú)' : ''}</span>
       <b>Nivel ${row.record_level} · Piso ${row.record_floor_idx}</b>
     </div>`;
   }).join('');
@@ -7213,6 +7258,91 @@ function renderMap(){
   });
 }
 
+// Arma el grupo de enemigos de un nodo de combate (extraído de enterNode,
+// 2026-10-02, para que el simulador de balance use la misma lógica).
+function buildEncounterGroup(nodeType, f, level){
+  const bestiary = DECADE_BESTIARY[decadeIndexForLevel(level)];
+  const isDecadeFinal = level % 10 === 0;
+  const paraiso = isParaisoDecade(level);
+  // Isla Paraíso (década 4, pisos 41-49) no tiene plantillas de guardián
+  // propias — pero el piso igual necesita un cierre que se sienta como
+  // tal (pedido explícito, 2026-09-18): en vez de un combate reforzado
+  // cualquiera, el "jefe" de estos niveles siempre es un grupo fijo de 5
+  // mobs regulares + 1 élite, para que la dificultad sea clara y pareja.
+  const paraisoGuardianFloor = nodeType==='jefe' && paraiso && !isDecadeFinal;
+  let templates, count;
+  if(nodeType==='jefe'){
+    if(isDecadeFinal){
+      templates = [bestiary.decadeBoss];
+      count = 1;
+    } else if(paraisoGuardianFloor){
+      templates = null; count = 0; // se arma a mano más abajo
+    } else if(bestiary.guardianByFloor && bestiary.guardianByFloor[f%10]){
+      // Guardián único y determinista por piso (2026-09-25, "Década 2 -
+      // Arañas" en adelante) — en vez de sortear entre un pool compartido
+      // de 2, cada piso 11-19 tiene su propio mini-jefe fijo.
+      templates = [bestiary.guardianByFloor[f%10]];
+      count = 1;
+    } else {
+      templates = bestiary.guardians;
+      count = 1;
+    }
+  } else if(nodeType==='elite'){
+    templates = bestiary.elite;
+    // 2026-09-16, pedido explícito ("me olvidé de pedirlo, jaja"): más
+    // élites juntos a medida que avanzan las décadas — igual criterio que
+    // ya se usa para los mobs regulares. Década 1-2 (Bosque Goblin/Arañas,
+    // decadeIndex 0-1) = 1, década 3-4 (Bestias-Riakis/Usurpador,
+    // decadeIndex 2-3) = 2, década 5-6 (Isla Paraíso/El Mar, decadeIndex
+    // 4-5) = 3. Se repite la misma plantilla de élite (cada década solo
+    // tiene una definida en el bestiario), igual que ya hace pick() con
+    // los regulares.
+    const decIdx = decadeIndexForLevel(level);
+    count = decIdx<=1 ? 1 : decIdx<=3 ? 2 : 3;
+  } else {
+    templates = bestiary.regular;
+    // 2026-09-16, pedido explícito: el laberinto se sentía muy fácil salvo
+    // por élites/guardianes — los combates normales ahora traen más
+    // enemigos a la vez a medida que se avanza (nunca más que el tope de
+    // 6 que ya usa invocar()).
+    count = level>=40 ? rnd(5,6) : level>=20 ? rnd(3,4) : rnd(1,2);
+  }
+  const group = [];
+  if(paraisoGuardianFloor){
+    for(let i=0;i<5;i++) group.push(makeEnemy(pick(bestiary.regular), f, level));
+    group.push(makeEnemy(bestiary.elite[0], f, level));
+  } else {
+    for(let i=0;i<count;i++) group.push(makeEnemy(pick(templates), f, level));
+  }
+  if(nodeType==='jefe' && isDecadeFinal && paraiso){
+    // el jefe de Isla Paraíso llega escoltado por dos élites en el frente
+    // mientras él se queda atrás.
+    group.push(makeEnemy(bestiary.elite[0], f, level));
+    group.push(makeEnemy(bestiary.elite[0], f, level));
+  }
+  // Acompañante de élite (2026-09-25, "Década 2 - Arañas" en adelante): si
+  // la década define un pool de acompañantes, cada élite spawneada trae 1
+  // acompañante propio (sorteado por peso), enlazados por companionRef en
+  // ambas direcciones para la pasiva "mientras viva el acompañante"
+  // (Reina del Nido) y "fortalece a su acompañante" (Orden de la Colmena).
+  // Respeta el tope de 6 combatientes por bando enemigo (mismo tope que
+  // usa 'invocar').
+  if(nodeType==='elite' && bestiary.eliteCompanions){
+    group.slice().forEach(elite=>{
+      if(!elite.tpl.elite || group.length>=6) return;
+      const companionTpl = pickWeighted(bestiary.eliteCompanions);
+      const companion = makeEnemy(companionTpl, f, level);
+      group.push(companion);
+      elite.companionRef = companion;
+      companion.companionRef = elite;
+    });
+  }
+  // los de línea frontal (tanques/melee) van al slot 0, el que reciben los
+  // ataques 'front'; a distancia/soporte se acomodan detrás.
+  group.sort((a,b)=> (b.tpl.frontline?1:0) - (a.tpl.frontline?1:0));
+  return group;
+}
+
 function enterNode(f,n){
   const dg = state.dungeon;
   const advancedFloor = f > dg.atFloor;
@@ -7224,85 +7354,7 @@ function enterNode(f,n){
   if(advancedFloor) advanceMissionsFor('clear_floors', 1);
 
   if(node.type==='combate' || node.type==='elite' || node.type==='jefe'){
-    const bestiary = DECADE_BESTIARY[decadeIndexForLevel(dg.level)];
-    const isDecadeFinal = dg.level % 10 === 0;
-    const paraiso = isParaisoDecade(dg.level);
-    // Isla Paraíso (década 4, pisos 41-49) no tiene plantillas de guardián
-    // propias — pero el piso igual necesita un cierre que se sienta como
-    // tal (pedido explícito, 2026-09-18): en vez de un combate reforzado
-    // cualquiera, el "jefe" de estos niveles siempre es un grupo fijo de 5
-    // mobs regulares + 1 élite, para que la dificultad sea clara y pareja.
-    const paraisoGuardianFloor = node.type==='jefe' && paraiso && !isDecadeFinal;
-    let templates, count;
-    if(node.type==='jefe'){
-      if(isDecadeFinal){
-        templates = [bestiary.decadeBoss];
-        count = 1;
-      } else if(paraisoGuardianFloor){
-        templates = null; count = 0; // se arma a mano más abajo
-      } else if(bestiary.guardianByFloor && bestiary.guardianByFloor[f%10]){
-        // Guardián único y determinista por piso (2026-09-25, "Década 2 -
-        // Arañas" en adelante) — en vez de sortear entre un pool compartido
-        // de 2, cada piso 11-19 tiene su propio mini-jefe fijo.
-        templates = [bestiary.guardianByFloor[f%10]];
-        count = 1;
-      } else {
-        templates = bestiary.guardians;
-        count = 1;
-      }
-    } else if(node.type==='elite'){
-      templates = bestiary.elite;
-      // 2026-09-16, pedido explícito ("me olvidé de pedirlo, jaja"): más
-      // élites juntos a medida que avanzan las décadas — igual criterio que
-      // ya se usa para los mobs regulares. Década 1-2 (Bosque Goblin/Arañas,
-      // decadeIndex 0-1) = 1, década 3-4 (Bestias-Riakis/Usurpador,
-      // decadeIndex 2-3) = 2, década 5-6 (Isla Paraíso/El Mar, decadeIndex
-      // 4-5) = 3. Se repite la misma plantilla de élite (cada década solo
-      // tiene una definida en el bestiario), igual que ya hace pick() con
-      // los regulares.
-      const decIdx = decadeIndexForLevel(dg.level);
-      count = decIdx<=1 ? 1 : decIdx<=3 ? 2 : 3;
-    } else {
-      templates = bestiary.regular;
-      // 2026-09-16, pedido explícito: el laberinto se sentía muy fácil salvo
-      // por élites/guardianes — los combates normales ahora traen más
-      // enemigos a la vez a medida que se avanza (nunca más que el tope de
-      // 6 que ya usa invocar()).
-      count = dg.level>=40 ? rnd(5,6) : dg.level>=20 ? rnd(3,4) : rnd(1,2);
-    }
-    const group = [];
-    if(paraisoGuardianFloor){
-      for(let i=0;i<5;i++) group.push(makeEnemy(pick(bestiary.regular), f, dg.level));
-      group.push(makeEnemy(bestiary.elite[0], f, dg.level));
-    } else {
-      for(let i=0;i<count;i++) group.push(makeEnemy(pick(templates), f, dg.level));
-    }
-    if(node.type==='jefe' && isDecadeFinal && paraiso){
-      // el jefe de Isla Paraíso llega escoltado por dos élites en el frente
-      // mientras él se queda atrás.
-      group.push(makeEnemy(bestiary.elite[0], f, dg.level));
-      group.push(makeEnemy(bestiary.elite[0], f, dg.level));
-    }
-    // Acompañante de élite (2026-09-25, "Década 2 - Arañas" en adelante): si
-    // la década define un pool de acompañantes, cada élite spawneada trae 1
-    // acompañante propio (sorteado por peso), enlazados por companionRef en
-    // ambas direcciones para la pasiva "mientras viva el acompañante"
-    // (Reina del Nido) y "fortalece a su acompañante" (Orden de la Colmena).
-    // Respeta el tope de 6 combatientes por bando enemigo (mismo tope que
-    // usa 'invocar').
-    if(node.type==='elite' && bestiary.eliteCompanions){
-      group.slice().forEach(elite=>{
-        if(!elite.tpl.elite || group.length>=6) return;
-        const companionTpl = pickWeighted(bestiary.eliteCompanions);
-        const companion = makeEnemy(companionTpl, f, dg.level);
-        group.push(companion);
-        elite.companionRef = companion;
-        companion.companionRef = elite;
-      });
-    }
-    // los de línea frontal (tanques/melee) van al slot 0, el que reciben los
-    // ataques 'front'; a distancia/soporte se acomodan detrás.
-    group.sort((a,b)=> (b.tpl.frontline?1:0) - (a.tpl.frontline?1:0));
+    const group = buildEncounterGroup(node.type, f, dg.level);
     startCombat(group, node);
   } else if(node.type==='tesoro'){
     // El oro de los cofres escalaba con `f` (el piso LOCAL dentro de esta
@@ -7636,6 +7688,23 @@ const DECADE_BOSS_TUNING = {
   50: {hp:1.42, atk:1.57},
   60: {hp:1.64, atk:1.27},
 };
+// BETA (con BETA_ALLY_UNLOCKS): en las décadas 0-3 el jugador lleva menos
+// aliados (0 hasta el Ogro, 1 hasta la Matriarca, 2 hasta Riakis, 3 hasta
+// el Usurpador), así que jefes y enemigos de esos tramos se ajustan para
+// que la dificultad sea equivalente a la de la alfa con 4 aliados.
+// Calibrado con simulaciones (mismo método que DECADE_BOSS_TUNING).
+const BETA_DECADE_BOSS_TUNING = {
+  10: {hp:0.18, atk:0.42},  // Ogro en solitario
+  20: {hp:0.82, atk:0.91},  // Matriarca con 1 aliado
+  30: {hp:1.11, atk:1.05},  // Riakis con 2 aliados
+  40: {hp:1.21, atk:1.10},  // Usurpador con 3 aliados
+};
+// Enemigos que NO son jefe de década, por índice de década (1 = pisos 11-19...).
+// Medido: con 2-3 aliados los combates normales/élite/guardián rinden igual
+// que con 4; solo los guardianes de la década 1 (1 aliado) necesitaban ajuste.
+const BETA_ENEMY_SCALE = {
+  1: {hp:0.85, atk:0.90},
+};
 function makeEnemy(tpl, floorIdx, level){
   const lvlMult = levelMult(level||1);
   const floorMult = 1 + floorIdx * floorDifficultyStep(level||1);
@@ -7655,7 +7724,7 @@ function makeEnemy(tpl, floorIdx, level){
       atk = Math.round(26 * tpl.atk * lvlMult);
     }
     // Jefe de década: ajuste propio de vida/ataque (ver DECADE_BOSS_TUNING).
-    const tune = DECADE_BOSS_TUNING[level];
+    const tune = (BETA_ALLY_UNLOCKS && BETA_DECADE_BOSS_TUNING[level]) || DECADE_BOSS_TUNING[level];
     if(tune && level % 10 === 0 && DECADE_BESTIARY[decadeIndexForLevel(level)].decadeBoss === tpl){
       hp = Math.round(hp * tune.hp);
       atk = Math.round(atk * tune.atk);
@@ -7679,6 +7748,12 @@ function makeEnemy(tpl, floorIdx, level){
     // objetivo en un mismo round).
     hp = Math.round(rnd(55,65) * tpl.hp * floorMult * regularHPMult(level||1));
     atk = Math.round(9 * tpl.atk * floorMult * monsterAtkMult(level||1));
+  }
+  if(BETA_ALLY_UNLOCKS){
+    const dIdx = decadeIndexForLevel(level||1);
+    const isDecadeBoss = (level||1) % 10 === 0 && DECADE_BESTIARY[dIdx].decadeBoss === tpl;
+    const sc = !isDecadeBoss && BETA_ENEMY_SCALE[dIdx];
+    if(sc){ hp = Math.max(1, Math.round(hp*sc.hp)); atk = Math.max(1, Math.round(atk*sc.atk)); }
   }
   const res = Object.assign({}, tpl.res);
   if(tpl.boss && level===1) res.fisico = 5; // defensa física reducida solo para el guardián de nivel 1
@@ -12030,7 +12105,7 @@ function renderCharacterSelect(rows){
       <div style="display:flex; align-items:center; gap:10px; min-width:0; flex:1;">
         <div class="sheet-emblem" style="width:40px; height:40px; font-size:1.3em;"><img src="src/assets/razas/${r.id}.png" alt="" onerror="this.replaceWith('${r.icon}')"></div>
         <div style="min-width:0; flex:1;">
-          <b>${row.nickname}</b> <span class="slot-tag">${r.name} · ${s.name}</span>${row.role==='admin' ? ' <span class="slot-tag">admin</span>' : ''}
+          <b>${row.nickname}</b>${renownBadge(decadeBossesBeaten(row.checkpoint_level, row.record_level))} <span class="slot-tag">${r.name} · ${s.name}</span>${row.role==='admin' ? ' <span class="slot-tag">admin</span>' : ''}
           <div class="inv-item-bonus neutral">Nivel ${row.level} · Récord: Nivel ${row.record_level} · Piso ${row.record_floor_idx}</div>
         </div>
       </div>

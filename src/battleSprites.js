@@ -140,8 +140,9 @@ Object.assign(ENEMY_SPRITES, MONSTER_SPRITES);
 // reemplazan a los generados. Se sirven como archivos (96x96) en vez de
 // base64. Para sumar más: guardar el PNG en src/assets/enemigos/<id>.png y
 // agregar el id acá.
-const HD_ENEMY_IDS = ['goblin_guerrero','goblin_arquero','goblin_saqueador','goblin_chaman','tarantula_cazadora','jefe_goblin','hobgoblin','gilgoblin','ogro','matriarca_escarlata'];
-HD_ENEMY_IDS.forEach(id=>{ ENEMY_SPRITES[id] = `src/assets/enemigos/${id}.png?v=1`; });
+const HD_ENEMY_IDS = ['goblin_guerrero','goblin_arquero','goblin_saqueador','goblin_chaman','tarantula_cazadora','jefe_goblin','hobgoblin','gilgoblin','ogro',
+  'matriarca_telaranha','reina_telaranha','viuda_alfa','saltadora_alfa','gran_tejedora','devoradora_nido','arana_caparazon','viuda_carmesi','matriarca_abisal','reina_devoradora','matriarca_escarlata'];
+HD_ENEMY_IDS.forEach(id=>{ ENEMY_SPRITES[id] = `src/assets/enemigos/${id}.png?v=2`; });
 // Invocaciones de las fases de jefe (2026-10-02): reusan sprites existentes.
 ENEMY_SPRITES.cria_arana = ENEMY_SPRITES.tarantula_cazadora;
 ENEMY_SPRITES.cangrejo_isla = ENEMY_SPRITES.cangrejo_gigante;
