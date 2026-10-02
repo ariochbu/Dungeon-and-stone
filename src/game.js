@@ -561,7 +561,7 @@ const DECADE_BESTIARY = [
           mordida_profunda:{label:'Mordida Profunda', mult:1.15},
           telarana_abisal:{label:'Telaraña Abisal', mult:0.70, applies:{name:'Paralisis', chance:0.35, duration:1}, cooldown:3},
           // Simplificado: reusa Marcado (+20% de TODO el daño, no solo el propio).
-          sello_presa:{label:'Sello de Presa', mult:0.85, applies:{name:'Marcado', chance:1, duration:3}, cooldown:4},
+          sello_presa:{label:'Sello de Presa', mult:0.85, applies:{name:'Marcado', incomingDmgMult:1.15, chance:1, duration:3}, cooldown:4},
         },
         aiPriority:['sello_presa','telarana_abisal','mordida_profunda']},
       9: {id:'reina_devoradora', name:'Reina Devoradora', icon:'🕷️', hp:3.70, atk:1.35, res:{fisico:25,fuego:-10,hielo:5,veneno:55,aturdimiento:15}, boss:true, frontline:true,
@@ -612,7 +612,7 @@ const DECADE_BESTIARY = [
         abilities:{
           zarpazo:{label:'Zarpazo', mult:1.00, applies:{name:'Sangrado', chance:0.10, duration:2, stack:true, maxStack:3}},
           garra_profunda:{label:'Garra Profunda', mult:1.15, applies:{name:'Sangrado', chance:0.30, duration:3, stack:true, maxStack:3}, cooldown:3},
-          golpe_brutal_oso:{label:'Golpe Brutal', mult:1.35, cooldown:4, condition:(ctx)=>ctx.targetStatusCount('Sangrado')>=1},
+          golpe_brutal_oso:{label:'Golpe Brutal', mult:1.35, cooldown:4, condition:(ctx)=>ctx.targetStatusCount('Sangrado')>=1, bonusVsTargetStatus:{name:'Sangrado', mult:1.20}},
         },
         aiPriority:['garra_profunda','golpe_brutal_oso','zarpazo']},
       {id:'buitre_corrupto', name:'Buitre Corrupto', icon:'🦅', hp:0.80, atk:0.95, res:{fisico:-5,fuego:0,hielo:0,veneno:15,aturdimiento:0},
@@ -625,7 +625,7 @@ const DECADE_BESTIARY = [
       {id:'lince_sombrio', name:'Lince Sombrío', icon:'🐈‍⬛', hp:0.85, atk:1.15, res:{fisico:5,fuego:0,hielo:0,veneno:0,aturdimiento:5},
         abilities:{
           zarpazo_lince:{label:'Zarpazo', mult:1.00, applies:{name:'Sangrado', chance:0.15, duration:2, stack:true, maxStack:3}},
-          corte_garganta:{label:'Corte de Garganta', mult:0.85, applies:{name:'Sangrado', chance:0.30, duration:3, stack:true, maxStack:3}, cooldown:3, condition:(ctx)=>ctx.targetHpPct<0.5},
+          corte_garganta:{label:'Corte de Garganta', mult:0.85, applies:{name:'Sangrado', chance:0.30, duration:3, stack:true, maxStack:3}, cooldown:3, bonusVsLowHp:{below:0.5, mult:1.20}},
           atemorizar_lince:{label:'Atemorizar', mult:0.60, applies:{name:'Miedo', chance:0.20, duration:2}, cooldown:5},
         },
         aiPriority:['corte_garganta','atemorizar_lince','zarpazo_lince']},
@@ -635,7 +635,7 @@ const DECADE_BESTIARY = [
         abilities:{
           mordida_alfa:{label:'Mordida Alfa', mult:1.05, applies:{name:'Sangrado', chance:0.15, duration:2, stack:true, maxStack:3}},
           desgarro_alfa:{label:'Desgarro Alfa', mult:1.05, applies:{name:'Sangrado', chance:0.35, duration:3, stack:true, maxStack:3}, cooldown:3},
-          frenesi_manada:{label:'Frenesí de Manada', mult:1.30, cooldown:4, condition:(ctx)=>ctx.targetStatusCount('Sangrado')>=1},
+          frenesi_manada:{label:'Frenesí de Manada', mult:1.30, cooldown:4, condition:(ctx)=>ctx.targetStatusCount('Sangrado')>=1, bonusVsTargetStatus:{name:'Sangrado', mult:1.25}},
           aullido_dominio:{label:'Aullido de Dominio', mult:0.50, cooldown:5, selfBuff:{name:'Fortalecido', duration:2, stacks:5}},
         },
         aiPriority:['aullido_dominio','desgarro_alfa','frenesi_manada','mordida_alfa']},
@@ -643,7 +643,7 @@ const DECADE_BESTIARY = [
         abilities:{
           garra_carmesi:{label:'Garra Carmesí', mult:1.05, applies:{name:'Sangrado', chance:0.20, duration:2, stack:true, maxStack:3}},
           presa_sanguinaria:{label:'Presa Sanguinaria', mult:0.95, applies:{name:'Sangrado', chance:0.35, duration:3, stack:true, maxStack:3}, cooldown:3},
-          salto_mortal_tigre:{label:'Salto Mortal', mult:1.35, cooldown:4, condition:(ctx)=>ctx.targetHpPct<0.5},
+          salto_mortal_tigre:{label:'Salto Mortal', mult:1.35, cooldown:4, condition:(ctx)=>ctx.targetHpPct<0.5, bonusVsLowHp:{below:0.5, mult:1.20}},
         },
         bonusVsOwnStatus:{name:'Sangrado', minStacks:1, mult:1.15},
         aiPriority:['presa_sanguinaria','salto_mortal_tigre','garra_carmesi']},
@@ -867,8 +867,8 @@ const DECADE_BESTIARY = [
       {id:'explorador_rival', name:'Explorador Rival', icon:'🗡️', hp:0.95, atk:1.05, res:{fisico:5,fuego:0,hielo:0,veneno:0,aturdimiento:5}, frontline:true,
         abilities:{
           estocada_er:{label:'Estocada', mult:1.00},
-          ataque_oportunista:{label:'Ataque Oportunista', mult:0.80, cooldown:3, condition:(ctx)=>ctx.targetHpPct<0.5},
-          robar_er:{label:'Robar', mult:0.65, cooldown:4, selfBuff:{name:'Tras Robar', duration:1, evasionDelta:10}},
+          ataque_oportunista:{label:'Ataque Oportunista', mult:0.80, cooldown:3, bonusVsLowHp:{below:0.5, mult:1.20}},
+          robar_er:{label:'Robar', mult:0.65, cooldown:4, mpDrain:0.05, selfBuff:{name:'Tras Robar', duration:1, evasionDelta:10}},
         },
         aiPriority:['ataque_oportunista','robar_er','estocada_er']},
       {id:'mercenario_desertor', name:'Mercenario Desertor', icon:'🪓', hp:1.08, atk:1.12, res:{fisico:10,fuego:0,hielo:0,veneno:0,aturdimiento:5}, frontline:true,
@@ -882,8 +882,8 @@ const DECADE_BESTIARY = [
       {id:'cazarrecompensas', name:'Cazarrecompensas', icon:'🏹', hp:0.85, atk:1.10, res:{fisico:-5,fuego:0,hielo:0,veneno:0,aturdimiento:0},
         abilities:{
           disparo_cr:{label:'Disparo', mult:1.00},
-          disparo_preciso:{label:'Disparo Preciso', mult:0.90, cooldown:3, condition:(ctx)=>ctx.targetHpPct<0.5},
-          marca_presa:{label:'Marca de Presa', mult:0.70, cooldown:4},
+          disparo_preciso:{label:'Disparo Preciso', mult:0.90, cooldown:3, bonusVsLowHp:{below:0.5, mult:1.25}},
+          marca_presa:{label:'Marca de Presa', mult:0.70, cooldown:4, applies:{name:'Marcado', incomingDmgMult:1.15, chance:1, duration:2}},
         },
         aiPriority:['disparo_preciso','marca_presa','disparo_cr']},
       {id:'superviviente_curtido', name:'Superviviente Curtido', icon:'🔪', hp:1.00, atk:1.10, res:{fisico:5,fuego:0,hielo:0,veneno:5,aturdimiento:5},
@@ -898,7 +898,7 @@ const DECADE_BESTIARY = [
         abilities:{
           doble_daga:{label:'Doble Daga', mult:1.00, applies:{name:'Sangrado', chance:0.15, duration:2, stack:true, maxStack:3}},
           paso_sombrio:{label:'Paso Sombrío', mult:0.60, cooldown:4, selfBuff:{name:'Paso Sombrío', duration:1, evasionDelta:10}},
-          corte_ejecutor:{label:'Corte Ejecutor', mult:1.15, cooldown:4, condition:(ctx)=>ctx.targetHpPct<0.4},
+          corte_ejecutor:{label:'Corte Ejecutor', mult:1.15, cooldown:4, bonusVsLowHp:{below:0.4, mult:1.25}},
         },
         aiPriority:['corte_ejecutor','paso_sombrio','doble_daga']},
       {id:'medico_campana', name:'Médico de Campaña', icon:'⚕️', hp:0.75, atk:0.80, res:{fisico:-5,fuego:5,hielo:5,veneno:10,aturdimiento:5},
@@ -926,8 +926,8 @@ const DECADE_BESTIARY = [
       {id:'cazador_veterano', name:'Cazador Veterano', icon:'🏹', hp:1.65, atk:1.35, res:{fisico:0,fuego:0,hielo:0,veneno:0,aturdimiento:5}, elite:true,
         abilities:{
           disparo_cv:{label:'Disparo', mult:1.00},
-          marca_mortal:{label:'Marca Mortal', mult:0.75, cooldown:4},
-          disparo_ejecutor:{label:'Disparo Ejecutor', mult:1.30, cooldown:4, condition:(ctx)=>ctx.targetHpPct<0.4},
+          marca_mortal:{label:'Marca Mortal', mult:0.75, cooldown:4, applies:{name:'Marcado', incomingDmgMult:1.15, chance:1, duration:3}},
+          disparo_ejecutor:{label:'Disparo Ejecutor', mult:1.30, cooldown:4, bonusVsLowHp:{below:0.4, mult:1.30}},
         },
         aiPriority:['disparo_ejecutor','marca_mortal','disparo_cv']},
       {id:'duelista_veterano', name:'Duelista Veterano', icon:'🤺', hp:1.80, atk:1.32, res:{fisico:5,fuego:0,hielo:0,veneno:0,aturdimiento:5}, elite:true, frontline:true,
@@ -948,7 +948,7 @@ const DECADE_BESTIARY = [
         abilities:{
           doble_corte:{label:'Doble Corte', mult:1.00},
           paso_letal:{label:'Paso Letal', mult:0.60, cooldown:4, selfBuff:{name:'Paso Letal', duration:1, evasionDelta:15}},
-          corte_mortal:{label:'Corte Mortal', mult:1.20, cooldown:4, condition:(ctx)=>ctx.targetHpPct<0.4},
+          corte_mortal:{label:'Corte Mortal', mult:1.20, cooldown:4, bonusVsLowHp:{below:0.4, mult:1.30}},
           silencio_ae:{label:'Silencio', mult:0.70, applies:{name:'Silencio', chance:0.15, duration:1}, cooldown:5},
         },
         aiPriority:['corte_mortal','silencio_ae','paso_letal','doble_corte']},
@@ -986,7 +986,7 @@ const DECADE_BESTIARY = [
         abilities:{
           descarga_acuatica:{label:'Descarga Acuática', mult:0.80},
           debilitar_th:{label:'Debilitar', mult:0.70, applies:{name:'Debilitado', chance:0.20, duration:2}, cooldown:3},
-          corriente_inversa:{label:'Corriente Inversa', mult:0.60, cooldown:4},
+          corriente_inversa:{label:'Corriente Inversa', mult:0.60, cooldown:4, applies:{name:'Ralentizado', chance:1, duration:2}},
         },
         aiPriority:['debilitar_th','corriente_inversa','descarga_acuatica']},
       {id:'cangrejo_gigante', name:'Cangrejo Gigante', icon:'🦀', hp:1.30, atk:1.05, res:{fisico:20,fuego:0,hielo:-5,veneno:0,aturdimiento:10}, frontline:true,
@@ -1006,7 +1006,7 @@ const DECADE_BESTIARY = [
       {id:'naga_arquero', name:'Naga Arquero', icon:'🏹', hp:0.80, atk:1.10, res:{fisico:0,fuego:0,hielo:-5,veneno:5,aturdimiento:0},
         abilities:{
           flecha_marina:{label:'Flecha Marina', mult:1.00},
-          flecha_perforante:{label:'Flecha Perforante', mult:0.85, cooldown:3},
+          flecha_perforante:{label:'Flecha Perforante', mult:0.85, cooldown:3, ignoreResist:0.25},
           flecha_entumecedora:{label:'Flecha Entumecedora', mult:0.65, applies:{name:'Ralentizado', chance:0.20, duration:2}, cooldown:4},
         },
         aiPriority:['flecha_entumecedora','flecha_perforante','flecha_marina']},
@@ -1029,7 +1029,7 @@ const DECADE_BESTIARY = [
       {id:'naga_capitan', name:'Naga Capitán', icon:'🏹', hp:1.90, atk:1.35, res:{fisico:5,fuego:0,hielo:-10,veneno:5,aturdimiento:5}, elite:true,
         abilities:{
           ataque_nc:{label:'Ataque', mult:1.00},
-          flecha_perforante_nc:{label:'Flecha Perforante', mult:0.90, cooldown:3},
+          flecha_perforante_nc:{label:'Flecha Perforante', mult:0.90, cooldown:3, ignoreResist:0.35},
           orden_ataque_nc:{label:'Orden de Ataque', mult:0.60, cooldown:5, selfBuff:{name:'Fortalecido', duration:2, stacks:4}},
         },
         aiPriority:['orden_ataque_nc','flecha_perforante_nc','ataque_nc']},
@@ -1055,7 +1055,7 @@ const DECADE_BESTIARY = [
       2: {id:'naga_maestro', name:'Naga Maestro', icon:'🏹', hp:2.65, atk:1.35, res:{fisico:0,fuego:0,hielo:-10,veneno:5,aturdimiento:5}, boss:true,
         abilities:{
           flecha_g52:{label:'Flecha', mult:1.05},
-          perforante_g52:{label:'Perforante', mult:0.95, cooldown:3},
+          perforante_g52:{label:'Perforante', mult:0.95, cooldown:3, ignoreResist:0.30},
           entumecedora_g52:{label:'Entumecedora', mult:0.85, applies:{name:'Ralentizado', chance:0.25, duration:2}, cooldown:4},
         },
         aiPriority:['entumecedora_g52','perforante_g52','flecha_g52']},
@@ -10294,10 +10294,22 @@ function resolveNewStyleEnemyMove(enemy, target, enemyCrit){
   if(ability.bonusVsTargetStatus && ctx.targetStatusCount(ability.bonusVsTargetStatus.name) >= (ability.bonusVsTargetStatus.minStacks||1)){
     dmg = Math.round(dmg*ability.bonusVsTargetStatus.mult);
   }
+  // "+X% si el objetivo está por debajo del Y% de vida" (PDFs de décadas
+  // 3 y 4 — auditoría 2026-10-02: antes solo existía como condición de uso
+  // y el +X% se perdía).
+  if(ability.bonusVsLowHp && ctx.targetHpPct < ability.bonusVsLowHp.below){
+    dmg = Math.round(dmg*ability.bonusVsLowHp.mult);
+  }
+  // Marcado sobre el jugador/aliado (Sello de Presa, Marca de Presa, Marca
+  // Mortal): antes no tenía ningún efecto — el +daño de Marcado solo se leía
+  // cuando el marcado era un enemigo.
+  const marked = ctx.targetStatuses.find(st=>st.name==='Marcado');
+  if(marked) dmg = Math.round(dmg*(marked.incomingDmgMult||1.2));
 
   let finalDmg;
   if(onPlayer){
     let resVal = totalRes('fisico') - corrosionResPenalty(combat.playerStatuses);
+    if(ability.ignoreResist && resVal>0) resVal *= (1-ability.ignoreResist); // Flecha Perforante (Década 6)
     finalDmg = dmg*(1-resVal/100);
     if(enemyCrit) finalDmg *= ENEMY_CRIT_MULT;
     if(state.char.race==='enano') finalDmg -= 2;
@@ -10335,6 +10347,7 @@ function resolveNewStyleEnemyMove(enemy, target, enemyCrit){
     const ally = target.ally;
     const allyBendicion = hasStatus(ally.statuses,'Bendición');
     let resVal = ((ally.res && ally.res.fisico)||0) + (allyBendicion?allyBendicion.resBonus||0:0) - corrosionResPenalty(ally.statuses);
+    if(ability.ignoreResist && resVal>0) resVal *= (1-ability.ignoreResist);
     let allyDmg = dmg*(1-resVal/100);
     if(enemyCrit) allyDmg *= ENEMY_CRIT_MULT;
     if(hasStatus(ally.statuses,'Paralisis')) allyDmg *= 1.25;
