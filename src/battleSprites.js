@@ -140,9 +140,15 @@ Object.assign(ENEMY_SPRITES, MONSTER_SPRITES);
 // reemplazan a los generados. Se sirven como archivos (96x96) en vez de
 // base64. Para sumar más: guardar el PNG en src/assets/enemigos/<id>.png y
 // agregar el id acá.
-const HD_ENEMY_IDS = ['goblin_guerrero','goblin_arquero','goblin_saqueador','goblin_chaman','tarantula_cazadora','jefe_goblin','hobgoblin','gilgoblin','ogro',
-  'matriarca_telaranha','reina_telaranha','viuda_alfa','saltadora_alfa','gran_tejedora','devoradora_nido','arana_caparazon','viuda_carmesi','matriarca_abisal','reina_devoradora','matriarca_escarlata'];
-HD_ENEMY_IDS.forEach(id=>{ ENEMY_SPRITES[id] = `src/assets/enemigos/${id}.png?v=2`; });
+const HD_ENEMY_IDS = [
+  'arana_caparazon', 'bestia_carmesi', 'buitre_corrupto', 'devoradora_nido', 'gilgoblin', 'goblin_arquero',
+  'goblin_chaman', 'goblin_guerrero', 'goblin_saqueador', 'gran_lobo_hoja', 'gran_tejedora', 'halcon_guerra',
+  'hobgoblin', 'jabali_hierro', 'jefe_goblin', 'lince_sombrio', 'loba_acantilado', 'lobo_quimera',
+  'matriarca_abisal', 'matriarca_escarlata', 'matriarca_telaranha', 'ogro', 'oso_acorazado', 'oso_cuevas',
+  'oso_roca_lunar', 'reina_devoradora', 'reina_telaranha', 'rey_manada', 'riakis', 'saltadora_alfa',
+  'tarantula_cazadora', 'tarantula_saltarina', 'tarantula_tejedora', 'tigre_sable', 'viuda_alfa', 'viuda_carmesi',
+  'viuda_venenosa'];
+HD_ENEMY_IDS.forEach(id=>{ ENEMY_SPRITES[id] = `src/assets/enemigos/${id}.png?v=3`; });
 // Invocaciones de las fases de jefe (2026-10-02): reusan sprites existentes.
 ENEMY_SPRITES.cria_arana = ENEMY_SPRITES.tarantula_cazadora;
 ENEMY_SPRITES.cangrejo_isla = ENEMY_SPRITES.cangrejo_gigante;
