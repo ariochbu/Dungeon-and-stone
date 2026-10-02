@@ -2,8 +2,8 @@
 
 import { supabase } from './supabaseClient.js';
 import * as auth from './auth.js';
-import { syncBattleStage, playBattleAnim } from './battleStage.js?v=71';
-import { CLASS_SPRITES, ENEMY_SPRITES, playerSpriteFor } from './battleSprites.js?v=69';
+import { syncBattleStage, playBattleAnim } from './battleStage.js?v=72';
+import { CLASS_SPRITES, ENEMY_SPRITES, playerSpriteFor } from './battleSprites.js?v=70';
 
 /* ============================================================
    DATA
@@ -243,18 +243,18 @@ const SKILLS = {
 
   corte_rapido: {
     id:'corte_rapido', name:'Corte rápido', cost:{tipo:'estamina', valor:12}, dmgType:'fisico', mult:0.6,
-    requiresPos:'frente', applies:{name:'Sangrado', chance:0.85, duration:3, stack:true, maxStack:3},
+    applies:{name:'Sangrado', chance:0.85, duration:3, stack:true, maxStack:3},
     desc: ()=> `Daño físico. Apila Sangrado (hasta x${skillBonus('corte_rapido','maxStack',3)}) durante ${skillBonus('corte_rapido','duration',3)} turnos.`,
     targetMode:'front'
   },
   danza_cuchillas: {
     id:'danza_cuchillas', name:'Danza de cuchillas', cost:{tipo:'estamina', valor:22}, dmgType:'fisico', mult:0.5, hits:2,
-    requiresPos:'frente', scalesWithStack:{name:'Sangrado', perStackMult:0.15},
+    scalesWithStack:{name:'Sangrado', perStackMult:0.15},
     desc: ()=> `Golpea dos veces. +${Math.round(skillBonus('danza_cuchillas','perStackMult',0.15)*100)}% de daño por cada carga de Sangrado en el objetivo.`, targetMode:'front'
   },
   golpe_gracia: {
     id:'golpe_gracia', name:'Golpe de gracia', cost:{tipo:'estamina', valor:18}, dmgType:'fisico', mult:0.9,
-    requiresPos:'frente', consumesStackBonus:{name:'Sangrado', perStackMult:0.25},
+    consumesStackBonus:{name:'Sangrado', perStackMult:0.25},
     desc: ()=> `Consume el Sangrado del objetivo: +${Math.round(skillBonus('golpe_gracia','perStackMult',0.25)*100)}% daño por carga consumida.`,
     targetMode:'front'
   },
@@ -348,7 +348,7 @@ const SKILLS = {
   },
   vals_sangre: {
     id:'vals_sangre', name:'Vals de sangre', cost:null, dmgType:'fisico', mult:0.5, ultimate:true,
-    requiresPos:'frente', targetMode:'all',
+    targetMode:'all',
     consumesStackBonus:{name:'Sangrado', perStackMult:0.3},
     selfHealPctOfDmg:0.3,
     desc:'Ultimate del Asesino. Golpea a todos los enemigos consumiendo el Sangrado de cada uno para más daño, y te cura el 30% de lo infligido.'
@@ -410,6 +410,11 @@ const GARVEL_SMALL_TPL = {id:'garvel_pequeno', name:'Garvel pequeño', icon:'�
   res:{fisico:-10,fuego:0,hielo:-5,veneno:15,aturdimiento:0},
   abilities:{mordida_gp:{label:'Mordida', mult:1.0}}, aiPriority:['mordida_gp']};
 const CORROSION_STATUS = {name:'Corrosion', duration:2, resPenalty:15, healMult:0.5};
+// Crías de la Matriarca Escarlata y cangrejos del Custodio (fases, 2026-10-02).
+const CRIA_ARANA_TPL = {id:'cria_arana', name:'Cría de araña', icon:'🕷️', hp:0.3, atk:0.4, res:{fisico:0,fuego:-10,hielo:0,veneno:30,aturdimiento:0}, frontline:true,
+  abilities:{mordida_cria:{label:'Mordida', mult:1.0, applies:{name:'Veneno', chance:0.25, duration:2, stack:true, maxStack:3}}}, aiPriority:['mordida_cria']};
+const CANGREJO_ISLA_TPL = {id:'cangrejo_isla', name:'Cangrejo de la Isla', icon:'🦀', hp:0.4, atk:0.4, res:{fisico:20,fuego:0,hielo:0,veneno:10,aturdimiento:10}, frontline:true, immuneRetroceso:true,
+  abilities:{pinza_isla:{label:'Pinza', mult:1.0}}, aiPriority:['pinza_isla']};
 
 const DECADE_BESTIARY = [
   // Década 0 — pisos 1-10 — Bosque Goblin
@@ -435,7 +440,16 @@ const DECADE_BESTIARY = [
       {id:'hobgoblin', name:'Hobgoblin', icon:'🛡️', role:'melee', hp:1.8, atk:1.15, res:{fisico:15,fuego:5,hielo:5,veneno:15,aturdimiento:30}, moves:['pegar','aplastar','debilitar'], boss:true, frontline:true},
       {id:'gilgoblin', name:'Gilgoblin', icon:'🔱', role:'melee', hp:1.7, atk:1.2, res:{fisico:10,fuego:10,hielo:10,veneno:20,aturdimiento:20}, moves:['pegar','aplastar','debilitar'], boss:true, frontline:true}
     ],
-    decadeBoss: {id:'ogro', name:'Ogro', icon:'👺', role:'melee', hp:4.2, atk:1.9, res:{fisico:25,fuego:0,hielo:0,veneno:10,aturdimiento:35}, moves:['pegar','aplastar','debilitar'], boss:true, frontline:true}
+    // Fases (2026-10-02): 60% Furia, 30% lanza rocas.
+    decadeBoss: {id:'ogro', name:'Ogro', icon:'👺', role:'melee', hp:4.2, atk:1.9, res:{fisico:25,fuego:0,hielo:0,veneno:10,aturdimiento:35}, boss:true, frontline:true,
+      phases:[{below:0.6, msg:'ruge y entra en <b>Furia</b> (fase 2).'},{below:0.3, msg:'arranca una roca del suelo: <b>golpes devastadores</b> (fase 3).'}],
+      abilities:{
+        furia_ogro:{label:'Furia del Ogro', utility:'self_buff', oncePerCombat:true, condition:(ctx)=>ctx.selfHpPct<0.6, selfBuff:{name:'Furia del Ogro', duration:99, dmgMult:1.15}},
+        lanzar_roca:{label:'Lanzar Roca', mult:1.5, cooldown:3, condition:(ctx)=>ctx.selfHpPct<0.3, applies:{name:'Paralisis', chance:0.30, duration:1}},
+        aplastar_o:{label:'Aplastar', mult:1.35, cooldown:3},
+        debilitar_o:{label:'Golpe Debilitante', mult:0.7, cooldown:4, applies:{name:'Debilitado', chance:0.6, duration:2}},
+        pegar_o:{label:'Garrotazo', mult:1.0}},
+      aiPriority:['furia_ogro','lanzar_roca','aplastar_o','debilitar_o','pegar_o']}
   },
   // Década 1 — pisos 11-20 — Arañas (REWORK 2026-09-25, pedido explícito,
   // "Década 2" en la nomenclatura del PDF de diseño — el compendio la sigue
@@ -597,7 +611,10 @@ const DECADE_BESTIARY = [
         aiPriority:['mandibula_devastadora','telarana_mortal','doble_picadura']},
     },
     decadeBoss: {id:'matriarca_escarlata', name:'Matriarca escarlata', icon:'🕷️', hp:4.2, atk:1.5, res:{fisico:20,fuego:-15,hielo:10,veneno:45,aturdimiento:10}, boss:true, frontline:true,
+      phases:[{below:0.6, msg:'chilla y su <b>nido</b> despierta: veneno y crías (fase 2).'},{below:0.3, msg:'entra en <b>frenesí</b>: golpes brutales (fase 3).'}],
       abilities:{
+        frenesi_matriarca:{label:'Frenesí', utility:'self_buff', oncePerCombat:true, condition:(ctx)=>ctx.selfHpPct<0.3, selfBuff:{name:'Frenesí', duration:99, dmgMult:1.20}},
+        crias_nido:{label:'Llamado del Nido', utility:'summon', cooldown:5, condition:(ctx)=>ctx.selfHpPct<0.6, summon:{tpl:CRIA_ARANA_TPL, count:2, maxAlive:2, hpPct:0.04, atkPct:0.30}},
         mordida_final:{label:'Mordida', mult:1.00},
         paralisis_matriarca:{label:'Parálisis', mult:0.90, applies:{name:'Paralisis', chance:0.30, duration:1}, cooldown:3},
         // Fase 2 (<60% HP): presión de Veneno.
@@ -605,7 +622,7 @@ const DECADE_BESTIARY = [
         // Fase 3 (<30% HP): cadencia agresiva.
         golpe_brutal_final:{label:'Golpe Brutal', mult:1.40, cooldown:4, condition:(ctx)=>ctx.selfHpPct<0.3},
       },
-      aiPriority:['golpe_brutal_final','veneno_matriarca','paralisis_matriarca','mordida_final']}
+      aiPriority:['frenesi_matriarca','crias_nido','golpe_brutal_final','veneno_matriarca','paralisis_matriarca','mordida_final']}
   },
   // Década 2 — pisos 21-30 — Bestias (REWORK 2026-09-25, pedido explícito,
   // PDF "Rework Decada 3: Bestias" — el compendio la sigue llamando Década 2
@@ -1005,7 +1022,18 @@ const DECADE_BESTIARY = [
     // El jefe de década llega escoltado (ver enterNode) y no busca hacer daño
     // directo: cura, se bufa solo y llama refuerzos. Débil en poder bruto
     // frente al Usurpador, pero nunca solo. Intacto por pedido explícito.
-    decadeBoss: {id:'custodio_isla', name:'Custodio de la Isla', icon:'🏝️', hp:3.2, atk:1.2, res:{fisico:15,fuego:10,hielo:10,veneno:10,aturdimiento:15}, moves:['curar','buff_pasivo','invocar','area_debil'], boss:true, frontline:false}
+    // Fases (2026-10-02, lámina "Custodio de la Isla"): curación, invocación
+    // de cangrejos, golpe en área con Corrosión, coraza de coral y furia final.
+    decadeBoss: {id:'custodio_isla', name:'Custodio de la Isla', icon:'🏝️', hp:3.2, atk:1.2, res:{fisico:15,fuego:10,hielo:10,veneno:10,aturdimiento:15}, boss:true, frontline:true,
+      phases:[{below:0.7, msg:'la isla despierta: llama a sus <b>criaturas</b> (fase 2).'},{below:0.4, msg:'se cubre de <b>coral</b>: se endurece y se regenera (fase 3).'},{below:0.15, msg:'desata la <b>Furia de la Marea</b> (fase 4).'}],
+      abilities:{
+        furia_marea:{label:'Furia de la Marea', utility:'self_buff', oncePerCombat:true, condition:(ctx)=>ctx.selfHpPct<0.15, selfBuff:{name:'Furia de la Marea', duration:99, dmgMult:1.25}},
+        coraza_coral:{label:'Coraza de Coral', utility:'self_buff', oncePerCombat:true, condition:(ctx)=>ctx.selfHpPct<0.4, selfBuff:{name:'Coraza de Coral', duration:99, regenPct:0.02, incomingDmgReduction:0.15}},
+        invocar_cangrejos:{label:'Invocación', utility:'summon', cooldown:7, condition:(ctx)=>ctx.selfHpPct<0.7, summon:{tpl:CANGREJO_ISLA_TPL, count:2, maxAlive:2, hpPct:0.05, atkPct:0.30}},
+        impacto_area:{label:'Impacto en Área', utility:'aoe', mult:0.55, cooldown:3, applies:Object.assign({chance:1}, CORROSION_STATUS)},
+        aura_curacion:{label:'Aura de Curación', utility:'self_heal', healPct:0.08, cooldown:4, condition:(ctx)=>ctx.selfHpPct<0.6},
+        golpe_coral:{label:'Golpe de Coral', mult:1.0}},
+      aiPriority:['furia_marea','coraza_coral','invocar_cangrejos','impacto_area','aura_curacion','golpe_coral']}
   },
   // Década 5 — pisos 51-60 — El Mar (Storm Gush / Tetrasea) (REWORK
   // 2026-09-25, pedido explícito, PDF "Decada 6 - Storm Gush" — el propio
@@ -1172,10 +1200,10 @@ const DECADE_BESTIARY = [
         ritual_lluvia_2:{label:'Ritual de Lluvia', utility:'self_buff', oncePerCombat:true, condition:(ctx)=>ctx.selfHpPct<0.4, selfBuff:{name:'Lluvia', duration:4, dmgMult:1.15, regenPct:0.03}, debuffTarget:{name:'Empapado', duration:4, evasionDelta:-10}},
         llamado_tormenta:{label:'Llamado de la Tormenta', utility:'self_heal', cooldown:4, healPct:0.08, requiresStatus:'Lluvia', condition:(ctx)=>ctx.selfHpPct<0.4 && ctx.selfHpPct>=0.1, debuffTarget:{name:'Empapado', duration:2, evasionDelta:-10}},
         sangre_tormenta:{label:'Sangre de la Tormenta', utility:'self_buff', cooldown:5, condition:(ctx)=>ctx.selfHpPct>=0.7, selfBuff:{name:'Sangre de la Tormenta', duration:2, dmgMult:1.10}},
-        rugido_tiranico:{label:'Rugido Tiránico', mult:0.60, cooldown:5, condition:(ctx)=>ctx.selfHpPct>=0.1, applies:{name:'Miedo', chance:0.20, duration:2, procChance:0.4}},
+        rugido_tiranico:{label:'Rugido Tiránico', utility:'aoe', mult:0.55, cooldown:4, condition:(ctx)=>ctx.selfHpPct>=0.1, applies:{name:'Miedo', chance:0.15, duration:2, procChance:0.4}}, // onda que golpea a todo el grupo (lámina de Storm Gush)
         vena_dragon:{label:'Vena del Dragón', mult:0.60, cooldown:4, mpDrain:0.10, condition:(ctx)=>ctx.selfHpPct>=0.1, applies:{name:'Ralentizado', chance:0.20, duration:2}},
         ojo_tormenta:{label:'Ojo de la Tormenta', mult:0.80, cooldown:3, applies:{name:'Ralentizado', chance:0.20, duration:2}},
-        golpe_cola_sg:{label:'Golpe de Cola', mult:1.25, cooldown:3},
+        golpe_cola_sg:{label:'Golpe de Cola', utility:'aoe', mult:0.70, cooldown:3}, // barrido de cola en área
         tridente_sg:{label:'Tridente', mult:1.00}},
       aiPriority:['sacerdote_tormenta','ritual_lluvia_2','ritual_lluvia','llamado_tormenta','sangre_tormenta','rugido_tiranico','vena_dragon','ojo_tormenta','golpe_cola_sg','tridente_sg']}
   }
@@ -3460,7 +3488,7 @@ const HP_PER_LEVEL = {pesada:20, tirador:10, doblefilo:10, mago:10, sacerdote:10
 // Habilidad) rige su crítico/evasión, igual que para el resto.
 function derived(){
   const fis = baseStat('fis'), esp = baseStat('esp'), hab = baseStat('hab'), agi = baseStat('agi'), vig = baseStat('vig');
-  let maxHP = Math.round(HP_BASE + state.char.level * (HP_PER_LEVEL[state.char.style]||40));
+  let maxHP = Math.round((HP_BASE + state.char.level * (HP_PER_LEVEL[state.char.style]||40)) * classCurve('hp'));
   // MP (barra "MP", internamente curSta) ahora la alimenta SOLO Habilidad —
   // antes era fis×3+hab×2. Efecto esperado y ya avisado: Guerrero/Arquero/
   // Asesino, que hoy no invierten nada en Habilidad, van a notar su MP más
@@ -3575,8 +3603,32 @@ function scaleStatValue(){
 function baseDamageFromStat(statVal){
   return 8 + statVal*2.2 + state.char.level*1.5;
 }
+// Equilibrio de clases (2026-10-02): multiplicadores de vida y daño por
+// clase en cada década (niveles 10, 20, 30, 40, 50 y 60, interpolados
+// linealmente entre medio), calibrados con simulaciones contra los jefes de
+// década (ver DECADE_BOSS_TUNING) para que todas las clases rindan parecido
+// en cada tramo del laberinto.
+const CLASS_CURVE_LEVELS = [1,10,20,30,40,50,60]; // nivel 1 = neutro (sin ajuste)
+const CLASS_CURVE = {
+  pesada:    {hp:[1.00,0.85,0.77,0.69,0.62,0.55,0.49], dmg:[1.00,0.92,0.88,0.83,0.79,0.74,0.70]},
+  tirador:   {hp:[1.00,0.69,0.77,0.87,0.98,1.10,1.24], dmg:[1.00,0.83,0.88,0.93,0.99,1.05,1.11]},
+  doblefilo: {hp:[1.00,1.06,1.02,0.99,0.96,0.93,0.90], dmg:[1.00,1.03,1.01,0.99,0.98,0.96,0.95]},
+  mago:      {hp:[1.00,1.05,1.06,1.08,1.10,1.11,1.13], dmg:[1.00,1.02,1.03,1.04,1.05,1.05,1.06]},
+  paladin:   {hp:[1.00,1.19,1.10,1.02,0.95,0.88,0.81], dmg:[1.00,1.09,1.05,1.01,0.97,0.94,0.90]},
+  hechicero: {hp:[1.00,0.55,0.60,0.67,0.76,0.85,0.95], dmg:[1.00,0.73,0.77,0.82,0.87,0.92,0.97]},
+};
+function classCurve(kind){
+  const c = CLASS_CURVE[state.char.style];
+  if(!c) return 1;
+  const v = c[kind], L = CLASS_CURVE_LEVELS, lvl = state.char.level||1;
+  if(lvl <= L[0]) return v[0];
+  for(let i=1;i<L.length;i++){
+    if(lvl <= L[i]) return v[i-1] + (v[i]-v[i-1]) * (lvl-L[i-1])/(L[i]-L[i-1]);
+  }
+  return v[v.length-1];
+}
 function skillBaseDamage(){
-  return baseDamageFromStat(scaleStatValue());
+  return baseDamageFromStat(scaleStatValue()) * classCurve('dmg');
 }
 
 /* ============================================================
@@ -7570,19 +7622,19 @@ function generateLoot(floorIdx, level){
 // de su conjunto afín (Raro en nivel 10, Rango B en 20-30, Rango A en 40+),
 // piedras de alma del rango equivalente en todos sus espacios, 3 pociones
 // de vida y 4 aliados del mismo nivel y rango de equipo.
-// Con ese grupo la media de victorias queda en ~63-69% en los jefes 10-50
-// y ~50% en Storm Gush (60) (con 2 aliados baja mucho más).
+// Con ese grupo la media de victorias queda en ~60-70% en los jefes 10-50
+// y ~50% en Storm Gush (60), con las clases niveladas por CLASS_CURVE.
 // Meta pedida para las décadas futuras (con equipo Rango A; el S/SS y la
 // estrategia del jugador lo suben): 70 → 40%, 80 → 30%, 90 → 20%, 100 → 10%. El Custodio (50) partía muy por debajo de la
 // curva y se cura, así que se le sube más el ataque que la vida para no
 // alargar el combate.
 const DECADE_BOSS_TUNING = {
-  10: {hp:1.10, atk:1.05},
-  20: {hp:1.78, atk:1.33},
-  30: {hp:1.44, atk:1.20},
-  40: {hp:1.36, atk:1.17},
-  50: {hp:2.00, atk:2.95},
-  60: {hp:3.20, atk:1.79},
+  10: {hp:1.01, atk:1.02},
+  20: {hp:1.68, atk:1.28},
+  30: {hp:1.49, atk:1.20},
+  40: {hp:1.32, atk:1.16},
+  50: {hp:1.42, atk:1.57},
+  60: {hp:1.64, atk:1.27},
 };
 function makeEnemy(tpl, floorIdx, level){
   const lvlMult = levelMult(level||1);
@@ -7674,6 +7726,9 @@ function makeEnemy(tpl, floorIdx, level){
   return {
     tpl, name:tpl.name, icon:tpl.icon,
     maxHP:hp, hp:hp, atk:atk, res, evasion, precision, critChance,
+    // Jefes y guardianes resisten el control mental (2026-10-02): sin esto,
+    // Miedo/Confusión del Hechicero los dejaban perdiendo turno tras turno.
+    mentalResist: tpl.mentalResist!=null ? tpl.mentalResist : (tpl.boss ? 0.5 : 0),
     statuses:[], defending:false, cooldowns:{}
   };
 }
@@ -7695,10 +7750,12 @@ function startCombat(enemyGroup, node){
     // Arquero y Mago pelean a distancia — por defecto empiezan en
     // Retaguardia, igual que cualquier aliado no-frontline (ver
     // makeCombatAlly: pos = tpl.frontline ? 'frente' : 'retaguardia').
-    // Guerrero y Asesino siguen empezando en el Frente. Pedido explícito
+    // Guerrero y Paladín empiezan en el Frente. Pedido explícito
     // 2026-09-26. El jugador puede reposicionarse manualmente en cualquier
     // momento con "Reposicionarse", esto solo cambia el punto de partida.
-    playerPos: isRangedStyle() ? 'retaguardia' : 'frente',
+    // El Asesino arranca en la Retaguardia (2026-10-02, pedido explícito):
+    // ataca desde atrás sin exponerse; el Paladín sigue en el Frente.
+    playerPos: (isRangedStyle() || state.char.style==='doblefilo') ? 'retaguardia' : 'frente',
     playerStatuses:[],
     playerDefending:false,
     turnLog:[],
@@ -10715,6 +10772,36 @@ function resolveNewStyleEnemyMove(enemy, target, enemyCrit){
       log(`${enemy.name} usa ${ability.label}, pero nadie necesita curación.`);
     }
     combat.lastAction = {label:ability.label, effects:[]};
+    return;
+  }
+
+  // Golpe en área (2026-10-02, Custodio de la Isla): pega a todo el grupo
+  // (jugador + aliados vivos) con la resistencia física de cada uno, y puede
+  // aplicar un estado a cada golpeado (ej. Corrosión).
+  if(ability.utility==='aoe'){
+    let base = enemy.atk * (ability.mult!=null ? ability.mult : 0.5);
+    const fz = hasStatus(enemy.statuses,'Fortalecido');
+    if(fz) base *= (1 + (fz.stacks||1)*0.04);
+    if(hasStatus(enemy.statuses,'Debilitado')) base *= 0.85;
+    base *= enemyMermadoMult(enemy);
+    enemy.statuses.forEach(st=>{ if(st.dmgMult) base *= st.dmgMult; });
+    base *= enemyPassiveDealtMult(enemy);
+    const effects = [];
+    const pRes = totalRes('fisico') - corrosionResPenalty(combat.playerStatuses);
+    const pDmg = Math.max(1, Math.round(base*(1-pRes/100)));
+    dealDamageToPlayer(pDmg);
+    effects.push({targetKind:'player', amount:pDmg, kind:'dmg'});
+    if(ability.applies) applyStatus(null, Object.assign({}, ability.applies), true);
+    livingAllies().forEach(ally=>{
+      const aRes = ((ally.res && ally.res.fisico)||0) - corrosionResPenalty(ally.statuses);
+      const aDmg = Math.max(1, Math.round(base*(1-aRes/100)));
+      dealDamageToAlly(ally, aDmg);
+      if(ability.applies) applyStatus(ally, Object.assign({}, ability.applies), false);
+      effects.push({targetKind:'ally', key:ally.id, amount:aDmg, kind:'dmg'});
+      if(ally.hp<=0) log(`<b>${ally.name}</b> cae en combate y queda fuera de acción hasta que avances al siguiente nivel del laberinto.`);
+    });
+    log(`${enemy.name} usa ${ability.label}: golpea a todo tu grupo (${pDmg} de daño a ti).`);
+    combat.lastAction = {label:ability.label, effects};
     return;
   }
 

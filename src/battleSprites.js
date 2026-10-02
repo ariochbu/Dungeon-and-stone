@@ -135,3 +135,13 @@ const MONSTER_SPRITES = {
   viuda_venenosa:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAACC0lEQVR4nO1XS0vDQBCeXWNpxXMPJXcPvRYEtQ/0J9q7v8OLIGofIGgLpXgXD168lLamIZVJmTgZNpsXHoR+EDabzs73zSuhAHvs8d/h1hvbMudVWdKzdhcGD/fRb++fH7l8qiLESJoEEpNViMpDbiM2CckiQv8FOQLts/SHk0ZsimI0HIfrnVOJnl36Xi4fqRlw643tSbNpjYJIk8gRaT504kkAmLxOwjVv+iPnTjXykUuAW29s1xsfqocO4MrHjINKwEvBsVwtIh9JWVBpAhB4f1Q7hrwI/HV0Hn2ZekGbyLFudAAvElIEdD6pF5RJACpGcGJ8pnWmqQ1ROfi15f5kFrSNHO/5PgiCmGNEu9OJ7bkNneellFlwTOpJKRlLUd1eL1HE+OkxZo8gX/TcmAFXGNALhGooyW+uOnA9n4b3tCJOzy9CW95DPGqZBccUPQKbBgBi6eI9sej3ofW1BBiMoAUAz/Ppbs+iIiL09TabRUFwKBk9r5cET/1wMAIbPG83glK8bEhlm33T+AUqfST1Ni7e5JemQdvIqYZQELyHZCNTeXSaE3ox0UhhdN/eOrwmL7exFS9MPdqlfYQIyha9KTuyq1cbH2qGUnE/3IfcO3lTylcSKMskI+ek8jdNNTLVWiq3iZLPbF9BzqmlQhtZGUhRsSkwoaygtCwQtDzwF9EX5ij7ryeLjx9OZsA18T3zoAAAAABJRU5ErkJggg=='
 };
 Object.assign(ENEMY_SPRITES, MONSTER_SPRITES);
+
+// Sprites HD hechos por ariochbu (2026-10-02, carpeta "Sprites mobs"):
+// reemplazan a los generados. Se sirven como archivos (96x96) en vez de
+// base64. Para sumar más: guardar el PNG en src/assets/enemigos/<id>.png y
+// agregar el id acá.
+const HD_ENEMY_IDS = ['goblin_guerrero','goblin_arquero','goblin_saqueador','goblin_chaman','tarantula_cazadora','jefe_goblin','hobgoblin','gilgoblin','ogro','matriarca_escarlata'];
+HD_ENEMY_IDS.forEach(id=>{ ENEMY_SPRITES[id] = `src/assets/enemigos/${id}.png?v=1`; });
+// Invocaciones de las fases de jefe (2026-10-02): reusan sprites existentes.
+ENEMY_SPRITES.cria_arana = ENEMY_SPRITES.tarantula_cazadora;
+ENEMY_SPRITES.cangrejo_isla = ENEMY_SPRITES.cangrejo_gigante;
