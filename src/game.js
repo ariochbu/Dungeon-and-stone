@@ -13,11 +13,21 @@ import { CLASS_SPRITES, ENEMY_SPRITES } from './battleSprites.js?v=65';
 // desventajas' de cada raza") — reflejan literalmente los stats/res/passive
 // de arriba, no son adorno: quien lee la ficha antes de crear personaje
 // tiene que poder anticipar el hueco que le va a tocar tapar con equipo.
+// Agilidad y Vigor (pedido explícito 2026-09-28, "Paso 0" del rediseño de
+// stats): se agregan como 4º y 5º stat base de cada raza. No vinieron
+// números dados — se repartieron por identidad de cada raza, buscando un
+// total aproximadamente parejo entre todas (25-28 puntos sumando los 5
+// stats) para no romper el equilibrio ya establecido entre fis/esp/hab.
+// Agilidad reemplaza a Habilidad como fuente de crítico/evasión/precisión
+// (ver derived()) — por eso el texto de pros/cons que hablaba de "Habilidad"
+// para eso se reescribió a "Agilidad" en Enano/Dracónido/Hombre bestia.
+// Vigor es nuevo (vida + reducción de daño) — Enano queda como la raza con
+// más Vigor, reforzando su identidad ya existente de "la más resistente".
 const RACES = {
   barbaro: {
     id:'barbaro', name:'Bárbaro', icon:'🪓',
     desc:'Carne y furia. El más fuerte y el más despreciado fuera del combate.',
-    stats:{fis:8, esp:3, hab:5},
+    stats:{fis:8, esp:3, hab:5, agi:3, vig:6},
     res:{fisico:15, fuego:-10, hielo:0, veneno:0, aturdimiento:20},
     passive:'Furia de sangre', passiveDesc:'Por debajo del 30% de vida, tu daño físico aumenta un 20%.',
     pros:'El Físico más alto del juego y gran resistencia a Aturdimiento.',
@@ -26,25 +36,25 @@ const RACES = {
   enano: {
     id:'enano', name:'Enano', icon:'⛏️',
     desc:'Robusto y terco. Resiste lo que otros no soportarían.',
-    stats:{fis:7, esp:4, hab:4},
+    stats:{fis:7, esp:4, hab:4, agi:2, vig:9},
     res:{fisico:10, fuego:0, hielo:10, veneno:25, aturdimiento:5},
     passive:'Piel de piedra', passiveDesc:'Reduce todo daño físico recibido en una cantidad plana adicional.',
-    pros:'La raza más resistente en general — Físico, Veneno y Hielo por encima del resto.',
-    cons:'Habilidad baja: menos crítico y evasión que cualquier otra raza.'
+    pros:'La raza más resistente en general — Físico, Veneno y Hielo por encima del resto, y el Vigor más alto del juego.',
+    cons:'Agilidad baja: menos crítico y evasión que cualquier otra raza.'
   },
   hada: {
     id:'hada', name:'Hada', icon:'🦋',
     desc:'Frágil pero certera. Vive de no ser tocada.',
-    stats:{fis:3, esp:9, hab:6},
+    stats:{fis:3, esp:9, hab:6, agi:8, vig:1},
     res:{fisico:-10, fuego:15, hielo:15, veneno:5, aturdimiento:0},
     passive:'Gracia', passiveDesc:'+15% de probabilidad de esquivar cualquier ataque.',
-    pros:'El Espíritu más alto del juego (mejor daño mágico y MP) + 15% de evasión propia.',
-    cons:'El Físico más bajo del juego, y encima resta resistencia física: cada golpe que sí conecta duele más.'
+    pros:'El Espíritu más alto del juego (mejor daño mágico y MP) + Agilidad muy alta (crítico y evasión) + 15% de evasión propia.',
+    cons:'El Físico más bajo del juego y el Vigor más bajo (poca vida), y encima resta resistencia física: cada golpe que sí conecta duele más.'
   },
   humano: {
     id:'humano', name:'Humano', icon:'🗡️',
     desc:'Sin extremos, sin techo. Aprende más rápido que el resto.',
-    stats:{fis:5, esp:5, hab:6},
+    stats:{fis:5, esp:5, hab:6, agi:5, vig:5},
     res:{fisico:5, fuego:5, hielo:5, veneno:5, aturdimiento:5},
     passive:'Adaptable', passiveDesc:'Ganas un 10% más de experiencia de cada victoria.',
     pros:'La más equilibrada de todas, sin ningún punto débil real, y sube de nivel un 10% más rápido.',
@@ -53,20 +63,20 @@ const RACES = {
   draconido: {
     id:'draconido', name:'Dracónido', icon:'🐉',
     desc:'Sangre de bestia antigua. Poderoso, pero torpe con el hielo.',
-    stats:{fis:7, esp:7, hab:3},
+    stats:{fis:7, esp:7, hab:3, agi:3, vig:6},
     res:{fisico:0, fuego:30, hielo:-15, veneno:0, aturdimiento:10},
     passive:'Sangre ancestral', passiveDesc:'Tus habilidades de fuego infligen un 15% adicional de daño.',
     pros:'La única raza fuerte en Físico Y Espíritu a la vez, casi inmune al Fuego (+30%).',
-    cons:'Habilidad muy baja (poco crítico/evasión) y con resistencia negativa a Hielo — su elemento opuesto pega más fuerte.'
+    cons:'Agilidad baja (poco crítico/evasión) y con resistencia negativa a Hielo — su elemento opuesto pega más fuerte.'
   },
   bestia: {
     id:'bestia', name:'Hombre bestia', icon:'🐺',
     desc:'Instinto puro. Golpea primero, golpea fuerte, golpea rápido.',
-    stats:{fis:6, esp:2, hab:9},
+    stats:{fis:6, esp:2, hab:9, agi:9, vig:2},
     res:{fisico:5, fuego:0, hielo:0, veneno:-10, aturdimiento:15},
     passive:'Instinto cazador', passiveDesc:'+15% de probabilidad de golpe crítico.',
-    pros:'La Habilidad más alta del juego (más crítico y evasión) + 15% de crítico propio adicional.',
-    cons:'El Espíritu más bajo del juego (casi sin MP para magia) y resta resistencia a Veneno.'
+    pros:'La Agilidad más alta del juego (más crítico y evasión) + 15% de crítico propio adicional.',
+    cons:'El Espíritu más bajo del juego (casi sin MP para magia), Vigor bajo (poca vida), y resta resistencia a Veneno.'
   }
 };
 
@@ -2890,11 +2900,30 @@ const HP_BASE = 40;
 // 2026-09-16, pedido explícito (segunda baja: el laberinto se sentía muy
 // fácil con la vida anterior) — Guerrero baja a x20, el resto a x10.
 const HP_PER_LEVEL = {pesada:20, tirador:10, doblefilo:10, mago:10, sacerdote:10};
+// Paso 0 del rediseño de stats (pedido explícito 2026-09-28): Agilidad y
+// Vigor se suman como stats de verdad, y Habilidad/Espíritu/Físico cambian
+// de trabajo. Mago se deja intacto a propósito ("seguirá siendo con
+// espíritu, aún no lo modifiques, esto hasta que cree las armas nuevas") —
+// su arma1/arma2 siguen dando Espíritu y su daño sigue escalando con
+// Espíritu; lo único que cambia para Mago acá es que Agilidad (no ya
+// Habilidad) rige su crítico/evasión, igual que para el resto.
 function derived(){
-  const fis = baseStat('fis'), esp = baseStat('esp'), hab = baseStat('hab');
+  const fis = baseStat('fis'), esp = baseStat('esp'), hab = baseStat('hab'), agi = baseStat('agi'), vig = baseStat('vig');
   let maxHP = Math.round(HP_BASE + state.char.level * (HP_PER_LEVEL[state.char.style]||40));
-  let maxSta = Math.round(20 + fis*3 + hab*2);
+  // MP (barra "MP", internamente curSta) ahora la alimenta SOLO Habilidad —
+  // antes era fis×3+hab×2. Efecto esperado y ya avisado: Guerrero/Arquero/
+  // Asesino, que hoy no invierten nada en Habilidad, van a notar su MP más
+  // chico que antes hasta que el equipamiento libre de clase (fase 2) les
+  // deje itemizar algo de Habilidad si quieren más pozo. No es un bug.
+  const HAB_MP_RATE = 5;
+  let maxSta = Math.round(20 + hab*HAB_MP_RATE);
   let maxSpi = Math.round(20 + esp*4);
+  // Vigor → Vida máxima, lineal y simple (mismo criterio que Stamina→HP de
+  // WoW/Diablo) — +3 HP por punto. A nivel 60 con Vigor bien invertido
+  // (~100-130 con raza+nivel) suma +300-400 HP, un empujón real sin opacar
+  // la vida que ya da el nivel/clase (Guerrero sigue siendo el más vivo).
+  const VIG_HP_PER_POINT = 3;
+  maxHP += Math.round(vig * VIG_HP_PER_POINT);
   const eq = state.char.equip;
   // El viejo bono bonus.stat==='maxhp' (×8) ya no lo otorga ningún equipo
   // nuevo (Armadura ahora da resistencia física, no vida) — se deja este
@@ -2917,7 +2946,13 @@ function derived(){
   maxHP += equipModsSum(eq, 'maxhp_flat') + petModSum('maxhp_flat');
   maxSta += equipModsSum(eq, 'mp_flat') + petModSum('mp_flat');
   maxSpi += equipModsSum(eq, 'espiritu_flat') + petModSum('espiritu_flat');
-  const fortalezaMentalPct = equipModsSum(eq, 'fortaleza_mental');
+  // Espíritu ahora alimenta las dos resistencias de estado (pedido explícito
+  // 2026-09-28) — siguen siendo DOS stats separados entre sí (uno cubre
+  // Miedo/Confusión, el otro Sangrado/Debilitado/Parálisis/Ceguera/
+  // Ralentizado), Espíritu solo pasa a ser la fuente natural de ambos,
+  // sumándose a lo que ya daba el equipo.
+  const ESP_RESIST_RATE = 0.3;
+  const fortalezaMentalPct = equipModsSum(eq, 'fortaleza_mental') + esp*ESP_RESIST_RATE;
   // Fortaleza mental (Accesorio) ahora también aporta un poco a Resistencia
   // mágica (pedido explícito: "separarlas, pero que fortaleza mental
   // también aumente un poco resistencia mágica") — a una fracción de lo que
@@ -2925,29 +2960,34 @@ function derived(){
   const FORTALEZA_MENTAL_TO_RES_MAGICA = 0.4;
   const resMagica = clamp(equipModsSum(eq, 'res_magica') + petModSum('res_magica') + fortalezaMentalPct*FORTALEZA_MENTAL_TO_RES_MAGICA, -60, 80);
   const fortalezaMental = clamp(fortalezaMentalPct/100, 0, 0.9);
-  const resistenciaEstado = clamp((equipModsSum(eq, 'resistencia_estado') + petModSum('resistencia_estado'))/100, 0, 0.9);
+  const resistenciaEstado = clamp((equipModsSum(eq, 'resistencia_estado') + petModSum('resistencia_estado') + esp*ESP_RESIST_RATE)/100, 0, 0.9);
   // Precisión y Penetración: además de lo que dé el equipo, crecen solas
   // con el nivel (pedido explícito) — sin nada de equipo, un nivel 60 ya
-  // trae ~9% de Precisión "de fábrica".
+  // trae ~9% de Precisión "de fábrica". Ahora Agilidad es su fuente
+  // principal y Físico aporta una porción menor (secundaria) — pedido
+  // explícito 2026-09-28.
   const PRECISION_PER_LEVEL = 0.0015, PENETRACION_PER_LEVEL = 0.001;
-  const precision = clamp(equipModsSum(eq, 'precision')/100 + state.char.level*PRECISION_PER_LEVEL, 0, 0.9);
+  const AGI_PRECISION_RATE = 0.0015, FIS_PRECISION_RATE = 0.0008;
+  const precision = clamp(equipModsSum(eq, 'precision')/100 + state.char.level*PRECISION_PER_LEVEL + agi*AGI_PRECISION_RATE + fis*FIS_PRECISION_RATE, 0, 0.9);
   const penetracionNivel = state.char.level*PENETRACION_PER_LEVEL;
   const petCritProc = specialsFromPets().filter(sp=>sp.type==='prob_critico').reduce((s,sp)=>s+sp.value,0);
-  const critChance = clamp(0.05 + hab*0.006 + (race().id==='bestia'?0.15:0) + petCritProc, 0, 0.6);
+  // Crítico y Evasión ahora los rige Agilidad, no Habilidad (pedido
+  // explícito 2026-09-28: "Agilidad se encargará de evasión, precisión y
+  // probabilidad de crítico, separado de Habilidad"). Mismo ritmo para las
+  // dos (0.35%/punto) ya que antes Habilidad repartía su presupuesto entre
+  // ambas — ahora Agilidad reparte entre tres cosas (+Precisión), así que
+  // cada una rinde menos por punto que cuando Habilidad solo alimentaba una.
+  const AGI_CRIT_RATE = 0.0035, AGI_EVASION_RATE = 0.0035;
+  const critChance = clamp(0.05 + agi*AGI_CRIT_RATE + (race().id==='bestia'?0.15:0) + petCritProc, 0, 0.6);
   const critDmgBonus = specialsFromPets().filter(sp=>sp.type==='critico_dano').reduce((s,sp)=>s+sp.value,0);
-  // Esquivar: viene de Habilidad, pero solo la parte "natural" (raza + nivel)
-  // pesa completo — la que aporta EQUIPO pesa la mitad (2026-09-16, pedido
-  // explícito). El Asesino es la única senda cuya arma1+arma2+guantes vierten
-  // TODO su bono en Habilidad (ver GEAR_CLASS_STAT/WEAPON_CATALOG.doblefilo),
-  // así que sin este freno llegaba a 40-60% de esquivar ya en nivel 10-20 con
-  // buen equipo — se quiere que ese techo se sienta recién por los niveles
-  // 35-40, sin perder la esencia de "el Asesino esquiva mucho porque invierte
-  // en Habilidad". Las demás sendas casi no cambian: su equipo no alimenta
-  // Habilidad, así que su evasión ya era casi toda "natural".
-  const habNatural = race().stats.hab + Math.floor((state.char.level-1)*1);
-  const habGear = Math.max(0, hab - habNatural);
-  const EVASION_GEAR_HAB_WEIGHT = 0.5;
-  let evasionBase = 0.04 + habNatural*0.005 + habGear*0.005*EVASION_GEAR_HAB_WEIGHT + (race().id==='hada'?0.15:0);
+  // Esquivar: viene de Agilidad (ya no Habilidad), pero solo la parte
+  // "natural" (raza + nivel) pesa completo — la que aporta EQUIPO pesa la
+  // mitad (mismo freno que ya existía para Habilidad, ahora aplicado a
+  // Agilidad: evita que itemizar a fondo un solo stat dispare la evasión).
+  const agiNatural = race().stats.agi + Math.floor((state.char.level-1)*1);
+  const agiGear = Math.max(0, agi - agiNatural);
+  const EVASION_GEAR_AGI_WEIGHT = 0.5;
+  let evasionBase = 0.04 + agiNatural*AGI_EVASION_RATE + agiGear*AGI_EVASION_RATE*EVASION_GEAR_AGI_WEIGHT + (race().id==='hada'?0.15:0);
   socketedStones().forEach(s=>{
     // itemSpecialsArr (no solo s.special) porque Sombra Cazadora A/S/SS ya
     // trae 2 specials a la vez (evasión + invocar sombra, ver
@@ -2957,7 +2997,15 @@ function derived(){
   specialsFromEquip(eq).forEach(sp=>{
     if(sp.type==='evasion_flat') evasionBase += sp.value;
   });
-  return {fis,esp,hab,maxHP,maxSta,maxSpi,critChance,critDmgBonus,evasionBase,resMagica,fortalezaMental,resistenciaEstado,precision,penetracionNivel};
+  // Vigor → reducción de daño recibido, física y mágica por igual (pedido
+  // explícito 2026-09-28) — multiplicativa, como la que ya da el equipo
+  // (Armadura/Maza/Espadón). Tope conservador (25%) porque esto YA se
+  // multiplica con la vida extra que el mismo Vigor regala arriba: más HP y
+  // menos daño por golpe juntos rinden más "vida efectiva" que la suma de
+  // los dos por separado, así que su curva debe ser más suave que si Vigor
+  // solo controlara una de las dos cosas.
+  const reduccionVigor = clamp(vig * 0.002, 0, 0.25);
+  return {fis,esp,hab,agi,vig,maxHP,maxSta,maxSpi,critChance,critDmgBonus,evasionBase,resMagica,fortalezaMental,resistenciaEstado,precision,penetracionNivel,reduccionVigor};
 }
 
 function scaleStatValue(){
@@ -3607,18 +3655,23 @@ function renderSheet(){
       <div class="stat-box"><div class="v">${d.fis}</div><div class="k">Físico</div></div>
       <div class="stat-box"><div class="v">${d.esp}</div><div class="k">Espíritu</div></div>
       <div class="stat-box"><div class="v">${d.hab}</div><div class="k">Habilidad</div></div>
+      <div class="stat-box"><div class="v">${d.agi}</div><div class="k">Agilidad</div></div>
+      <div class="stat-box"><div class="v">${d.vig}</div><div class="k">Vigor</div></div>
     </div>
 
     <div class="section-label">Estadísticas de combate</div>
     <div class="res-list">
       <span class="res-chip pos">Físico ${d.fis}</span>
       <span class="res-chip pos">Habilidad ${d.hab}</span>
+      <span class="res-chip pos">Agilidad ${d.agi}</span>
+      <span class="res-chip pos">Vigor ${d.vig}</span>
       <span class="res-chip pos">Crítico +${Math.round(d.critChance*100)}%</span>
       ${cs.criticoDano>0?`<span class="res-chip pos">Daño crítico +${Math.round((1.5+cs.criticoDano)*100)}%</span>`:''}
       <span class="res-chip pos">Evasión ${Math.round(d.evasionBase*100)}%</span>
       <span class="res-chip ${stunChance>0?'pos':''}">Aturdir al golpear ${Math.round(stunChance*100)}%</span>
       ${cs.aumentoDano>0?`<span class="res-chip pos">Aumento de daño +${Math.round(cs.aumentoDano*100)}%</span>`:''}
-      ${cs.reduccionDano>0?`<span class="res-chip pos">Reducción de daño recibido ${Math.round(cs.reduccionDano*100)}%</span>`:''}
+      ${cs.reduccionDano>0?`<span class="res-chip pos">Reducción de daño recibido (equipo) ${Math.round(cs.reduccionDano*100)}%</span>`:''}
+      ${d.reduccionVigor>0?`<span class="res-chip pos">Reducción de daño recibido (Vigor) ${Math.round(d.reduccionVigor*100)}%</span>`:''}
       ${cs.bloqueo>0?`<span class="res-chip pos">Bloqueo ${Math.round(cs.bloqueo*100)}%</span>`:''}
       ${cs.retroceso>0?`<span class="res-chip pos">Retroceso ${Math.round(cs.retroceso*100)}%</span>`:''}
       ${cs.robovida>0?`<span class="res-chip pos">Succión de vida ${Math.round(cs.robovida*100)}%</span>`:''}
@@ -6673,9 +6726,35 @@ function makeEnemy(tpl, floorIdx, level){
   // (ver levelGapEvasionBonus/monsterEffectiveLevel), no acá.
   const EVASION_PER_FLOOR = 0.003;
   const evasion = (tpl.boss ? 0.10 : tpl.elite ? 0.08 : 0.05) + floorIdx*EVASION_PER_FLOOR;
+  // Precisión y Crítico de monstruo (pedido explícito 2026-09-28: "la
+  // precisión, evasión y probabilidad de crítico también deben ser
+  // aplicados a los monstruos... así mismo como stat del laberinto, por
+  // piso"). Mismo criterio que Evasión arriba (base por categoría + un poco
+  // más por piso dentro de la década). Precisión contrarresta la evasión del
+  // jugador/aliado (ver frontlineTarget/enemyAct). Crítico es una mecánica
+  // nueva de verdad — antes NINGÚN enemigo critaba — así que arranca a un
+  // ritmo más sobrio que el del jugador (mitad o menos) para no sentirse
+  // injusto; se sube después si en la práctica queda floja.
+  const PRECISION_PER_FLOOR = 0.002;
+  const precision = (tpl.boss ? 0.08 : tpl.elite ? 0.06 : 0.03) + floorIdx*PRECISION_PER_FLOOR;
+  // Crítico de monstruo (ajuste 2026-09-28, pedido explícito): un mob o
+  // élite normal se queda como "mala suerte" — chico, sube poco con el piso
+  // dentro de la década. Un guardián o jefe de década (tpl.boss) en cambio
+  // debe sentirse en la estrategia real de la pelea, no como azar — por eso
+  // su crítico escala con el NIVEL del laberinto (1-LEVEL_CAP), no con el
+  // floorIdx de 1-10 dentro de la entrada actual: así el guardián del piso
+  // 10 ya pega fuerte (~13%) pero el que cierra la última década (hoy Storm
+  // Gush, piso 60) es el que de verdad obliga a jugar alrededor del
+  // crítico (~30%). LEVEL_CAP (no un 60 fijo) para que esto se reacomode
+  // solo cuando el laberinto crezca a 100 pisos.
+  const CRIT_PER_FLOOR = 0.001;
+  const BOSS_CRIT_BASE = 0.10, BOSS_CRIT_MAX_BONUS = 0.20;
+  const critChance = tpl.boss
+    ? BOSS_CRIT_BASE + (level/LEVEL_CAP)*BOSS_CRIT_MAX_BONUS
+    : (tpl.elite ? 0.035 : 0.02) + floorIdx*CRIT_PER_FLOOR;
   return {
     tpl, name:tpl.name, icon:tpl.icon,
-    maxHP:hp, hp:hp, atk:atk, res, evasion,
+    maxHP:hp, hp:hp, atk:atk, res, evasion, precision, critChance,
     statuses:[], defending:false, cooldowns:{}
   };
 }
@@ -6918,6 +6997,12 @@ function corrosionResPenalty(statuses){ return hasStatus(statuses, 'Corrosion') 
 // reducción (Armadura/Maza/Furioso/Bendición/Tier S, etc.) — no la
 // reemplaza. No aplica a Retaguardia.
 const FRONTLINE_DAMAGE_REDUCTION = 0.10;
+// Crítico de enemigo (pedido explícito 2026-09-28) — antes NINGÚN enemigo
+// criteaba. Multiplicador conservador a propósito (el jugador usa 1.5x+
+// bono): mejor que arranque sobrio y lo subamos si en la práctica se siente
+// flojo, a que se sienta injusto recibir golpes variables sin ningún stat
+// del jugador que lo contrarreste todavía.
+const ENEMY_CRIT_MULT = 1.3;
 function healMultiplierFor(statuses){
   const c = hasStatus(statuses, 'Corrosion');
   return c ? c.healMult : 1;
@@ -8449,10 +8534,17 @@ async function processEnemyTurns(){
   decrementStatuses(combat.playerStatuses);
   (combat.allies||[]).forEach(ally=> decrementStatuses(ally.statuses));
 
-  // player y aliados regeneran MP/Espíritu cada ciclo de turno, igual ritmo
+  // Regeneración de MP/Espíritu del jugador cada ciclo de turno — antes era
+  // un flat +5 sin tocar ningún stat ("regeneración de mp, actualmente no
+  // está creado, habrá que hacerlo" — en realidad sí existía, solo no
+  // escalaba con nada; pedido explícito 2026-09-28 corregido acá: MP ahora
+  // escala con Habilidad y Espíritu con Espíritu, cada recurso con su propia
+  // fuente, igual que ya hacen sus respectivos máximos). Los aliados (v1,
+  // sin stats propios todavía) se quedan con el flat +5 de siempre.
   const d = derived();
-  state.char.curSta = Math.min(d.maxSta, state.char.curSta+5);
-  state.char.curSpi = Math.min(d.maxSpi, state.char.curSpi+5);
+  const HAB_MP_REGEN_RATE = 0.08, ESP_SPI_REGEN_RATE = 0.08;
+  state.char.curSta = Math.min(d.maxSta, state.char.curSta + Math.round(5 + d.hab*HAB_MP_REGEN_RATE));
+  state.char.curSpi = Math.min(d.maxSpi, state.char.curSpi + Math.round(5 + d.esp*ESP_SPI_REGEN_RATE));
   livingAllies().forEach(a=>{
     a.mp = Math.min(a.maxMP, a.mp+5);
     a.spirit = Math.min(a.maxSpirit, a.spirit+5);
@@ -8483,7 +8575,12 @@ function enemyAct(enemy){
   Object.keys(enemy.cooldowns).forEach(k=> enemy.cooldowns[k] = Math.max(0, enemy.cooldowns[k]-1));
 
   const target = frontlineTarget();
-  const evasion = target.kind==='ally' ? computeAllyEvasion(target.ally) : computeCritEvasion().evasion;
+  // La Precisión del enemigo contrarresta la evasión de quien lo recibe —
+  // mismo criterio en espejo que ya usa el jugador contra la evasión de un
+  // enemigo (ver d.precision en playerUseSkill), ahora también del otro
+  // lado (pedido explícito 2026-09-28).
+  const rawEvasion = target.kind==='ally' ? computeAllyEvasion(target.ally) : computeCritEvasion().evasion;
+  const evasion = Math.max(0.02, rawEvasion - (enemy.precision||0));
   if(chance(evasion)){
     log(`${enemy.name} ataca a ${target.kind==='ally' ? target.ally.name : 'ti'}, ¡pero esquiva!`);
     combat.lastAction = {label:'¡Esquivado!', effects:[]};
@@ -8513,13 +8610,20 @@ function enemyAct(enemy){
     return;
   }
 
+  // Crítico de enemigo (pedido explícito 2026-09-28) — se tira UNA vez acá,
+  // antes de bifurcar entre el sistema viejo (de abajo) y el nuevo
+  // (resolveNewStyleEnemyMove), para no duplicar el roll en los dos lugares
+  // donde se calcula el daño final. ENEMY_CRIT_MULT más sobrio que el 1.5x+
+  // del jugador: es una mecánica nueva de verdad, arranca conservadora.
+  const enemyCrit = chance(enemy.critChance||0);
+
   // Sistema nuevo, data-driven (2026-09-25, "Década 2 - Arañas" y en
   // adelante): un tpl con `abilities`+`aiPriority` en vez de `moves` (lista
   // de strings sueltas resueltas por un if-chain) resuelve su turno acá y
   // nunca llega al sistema viejo de abajo — décadas ya lanzadas (Bosque
   // Goblin, Bestias, Usurpador, Isla Paraíso, El Mar) siguen 100% con el
   // sistema viejo, sin ningún cambio de comportamiento.
-  if(enemy.tpl.abilities){ resolveNewStyleEnemyMove(enemy, target); return; }
+  if(enemy.tpl.abilities){ resolveNewStyleEnemyMove(enemy, target, enemyCrit); return; }
 
   const available = enemy.tpl.moves.filter(m=> !(m==='invocar' && enemy.cooldowns.invocar>0));
   let move = pick(available.length ? available : enemy.tpl.moves);
@@ -8652,6 +8756,7 @@ function enemyAct(enemy){
       ? totalRes(elementalType) + d.resMagica
       : totalRes('fisico') - corrosionResPenalty(combat.playerStatuses);
     finalDmg = dmg*(1-resVal/100);
+    if(enemyCrit) finalDmg *= ENEMY_CRIT_MULT;
     if(state.char.race==='enano') finalDmg -= 2;
     if(combat.playerDefending) finalDmg *= 0.5;
     if(combat.playerPos==='frente') finalDmg *= (1-FRONTLINE_DAMAGE_REDUCTION);
@@ -8663,6 +8768,10 @@ function enemyAct(enemy){
     playerEquipSpecials.forEach(sp=>{
       if(sp.type==='reduccion_dano') finalDmg *= (1-sp.value);
     });
+    // Vigor (pedido explícito 2026-09-28): reducción de daño recibido propia
+    // del stat, física y mágica por igual — se suma multiplicativamente a la
+    // de equipo de arriba, no la reemplaza.
+    finalDmg *= (1 - d.reduccionVigor);
     // Casco Tier S ('casco_s'): por debajo del 50% de vida, -5% de daño
     // recibido adicional — continuo, no consume el "1 vez por combate".
     if(hasTierSProc(playerEquipSpecials,'casco_s') && d.maxHP>0 && (state.char.curHP/d.maxHP) < 0.5){
@@ -8680,13 +8789,14 @@ function enemyAct(enemy){
     finalDmg *= levelDiffDamageMult(monsterEffectiveLevel(), state.char.level);
     finalDmg = Math.max(1, Math.round(finalDmg));
     dealDamageToPlayer(finalDmg);
-    log(`${enemy.name} ${text}: ${finalDmg} de daño.`);
+    log(`${enemy.name} ${text}: ${finalDmg} de daño${enemyCrit?' (¡crítico!)':''}.`);
     combat.lastAction = {label:moveLabel, effects:[{targetKind:'player', amount:finalDmg, kind:'dmg'}]};
   } else {
     const ally = target.ally;
     const allyResKey = elementalType || 'fisico';
     const allyBendicion = hasStatus(ally.statuses,'Bendición');
     let allyDmg = dmg*(1-(((ally.res && ally.res[allyResKey])||0) + (allyBendicion?allyBendicion.resBonus||0:0) - (elementalType?0:corrosionResPenalty(ally.statuses)))/100);
+    if(enemyCrit) allyDmg *= ENEMY_CRIT_MULT;
     if(hasStatus(ally.statuses,'Paralisis')) allyDmg *= 1.25; // indefenso: igual que al jugador
     if(ally.pos==='frente') allyDmg *= (1-FRONTLINE_DAMAGE_REDUCTION);
     (ally.specials||[]).forEach(sp=>{ if(sp.type==='reduccion_dano') allyDmg *= (1-sp.value); });
@@ -8710,7 +8820,7 @@ function enemyAct(enemy){
     allyDmg *= levelDiffDamageMult(monsterEffectiveLevel(), state.char.level);
     finalDmg = Math.max(1, Math.round(allyDmg));
     dealDamageToAlly(ally, finalDmg);
-    log(`${enemy.name} ${text} a ${ally.name}: ${finalDmg} de daño.`);
+    log(`${enemy.name} ${text} a ${ally.name}: ${finalDmg} de daño${enemyCrit?' (¡crítico!)':''}.`);
     if(ally.hp<=0) log(`<b>${ally.name}</b> cae en combate y queda fuera de acción hasta que avances al siguiente nivel del laberinto.`);
     combat.lastAction = {label:moveLabel, effects:[{targetKind:'ally', key:ally.id, amount:finalDmg, kind:'dmg'}]};
   }
@@ -8751,7 +8861,7 @@ function enemyAct(enemy){
 // enemyAct() (Object.keys(enemy.cooldowns).forEach...), así que acá solo
 // hace falta leerlo y, al usar una habilidad con cooldown, volver a armarlo.
 // ============================================================
-function resolveNewStyleEnemyMove(enemy, target){
+function resolveNewStyleEnemyMove(enemy, target, enemyCrit){
   const tpl = enemy.tpl;
   const onPlayer = target.kind==='player';
   const d = derived();
@@ -8851,6 +8961,7 @@ function resolveNewStyleEnemyMove(enemy, target){
   if(onPlayer){
     let resVal = totalRes('fisico') - corrosionResPenalty(combat.playerStatuses);
     finalDmg = dmg*(1-resVal/100);
+    if(enemyCrit) finalDmg *= ENEMY_CRIT_MULT;
     if(state.char.race==='enano') finalDmg -= 2;
     if(combat.playerDefending) finalDmg *= 0.5;
     if(combat.playerPos==='frente') finalDmg *= (1-FRONTLINE_DAMAGE_REDUCTION);
@@ -8859,6 +8970,7 @@ function resolveNewStyleEnemyMove(enemy, target){
     if(hasStatus(combat.playerStatuses,'Paralisis')) finalDmg *= 1.25;
     const playerEquipSpecials = specialsFromEquip(state.char.equip);
     playerEquipSpecials.forEach(sp=>{ if(sp.type==='reduccion_dano') finalDmg *= (1-sp.value); });
+    finalDmg *= (1 - d.reduccionVigor); // Vigor — ver mismo comentario en enemyAct()
     if(hasTierSProc(playerEquipSpecials,'casco_s') && d.maxHP>0 && (state.char.curHP/d.maxHP) < 0.5) finalDmg *= 0.95;
     if(hasTierSProc(playerEquipSpecials,'armadura_s') && !combat.tierSFired.has('armadura_s:player')){
       combat.tierSFired.add('armadura_s:player'); finalDmg *= 0.9;
@@ -8877,13 +8989,14 @@ function resolveNewStyleEnemyMove(enemy, target){
         log(`${enemy.name} drena ${drained} de tu MP.`);
       }
     }
-    log(`${enemy.name} usa ${ability.label}: ${finalDmg} de daño.`);
+    log(`${enemy.name} usa ${ability.label}: ${finalDmg} de daño${enemyCrit?' (¡crítico!)':''}.`);
     combat.lastAction = {label:ability.label, effects:[{targetKind:'player', amount:finalDmg, kind:'dmg'}]};
   } else {
     const ally = target.ally;
     const allyBendicion = hasStatus(ally.statuses,'Bendición');
     let resVal = ((ally.res && ally.res.fisico)||0) + (allyBendicion?allyBendicion.resBonus||0:0) - corrosionResPenalty(ally.statuses);
     let allyDmg = dmg*(1-resVal/100);
+    if(enemyCrit) allyDmg *= ENEMY_CRIT_MULT;
     if(hasStatus(ally.statuses,'Paralisis')) allyDmg *= 1.25;
     if(ally.pos==='frente') allyDmg *= (1-FRONTLINE_DAMAGE_REDUCTION);
     (ally.specials||[]).forEach(sp=>{ if(sp.type==='reduccion_dano') allyDmg *= (1-sp.value); });
@@ -8911,7 +9024,7 @@ function resolveNewStyleEnemyMove(enemy, target){
         log(`${enemy.name} drena ${drained} de MP a <b>${ally.name}</b>.`);
       }
     }
-    log(`${enemy.name} usa ${ability.label} sobre ${ally.name}: ${finalDmg} de daño.`);
+    log(`${enemy.name} usa ${ability.label} sobre ${ally.name}: ${finalDmg} de daño${enemyCrit?' (¡crítico!)':''}.`);
     if(ally.hp<=0) log(`<b>${ally.name}</b> cae en combate y queda fuera de acción hasta que avances al siguiente nivel del laberinto.`);
     combat.lastAction = {label:ability.label, effects:[{targetKind:'ally', key:ally.id, amount:finalDmg, kind:'dmg'}]};
   }
