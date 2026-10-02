@@ -178,7 +178,15 @@ const LEVEL30_SKILL_BONUS = {
   muro_de_fe:       {reductionPct: 0.35},                     // era 0.25
   escudo_del_juramento: {shieldPct: 0.30},                    // era 0.20
   grito_de_panico:  {applyChance: 0.8},                       // era 0.6
-  mirada_de_locura: {applyChance: 0.8}                        // era 0.6
+  mirada_de_locura: {applyChance: 0.8},                       // era 0.6
+  // 2026-10-02 (pedido explícito): las 6 habilidades que no tenían mejora de
+  // nivel 30, aunque el tutorial lo promete para las 3 de cada senda.
+  danza_cuchillas:  {perStackMult: 0.20},                     // era 0.15
+  disparo_certero:  {ignoreResist: 0.65},                     // era 0.50
+  lluvia_flechas:   {bonusVsMarked: 0.35},                    // era 0.25 (sin subir el daño en área)
+  bola_fuego:       {applyChance: 1.0},                       // era 0.8
+  lanza_hielo:      {duration: 3},                            // era 2
+  toque_venenoso:   {maxStack: 4}                             // era 3
 };
 function skillBonus(skillId, field, base){
   if(!state || !state.char || state.char.level < LEVEL_30_MILESTONE) return base;
@@ -242,7 +250,7 @@ const SKILLS = {
   danza_cuchillas: {
     id:'danza_cuchillas', name:'Danza de cuchillas', cost:{tipo:'estamina', valor:22}, dmgType:'fisico', mult:0.5, hits:2,
     requiresPos:'frente', scalesWithStack:{name:'Sangrado', perStackMult:0.15},
-    desc:'Golpea dos veces. +15% de daño por cada carga de Sangrado en el objetivo.', targetMode:'front'
+    desc: ()=> `Golpea dos veces. +${Math.round(skillBonus('danza_cuchillas','perStackMult',0.15)*100)}% de daño por cada carga de Sangrado en el objetivo.`, targetMode:'front'
   },
   golpe_gracia: {
     id:'golpe_gracia', name:'Golpe de gracia', cost:{tipo:'estamina', valor:18}, dmgType:'fisico', mult:0.9,
@@ -254,7 +262,7 @@ const SKILLS = {
   disparo_certero: {
     id:'disparo_certero', name:'Disparo certero', cost:{tipo:'estamina', valor:10}, dmgType:'fisico', mult:0.8,
     ignoreResist:0.5, penaltyIfFrente:0.2,
-    desc:'Ignora 50% de la resistencia física. Menos preciso desde el Frente.', targetMode:'any'
+    desc: ()=> `Ignora ${Math.round(skillBonus('disparo_certero','ignoreResist',0.5)*100)}% de la resistencia física. Menos preciso desde el Frente.`, targetMode:'any'
   },
   marca_cazador: {
     id:'marca_cazador', name:'Marca del cazador', cost:{tipo:'espiritu', valor:20}, utility:'mark',
@@ -272,18 +280,18 @@ const SKILLS = {
     // cuando no queda nadie al frente cae sobre la retaguardia (misma regla
     // de línea que playerFrontTargetIndices). Se eligió esto en vez de un
     // enfriamiento para no tener que meter enfriamientos en todas las sendas.
-    desc:'Daño a toda la línea frontal enemiga (si ya no queda nadie al frente, a toda la retaguardia). +25% contra los Marcados.', targetMode:'all'
+    desc: ()=> `Daño a toda la línea frontal enemiga (si ya no queda nadie al frente, a toda la retaguardia). +${Math.round(skillBonus('lluvia_flechas','bonusVsMarked',0.25)*100)}% contra los Marcados.`, targetMode:'all'
   },
 
   bola_fuego: {
     id:'bola_fuego', name:'Bola de fuego', cost:{tipo:'estamina', valor:15}, dmgType:'fuego', mult:0.9,
     applies:{name:'Quemadura', chance:0.8, duration:3},
-    desc:'Daño de fuego. Aplica Quemadura (daño por turno).', targetMode:'any'
+    desc: ()=> `Daño de fuego. ${Math.round(skillBonus('bola_fuego','applyChance',0.8)*100)}% de aplicar Quemadura (daño por turno).`, targetMode:'any'
   },
   lanza_hielo: {
     id:'lanza_hielo', name:'Lanza de hielo', cost:{tipo:'estamina', valor:15}, dmgType:'hielo', mult:0.8,
     applies:{name:'Ralentizado', chance:0.8, duration:2},
-    desc:'Daño de hielo. Aplica Ralentizado (-20% evasión, actúa después).', targetMode:'any'
+    desc: ()=> `Daño de hielo. Aplica Ralentizado (-20% evasión, actúa después) durante ${skillBonus('lanza_hielo','duration',2)} turnos.`, targetMode:'any'
   },
   explosion_arcana: {
     id:'explosion_arcana', name:'Explosión arcana', cost:{tipo:'estamina', valor:25}, dmgType:'arcano', mult:0.75,
@@ -316,7 +324,7 @@ const SKILLS = {
   toque_venenoso: {
     id:'toque_venenoso', name:'Toque Venenoso', cost:{tipo:'estamina', valor:15}, dmgType:'veneno', mult:0.85,
     applies:{name:'Veneno', chance:0.85, duration:3, stack:true, maxStack:3},
-    desc:'Daño de veneno. Apila Veneno (hasta x3) durante 3 turnos.', targetMode:'any'
+    desc: ()=> `Daño de veneno. Apila Veneno (hasta x${skillBonus('toque_venenoso','maxStack',3)}) durante 3 turnos.`, targetMode:'any'
   },
   grito_de_panico: {
     id:'grito_de_panico', name:'Grito de Pánico', cost:{tipo:'estamina', valor:20}, dmgType:'arcano', mult:0.5,
@@ -8874,7 +8882,8 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
     }
     if(skill.scalesWithStack){
       const st = hasStatus(target.statuses, skill.scalesWithStack.name);
-      if(st) base *= (1 + (st.stacks||1)*skill.scalesWithStack.perStackMult);
+      const perStack = skillId==='danza_cuchillas' ? skillBonus('danza_cuchillas','perStackMult', skill.scalesWithStack.perStackMult) : skill.scalesWithStack.perStackMult;
+      if(st) base *= (1 + (st.stacks||1)*perStack);
     }
     if(skill.consumesStackBonus){
       const st = hasStatus(target.statuses, skill.consumesStackBonus.name);
@@ -8886,7 +8895,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
       }
     }
     if(skill.bonusVsMarked && hasStatus(target.statuses,'Marcado')){
-      base *= (1+skill.bonusVsMarked);
+      base *= (1 + (skillId==='lluvia_flechas' ? skillBonus('lluvia_flechas','bonusVsMarked', skill.bonusVsMarked) : skill.bonusVsMarked));
     }
     if(skill.consumesEither){
       let used = false;
@@ -8928,7 +8937,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
     if(combat.critNext && !isRepeat){ isCrit = true; combat.critNextUsed = true; }
     if(isCrit) base *= (1.5 + d.critDmgBonus);
 
-    let ignore = skill.ignoreResist||0;
+    let ignore = skillId==='disparo_certero' ? skillBonus('disparo_certero','ignoreResist', skill.ignoreResist) : (skill.ignoreResist||0);
     // Carcaj Tier S ('carcaj_s'): el flag lo deja armado playerUseSkill justo
     // antes de relanzar el segundo ataque básico (ver más abajo) — se
     // consume acá mismo así que solo afecta a ESE golpe repetido.
@@ -9035,6 +9044,9 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
       });
       else if(skillId==='grito_de_panico') applyDef = Object.assign({}, skill.applies, {chance: skillBonus('grito_de_panico','applyChance', skill.applies.chance)});
       else if(skillId==='mirada_de_locura') applyDef = Object.assign({}, skill.applies, {chance: skillBonus('mirada_de_locura','applyChance', skill.applies.chance)});
+      else if(skillId==='bola_fuego') applyDef = Object.assign({}, skill.applies, {chance: skillBonus('bola_fuego','applyChance', skill.applies.chance)});
+      else if(skillId==='lanza_hielo') applyDef = Object.assign({}, skill.applies, {duration: skillBonus('lanza_hielo','duration', skill.applies.duration)});
+      else if(skillId==='toque_venenoso') applyDef = Object.assign({}, skill.applies, {maxStack: skillBonus('toque_venenoso','maxStack', skill.applies.maxStack)});
       // Conjuntos (2026-10-02): probabilidad extra de aplicar estados.
       if(applyDef.chance!==undefined && applyDef.chance<1){
         const sps = specialsFromEquip(state.char.equip);
@@ -9114,11 +9126,16 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
         // 50% de resistencia física — se arma acá, se consume una sola vez
         // en el cálculo de daño de abajo (ver combat.pendingIgnoreBoost).
         if(segundoAtaque.tierSProc==='carcaj_s' && chance(0.1)) combat.pendingIgnoreBoost = true;
-        if(playerSetSp('set_luna_llena') && !combat.lunaLlena){ combat.lunaLlena = true; log('<b>Luna Llena</b> cargada: tu próximo ataque básico será más fuerte y alcanzará a todos.'); }
         await repeatAndClose();
+        // Bug 2026-10-02: la carga de Luna Llena (Artemisa 5) y la cura del
+        // Arco corto S se aplicaban aunque el segundo ataque terminara el
+        // combate — "cargada" se anunciaba y se perdía. Ahora solo si el
+        // MISMO combate sigue abierto.
+        const stillFighting = combat && combat===myCombat && !combat.over;
+        if(stillFighting && playerSetSp('set_luna_llena') && !combat.lunaLlena){ combat.lunaLlena = true; log('<b>Luna Llena</b> cargada: tu próximo ataque básico será más fuerte y alcanzará a todos.'); }
         // Arco corto Tier S ('arcocorto_s'): cada segundo ataque cura un 3%
         // de tu vida máxima.
-        if(segundoAtaque.tierSProc==='arcocorto_s'){
+        if(stillFighting && segundoAtaque.tierSProc==='arcocorto_s'){
           const d0 = derived();
           const before = state.char.curHP;
           state.char.curHP = Math.min(d0.maxHP, state.char.curHP + Math.round(d0.maxHP*0.03));
