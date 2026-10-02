@@ -11836,64 +11836,78 @@ function renderCombat(){
 /* ============================================================
    CREATION SCREEN
    ============================================================ */
-let selRace = null, selStyle = null;
-
+// Asistente de creación (2026-10-02, maqueta aprobada): primero la raza,
+// luego la clase (se ve el sprite de ESA raza con ESA clase) y por último el
+// nombre. Mismo chequeo de nombre y misma creación en el servidor de antes.
+let selRace = 'barbaro', selStyle = 'pesada', crStep = 1, crName = '';
+const CR_STAT_NAMES = {fis:'Físico', esp:'Espíritu', hab:'Habilidad', agi:'Agilidad', vig:'Vigor'};
+const CR_RES_NAMES = {fisico:'Físico', fuego:'Fuego', hielo:'Hielo', veneno:'Veneno', aturdimiento:'Aturdimiento'};
+const CR_REAR_STYLES = new Set(['tirador','mago','hechicero','doblefilo']);
 function renderCreation(){
-  const raceGrid = document.getElementById('race-grid');
-  raceGrid.innerHTML = Object.values(RACES).map(r=>`
-    <button class="pick-card" data-race="${r.id}">
-      <img class="pick-card-art" src="src/assets/razas/${r.id}.png" alt="" loading="lazy">
-      <h3>${r.icon} ${r.name}</h3>
-      <div class="desc">${r.desc}</div>
-      <div class="mini-stats">
-        <span>FIS <b>${r.stats.fis}</b></span>
-        <span>ESP <b>${r.stats.esp}</b></span>
-        <span>HAB <b>${r.stats.hab}</b></span>
-      </div>
-      <div class="race-pros-cons">
-        <div class="pro">▲ ${r.pros}</div>
-        <div class="con">▼ ${r.cons}</div>
-      </div>
-    </button>
-  `).join('');
-
-  const styleGrid = document.getElementById('style-grid');
-  styleGrid.innerHTML = Object.values(STYLES).map(s=>`
-    <button class="pick-card" data-style="${s.id}">
-      <img class="pick-card-art emblem" src="src/assets/clases/${s.id}.png" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'pick-card-art emblem', style:'display:flex; align-items:center; justify-content:center; font-size:48px;', textContent:'${s.icon}'}))">
-      <h3>${s.icon} ${s.name}</h3>
-      <div class="desc">${s.desc}</div>
-    </button>
-  `).join('');
-
-  raceGrid.querySelectorAll('.pick-card').forEach(el=>{
-    el.onclick = ()=>{
-      selRace = el.dataset.race;
-      raceGrid.querySelectorAll('.pick-card').forEach(c=>c.classList.remove('selected'));
-      el.classList.add('selected');
-      checkBegin();
+  const stepper = document.getElementById('cr-stepper');
+  stepper.innerHTML = ['Raza','Clase','Nombre'].map((t,i)=>`<span class="${i+1===crStep?'on':(i+1<crStep?'done':'')}">${i+1} · ${t}</span>`).join('');
+  const title = document.getElementById('cr-title'), em = document.getElementById('cr-emblems');
+  const hero = document.getElementById('cr-hero'), info = document.getElementById('cr-info');
+  if(crStep===1){
+    title.textContent = 'Elige tu raza';
+    em.innerHTML = Object.values(RACES).map(r=>`<button class="cr-emblem ${r.id===selRace?'on':''}" data-race="${r.id}" title="${r.name}"><img src="src/assets/razas/${r.id}.png" alt=""><span>${r.name}</span></button>`).join('');
+    const r = RACES[selRace];
+    hero.innerHTML = `<img class="cr-race-art" src="src/assets/razas/${r.id}.png" alt="${r.name}">`;
+    info.innerHTML = `<h2>${r.icon} ${r.name}</h2>
+      <div class="cr-sub">Raza · Pasiva: ${r.passive}</div>
+      <p class="cr-desc">“${r.desc}”</p>
+      <div class="cr-bars">${Object.entries(r.stats).map(([k,v])=>`<span>${CR_STAT_NAMES[k]}</span><div class="cr-bar"><i style="width:${Math.min(100,v*11)}%"></i></div><b>${v}</b>`).join('')}</div>
+      <div class="cr-chips">${Object.entries(r.res).filter(([,v])=>v).map(([k,v])=>`<span class="cr-chip ${v>0?'pos':'neg'}">${CR_RES_NAMES[k]} ${v>0?'+':''}${v}%</span>`).join('')}</div>
+      <div class="cr-passive"><b>${r.passive}:</b> ${r.passiveDesc}</div>
+      <div class="cr-proscons"><div><b class="pro">A favor</b>${r.pros}</div><div><b class="con">En contra</b>${r.cons}</div></div>
+      <div class="cr-cta"><span></span><button class="btn-main" id="cr-next">Elegir ${r.name} →</button></div>`;
+    em.querySelectorAll('.cr-emblem').forEach(b=> b.onclick = ()=>{ selRace = b.dataset.race; renderCreation(); });
+  } else if(crStep===2){
+    title.textContent = 'Elige tu clase';
+    em.innerHTML = Object.values(STYLES).map(st=>`<button class="cr-emblem ${st.id===selStyle?'on':''}" data-style="${st.id}" title="${st.name}"><img src="src/assets/clases/${st.id}.png" alt=""><span>${st.name}</span></button>`).join('');
+    const st = STYLES[selStyle], r = RACES[selRace];
+    const pos = CR_REAR_STYLES.has(st.id) ? 'Retaguardia' : 'Frente';
+    hero.innerHTML = `<img class="cr-class-bg" src="src/assets/clases/${st.id}.png" alt=""><img class="cr-sprite" src="${playerSpriteFor(st.id, r.id)||''}" alt="${st.name}">`;
+    info.innerHTML = `<h2>${st.icon} ${st.name} <small>${r.name}</small></h2>
+      <div class="cr-sub">Atributo principal: ${CR_STAT_NAMES[st.scaleStat]||st.scaleStat} · Posición: ${pos}</div>
+      <p class="cr-desc">“${st.desc}”</p>
+      <div class="cr-skills">${st.skills.map((id,k)=>`<div class="cr-skill"><span>${k+1}</span>${SKILLS[id] ? SKILLS[id].name : id}</div>`).join('')}</div>
+      <div class="cr-passive">Así se verá tu <b>${st.name.toLowerCase()} ${r.name.toLowerCase()}</b> en combate.</div>
+      <div class="cr-cta"><button class="reset-btn" id="cr-back">← Raza</button><button class="btn-main" id="cr-next">Elegir ${st.name} →</button></div>`;
+    em.querySelectorAll('.cr-emblem').forEach(b=> b.onclick = ()=>{ selStyle = b.dataset.style; renderCreation(); });
+  } else {
+    title.textContent = 'Tu nombre en el laberinto';
+    em.innerHTML = '';
+    const st = STYLES[selStyle], r = RACES[selRace];
+    hero.innerHTML = `<img class="cr-sprite" src="${playerSpriteFor(st.id, r.id)||''}" alt="">`;
+    info.innerHTML = `<h2 id="cr-name-title">${crName || 'Sin nombre'}</h2>
+      <div class="cr-sub">${r.name} · ${st.name}</div>
+      <p style="color:var(--text-dim); font-size:0.88em; margin:6px 0 0;">Es el nombre que verán los demás jugadores en el ranking. Único en todo el juego, y no se puede cambiar después.</p>
+      <div class="cr-name"><input id="char-nickname" class="auth-input" type="text" maxlength="20" placeholder="Nombre del personaje" value="${crName.replace(/"/g,'&quot;')}"><button id="cr-dice" title="Nombre al azar">🎲</button></div>
+      <p id="char-nickname-msg" style="color:var(--blood-light); font-size:0.85em; min-height:1.2em; margin:0;"></p>
+      <div class="cr-chips"><span class="cr-chip">Pasiva: ${r.passive}</span><span class="cr-chip">${CR_STAT_NAMES[st.scaleStat]||''}</span><span class="cr-chip">${CR_REAR_STYLES.has(st.id)?'Retaguardia':'Frente'}</span></div>
+      <div class="cr-cta"><button class="reset-btn" id="cr-back">← Clase</button><button class="btn-main" id="btn-begin" ${crName.trim().length>=3?'':'disabled'}>Comenzar aventura ⚔</button></div>`;
+    const inp = document.getElementById('char-nickname');
+    inp.oninput = ()=>{ crName = inp.value; document.getElementById('cr-name-title').textContent = crName.trim() || 'Sin nombre'; document.getElementById('btn-begin').disabled = crName.trim().length < 3; };
+    document.getElementById('cr-dice').onclick = ()=>{
+      const a = ['Kael','Brann','Ysolde','Torg','Mira','Orrin','Sable','Hilde','Ragn','Ulric','Neva','Darro','Ilse','Vorn'];
+      const b = ['Rojo','Piedrafría','Ceniza','Rompeyelmos','Muda','Sangreviva','Hierro','Tormenta','Lobo','Sombra'];
+      crName = a[Math.random()*a.length|0] + b[Math.random()*b.length|0];
+      renderCreation();
     };
-  });
-  styleGrid.querySelectorAll('.pick-card').forEach(el=>{
-    el.onclick = ()=>{
-      selStyle = el.dataset.style;
-      styleGrid.querySelectorAll('.pick-card').forEach(c=>c.classList.remove('selected'));
-      el.classList.add('selected');
-      checkBegin();
-    };
-  });
+    document.getElementById('btn-begin').onclick = beginCharacter;
+    setTimeout(()=>inp.focus(), 0);
+  }
+  const next = document.getElementById('cr-next'), back = document.getElementById('cr-back');
+  if(next) next.onclick = ()=>{ crStep++; renderCreation(); window.scrollTo({top:0}); };
+  if(back) back.onclick = ()=>{ crStep--; renderCreation(); };
 }
-function checkBegin(){
-  const nickname = document.getElementById('char-nickname').value.trim();
-  document.getElementById('btn-begin').disabled = !(selRace && selStyle && nickname.length >= 3);
-}
-document.getElementById('char-nickname').addEventListener('input', checkBegin);
-
-document.getElementById('btn-begin').onclick = async ()=>{
+async function beginCharacter(){
   const btn = document.getElementById('btn-begin');
   const msg = document.getElementById('char-nickname-msg');
-  const nickname = document.getElementById('char-nickname').value.trim();
+  const nickname = (crName||'').trim();
   msg.textContent = '';
+  if(nickname.length < 3){ msg.textContent = 'El nombre debe tener al menos 3 letras.'; return; }
   btn.disabled = true;
   try{
     const available = await characterNicknameAvailable(nickname);
@@ -11917,7 +11931,7 @@ document.getElementById('btn-begin').onclick = async ()=>{
     msg.textContent = 'No se pudo crear el personaje: ' + (e && e.message ? e.message : e);
     btn.disabled = false;
   }
-};
+}
 
 const musicToggleBtn = document.getElementById('btn-music-toggle');
 if(musicToggleBtn) musicToggleBtn.onclick = toggleLoginAudioMuted;
@@ -12318,14 +12332,8 @@ function goToCreation(canGoBack){
   document.getElementById('tier-badge').style.display = 'none';
   document.getElementById('btn-inventory').style.display = 'none';
   document.getElementById('header-sub').textContent = 'El juego que nadie ha superado';
+  selRace = 'barbaro'; selStyle = 'pesada'; crStep = 1; crName = '';
   renderCreation();
-  selRace = null; selStyle = null;
-  document.querySelectorAll('.pick-card').forEach(c=>c.classList.remove('selected'));
-  const nickInput = document.getElementById('char-nickname');
-  if(nickInput) nickInput.value = '';
-  const nickMsg = document.getElementById('char-nickname-msg');
-  if(nickMsg) nickMsg.textContent = '';
-  document.getElementById('btn-begin').disabled = true;
   document.getElementById('create-back-row').style.display = canGoBack ? 'block' : 'none';
   document.getElementById('btn-cancel-creation').onclick = ()=> enterGame();
   showScreen('screen-create');

@@ -966,3 +966,59 @@ details.admin-acc > summary > span{ flex:1; }
   .cw-comic{ grid-template-columns:1fr 1fr; grid-template-rows:140px 140px 120px; }
   .cw-panel.big{ grid-row:auto; }
 }
+
+/* ============================================================
+   CREACIÓN DE PERSONAJE — asistente raza → clase → nombre (2026-10-02)
+   ============================================================ */
+#screen-create{ background:radial-gradient(ellipse at 50% 30%, rgba(120,58,18,0.45) 0%, rgba(40,20,10,0.3) 45%, transparent 75%); border-radius:8px; padding-bottom:20px; }
+.cr-wrap{ max-width:1180px; margin:0 auto; padding:6px 4px 10px; }
+.cr-stepper{ display:flex; justify-content:center; gap:6px; margin:4px 0 12px; flex-wrap:wrap; }
+.cr-stepper span{ font-family:'Cinzel'; font-size:0.78em; color:var(--text-dim); padding:4px 12px; border:1px solid var(--border); border-radius:20px; background:rgba(0,0,0,0.3); }
+.cr-stepper span.on{ color:#111; background:var(--bronze-light); border-color:var(--bronze-light); }
+.cr-stepper span.done{ color:var(--bronze-light); border-color:var(--bronze); }
+.cr-title{ font-size:1.7em; text-align:center; color:#ffd76a; text-shadow:0 0 18px rgba(255,180,60,0.35); display:flex; align-items:center; justify-content:center; gap:12px; margin:0; }
+.cr-title::before, .cr-title::after{ content:''; height:1px; width:80px; background:linear-gradient(90deg,transparent,var(--bronze),transparent); }
+.cr-emblems{ display:flex; justify-content:center; gap:14px; margin:16px 0 8px; flex-wrap:wrap; }
+.cr-emblem{ width:84px; height:84px; padding:0; border-radius:50%; border:3px solid #4b4036; background:radial-gradient(circle at 50% 40%,#3b342c,#15120f); overflow:hidden; cursor:pointer; position:relative; filter:grayscale(0.75) brightness(0.75); transition:transform 0.15s, box-shadow 0.15s, filter 0.15s; }
+.cr-emblem img{ width:100%; height:100%; object-fit:cover; }
+.cr-emblem span{ position:absolute; bottom:0; left:0; right:0; font-family:'Cinzel'; font-size:0.6em; background:rgba(0,0,0,0.7); color:var(--bronze-light); padding:1px 0; }
+.cr-emblem:hover{ filter:none; transform:translateY(-2px); }
+.cr-emblem.on{ filter:none; border-color:#ffd76a; box-shadow:0 0 0 3px rgba(255,215,106,0.25), 0 0 24px rgba(255,190,70,0.55); transform:scale(1.08); }
+.cr-stage{ display:grid; grid-template-columns:1.1fr 1fr; gap:20px; align-items:center; margin-top:8px; }
+.cr-hero{ position:relative; min-height:420px; display:flex; align-items:center; justify-content:center; }
+.cr-hero::before{ content:''; position:absolute; inset:4% 10% 0; background:radial-gradient(ellipse at 50% 60%, rgba(255,200,90,0.42), rgba(255,140,40,0.12) 45%, transparent 70%); filter:blur(4px); animation:cm-pulse 3.5s ease-in-out infinite; }
+.cr-race-art{ position:relative; height:370px; max-width:94%; object-fit:cover; border-radius:10px; border:3px solid var(--bronze); box-shadow:0 0 0 2px #120c07, 0 0 40px rgba(255,170,60,0.45), 0 18px 30px rgba(0,0,0,0.6); }
+.cr-sprite{ position:relative; width:300px; height:300px; image-rendering:pixelated; filter:drop-shadow(0 10px 18px rgba(0,0,0,0.7)); }
+.cr-class-bg{ position:absolute; max-width:88%; max-height:90%; opacity:0.2; filter:blur(1px); }
+.cr-info{ padding:18px 20px !important; }
+.cr-info h2{ font-size:1.55em; color:#ffd76a; margin:0; }
+.cr-info h2 small{ font-size:0.55em; color:var(--text-dim); }
+.cr-sub{ color:var(--bronze-light); font-family:'Cinzel'; font-size:0.8em; margin:4px 0 10px; text-transform:uppercase; letter-spacing:0.04em; }
+.cr-desc{ font-style:italic; margin:0 0 12px; font-size:1.05em; }
+.cr-bars{ display:grid; grid-template-columns:auto 1fr auto; gap:5px 10px; align-items:center; font-size:0.9em; margin-bottom:12px; }
+.cr-bar{ height:8px; border-radius:4px; background:#0c0a08; border:1px solid #2d261f; overflow:hidden; }
+.cr-bar i{ display:block; height:100%; background:linear-gradient(90deg,var(--bronze),#ffd76a); }
+.cr-chips{ display:flex; flex-wrap:wrap; gap:6px; margin:8px 0 12px; }
+.cr-chip{ font-size:0.8em; padding:2px 8px; border-radius:12px; border:1px solid var(--border); background:rgba(0,0,0,0.3); }
+.cr-chip.pos{ color:#8fd08f; border-color:rgba(122,154,90,0.5); } .cr-chip.neg{ color:#e57c74; border-color:rgba(229,124,116,0.4); }
+.cr-passive{ border-left:3px solid var(--bronze-light); padding:6px 10px; background:rgba(217,183,107,0.07); margin-bottom:10px; border-radius:3px; }
+.cr-proscons{ display:grid; grid-template-columns:1fr 1fr; gap:10px; font-size:0.9em; }
+.cr-proscons div{ padding:8px 10px; border-radius:4px; background:rgba(0,0,0,0.25); }
+.cr-proscons b{ font-family:'Cinzel'; font-size:0.78em; display:block; margin-bottom:3px; text-transform:uppercase; }
+.cr-proscons .pro{ color:#8fd08f; } .cr-proscons .con{ color:#e57c74; }
+.cr-skills{ display:grid; gap:6px; margin-bottom:12px; }
+.cr-skill{ display:flex; gap:10px; align-items:center; padding:6px 8px; background:rgba(0,0,0,0.25); border-radius:4px; font-size:0.95em; }
+.cr-skill span{ font-family:'Cinzel'; font-size:0.75em; color:#111; background:var(--bronze-light); border-radius:3px; padding:1px 6px; }
+.cr-name{ display:flex; gap:8px; margin:12px 0 4px; }
+.cr-name input{ flex:1; margin:0 !important; max-width:none !important; font-family:'Cinzel'; font-size:1.05em; border-style:dashed !important; }
+.cr-name button{ width:48px; background:#0c0a08; border:1px solid var(--border); border-radius:4px; font-size:1.3em; cursor:pointer; }
+.cr-cta{ display:flex; justify-content:space-between; align-items:center; gap:10px; margin-top:14px; }
+.cr-cta .btn-main{ width:auto; }
+@media (max-width:840px){
+  .cr-stage{ grid-template-columns:1fr; }
+  .cr-hero{ min-height:280px; }
+  .cr-race-art{ height:260px; }
+  .cr-sprite{ width:220px; height:220px; }
+  .cr-emblem{ width:64px; height:64px; }
+  .cr-proscons{ grid-template-columns:1fr; }
+}
