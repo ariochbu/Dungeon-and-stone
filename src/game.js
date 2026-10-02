@@ -3492,6 +3492,7 @@ function totalRes(key){
 // Mago no vinieron con una meta explícita, los ubiqué por criterio propio
 // entre ambos extremos (Tirador cerca de Asesino, Mago el más frágil).
 const HP_BASE = 40;
+const FORTALEZA_MENTAL_CAP = 0.6; // ver derived()
 // 2026-09-16, pedido explícito (segunda baja: el laberinto se sentía muy
 // fácil con la vida anterior) — Guerrero baja a x20, el resto a x10.
 // Paladín: tanque/soporte, casi tanto HP como Guerrero pero no tanto (su
@@ -3550,14 +3551,18 @@ function derived(){
   // Ralentizado), Espíritu solo pasa a ser la fuente natural de ambos,
   // sumándose a lo que ya daba el equipo.
   const ESP_RESIST_RATE = 0.3;
-  const fortalezaMentalPct = equipModsSum(eq, 'fortaleza_mental') + esp*ESP_RESIST_RATE;
+  // Tope 60% (pedido explícito 2026-10-02): con Voluntad Inquebrantable como
+  // equipo base de todos, en rango S se llegaba a ~96% y Miedo/Confusión
+  // dejaban de existir. El tope también limita lo que Fortaleza mental le
+  // pasa a Resistencia mágica más abajo.
+  const fortalezaMentalPct = Math.min(FORTALEZA_MENTAL_CAP*100, equipModsSum(eq, 'fortaleza_mental') + esp*ESP_RESIST_RATE);
   // Fortaleza mental (Accesorio) ahora también aporta un poco a Resistencia
   // mágica (pedido explícito: "separarlas, pero que fortaleza mental
   // también aumente un poco resistencia mágica") — a una fracción de lo que
   // aporta Botas, para que Botas siga siendo la fuente principal.
   const FORTALEZA_MENTAL_TO_RES_MAGICA = 0.4;
   const resMagica = clamp(equipModsSum(eq, 'res_magica') + petModSum('res_magica') + fortalezaMentalPct*FORTALEZA_MENTAL_TO_RES_MAGICA, -60, 80);
-  const fortalezaMental = clamp(fortalezaMentalPct/100, 0, 0.9);
+  const fortalezaMental = clamp(fortalezaMentalPct/100, 0, FORTALEZA_MENTAL_CAP);
   const resistenciaEstado = clamp((equipModsSum(eq, 'resistencia_estado') + petModSum('resistencia_estado') + esp*ESP_RESIST_RATE)/100, 0, 0.9);
   // Precisión y Penetración: además de lo que dé el equipo, crecen solas
   // con el nivel (pedido explícito) — sin nada de equipo, un nivel 60 ya
@@ -3848,6 +3853,40 @@ function kickSession(){
   div.querySelector('#btn-session-retake').onclick = ()=> location.reload();
 }
 setInterval(()=>{ if(state) checkSessionStillActive(); }, 15000);
+
+// ============================================================
+// AVISO DE ACTUALIZACIÓN (pedido explícito 2026-10-02). Cada deploy sube el
+// ?v= de game.js en index.html; esta pestaña compara el suyo con el del
+// index.html publicado cada 3 minutos (y al volver a la pestaña). Si hay uno
+// nuevo: guarda y muestra un aviso que obliga a recargar — pero nunca en
+// medio de un combate: espera a que termine.
+// ============================================================
+const LOADED_VERSION = (()=>{ const m = import.meta.url.match(/[?&]v=(\d+)/); return m ? parseInt(m[1],10) : 0; })();
+let updatePending = false, updateShown = false;
+async function checkForUpdate(){
+  if(updateShown || !LOADED_VERSION) return;
+  if(!updatePending){
+    try{
+      const html = await (await fetch('index.html?_=' + Date.now(), {cache:'no-store'})).text();
+      const m = html.match(/game\.js\?v=(\d+)/);
+      if(m && parseInt(m[1],10) > LOADED_VERSION) updatePending = true;
+    }catch(e){ return; }
+  }
+  if(!updatePending || (combat && !combat.over)) return; // en combate: esperar
+  updateShown = true;
+  if(pendingSave) await flushSave();
+  const div = document.createElement('div');
+  div.className = 'overlay-msg';
+  div.style.zIndex = '99998';
+  div.innerHTML = `<div class="overlay-card"><h2>¡Actualización disponible!</h2><p>Hay una nueva versión de Dungeon &amp; Stone. Tu progreso ya está guardado — recarga para seguir jugando con la versión nueva.</p><button class="btn-main" id="btn-update-reload">Recargar ahora</button></div>`;
+  document.body.appendChild(div);
+  div.querySelector('#btn-update-reload').onclick = ()=> location.reload();
+}
+setInterval(()=>{ checkForUpdate(); }, 180000);
+// Mientras haya una actualización esperando a que termine un combate, se
+// revisa seguido para mostrar el aviso apenas se pueda.
+setInterval(()=>{ if(updatePending && !updateShown) checkForUpdate(); }, 5000);
+document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') checkForUpdate(); });
 window.addEventListener('focus', ()=>{ if(state) checkSessionStillActive(); });
 
 let lastSaveErrorShown = 0;
@@ -7781,7 +7820,7 @@ function makeCombatAlly(row){
   const specials = specialsFromEquip(equip).concat(allySocketedStones(row).flatMap(s=>itemSpecialsArr(s)));
   // Fortaleza mental / Resistencia a efectos de estado del Amuleto/Botas —
   // ver applyStatus(), que las lee de acá cuando el objetivo es un aliado.
-  const mentalResist = clamp(equipModsSum(equip,'fortaleza_mental')/100, 0, 0.9);
+  const mentalResist = clamp(equipModsSum(equip,'fortaleza_mental')/100, 0, FORTALEZA_MENTAL_CAP);
   const statusResist = clamp(equipModsSum(equip,'resistencia_estado')/100, 0, 0.9);
   return {
     id: row.id, templateId: row.template_id, name: row.name, icon: tpl.icon, role: tpl.role,
