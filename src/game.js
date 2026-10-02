@@ -1486,6 +1486,7 @@ function doPetPulls(count){
 // Laberinto, no puede depender de un temporizador — se escribe a Supabase
 // apenas se resuelve la tirada, antes de que el jugador pueda alejarse.
 async function pullGacha(kind, payWith){
+  if(!(await checkSessionStillActive())) return null;
   ensurePets();
   payWith = payWith==='sellos' ? 'sellos' : 'gold';
   const count = kind==='x10' ? 11 : 1;
@@ -1571,6 +1572,7 @@ function checkinCycleClaimedDay(){
 // las ofrendas pendientes que reparte esto son la materia prima de una
 // invocación real, así que tampoco deben quedar a merced del debounce.
 async function claimCheckin(){
+  if(!(await checkSessionStillActive())) return null;
   ensureCheckin();
   if(!checkinAvailable()) return null;
   const day = checkinPreviewDay();
@@ -3698,7 +3700,8 @@ function characterToRow(){
     pity_stone: state.char.pityStone,
     pets: state.char.pets,
     checkin: state.char.checkin,
-    dungeon: state.dungeon
+    dungeon: state.dungeon,
+    ...(sessionEnforced ? {last_session: SESSION_ID} : {})
   };
 }
 
@@ -3806,6 +3809,47 @@ const SAVE_DEBOUNCE_MS = 1500;
 // quedaba en la consola y el jugador no se enteraba. Ahora se reintenta una
 // vez y, si vuelve a fallar, se avisa en pantalla con el motivo exacto del
 // servidor (sirve para saber QUÉ regla lo rechaza).
+// ============================================================
+// SESIÓN ÚNICA POR CUENTA (pedido explícito 2026-10-02, ver migración
+// 0028_single_active_session.sql). Cada pestaña genera su propio id al
+// abrir y lo reclama al entrar; la última en reclamar es la activa. Una
+// pestaña reemplazada (otra pestaña, otro navegador, otro dispositivo) se
+// bloquea: deja de guardar y pide recargar. Si la migración todavía no se
+// corrió (claim_session no existe), todo sigue como antes.
+// ============================================================
+const SESSION_ID = (crypto && crypto.randomUUID) ? crypto.randomUUID()
+  : 'xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx'.replace(/x/g, ()=>Math.floor(Math.random()*16).toString(16));
+let sessionEnforced = false;
+let sessionKicked = false;
+async function claimSession(){
+  const { error } = await supabase.rpc('claim_session', {p_session: SESSION_ID});
+  sessionEnforced = !error;
+  if(error) console.warn('Sesión única no disponible todavía (¿falta la migración 0028?):', error.message);
+}
+// true si esta pestaña sigue siendo la sesión activa (o si no hay control).
+async function checkSessionStillActive(){
+  if(!sessionEnforced || sessionKicked || !currentUser) return !sessionKicked;
+  const { data, error } = await supabase.from('active_sessions').select('session_id').eq('user_id', currentUser.id).maybeSingle();
+  if(error || !data) return true; // ante la duda (red caída), no cerrar
+  if(data.session_id !== SESSION_ID){ kickSession(); return false; }
+  return true;
+}
+function kickSession(){
+  if(sessionKicked) return;
+  sessionKicked = true;
+  pendingSave = false;
+  if(saveTimer) clearTimeout(saveTimer);
+  combat = null;
+  const div = document.createElement('div');
+  div.className = 'overlay-msg';
+  div.style.zIndex = '99999';
+  div.innerHTML = `<div class="overlay-card"><h2>Sesión cerrada</h2><p>Tu cuenta se abrió en otro navegador, dispositivo o pestaña. Solo puede haber una sesión activa a la vez, así que esta se cerró para no perder ni pisar tu progreso.</p><button class="btn-main" id="btn-session-retake">Jugar aquí (cierra la otra sesión)</button></div>`;
+  document.body.appendChild(div);
+  div.querySelector('#btn-session-retake').onclick = ()=> location.reload();
+}
+setInterval(()=>{ if(state) checkSessionStillActive(); }, 15000);
+window.addEventListener('focus', ()=>{ if(state) checkSessionStillActive(); });
+
 let lastSaveErrorShown = 0;
 // Causa real del "perdí la ofrenda al recargar" (2026-10-02, visto en los
 // logs de Postgres: "checkpoint_level no puede bajar" en ráfaga): si el mismo
@@ -3832,9 +3876,10 @@ async function mergeServerProgress(){
   return true;
 }
 async function flushSave(){
-  if(!state || !currentUser) return;
+  if(!state || !currentUser || sessionKicked) return;
   pendingSave = false;
   let { error } = await supabase.from('characters').update(characterToRow()).eq('id', state.char.id);
+  if(error && (error.message||'').includes('SESION_REEMPLAZADA')){ kickSession(); return; }
   if(error && STALE_SESSION_ERR.test(error.message||'') && await mergeServerProgress()){
     ({ error } = await supabase.from('characters').update(characterToRow()).eq('id', state.char.id));
     if(!error) log('Se detectó progreso guardado desde otra pestaña o dispositivo con este personaje: se combinó con esta sesión. Evita jugar el mismo personaje en dos lugares a la vez.');
@@ -3854,7 +3899,7 @@ async function flushSave(){
 
 async function save(){
   saveLocalLog();
-  if(!state || !currentUser) return;
+  if(!state || !currentUser || sessionKicked) return;
   pendingSave = true;
   if(saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(()=>{ if(pendingSave) flushSave(); }, SAVE_DEBOUNCE_MS);
@@ -4977,6 +5022,13 @@ function renderInventory(){
 }
 
 function addToInventory(item){
+  // Objetos generados antes del retiro del equipo por senda (ej. la
+  // recompensa ya guardada de una misión) se convierten al entrar.
+  // Se reescribe el MISMO objeto (los llamadores siguen usando su referencia).
+  if(item && item.kind==='equip'){
+    const fresh = refreshGearFromTemplate(item);
+    if(fresh !== item){ Object.keys(item).forEach(k=> delete item[k]); Object.assign(item, fresh); }
+  }
   if(item.kind==='potion'){
     const existing = state.char.inventory.find(i=>i.kind==='potion' && i.potionId===item.potionId);
     if(existing) existing.qty += 1;
@@ -5794,6 +5846,13 @@ async function advanceMissionsFor(objectiveType, amount){
 }
 
 async function claimMissionReward(missionId){
+  // claim_mission devuelve oro/XP/Sellos DEL SERVIDOR y el cliente los
+  // adopta tal cual: si había un gasto o ganancia todavía sin guardar (ej.
+  // una compra con Sellos en la Tienda hace <1.5s), se perdía o se
+  // "devolvía". Bug encontrado 2026-10-02 revisando los Sellos — se guarda
+  // primero para que el servidor esté al día.
+  if(!(await checkSessionStillActive())) return;
+  if(pendingSave) await flushSave();
   const { data, error } = await supabase.rpc('claim_mission', {p_mission_id: missionId});
   if(error){ log('No se pudo reclamar la misión: '+error.message); return; }
   const m = (state.missions||[]).find(x=>x.id===missionId);
@@ -8940,12 +8999,15 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
       // aumento_curacion (Manos de Gracia, conjunto Gracia Celestial) y
       // Milagro (Gracia 5 piezas) también afectan a la autocuración.
       const playerHealSps = specialsFromEquip(state.char.equip);
-      const healMult = (1 + playerHealSps.filter(sp=>sp.type==='aumento_curacion').reduce((sum,sp)=>sum+sp.value,0)) * graciaHealMult(playerHealSps, combat);
+      // Gracia (3 y 5 piezas) cuenta UNA curación por uso de habilidad, no una
+      // por enemigo golpeado (Juicio Divino golpea a todos).
+      const firstHealOfCast = target===targets[0];
+      const healMult = (1 + playerHealSps.filter(sp=>sp.type==='aumento_curacion').reduce((sum,sp)=>sum+sp.value,0)) * (firstHealOfCast ? graciaHealMult(playerHealSps, combat) : 1);
       const selfHeal = Math.max(1, Math.round(dmg*healPct*healMult));
       const beforeHeal = state.char.curHP;
       state.char.curHP = Math.min(d.maxHP, state.char.curHP+selfHeal);
       if(state.char.curHP>beforeHeal) log(`Recuperas ${state.char.curHP-beforeHeal} de vida.`);
-      graciaAfterHeal(playerHealSps, combat, 'Tú', amt=>gainPlayerSpirit(amt, 'Milagro'), {isPlayer:true, ally:null, maxHP:d.maxHP});
+      if(firstHealOfCast) graciaAfterHeal(playerHealSps, combat, 'Tú', amt=>gainPlayerSpirit(amt, 'Milagro'), {isPlayer:true, ally:null, maxHP:d.maxHP});
     }
 
     log(`Usas <b>${skill.name}</b> sobre ${target.name}: ${dmg} de daño${isCrit?' (¡crítico!)':''}.${comboText}`);
@@ -11520,6 +11582,10 @@ function showAuthScreen(message){
 }
 
 async function enterGame(){
+  if(sessionKicked) return;
+  // Reclamar la sesión ANTES de cargar personajes: así la otra pestaña/
+  // dispositivo queda reemplazada desde este momento.
+  await claimSession();
   document.getElementById('btn-slots').style.display = 'inline-block';
   const rows = await loadCharacterRows();
   if(!rows.length){
