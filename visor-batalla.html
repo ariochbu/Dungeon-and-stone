@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Visor de batalla — Dungeon &amp; Stone</title>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Crimson+Text:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./src/styles.css">
+<style>
+  body{ padding:14px; }
+  .vb{ max-width:1100px; margin:0 auto; }
+  .vb h1{ font-family:'Cinzel'; color:#ffd76a; font-size:1.4em; margin:0 0 4px; }
+  .vb p.sub{ color:var(--text-dim); margin:0 0 12px; font-size:0.92em; }
+  .vb-bar{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:10px; }
+  .vb-bar button{ background:#0f0c0a; border:1px solid var(--border); color:var(--text-dim); padding:7px 12px; border-radius:5px; font-family:'Cinzel'; font-size:0.85em; cursor:pointer; }
+  .vb-bar button.on{ color:#ffd76a; border-color:var(--bronze-light); background:rgba(217,183,107,0.1); }
+  .vb-bar select, .vb-bar input{ background:#0c0a08; color:var(--text); border:1px solid var(--border); border-radius:4px; padding:5px 8px; font-family:inherit; }
+  .vb-bar label{ color:var(--text-dim); font-size:0.88em; display:flex; align-items:center; gap:6px; }
+  .vb-grid{ display:grid; grid-template-columns:1fr 300px; gap:14px; align-items:start; }
+  .vb-side{ background:var(--panel); border:1px solid var(--border); border-radius:6px; padding:12px; }
+  .vb-side h3{ font-family:'Cinzel'; color:var(--bronze-light); font-size:0.95em; margin:0 0 8px; }
+  .vb-thumbs{ display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
+  .vb-thumbs div{ background:#0c0a08; border:1px solid var(--border); border-radius:4px; text-align:center; padding:4px; font-size:0.7em; color:var(--text-dim); }
+  .vb-thumbs img{ width:100%; aspect-ratio:1; object-fit:contain; }
+  .vb-thumbs img.px{ image-rendering:pixelated; }
+  .vb-phase{ color:#ffd76a; font-family:'Cinzel'; font-size:0.85em; }
+  @media (max-width:900px){ .vb-grid{ grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<div class="vb">
+  <h1>Visor de batalla</h1>
+  <p class="sub">Escenario de combate real del juego con datos de prueba, para comparar sprites. No guarda nada ni toca tu partida.</p>
+  <div class="vb-bar" id="floors">
+    <button data-f="30" class="on">Piso 30 · Riakis</button>
+    <button data-f="39">Piso 39 · Usurpador Fragmentado</button>
+    <button data-f="40">Piso 40 · Usurpador Sin Nombre</button>
+    <button data-f="n">Pisos 31-40 · Normales</button>
+    <button data-f="e">Pisos 31-40 · Élites</button>
+    <button data-f="g">Guardianes 31-38</button>
+  </div>
+  <div class="vb-bar">
+    <label>Raza <select id="race"><option>barbaro</option><option>enano</option><option>hada</option><option selected>humano</option><option>draconido</option><option>bestia</option></select></label>
+    <label>Clase <select id="cls"><option value="pesada">Guerrero</option><option value="paladin" selected>Paladín</option><option value="tirador">Arquero</option><option value="doblefilo">Asesino</option><option value="mago">Mago</option><option value="hechicero">Hechicero</option></select></label>
+    <label>Aliados <input id="allies" type="checkbox" checked></label>
+    <label id="hpwrap">Vida del jefe <input id="hp" type="range" min="1" max="100" value="100"> <span id="hpv">100%</span></label>
+    <button id="atk">⚔ Golpe de prueba</button>
+  </div>
+  <div class="vb-grid">
+    <div><div id="battle-stage-mount"></div></div>
+    <div class="vb-side">
+      <h3>Sprites de este piso</h3>
+      <div class="vb-phase" id="phase"></div>
+      <div class="vb-thumbs" id="thumbs"></div>
+    </div>
+  </div>
+</div>
+<script type="module">
+import { syncBattleStage, playBattleAnim } from './src/battleStage.js';
+import { ENEMY_SPRITES, enemySpriteFor } from './src/battleSprites.js';
+
+const E = (id, name, o={}) => ({ tpl:Object.assign({id, name, frontline:true}, o), name, icon:'👤', hp:1000, maxHP:1000, statuses:[] });
+const ALLY_IDS = [['aldric','Aldric','guerrero','frente'],['delyth','Delyth','sacerdote','retaguardia'],['neira','Neira','arquero','retaguardia'],['fennwick','Fennwick','mago','retaguardia']];
+const FLOORS = {
+  '30': { theme:'cave',  boss:'riakis', enemies:()=>[E('riakis','Señor del Caos Riakis',{boss:true})] },
+  '39': { theme:'cult',  boss:'usurpador_fragmentado', enemies:()=>[E('usurpador_fragmentado','Usurpador Fragmentado',{boss:true}), E('senuelo_duplicado','Duplicado',{decoy:true}), E('senuelo_duplicado','Duplicado',{decoy:true})] },
+  '40': { theme:'cult',  boss:'usurpador', enemies:()=>[E('usurpador','El Usurpador Sin Nombre',{boss:true}), E('copia_usurpador','Copia del Usurpador'), E('copia_usurpador','Copia del Usurpador')] },
+  'n':  { theme:'cult', enemies:()=>[E('sombra_mimetica','Sombra Mimética'),E('espejo_viviente','Espejo Viviente'),E('doble_corrupto','Doble Corrupto'),E('farsante_menor','Farsante Menor',{frontline:false})] },
+  'e':  { theme:'cult', enemies:()=>[E('impostor_mayor','Impostor Mayor',{elite:true}),E('doble_perfecto','Doble Perfecto',{elite:true})] },
+  'g':  { theme:'cult', enemies:()=>[E('reflejo_perfecto_g','Reflejo Perfecto',{boss:true}),E('mascara_viviente_g','Máscara Viviente',{boss:true}),E('espejo_sombras','Espejo de Sombras',{boss:true}),E('doble_traicionero','Doble Traicionero',{boss:true,frontline:false}),E('imitador_formacion','Imitador de Formación',{boss:true,frontline:false}),E('falso_companero','Falso Compañero',{boss:true,frontline:false})] },
+};
+let floor = '30', combat = null;
+function build(){
+  const f = FLOORS[floor];
+  combat = { enemies: f.enemies(), allies: [], playerStatuses:[], pendingTargetFilter:null };
+  if(document.getElementById('allies').checked){
+    combat.allies = ALLY_IDS.map(([id,name,role,pos],i)=>({ id:'a'+i, templateId:id, name, role, pos, hp:500, maxHP:600, mp:40, maxMP:60, spirit:30, maxSpirit:40, statuses:[] }));
+  }
+  document.getElementById('hpwrap').style.display = (floor==='40') ? 'flex' : 'none';
+  render();
+}
+function render(){
+  const f = FLOORS[floor];
+  const pct = +document.getElementById('hp').value;
+  document.getElementById('hpv').textContent = pct+'%';
+  if(floor==='40'){ const b = combat.enemies[0]; b.hp = Math.round(b.maxHP*pct/100); }
+  const race = document.getElementById('race').value, cls = document.getElementById('cls').value;
+  syncBattleStage(document.getElementById('battle-stage-mount'), combat, {
+    name:'Tú', icon:'🧝', style:cls, race, hp:800, maxHP:1000, mp:60, maxMP:100, spirit:40, maxSpirit:60,
+    statuses:[], shield:0, pos: ['pesada','paladin'].includes(cls) ? 'frente' : 'retaguardia', bgTheme:f.theme,
+  }, { isAllyHostile:()=>false, onTarget:()=>{} });
+  const ph = floor==='40' ? (pct>=75?'Fase 1 · Limo negro':pct>=50?'Fase 2 · Mimetismo':pct>=25?'Fase 3 · Autorreplicación':'Fase 4 · Cristalización') : '';
+  document.getElementById('phase').textContent = ph;
+  const ids = floor==='40' ? ['usurpador','usurpador_f2','usurpador_f3','usurpador_f4','copia_usurpador'] : [...new Set(combat.enemies.map(e=>e.tpl.id))];
+  document.getElementById('thumbs').innerHTML = ids.map(id=>`<div><img class="${/^src\//.test(ENEMY_SPRITES[id]||'')?'':'px'}" src="${ENEMY_SPRITES[id]||''}" alt=""><br>${id}</div>`).join('');
+}
+document.querySelectorAll('#floors button').forEach(b=> b.onclick = ()=>{
+  document.querySelectorAll('#floors button').forEach(x=>x.classList.toggle('on', x===b));
+  floor = b.dataset.f; document.getElementById('hp').value = 100; build();
+});
+['race','cls','allies'].forEach(id=> document.getElementById(id).onchange = build);
+document.getElementById('hp').oninput = render;
+document.getElementById('atk').onclick = ()=>{
+  playBattleAnim({kind:'player'}, {label:'Golpe de prueba', effects:[{targetKind:'enemy', key:0, amount:Math.round(300+Math.random()*200), kind:'dmg'}]});
+};
+build();
+</script>
+</body>
+</html>

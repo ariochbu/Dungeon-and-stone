@@ -2,8 +2,8 @@
 
 import { supabase } from './supabaseClient.js';
 import * as auth from './auth.js';
-import { syncBattleStage, playBattleAnim } from './battleStage.js?v=77';
-import { CLASS_SPRITES, ENEMY_SPRITES, playerSpriteFor } from './battleSprites.js?v=75';
+import { syncBattleStage, playBattleAnim } from './battleStage.js?v=78';
+import { CLASS_SPRITES, ENEMY_SPRITES, playerSpriteFor, enemySpriteFor } from './battleSprites.js?v=76';
 
 /* ============================================================
    DATA
@@ -11800,7 +11800,7 @@ function renderCombat(){
   const PHUD_ICON_MP = `<svg viewBox="0 0 16 16" width="12" height="12"><path fill="currentColor" d="M8 1C8 1 3 7.3 3 10.3 3 12.7 5.2 14.6 8 14.6S13 12.7 13 10.3C13 7.3 8 1 8 1Z"/></svg>`;
   const PHUD_ICON_SPI = `<svg viewBox="0 0 16 16" width="12" height="12"><path fill="currentColor" d="M8 1 9.6 6.4 15 8 9.6 9.6 8 15 6.4 9.6 1 8 6.4 6.4Z"/></svg>`;
   const playerSprite = playerSpriteFor(state.char.style, state.char.race);
-  const enemySprite = targetEnemy && targetEnemy.tpl ? ENEMY_SPRITES[targetEnemy.tpl.id] : null;
+  const enemySprite = targetEnemy && targetEnemy.tpl ? enemySpriteFor(targetEnemy) : null;
   const enemyHUD = targetEnemy ? `
     <div class="phud enemy">
       <div class="phud-portrait">${enemySprite ? `<img src="${enemySprite}" alt="">` : `<span class="phud-emoji">${targetEnemy.icon}</span>`}</div>

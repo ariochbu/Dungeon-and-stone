@@ -13,7 +13,7 @@
 // combat.enemies/combat.allies/combat.lastActor/combat.lastAction y dibuja.
 // No aplica daño, no decide turnos, no cambia HP.
 
-import { CLASS_SPRITES, ALLY_SPRITES, ENEMY_SPRITES, playerSpriteFor, RACE_SIZE, ALLY_TEMPLATE_SPRITES } from './battleSprites.js?v=75';
+import { CLASS_SPRITES, ALLY_SPRITES, ENEMY_SPRITES, playerSpriteFor, RACE_SIZE, ALLY_TEMPLATE_SPRITES, enemySpriteFor } from './battleSprites.js?v=76';
 
 const TILE = 16;
 const SCALE = 3;
@@ -204,7 +204,7 @@ function keyFor(kind, entity, idx){
 
 function spriteFor(kind, entity, playerStyle, playerRace){
   if(kind==='player') return playerSpriteFor(playerStyle, playerRace);
-  if(kind==='enemy') return ENEMY_SPRITES[entity.tpl && entity.tpl.id] || null;
+  if(kind==='enemy') return enemySpriteFor(entity);
   if(kind==='ally') return ALLY_TEMPLATE_SPRITES[entity.templateId] || ALLY_SPRITES[entity.role] || null;
   return null;
 }

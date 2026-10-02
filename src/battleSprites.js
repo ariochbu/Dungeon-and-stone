@@ -148,18 +148,20 @@ Object.assign(ENEMY_SPRITES, MONSTER_SPRITES);
 const HD_ENEMY_IDS = [
   'alfa_manada', 'arana_caparazon', 'asesino_elite_isla', 'asesino_isla', 'bestia_carmesi', 'buitre_corrupto',
   'campeon_triton', 'cangrejo_gigante', 'capitan_mercenario', 'cazador_veterano', 'cazarrecompensas', 'centinela_coral_g',
-  'custodio_isla', 'devoradora_nido', 'doble_corrupto', 'doble_perfecto', 'duelista_veterano', 'espejo_viviente',
-  'explorador_rival', 'farsante_menor', 'garvel', 'gilgoblin', 'goblin_arquero', 'goblin_chaman',
-  'goblin_guerrero', 'goblin_saqueador', 'gran_cangrejo_abisal', 'gran_lobo_hoja', 'gran_tejedora', 'guardia_profundidades',
-  'guardian_abismo', 'halcon_guerra', 'heraldo_tormenta', 'hobgoblin', 'impostor_mayor', 'jabali_hierro',
-  'jefe_goblin', 'leviatan_abisal', 'lince_sombrio', 'loba_acantilado', 'lobo_quimera', 'matriarca_abisal',
-  'matriarca_escarlata', 'matriarca_telaranha', 'medico_campana', 'mercenario_desertor', 'naga_arquero', 'naga_capitan',
-  'naga_maestro', 'ogro', 'oso_acorazado', 'oso_cuevas', 'oso_roca_lunar', 'reina_devoradora',
-  'reina_telaranha', 'rey_manada', 'riakis', 'sacerdotisa_mareas', 'saltadora_alfa', 'serpiente_palpus',
-  'sirena_corrupta', 'sirena_matriarca', 'sombra_mimetica', 'storm_gush', 'superviviente_curtido', 'superviviente_despiadado',
-  'tarantula_cazadora', 'tarantula_saltarina', 'tarantula_tejedora', 'tigre_carmesi', 'tigre_sable', 'triton_guerrero',
-  'triton_hechicero', 'viuda_alfa', 'viuda_carmesi', 'viuda_venenosa'];
-HD_ENEMY_IDS.forEach(id=>{ ENEMY_SPRITES[id] = `src/assets/enemigos/${id}.png?v=5`; });
+  'copia_usurpador', 'custodio_isla', 'devoradora_nido', 'doble_corrupto', 'doble_perfecto', 'doble_traicionero',
+  'duelista_veterano', 'espejo_sombras', 'espejo_viviente', 'explorador_rival', 'falso_companero', 'farsante_menor',
+  'garvel', 'gilgoblin', 'goblin_arquero', 'goblin_chaman', 'goblin_guerrero', 'goblin_saqueador',
+  'gran_cangrejo_abisal', 'gran_lobo_hoja', 'gran_tejedora', 'guardia_profundidades', 'guardian_abismo', 'halcon_guerra',
+  'heraldo_tormenta', 'hobgoblin', 'imitador_formacion', 'impostor_mayor', 'jabali_hierro', 'jefe_goblin',
+  'leviatan_abisal', 'lince_sombrio', 'loba_acantilado', 'lobo_quimera', 'maestro_reflejo', 'maestro_rostros',
+  'mascara_viviente_g', 'matriarca_abisal', 'matriarca_escarlata', 'matriarca_telaranha', 'medico_campana', 'mercenario_desertor',
+  'naga_arquero', 'naga_capitan', 'naga_maestro', 'ogro', 'oso_acorazado', 'oso_cuevas',
+  'oso_roca_lunar', 'reflejo_perfecto_g', 'reina_devoradora', 'reina_telaranha', 'rey_manada', 'riakis',
+  'sacerdotisa_mareas', 'saltadora_alfa', 'serpiente_palpus', 'sirena_corrupta', 'sirena_matriarca', 'sombra_mimetica',
+  'storm_gush', 'superviviente_curtido', 'superviviente_despiadado', 'tarantula_cazadora', 'tarantula_saltarina', 'tarantula_tejedora',
+  'tigre_carmesi', 'tigre_sable', 'triton_guerrero', 'triton_hechicero', 'usurpador', 'usurpador_f2',
+  'usurpador_f3', 'usurpador_f4', 'usurpador_fragmentado', 'viuda_alfa', 'viuda_carmesi', 'viuda_venenosa'];
+HD_ENEMY_IDS.forEach(id=>{ ENEMY_SPRITES[id] = `src/assets/enemigos/${id}.png?v=6`; });
 // Invocaciones de las fases de jefe (2026-10-02): reusan sprites existentes.
 ENEMY_SPRITES.cria_arana = ENEMY_SPRITES.tarantula_cazadora;
 ENEMY_SPRITES.cangrejo_isla = ENEMY_SPRITES.cangrejo_gigante;
@@ -168,3 +170,18 @@ ENEMY_SPRITES.cangrejo_isla = ENEMY_SPRITES.cangrejo_gigante;
 // escenario los dibuja respetando su proporción. Vex y Kael aún usan el de rol.
 export const ALLY_TEMPLATE_SPRITES = {};
 ['aldric','brann','neira','lyra','fennwick','eira','delyth','seraphina'].forEach(id=>{ ALLY_TEMPLATE_SPRITES[id] = `src/assets/aliados/sprites/${id}.png?v=1`; });
+
+// Sprite de enemigo según su estado (2026-10-02): el Usurpador Sin Nombre
+// cambia de forma con sus fases — limo negro → mimetismo (75%) →
+// autorreplicación (50%) → cristalización (25%). El resto, por id.
+export function enemySpriteFor(en){
+  const id = en && en.tpl && en.tpl.id;
+  if(id==='usurpador'){
+    const pct = en.maxHP ? en.hp/en.maxHP : 1;
+    const has = n => (en.statuses||[]).some(s=>s.name===n);
+    if(has('Cristalización') || pct < 0.25) return ENEMY_SPRITES.usurpador_f4;
+    if(pct < 0.5) return ENEMY_SPRITES.usurpador_f3;
+    if(pct < 0.75 || has('Forma Robada')) return ENEMY_SPRITES.usurpador_f2;
+  }
+  return ENEMY_SPRITES[id] || null;
+}
