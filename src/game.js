@@ -3782,11 +3782,26 @@ let saveTimer = null;
 let pendingSave = false;
 const SAVE_DEBOUNCE_MS = 1500;
 
+// 2026-10-02: reportes de "problemas de guardado" — antes un fallo solo
+// quedaba en la consola y el jugador no se enteraba. Ahora se reintenta una
+// vez y, si vuelve a fallar, se avisa en pantalla con el motivo exacto del
+// servidor (sirve para saber QUÉ regla lo rechaza).
+let lastSaveErrorShown = 0;
 async function flushSave(){
   if(!state || !currentUser) return;
   pendingSave = false;
-  const { error } = await supabase.from('characters').update(characterToRow()).eq('id', state.char.id);
-  if(error) console.error('No se pudo guardar la partida:', error.message);
+  let { error } = await supabase.from('characters').update(characterToRow()).eq('id', state.char.id);
+  if(error){
+    await new Promise(r=>setTimeout(r, 1200));
+    ({ error } = await supabase.from('characters').update(characterToRow()).eq('id', state.char.id));
+  }
+  if(error){
+    console.error('No se pudo guardar la partida:', error.message);
+    if(Date.now() - lastSaveErrorShown > 15000){
+      lastSaveErrorShown = Date.now();
+      log(`<b style="color:var(--blood-light)">⚠ No se pudo guardar la partida</b> (${error.message}). Tu progreso de ahora podría perderse si recargas — avisa al administrador con este mensaje.`);
+    }
+  }
 }
 
 async function save(){
@@ -4722,16 +4737,21 @@ function renderInventory(){
   </div>` : '';
   // Filtro por senda (2026-09-26, pedido explícito: "en el inventario
   // tambien coloca por clase como filtro") — mismo patrón, tercera fila.
-  const gearClassesPresent = Object.keys(SHOP_ROLE_LABELS).filter(cid=> gearItems.some(it=>it.styleId===cid));
+  // 2026-10-02: desde que el equipo general son piezas de CONJUNTO (sin
+  // senda), este filtro también lista los conjuntos presentes ("set:<id>") —
+  // antes esas piezas no aparecían en ninguna opción salvo "Todas".
+  const gearClassesPresent = Object.keys(SHOP_ROLE_LABELS).filter(cid=> gearItems.some(it=>it.styleId===cid))
+    .concat(SET_IDS.filter(id=> gearItems.some(it=>it.setId===id)).map(id=>'set:'+id));
   if(invGearClassFilter!=='todos' && !gearClassesPresent.includes(invGearClassFilter)) invGearClassFilter = 'todos';
+  const gearClassLabel = (cid)=> cid.startsWith('set:') ? SET_CATALOG[cid.slice(4)].name : SHOP_ROLE_LABELS[cid];
   const gearClassFilterHTML = gearClassesPresent.length>1 ? `<div class="inv-filter-bar">
-    <button class="nav-btn ${invGearClassFilter==='todos'?'active':''}" data-gearclassfilter="todos">Todas las sendas</button>
-    ${gearClassesPresent.map(cid=>`<button class="nav-btn ${invGearClassFilter===cid?'active':''}" data-gearclassfilter="${cid}">${SHOP_ROLE_LABELS[cid]}</button>`).join('')}
+    <button class="nav-btn ${invGearClassFilter==='todos'?'active':''}" data-gearclassfilter="todos">Todas las sendas y conjuntos</button>
+    ${gearClassesPresent.map(cid=>`<button class="nav-btn ${invGearClassFilter===cid?'active':''}" data-gearclassfilter="${cid}">${gearClassLabel(cid)}</button>`).join('')}
   </div>` : '';
   const gearHTML = gearItems.length ? EQUIP_SLOTS.filter(slot=> invGearFilter==='todos' || slot===invGearFilter).map(slot=>{
     const items = gearItems.filter(it=>it.slot===slot
       && (invGearTierFilter==='todos' || (it.rarity||'comun')===invGearTierFilter)
-      && (invGearClassFilter==='todos' || it.styleId===invGearClassFilter));
+      && (invGearClassFilter==='todos' || (invGearClassFilter.startsWith('set:') ? it.setId===invGearClassFilter.slice(4) : it.styleId===invGearClassFilter)));
     if(!items.length) return '';
     const rows = items.map(it=>{
       const minLvl = gearEquipMinLevel(it.rarity);
