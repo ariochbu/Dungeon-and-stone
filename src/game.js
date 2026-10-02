@@ -4881,6 +4881,12 @@ function renderPetSectionHTML(){
   `;
 }
 
+// Pantalla de Personaje (2026-10-02, maqueta aprobada, estilo Shakes &
+// Fidget): retrato con ranuras de equipo alrededor, atributos debajo y
+// flechas ‹ › para pasar entre tú y tus aliados; a la derecha, pestañas de
+// Mochila / Pociones / Piedras / Caídos. Toda la lógica (equipar, quitar,
+// engarzar, filtros) es la misma de siempre: solo cambia la distribución.
+let invTab = 'mochila';
 function renderInventory(){
   const allies = state.char.allies || [];
   const targetRow = equipTarget!=='player' ? allies.find(a=>a.id===equipTarget) : null;
@@ -5049,34 +5055,88 @@ function renderInventory(){
     ${fragmentHTML}
   ` : '';
 
+  // ---------- Retrato + ranuras (estilo S&F) ----------
+  const targets = ['player'].concat(allies.map(a=>a.id));
+  const tIdx = Math.max(0, targets.indexOf(equipTarget));
+  const plainText = (h)=> String(h||'').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
+  const slotTile = (slot)=>{
+    const it = targetEquip[slot];
+    const label = slotLabel(slot);
+    if(!it) return `<div class="pj-slot empty" title="${label}: vacío"><span>${label}</span></div>`;
+    const r = RARITIES[it.rarity||'comun'];
+    return `<div class="pj-slot" data-unequip="${slot}" title="${label}: ${plainText(it.name)} — ${plainText(itemBonusText(it))}. Clic para quitar." style="--rc:${r.color}">
+      ${itemArtTileHTML(it, 68)}<span class="pj-rank">${r.name}</span></div>`;
+  };
+  const stoneTiles = soulSlotsSource.map((stone, idx)=>{
+    if(!stone) return `<div class="pj-stone empty" title="Espacio de alma ${idx+1}: vacío"></div>`;
+    const c = SOUL_TIER_COLORS[stone.tier] || 'var(--text)';
+    const attr = isAllyTargetForStones ? `data-unsocket-ally="${idx}|${targetRow.id}"` : `data-unsocket="${idx}"`;
+    return `<div class="pj-stone" ${attr} title="${plainText(stone.name)} (${stone.tier}). Clic para retirar." style="--rc:${c}">${itemArtTileHTML(stone, 40)}</div>`;
+  }).join('');
+  let portraitHTML, plateSub, attrsHTML;
+  if(targetRow){
+    const ca = makeCombatAlly(targetRow);
+    const tplA = ALLY_ROSTER.find(t=>t.templateId===targetRow.template_id) || {};
+    portraitHTML = `<img class="pj-ally-art" src="src/assets/aliados/${targetRow.template_id}.jpg" alt="" onerror="this.replaceWith('${tplA.icon||'🛡️'}')">`;
+    plateSub = `Aliado · ${targetRow.role || tplA.role || ''} · Nivel ${targetRow.level||1}`;
+    attrsHTML = [
+      ['Ataque','Daño por golpe', ca.atk], ['Vida','Puntos de vida', ca.maxHP], ['MP','Maná', ca.maxMP],
+      ['Res. física','Reducción de daño', (ca.res.fisico||0)+'%'], ['Posición', tplA.frontline?'Absorbe golpes':'Ataca desde atrás', tplA.frontline?'Frente':'Retaguardia'],
+      ['Habilidad', tplA.skillName||'—', '★']
+    ].map(([k,sub,v])=>`<div class="pj-attr"><div><b>${k}</b><small>${sub}</small></div><span>${v}</span></div>`).join('');
+  } else {
+    const d = derived();
+    portraitHTML = `<img class="pj-sprite" src="${playerSpriteFor(state.char.style, state.char.race)||''}" alt="">`;
+    plateSub = `${race().name} · ${style().name} · Nivel ${state.char.level}`;
+    attrsHTML = [
+      ['Físico','Daño físico', d.fis], ['Espíritu','Espíritu y curación', d.esp], ['Habilidad','MP y magia', d.hab],
+      ['Agilidad','Crítico y evasión', d.agi], ['Vigor','Vida', d.vig], ['Vida','Puntos de vida', d.maxHP],
+      ['MP','Maná', d.maxSta], ['Espíritu máx.','Recurso de habilidades', d.maxSpi]
+    ].map(([k,sub,v])=>`<div class="pj-attr"><div><b>${k}</b><small>${sub}</small></div><span>${v}</span></div>`).join('');
+  }
+  const dollHTML = `
+    <div class="pj-who">
+      <button class="pj-arrow" id="pj-prev" ${targets.length<2?'disabled':''} title="Anterior">‹</button>
+      <div class="pj-who-txt"><b>${targetRow ? targetRow.name : state.char.nickname}</b><span>${plateSub}</span>
+        <div class="pj-dots">${targets.map((t,i)=>`<i class="${i===tIdx?'on':''}"></i>`).join('')}</div></div>
+      <button class="pj-arrow" id="pj-next" ${targets.length<2?'disabled':''} title="Siguiente">›</button>
+    </div>
+    <div class="pj-doll">
+      <div class="pj-col">${slotTile('casco')}${slotTile('armadura')}${slotTile('guantes')}</div>
+      <div class="pj-center">
+        <div class="pj-portrait">${portraitHTML}</div>
+        <div class="pj-weapons">${slotTile('arma')}${slotTile('arma2')}</div>
+      </div>
+      <div class="pj-col">${slotTile('amuleto')}${slotTile('botas')}</div>
+    </div>
+    ${soulSlotsSource.length ? `<div class="pj-stones-row"><span>Piedras de alma</span>${stoneTiles}</div>` : ''}
+    <div class="pj-attrs">${attrsHTML}</div>
+    <details class="pj-details"><summary>Detalle del equipo de ${targetName}</summary>${equippedHTML}</details>`;
+  const tabs = [['mochila','🎒 Mochila'],['pociones','🧪 Pociones'],['piedras','💎 Piedras']].concat(targetRow ? [] : [['caidos','🐾 Caídos']]);
+  if(!tabs.some(t=>t[0]===invTab)) invTab = 'mochila';
+  const tabBody = invTab==='pociones' ? potionHTML
+    : invTab==='piedras' ? `${soulSlotsHTML}${stoneTierFilterHTML}${stoneBagHTML}${fragmentSection}`
+    : invTab==='caidos' ? renderPetSectionHTML()
+    : `${gearFilterHTML}${gearTierFilterHTML}${gearClassFilterHTML}${gearHTML}`;
   document.getElementById('main-panel').innerHTML = `
-    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:4px;">
-      <h3 style="color:var(--bronze-light);">Inventario y equipamiento</h3>
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:6px;">
+      <h3 style="color:var(--bronze-light);">Personaje e inventario</h3>
       <button class="reset-btn" id="btn-close-inv">Cerrar</button>
     </div>
-    <p style="color:var(--text-dim); font-size:0.85em; margin-top:0;">Equipa y desequipa a tu gusto entre combates para ajustar tu estrategia. La mochila es una sola para todo el equipo — decides tú quién se queda con cada objeto.</p>
-    ${targetSelectorHTML}
-
-    <div class="section-label inv-section-label" style="margin-top:6px;">⚔️ Equipado (${targetName})</div>
-    ${equippedHTML}
-
-    <div class="section-label inv-section-label">🎒 Equipo en la mochila</div>
-    ${gearFilterHTML}
-    ${gearTierFilterHTML}
-    ${gearClassFilterHTML}
-    ${gearHTML}
-
-    <div class="section-label inv-section-label">🧪 Pociones</div>
-    ${potionHTML}
-
-    <div class="section-label inv-section-label">💎 Piedras de alma</div>
-    ${soulSlotsHTML}
-    ${stoneTierFilterHTML}
-    ${stoneBagHTML}
-    ${fragmentSection}
-    ${targetRow ? '' : renderPetSectionHTML()}
+    <div class="pj-layout">
+      <div class="pj-left">${dollHTML}</div>
+      <div class="pj-right">
+        <div class="pj-tabs">${tabs.map(([k,l])=>`<button class="${invTab===k?'on':''}" data-invtab="${k}">${l}</button>`).join('')}</div>
+        <div class="pj-hint">Equipando a <b>${targetName}</b>. La mochila es una sola para ti y tus aliados.</div>
+        <div class="pj-tab-body">${tabBody}</div>
+      </div>
+    </div>
   `;
-
+  const goTarget = (delta)=>{ equipTarget = targets[(tIdx + delta + targets.length) % targets.length]; renderInventory(); };
+  const pjPrev = document.getElementById('pj-prev'), pjNext = document.getElementById('pj-next');
+  if(pjPrev) pjPrev.onclick = ()=> goTarget(-1);
+  if(pjNext) pjNext.onclick = ()=> goTarget(1);
+  document.querySelectorAll('[data-invtab]').forEach(b=>{ b.onclick = ()=>{ invTab = b.dataset.invtab; renderInventory(); }; });
   document.getElementById('btn-close-inv').onclick = ()=>{ invOpen=false; renderAll(); };
   document.querySelectorAll('[data-pet-unequip]').forEach(el=>{
     el.onclick = ()=>{ togglePetEquip(el.dataset.petUnequip); renderSheet(); renderInventory(); save(); };
@@ -5440,7 +5500,7 @@ function renderSideNav(){
     <div class="sn-sec"><h5>Laberinto</h5>
       ${item('laberinto','🕳️','Entrar al laberinto')}
       ${item('ficha','🧝','Ficha del personaje')}
-      ${item('inv','🎒','Inventario')}
+      ${item('inv','🎒','Personaje e inventario')}
     </div>
     <div class="sn-sec"><h5>Progreso</h5>
       ${item('ranking','🏆','Ranking')}

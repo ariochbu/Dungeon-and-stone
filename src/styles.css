@@ -1022,3 +1022,59 @@ details.admin-acc > summary > span{ flex:1; }
   .cr-emblem{ width:64px; height:64px; }
   .cr-proscons{ grid-template-columns:1fr; }
 }
+
+/* ============================================================
+   PERSONAJE E INVENTARIO — estilo Shakes & Fidget (2026-10-02)
+   ============================================================ */
+.pj-layout{ display:grid; grid-template-columns:minmax(330px,0.95fr) 1.05fr; gap:14px; align-items:start; }
+.pj-left{ background:linear-gradient(180deg,var(--panel-2),var(--panel)); border:1px solid var(--border); border-radius:6px; padding:12px; }
+.pj-who{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px; }
+.pj-arrow{ width:38px; height:38px; flex-shrink:0; border-radius:50%; background:#0c0a08; border:1px solid var(--bronze); color:#ffd76a; font-size:1.3em; line-height:1; cursor:pointer; }
+.pj-arrow:disabled{ opacity:0.3; cursor:default; }
+.pj-who-txt{ text-align:center; display:flex; flex-direction:column; min-width:0; }
+.pj-who-txt b{ font-family:'Cinzel'; color:#ffd76a; }
+.pj-who-txt span{ font-size:0.82em; color:var(--text-dim); }
+.pj-dots{ display:flex; gap:6px; justify-content:center; margin-top:4px; }
+.pj-dots i{ width:8px; height:8px; border-radius:50%; background:#3b332a; display:block; }
+.pj-dots i.on{ background:#ffd76a; }
+.pj-doll{ display:grid; grid-template-columns:80px 1fr 80px; gap:8px; align-items:start; }
+.pj-col{ display:grid; gap:8px; }
+.pj-center{ display:flex; flex-direction:column; gap:8px; }
+.pj-slot{ width:80px; height:80px; border:2px solid var(--rc, #3b3128); border-radius:6px; background:radial-gradient(circle,#2a231c,#120f0c); display:flex; align-items:center; justify-content:center; position:relative; cursor:pointer; box-shadow:0 0 10px color-mix(in srgb, var(--rc, transparent) 30%, transparent); }
+.pj-slot:hover{ filter:brightness(1.15); }
+.pj-slot .item-art-tile{ box-shadow:none !important; background:none !important; }
+.pj-slot.empty{ cursor:default; opacity:0.5; border-style:dashed; box-shadow:none; }
+.pj-slot.empty span{ font-family:'Cinzel'; font-size:0.62em; color:var(--text-dim); text-transform:uppercase; text-align:center; padding:0 4px; }
+.pj-rank{ position:absolute; bottom:1px; left:0; right:0; text-align:center; font-family:'Cinzel'; font-size:0.55em; color:var(--rc); text-shadow:0 1px 2px #000; }
+.pj-portrait{ border:2px solid var(--bronze); border-radius:8px; background:radial-gradient(ellipse at 50% 65%,#3d2a17,#120e0a 70%); height:256px; display:flex; align-items:flex-end; justify-content:center; overflow:hidden; position:relative; font-size:4em; }
+.pj-sprite{ width:230px; height:230px; image-rendering:pixelated; }
+.pj-ally-art{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+.pj-weapons{ display:flex; justify-content:center; gap:8px; }
+.pj-stones-row{ display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-top:10px; padding:6px 8px; background:rgba(0,0,0,0.25); border-radius:5px; }
+.pj-stones-row > span{ font-family:'Cinzel'; font-size:0.7em; color:var(--text-dim); margin-right:4px; text-transform:uppercase; }
+.pj-stone{ width:44px; height:44px; border:2px solid var(--rc, #3b3128); border-radius:50%; background:#120f0c; display:flex; align-items:center; justify-content:center; cursor:pointer; overflow:hidden; }
+.pj-stone .item-art-tile{ box-shadow:none !important; background:none !important; }
+.pj-stone.empty{ border-style:dashed; opacity:0.45; cursor:default; }
+.pj-attrs{ display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:10px; }
+.pj-attr{ display:flex; justify-content:space-between; align-items:center; padding:6px 10px; background:rgba(0,0,0,0.3); border-radius:4px; }
+.pj-attr b{ font-family:'Cinzel'; font-size:0.82em; }
+.pj-attr small{ display:block; color:var(--text-dim); font-size:0.72em; }
+.pj-attr span{ font-family:'Cinzel'; font-size:1.1em; color:#ffd76a; }
+.pj-details{ margin-top:10px; }
+.pj-details > summary{ cursor:pointer; color:var(--bronze-light); font-size:0.9em; }
+.pj-right{ min-width:0; }
+.pj-tabs{ display:flex; gap:4px; flex-wrap:wrap; }
+.pj-tabs button{ flex:1; min-width:96px; background:#0f0c0a; border:1px solid var(--border); border-bottom:none; color:var(--text-dim); padding:8px 6px; border-radius:5px 5px 0 0; font-family:'Cinzel'; font-size:0.8em; cursor:pointer; }
+.pj-tabs button.on{ color:#ffd76a; background:var(--panel-2); border-color:var(--bronze); }
+.pj-hint{ font-size:0.82em; color:var(--text-dim); padding:6px 10px; background:var(--panel-2); border:1px solid var(--bronze); border-top:none; border-bottom:none; }
+.pj-tab-body{ background:var(--panel-2); border:1px solid var(--bronze); border-top:none; border-radius:0 0 6px 6px; padding:10px; max-height:640px; overflow-y:auto; }
+@media (max-width:980px){
+  .pj-layout{ grid-template-columns:1fr; }
+  .pj-tab-body{ max-height:none; }
+}
+@media (max-width:420px){
+  .pj-doll{ grid-template-columns:64px 1fr 64px; }
+  .pj-slot{ width:64px; height:64px; }
+  .pj-portrait{ height:200px; }
+  .pj-sprite{ width:180px; height:180px; }
+}
