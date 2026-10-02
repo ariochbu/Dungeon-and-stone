@@ -41,8 +41,13 @@ export const RACE_SPRITES = {
 };
 // Tamaño relativo por raza al dibujar en el escenario (2026-10-02): el
 // Bárbaro es el más grande, luego el Hombre bestia.
-export const RACE_SIZE = { barbaro:1.22, bestia:1.12 };
+export const RACE_SIZE = { barbaro:1.12, bestia:1.06, enano:0.92 };
+// Sprites HD del jugador (2026-10-02): una ilustración por raza×clase
+// (src/assets/jugador/<clase>_<raza>.png). Los de pixel art quedan de respaldo.
+const HD_PLAYER_STYLES = ['pesada','tirador','doblefilo','mago','paladin','hechicero'];
+const HD_PLAYER_RACES = ['barbaro','enano','hada','humano','draconido','bestia'];
 export function playerSpriteFor(style, race){
+  if(HD_PLAYER_STYLES.includes(style) && HD_PLAYER_RACES.includes(race)) return `src/assets/jugador/${style}_${race}.png?v=1`;
   return (RACE_SPRITES[style] && RACE_SPRITES[style][race]) || CLASS_SPRITES[style] || null;
 }
 
