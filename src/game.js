@@ -4435,7 +4435,10 @@ const WEAPON_NAME_SLUG = {
   'Vara arcana':'vara_arcana', 'Bastón rúnico':'baston_runico', 'Foco arcano':'foco_arcano',
   'Grimorio de plegarias':'grimorio_de_plegarias', 'Tomo sagrado':'tomo_sagrado',
   // Paladín (2026-10-02, catálogos de ariochbu en Assets/Nuevos equipos/Arma paladin)
-  'Maza del Guardián':'maza_del_guardian', 'Escudo de la Vigilia':'escudo_de_la_vigilia', 'Espada del Heraldo':'espada_del_heraldo', 'Sello de la Sentencia':'sello_de_la_sentencia'
+  'Maza del Guardián':'maza_del_guardian', 'Escudo de la Vigilia':'escudo_de_la_vigilia', 'Espada del Heraldo':'espada_del_heraldo', 'Sello de la Sentencia':'sello_de_la_sentencia',
+  // Hechicero y Sacerdote (2026-10-02)
+  'Vara de la Ruina':'vara_de_la_ruina', 'Cetro del Devorador':'cetro_del_devorador', 'Libro de las Maldiciones':'libro_de_las_maldiciones', 'Orbe de las Almas':'orbe_de_las_almas',
+  'Cetro de Penitencia':'cetro_de_penitencia', 'Vara de la Salvaguarda':'vara_de_la_salvaguarda'
 };
 const WEAPON_ART_RARITIES = new Set(['comun','poco_comun','raro','rango_b','rango_a','legendario']);
 function weaponArtPath(it){
