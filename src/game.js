@@ -3256,14 +3256,23 @@ const SOUL_STONES = {
 };
 // ---- Ajustes 2026-10-02 (pedido explícito) sobre el catálogo de arriba ----
 const STONE_TIER_LIST = ['E','F','D','C','B','A','S','SS'];
-// 1) Vigor: solo Vida máxima (misma escala que Vitalidad), sin Físico.
+// 1) Vigor: solo Vida máxima (misma escala que Vitalidad), sin Físico, y
+//    (pedido explícito 2026-10-02, opción "regeneración") su efecto pasa a
+//    ser regenerar vida cada turno — deja de aturdir y de robar vida, para
+//    no pisarse con Baluarte (escudo/reducción) ni con Furia (daño).
+//    Desde A, la regeneración se duplica por debajo del 50% de vida.
 const VIT_STONE_VALUES = {E:1, F:2, D:4, C:8, B:12, A:16, S:20, SS:25};
+const VIGOR_REGEN = {E:0, F:0.01, D:0.015, C:0.02, B:0.025, A:0.03, S:0.035, SS:0.04};
 STONE_TIER_LIST.forEach(t=>{
   const st = SOUL_STONES['vigor_'+t.toLowerCase()];
   if(!st) return;
-  const v = VIT_STONE_VALUES[t];
+  const v = VIT_STONE_VALUES[t], r = VIGOR_REGEN[t];
+  const lowHpDouble = ['A','S','SS'].includes(t);
   st.bonus = {stat:'maxhp', value:v};
-  st.desc = st.desc.replace(/^\+\d+ Físico( permanente)?\./, `+${v*8} Vida máxima aprox.`);
+  delete st.special;
+  st.specials = r ? [{type:'regen_vida', pct:r, lowHpDouble}] : [];
+  st.desc = `+${v*8} Vida máxima aprox.` + (r ? ` Regeneras el ${(r*100).toLocaleString('es')}% de tu vida máxima cada turno.` : '') + (lowHpDouble ? ' Por debajo del 50% de vida, la regeneración se duplica.' : '');
+  st.preview = lowHpDouble ? undefined : 'Desde F: regeneras vida cada turno. Desde A: la regeneración se duplica por debajo del 50% de vida.';
 });
 // 2) Efectos de rango A/S/SS que estaban prometidos y nunca se programaron
 //    (Voluntad: mitad de costo; Instinto: doble lanzamiento; Vitalidad:
@@ -9983,6 +9992,25 @@ async function processEnemyTurns(){
   livingAllies().forEach(a=>{
     a.mp = Math.min(a.maxMP, a.mp+5);
     a.spirit = Math.min(a.maxSpirit, a.spirit+5);
+  });
+  // Piedra de Vigor (2026-10-02): regeneración de vida por turno, jugador y
+  // aliados (una sola piedra cuenta: la de mayor %). Desde A se duplica por
+  // debajo del 50% de vida.
+  const vigorRegen = (specials, hp, maxHP)=>{
+    const sp = (specials||[]).filter(x=>x.type==='regen_vida').sort((a,b)=>b.pct-a.pct)[0];
+    if(!sp || hp<=0) return 0;
+    const pct = sp.pct * (sp.lowHpDouble && hp/maxHP < 0.5 ? 2 : 1);
+    return Math.max(1, Math.round(maxHP*pct));
+  };
+  const playerRegen = vigorRegen(stoneSpecials('regen_vida'), state.char.curHP, d.maxHP);
+  if(playerRegen>0 && state.char.curHP < d.maxHP){
+    const before = state.char.curHP;
+    state.char.curHP = Math.min(d.maxHP, state.char.curHP + playerRegen);
+    log(`<b>Piedra de Vigor</b>: regeneras ${state.char.curHP-before} de vida.`);
+  }
+  livingAllies().forEach(a=>{
+    const r = vigorRegen(a.specials, a.hp, a.maxHP);
+    if(r>0 && a.hp < a.maxHP) a.hp = Math.min(a.maxHP, a.hp + r);
   });
 
   // Aturdir (retardado, ver applyEquippedSpecials): la bandera marcada este
