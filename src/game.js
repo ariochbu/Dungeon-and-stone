@@ -1738,8 +1738,8 @@ const WEAPON_CATALOG = {
         wTier('poco_comun', 10, [{type:'sangrado', chance:0.12, text:'de aplicar sangrado 2 turnos'}]),
         wTier('raro', 13, [{type:'sangrado', chance:0.15, text:'de aplicar sangrado 2 turnos'}]),
         wTier('rango_b', 17, [{type:'sangrado', chance:0.20, text:'de aplicar sangrado 2 turnos'}]),
-        wTier('rango_a', 20, [{type:'sangrado', chance:0.20, text:'de aplicar sangrado 2 turnos'}, {type:'succion_hechizo', percent:0.10, text:'succión de hechizo'}]),
-        wTier('legendario', 27, [{type:'sangrado', chance:0.25, duration:4, text:'de aplicar sangrado 4 turnos', tierSProc:'daga_s'}, {type:'succion_hechizo', percent:0.15, text:'succión de hechizo'}]),
+        wTier('rango_a', 20, [{type:'sangrado', chance:0.20, text:'de aplicar sangrado 2 turnos'}, {type:'succion_hechizo', percent:0.10, text:'succión de hechizo (solo habilidades)'}]),
+        wTier('legendario', 27, [{type:'sangrado', chance:0.25, duration:4, text:'de aplicar sangrado 4 turnos', tierSProc:'daga_s'}, {type:'succion_hechizo', percent:0.15, text:'succión de hechizo (solo habilidades)'}]),
       ],
       'Cuchillo largo': [
         wTier('comun', 7),
@@ -1756,8 +1756,8 @@ const WEAPON_CATALOG = {
         wTier('poco_comun', 10, [{type:'sangrado', chance:0.12, text:'de aplicar sangrado 2 turnos'}]),
         wTier('raro', 13, [{type:'sangrado', chance:0.15, text:'de aplicar sangrado 2 turnos'}]),
         wTier('rango_b', 17, [{type:'sangrado', chance:0.20, text:'de aplicar sangrado 2 turnos'}]),
-        wTier('rango_a', 20, [{type:'sangrado', chance:0.20, text:'de aplicar sangrado 2 turnos'}, {type:'succion_hechizo', percent:0.10, text:'succión de hechizo'}]),
-        wTier('legendario', 27, [{type:'sangrado', chance:0.25, duration:4, text:'de aplicar sangrado 4 turnos', tierSProc:'daga_s'}, {type:'succion_hechizo', percent:0.15, text:'succión de hechizo'}]),
+        wTier('rango_a', 20, [{type:'sangrado', chance:0.20, text:'de aplicar sangrado 2 turnos'}, {type:'succion_hechizo', percent:0.10, text:'succión de hechizo (solo habilidades)'}]),
+        wTier('legendario', 27, [{type:'sangrado', chance:0.25, duration:4, text:'de aplicar sangrado 4 turnos', tierSProc:'daga_s'}, {type:'succion_hechizo', percent:0.15, text:'succión de hechizo (solo habilidades)'}]),
       ],
       'Cuchillo gemelo': [
         wTier('comun', 7),
@@ -1774,11 +1774,11 @@ const WEAPON_CATALOG = {
     arma: {
       'Arco corto': [
         wTier('comun', 10),
-        wTier('poco_comun', 16, [{type:'robovida', percent:0.10, text:'de robo de vida'}]),
-        wTier('raro', 20, [{type:'robovida', percent:0.12, text:'de robo de vida'}]),
-        wTier('rango_b', 25, [{type:'robovida', percent:0.15, text:'de robo de vida'}]),
-        wTier('rango_a', 30, [{type:'robovida', percent:0.15, text:'de robo de vida'}, {type:'segundo_ataque_basico', chance:0.10, text:'de realizar un segundo ataque básico'}]),
-        wTier('legendario', 40, [{type:'robovida', percent:0.20, text:'de robo de vida'}, {type:'segundo_ataque_basico', chance:0.10, tierSProc:'arcocorto_s', text:'de realizar un segundo ataque básico que además cura 3% de tu vida máxima'}]),
+        wTier('poco_comun', 16, [{type:'robovida', percent:0.10, text:'de robo de vida (solo ataque básico)'}]),
+        wTier('raro', 20, [{type:'robovida', percent:0.12, text:'de robo de vida (solo ataque básico)'}]),
+        wTier('rango_b', 25, [{type:'robovida', percent:0.15, text:'de robo de vida (solo ataque básico)'}]),
+        wTier('rango_a', 30, [{type:'robovida', percent:0.15, text:'de robo de vida (solo ataque básico)'}, {type:'segundo_ataque_basico', chance:0.10, text:'de realizar un segundo ataque básico'}]),
+        wTier('legendario', 40, [{type:'robovida', percent:0.20, text:'de robo de vida (solo ataque básico)'}, {type:'segundo_ataque_basico', chance:0.10, tierSProc:'arcocorto_s', text:'de realizar un segundo ataque básico que además cura 3% de tu vida máxima'}]),
       ],
       'Arco largo': [
         wTier('comun', 10),
@@ -1792,11 +1792,11 @@ const WEAPON_CATALOG = {
     arma2: {
       'Carcaj de cuero': [
         wTier('comun', 10),
-        wTier('poco_comun', 14, [{type:'robovida', percent:0.10, text:'de robo de vida'}]),
-        wTier('raro', 18, [{type:'robovida', percent:0.12, text:'de robo de vida'}]),
-        wTier('rango_b', 22, [{type:'robovida', percent:0.15, text:'de robo de vida'}]),
-        wTier('rango_a', 26, [{type:'robovida', percent:0.15, text:'de robo de vida'}, {type:'segundo_ataque_basico', chance:0.10, text:'de realizar un segundo ataque básico'}]),
-        wTier('legendario', 40, [{type:'robovida', percent:0.20, text:'de robo de vida'}, {type:'segundo_ataque_basico', chance:0.10, tierSProc:'carcaj_s', text:'de realizar un segundo ataque básico con 10% de probabilidad de ignorar 50% de resistencia física'}]),
+        wTier('poco_comun', 14, [{type:'robovida', percent:0.10, text:'de robo de vida (solo ataque básico)'}]),
+        wTier('raro', 18, [{type:'robovida', percent:0.12, text:'de robo de vida (solo ataque básico)'}]),
+        wTier('rango_b', 22, [{type:'robovida', percent:0.15, text:'de robo de vida (solo ataque básico)'}]),
+        wTier('rango_a', 26, [{type:'robovida', percent:0.15, text:'de robo de vida (solo ataque básico)'}, {type:'segundo_ataque_basico', chance:0.10, text:'de realizar un segundo ataque básico'}]),
+        wTier('legendario', 40, [{type:'robovida', percent:0.20, text:'de robo de vida (solo ataque básico)'}, {type:'segundo_ataque_basico', chance:0.10, tierSProc:'carcaj_s', text:'de realizar un segundo ataque básico con 10% de probabilidad de ignorar 50% de resistencia física'}]),
       ],
     },
   },
@@ -2227,7 +2227,7 @@ const SET_SPECIAL_DEFS = {
   dano_basico: v=>({type:'aumento_dano_basico', value:v, text:'de daño del ataque básico'}),
   pen_fis:   v=>({type:'penetracion_armadura', value:v, text:'de penetración de armadura física'}),
   pen_mag:   v=>({type:'penetracion_magica', value:v, text:'de penetración de resistencia mágica'}),
-  sangrado:  v=>({type:'sangrado', chance:v, text:'de aplicar sangrado 2 turnos'}),
+  sangrado:  v=>({type:'sangrado', chance:v, text:'de aplicar sangrado 2 turnos (con ataque básico; el Asesino también con habilidades)'}),
   estados:   v=>({type:'prob_estados', value:v, text:'de probabilidad de aplicar estados'}),
   curacion:  v=>({type:'aumento_curacion', value:v, text:'de aumento de curación'}),
   escudo:    v=>({type:'aumento_escudo', value:v, text:'de potencia de escudos'}),
@@ -8581,7 +8581,21 @@ function applyEquippedSpecials(target, dmgDealt, skill){
   });
   socketedStones().forEach(s=> itemSpecialsArr(s).forEach(sp=> sources.push({it:s, sp})));
   equippedPets().forEach(p=> p.bonuses.forEach(sp=>{ if(sp.type) sources.push({it:{name:p.name}, sp}); }));
+  // Regla de procs (pedido explícito 2026-10-02, tras ver a un Arquero
+  // curarse entero con una sola Lluvia de flechas):
+  // - Sangrado del equipo y Robo de vida: SOLO con el ataque básico. El
+  //   Asesino es la excepción: a él le aplican también con sus habilidades.
+  // - Succión de hechizo: lo contrario, SOLO con habilidades (nunca básico).
+  // Única "Succión de vida" de algunos Caídos (effect.kind 'robovida'):
+  // estaba en el catálogo pero nunca tuvo código — se suma como robo de vida.
+  petUniqueEffects().forEach(({name, unique})=>{
+    if(unique.effect && unique.effect.kind==='robovida') sources.push({it:{name}, sp:{type:'robovida', percent:unique.effect.percent}});
+  });
+  const isBasicHit = !!skill && skill.id==='ataque_basico';
+  const procOnThisHit = isBasicHit || state.char.style==='doblefilo';
   sources.forEach(({it, sp})=>{
+    if((sp.type==='sangrado' || sp.type==='robovida') && !procOnThisHit) return;
+    if(sp.type==='succion_hechizo' && isBasicHit) return;
     if(sp.type==='aturdir'){
       // Piedras de alma únicamente (formato viejo) — inmediato, sin cambios.
       if(chance(sp.chance)){
@@ -9850,7 +9864,7 @@ function resolveOneAllyTurn(ally){
       dealDamageToAlly(ally, reflected);
       log(`${enemyTarget.name} refleja ${reflected} de daño de vuelta a <b>${ally.name}</b>.`);
     }
-    applyAllySpecials(ally, enemyTarget, dmg);
+    applyAllySpecials(ally, enemyTarget, dmg, !!skillText);
     // Golpe Pesado de Aldric (pedido explícito 2026-09-26): 12% de
     // probabilidad de aturdir al golpear, además del +60% de daño de siempre.
     if(stunProc>0 && enemyTarget.hp>0 && chance(stunProc)){
@@ -9866,8 +9880,14 @@ function resolveOneAllyTurn(ally){
 // que solo tienen sentido para el jugador (esp_refund, doble_encantamiento,
 // segundo ataque básico) no están acá: los aliados no tienen un kit de
 // habilidades propio con costo variable, así que no aplican.
-function applyAllySpecials(ally, target, dmgDealt){
+// isSkill: el golpe fue la habilidad del aliado (no su ataque básico) —
+// misma regla de procs que el jugador (ver applyEquippedSpecials), con la
+// excepción del Asesino para Sangrado/Robo de vida.
+function applyAllySpecials(ally, target, dmgDealt, isSkill){
+  const procOnThisHit = !isSkill || ally.role==='asesino';
   (ally.specials||[]).forEach(sp=>{
+    if((sp.type==='sangrado' || sp.type==='robovida') && !procOnThisHit) return;
+    if(sp.type==='succion_hechizo' && !isSkill) return;
     if(sp.type==='retroceso'){
       if(chance(sp.chance)){
         applyStatus(target, {name:'Aturdido', duration:1}, false);
