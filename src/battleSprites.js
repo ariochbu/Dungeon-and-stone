@@ -141,14 +141,24 @@ Object.assign(ENEMY_SPRITES, MONSTER_SPRITES);
 // base64. Para sumar más: guardar el PNG en src/assets/enemigos/<id>.png y
 // agregar el id acá.
 const HD_ENEMY_IDS = [
-  'arana_caparazon', 'bestia_carmesi', 'buitre_corrupto', 'devoradora_nido', 'gilgoblin', 'goblin_arquero',
-  'goblin_chaman', 'goblin_guerrero', 'goblin_saqueador', 'gran_lobo_hoja', 'gran_tejedora', 'halcon_guerra',
-  'hobgoblin', 'jabali_hierro', 'jefe_goblin', 'lince_sombrio', 'loba_acantilado', 'lobo_quimera',
-  'matriarca_abisal', 'matriarca_escarlata', 'matriarca_telaranha', 'ogro', 'oso_acorazado', 'oso_cuevas',
-  'oso_roca_lunar', 'reina_devoradora', 'reina_telaranha', 'rey_manada', 'riakis', 'saltadora_alfa',
-  'tarantula_cazadora', 'tarantula_saltarina', 'tarantula_tejedora', 'tigre_sable', 'viuda_alfa', 'viuda_carmesi',
-  'viuda_venenosa'];
-HD_ENEMY_IDS.forEach(id=>{ ENEMY_SPRITES[id] = `src/assets/enemigos/${id}.png?v=3`; });
+  'alfa_manada', 'arana_caparazon', 'asesino_elite_isla', 'asesino_isla', 'bestia_carmesi', 'buitre_corrupto',
+  'campeon_triton', 'cangrejo_gigante', 'capitan_mercenario', 'cazador_veterano', 'cazarrecompensas', 'centinela_coral_g',
+  'custodio_isla', 'devoradora_nido', 'duelista_veterano', 'explorador_rival', 'garvel', 'gilgoblin',
+  'goblin_arquero', 'goblin_chaman', 'goblin_guerrero', 'goblin_saqueador', 'gran_cangrejo_abisal', 'gran_lobo_hoja',
+  'gran_tejedora', 'guardia_profundidades', 'guardian_abismo', 'halcon_guerra', 'heraldo_tormenta', 'hobgoblin',
+  'impostor_mayor', 'jabali_hierro', 'jefe_goblin', 'leviatan_abisal', 'lince_sombrio', 'loba_acantilado',
+  'lobo_quimera', 'matriarca_abisal', 'matriarca_escarlata', 'matriarca_telaranha', 'medico_campana', 'mercenario_desertor',
+  'naga_arquero', 'naga_capitan', 'naga_maestro', 'ogro', 'oso_acorazado', 'oso_cuevas',
+  'oso_roca_lunar', 'reina_devoradora', 'reina_telaranha', 'rey_manada', 'riakis', 'sacerdotisa_mareas',
+  'saltadora_alfa', 'serpiente_palpus', 'sirena_corrupta', 'sirena_matriarca', 'storm_gush', 'superviviente_curtido',
+  'superviviente_despiadado', 'tarantula_cazadora', 'tarantula_saltarina', 'tarantula_tejedora', 'tigre_carmesi', 'tigre_sable',
+  'triton_guerrero', 'triton_hechicero', 'viuda_alfa', 'viuda_carmesi', 'viuda_venenosa'];
+HD_ENEMY_IDS.forEach(id=>{ ENEMY_SPRITES[id] = `src/assets/enemigos/${id}.png?v=4`; });
 // Invocaciones de las fases de jefe (2026-10-02): reusan sprites existentes.
 ENEMY_SPRITES.cria_arana = ENEMY_SPRITES.tarantula_cazadora;
 ENEMY_SPRITES.cangrejo_isla = ENEMY_SPRITES.cangrejo_gigante;
+
+// Sprites HD de aliados por personaje (2026-10-02): verticales (2:3), el
+// escenario los dibuja respetando su proporción. Vex y Kael aún usan el de rol.
+export const ALLY_TEMPLATE_SPRITES = {};
+['aldric','brann','neira','lyra','fennwick','eira','delyth','seraphina'].forEach(id=>{ ALLY_TEMPLATE_SPRITES[id] = `src/assets/aliados/sprites/${id}.png?v=1`; });

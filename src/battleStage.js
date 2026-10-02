@@ -13,7 +13,7 @@
 // combat.enemies/combat.allies/combat.lastActor/combat.lastAction y dibuja.
 // No aplica daño, no decide turnos, no cambia HP.
 
-import { CLASS_SPRITES, ALLY_SPRITES, ENEMY_SPRITES, playerSpriteFor, RACE_SIZE } from './battleSprites.js?v=72';
+import { CLASS_SPRITES, ALLY_SPRITES, ENEMY_SPRITES, playerSpriteFor, RACE_SIZE, ALLY_TEMPLATE_SPRITES } from './battleSprites.js?v=73';
 
 const TILE = 16;
 const SCALE = 3;
@@ -205,7 +205,7 @@ function keyFor(kind, entity, idx){
 function spriteFor(kind, entity, playerStyle, playerRace){
   if(kind==='player') return playerSpriteFor(playerStyle, playerRace);
   if(kind==='enemy') return ENEMY_SPRITES[entity.tpl && entity.tpl.id] || null;
-  if(kind==='ally') return ALLY_SPRITES[entity.role] || null;
+  if(kind==='ally') return ALLY_TEMPLATE_SPRITES[entity.templateId] || ALLY_SPRITES[entity.role] || null;
   return null;
 }
 
@@ -502,7 +502,15 @@ function drawActor(a){
       a._imgSrc = a.sprite;
     }
     if(a._img.complete && a._img.naturalWidth>0){
-      ctx.drawImage(a._img, cx-w/2, cy-h, w, h);
+      // Sprites no cuadrados (aliados HD, 2:3): se respeta su proporción y se
+      // dibujan un poco más altos para que la figura no quede chica.
+      const ar = a._img.naturalWidth / a._img.naturalHeight;
+      if(Math.abs(ar-1) > 0.05){
+        const hh = h * (ar < 1 ? 1.35 : 1), ww = hh * ar;
+        ctx.drawImage(a._img, cx-ww/2, cy-hh, ww, hh);
+      } else {
+        ctx.drawImage(a._img, cx-w/2, cy-h, w, h);
+      }
     }
   } else {
     ctx.filter = a.flash>0 ? ctx.filter : 'none';
