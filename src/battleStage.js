@@ -13,7 +13,7 @@
 // combat.enemies/combat.allies/combat.lastActor/combat.lastAction y dibuja.
 // No aplica daño, no decide turnos, no cambia HP.
 
-import { CLASS_SPRITES, ALLY_SPRITES, ENEMY_SPRITES, playerSpriteFor } from './battleSprites.js?v=67';
+import { CLASS_SPRITES, ALLY_SPRITES, ENEMY_SPRITES, playerSpriteFor, RACE_SIZE } from './battleSprites.js?v=69';
 
 const TILE = 16;
 const SCALE = 3;
@@ -272,7 +272,7 @@ function syncBattleStage(container, combat, playerInfo, onTargetClick){
     playerSpriteRef = spriteFor('player', null, playerInfo.style, playerInfo.race);
     Object.assign(a, {
       kind:'player', name: playerInfo.name, icon: playerInfo.icon, nameMaxW: pp.nameMaxW,
-      sprite: playerSpriteRef, role: roleFor('player', null, playerInfo.style),
+      sprite: playerSpriteRef, role: roleFor('player', null, playerInfo.style), sizeMul: RACE_SIZE[playerInfo.race] || 1,
       hp: playerInfo.hp, maxHP: playerInfo.maxHP, mp: playerInfo.mp, maxMP: playerInfo.maxMP,
       spirit: playerInfo.spirit, maxSpirit: playerInfo.maxSpirit, alive: playerInfo.hp>0,
       shield: playerInfo.shield||0,
@@ -313,7 +313,7 @@ function syncBattleStage(container, combat, playerInfo, onTargetClick){
     if(!a){ a = makeActor(k); actors.set(k, a); }
     a.baseX = enemyPos[i].x; a.baseY = enemyPos[i].y; a.x = a.baseX; a.y = a.baseY;
     Object.assign(a, {
-      kind:'enemy', refIdx:i, name: en.name, icon: en.icon, nameMaxW: enemyPos[i].nameMaxW, sprite: spriteFor('enemy', en),
+      kind:'enemy', refIdx:i, name: en.name, icon: en.icon, nameMaxW: enemyPos[i].nameMaxW, sprite: spriteFor('enemy', en), sizeMul: en.tpl && en.tpl.boss ? 1.3 : (en.tpl && en.tpl.elite ? 1.12 : (en.tpl && en.tpl.decoy ? 0.9 : 1)),
       role: roleFor('enemy', en), hp: en.hp, maxHP: en.maxHP, alive: en.hp>0, showResources:false,
       statuses: en.statuses||[],
       // Con pendingTargetFilter==='front' (2026-09-25: elegir a cuál de 2+
@@ -487,7 +487,8 @@ function drawActor(a){
   else if(a.flash>0) ctx.filter = 'brightness(1.8) saturate(0.3) sepia(1) hue-rotate(-50deg) saturate(4)';
   else if(dupTint) ctx.filter = 'hue-rotate(210deg) saturate(1.2)';
 
-  const w = SIZE*(a.scale||1), h = SIZE*(a.scale||1)*(a.squashY||1);
+  const sz = SIZE*(a.scale||1)*(a.sizeMul||1);
+  const w = sz, h = sz*(a.squashY||1);
   if(a.sprite){
     // El actor de un slot (p.ej. 'enemy:0') sobrevive entre peleas distintas
     // que reusan el mismo índice — sin comparar contra la fuente ya
