@@ -392,6 +392,25 @@ function decadeIndexForLevel(level){ return Math.min(DECADE_BESTIARY.length-1, M
 // cave (Riakis/bestias), cult (Usurpador), sea (Isla Paraíso/El Mar).
 const DECADE_BG_THEME = ['forest','forest','cave','cult','sea','sea'];
 
+// Plantillas de invocación (2026-10-02). Señuelo: 1 de vida (se fija al
+// invocar), no actúa, va al Frente y absorbe el golpe dirigido al frente.
+function decoyTpl(id, name, icon){
+  return {id, name, icon, hp:0.1, atk:0.1, res:{fisico:0,fuego:0,hielo:0,veneno:0,aturdimiento:0}, frontline:true, decoy:true,
+    abilities:{nada:{label:'—', mult:0}}, aiPriority:['nada']};
+}
+const DECOY_CLON_SOMBRA = decoyTpl('senuelo_clon', 'Clon de Sombra', '👤');
+const DECOY_REPLICA = decoyTpl('senuelo_replica', 'Réplica', '🪞');
+const DECOY_DUPLICADO = decoyTpl('senuelo_duplicado', 'Duplicado', '🪞');
+// Copias del Usurpador (fase 3): débiles pero sí pelean, y lo protegen al Frente.
+const USURPADOR_COPY_TPL = {id:'copia_usurpador', name:'Copia del Usurpador', icon:'🎭', hp:0.1, atk:0.4,
+  res:{fisico:10,fuego:10,hielo:10,veneno:10,aturdimiento:10}, frontline:true,
+  abilities:{confundir_c:{label:'Confundir', mult:0.6, applies:{name:'Confusion', chance:0.15, duration:2, procChance:0.35}, cooldown:4}, golpe_c:{label:'Golpe', mult:1.0}},
+  aiPriority:['confundir_c','golpe_c']};
+const GARVEL_SMALL_TPL = {id:'garvel_pequeno', name:'Garvel pequeño', icon:'🦠', hp:0.35, atk:0.5,
+  res:{fisico:-10,fuego:0,hielo:-5,veneno:15,aturdimiento:0},
+  abilities:{mordida_gp:{label:'Mordida', mult:1.0}}, aiPriority:['mordida_gp']};
+const CORROSION_STATUS = {name:'Corrosion', duration:2, resPenalty:15, healMult:0.5};
+
 const DECADE_BESTIARY = [
   // Década 0 — pisos 1-10 — Bosque Goblin
   // Plantilla de roles (2026-09-16, pedido explícito): cada bestiario de
@@ -631,12 +650,12 @@ const DECADE_BESTIARY = [
         aiPriority:['corte_garganta','atemorizar_lince','zarpazo_lince']},
     ],
     elite: [
-      {id:'alfa_manada', name:'Alfa de la Manada', icon:'🐺', hp:1.85, atk:1.28, res:{fisico:15,fuego:0,hielo:5,veneno:0,aturdimiento:5}, elite:true, frontline:true,
+      {id:'alfa_manada', reductionWithAllies:{min:1, value:0.10}, name:'Alfa de la Manada', icon:'🐺', hp:1.85, atk:1.28, res:{fisico:15,fuego:0,hielo:5,veneno:0,aturdimiento:5}, elite:true, frontline:true,
         abilities:{
           mordida_alfa:{label:'Mordida Alfa', mult:1.05, applies:{name:'Sangrado', chance:0.15, duration:2, stack:true, maxStack:3}},
           desgarro_alfa:{label:'Desgarro Alfa', mult:1.05, applies:{name:'Sangrado', chance:0.35, duration:3, stack:true, maxStack:3}, cooldown:3},
           frenesi_manada:{label:'Frenesí de Manada', mult:1.30, cooldown:4, condition:(ctx)=>ctx.targetStatusCount('Sangrado')>=1, bonusVsTargetStatus:{name:'Sangrado', mult:1.25}},
-          aullido_dominio:{label:'Aullido de Dominio', mult:0.50, cooldown:5, selfBuff:{name:'Fortalecido', duration:2, stacks:5}},
+          aullido_dominio:{label:'Aullido de Dominio', utility:'buff_allies', cooldown:5, buffAllies:{name:'Fortalecido', duration:2, stacks:5}},
         },
         aiPriority:['aullido_dominio','desgarro_alfa','frenesi_manada','mordida_alfa']},
       {id:'tigre_carmesi', name:'Tigre Carmesí', icon:'🐅', hp:1.75, atk:1.32, res:{fisico:10,fuego:0,hielo:0,veneno:5,aturdimiento:5}, elite:true, frontline:true,
@@ -716,7 +735,7 @@ const DECADE_BESTIARY = [
       9: {id:'rey_manada', name:'Rey de la Manada', icon:'👑', hp:3.75, atk:1.40, res:{fisico:25,fuego:0,hielo:5,veneno:35,aturdimiento:15}, boss:true, frontline:true,
         abilities:{
           mordida_real:{label:'Mordida Real', mult:1.15, applies:{name:'Sangrado', chance:0.20, duration:2, stack:true, maxStack:3}},
-          aullido_rey:{label:'Aullido del Rey', mult:0.60, applies:{name:'Miedo', chance:0.15, duration:2}, cooldown:5, selfBuff:{name:'Fortalecido', duration:2, stacks:3}},
+          aullido_rey:{label:'Aullido del Rey', mult:0.60, applies:{name:'Miedo', chance:0.15, duration:2}, cooldown:5, buffAllies:{name:'Fortalecido', duration:2, stacks:3}},
           desgarro_real:{label:'Desgarro Real', mult:1.25, applies:{name:'Sangrado', chance:0.35, duration:3, stack:true, maxStack:3}, cooldown:3},
           frenesi_alfa:{label:'Frenesí del Alfa', mult:1.30, cooldown:4, condition:(ctx)=>ctx.targetHpPct<0.4},
         },
@@ -726,7 +745,20 @@ const DECADE_BESTIARY = [
     // (físico/veneno/aturdimiento) pero es vulnerable a fuego/hielo — el hueco
     // que un Canalizador puede explotar hoy. Intacto por pedido explícito del
     // PDF ("Riakis no se reequilibra").
-    decadeBoss: {id:'riakis', name:'Señor del Caos Riakis', icon:'👁️', hp:5.0, atk:1.6, res:{fisico:55,fuego:-25,hielo:-25,veneno:40,aturdimiento:30}, moves:['pegar','cegar','atemorizar'], boss:true, frontline:true}
+    // Fases (2026-10-02, PDF Bestias: F1 presión de Caos, F2 portal/Orbes,
+    // F3 corrupción, F4 velocidad). Stats del compendio intactos.
+    decadeBoss: {id:'riakis', name:'Señor del Caos Riakis', icon:'👁️', hp:5.0, atk:1.6, res:{fisico:55,fuego:-25,hielo:-25,veneno:40,aturdimiento:30}, boss:true, frontline:true,
+      phases:[{below:0.75, msg:'abre una <b>Puerta del Caos</b>: acumula Orbes de poder (fase 2).'},{below:0.5, msg:'agrieta el suelo: la <b>corrupción</b> se extiende (fase 3).'},{below:0.25, msg:'desata el <b>Caos</b>: más rápido y feroz (fase 4).'}],
+      abilities:{
+        caos_desatado:{label:'Caos Desatado', utility:'self_buff', oncePerCombat:true, condition:(ctx)=>ctx.selfHpPct<0.25, selfBuff:{name:'Caos Desatado', duration:99, dmgMult:1.20, evasionDelta:10}},
+        grieta_mal:{label:'Grieta del Mal', mult:1.30, cooldown:3, condition:(ctx)=>ctx.selfHpPct<0.5, applies:Object.assign({chance:1}, CORROSION_STATUS)},
+        puerta_caos:{label:'Puerta del Caos', utility:'buff_allies', cooldown:4, condition:(ctx)=>ctx.selfHpPct<0.75, buffAllies:{name:'Fortalecido', duration:99, stacks:2, maxStacks:6}},
+        presa_r:{label:'Presa', mult:0.70, cooldown:4, condition:(ctx)=>ctx.selfHpPct<0.75 && ctx.targetStatusCount('Marcado')===0, applies:{name:'Marcado', incomingDmgMult:1.25, chance:1, duration:3}},
+        lluvia_desesperacion:{label:'Lluvia de Desesperación', mult:0.80, cooldown:4, applies:Object.assign({chance:0.6}, CORROSION_STATUS)},
+        cegar_r:{label:'Mirada del Caos', mult:0.60, cooldown:3, condition:(ctx)=>ctx.targetStatusCount('Ceguera')===0, applies:{name:'Ceguera', chance:0.30, duration:2, procChance:0.32}},
+        atemorizar_r:{label:'Rugido del Caos', mult:0.60, cooldown:4, applies:{name:'Miedo', chance:0.25, duration:2, procChance:0.4}},
+        pegar_r:{label:'Garra del Caos', mult:1.00}},
+      aiPriority:['caos_desatado','grieta_mal','puerta_caos','presa_r','lluvia_desesperacion','cegar_r','atemorizar_r','pegar_r']}
   },
   // Década 3 — pisos 31-40 — El Usurpador Sin Nombre (REWORK 2026-09-25,
   // pedido explícito, PDF "Decada 4 - El Usurpador Sin Nombre"). Identidad:
@@ -782,14 +814,14 @@ const DECADE_BESTIARY = [
         abilities:{
           golpe_copiado:{label:'Golpe Copiado', mult:1.05},
           reflejo_perfecto_e:{label:'Reflejo Perfecto', mult:0.75, applies:{name:'Confusion', chance:0.22, duration:2}, cooldown:4},
-          replica:{label:'Réplica', utility:'self_buff', selfBuff:{name:'Réplica', duration:3, incomingDmgReduction:0.20}, cooldown:5},
+          replica:{label:'Réplica', utility:'summon', cooldown:5, summon:{tpl:DECOY_REPLICA, count:1, maxAlive:1, oneHp:true}},
         },
         aiPriority:['replica','reflejo_perfecto_e','golpe_copiado']},
     ],
     guardians: [],
     // Guardián único y determinista por piso (31 a 39).
     guardianByFloor: {
-      1: {id:'reflejo_perfecto_g', name:'Reflejo Perfecto', icon:'🪞', hp:2.70, atk:1.20, res:{fisico:10,fuego:5,hielo:5,veneno:5,aturdimiento:10}, boss:true, frontline:true,
+      1: {id:'reflejo_perfecto_g', firstMentalResist:true, name:'Reflejo Perfecto', icon:'🪞', hp:2.70, atk:1.20, res:{fisico:10,fuego:5,hielo:5,veneno:5,aturdimiento:10}, boss:true, frontline:true,
         abilities:{
           golpe_g31:{label:'Golpe', mult:1.00},
           reflejo_perfecto_g31:{label:'Reflejo Perfecto', mult:0.75, applies:{name:'Confusion', chance:0.22, duration:2}, cooldown:4},
@@ -807,7 +839,7 @@ const DECADE_BESTIARY = [
         abilities:{
           fragmento_g33:{label:'Fragmento', mult:1.00},
           reflejo_oscuro:{label:'Reflejo Oscuro', mult:0.75, applies:{name:'Confusion', chance:0.20, duration:2}, cooldown:3},
-          clon_sombra:{label:'Clon de Sombra', utility:'self_buff', selfBuff:{name:'Clon de Sombra', duration:3, evasionDelta:10}, cooldown:5},
+          clon_sombra:{label:'Clon de Sombra', utility:'summon', cooldown:5, summon:{tpl:DECOY_CLON_SOMBRA, count:1, maxAlive:1, oneHp:true}, selfBuff:{name:'Tras el Clon', duration:3, evasionDelta:10}},
         },
         aiPriority:['clon_sombra','reflejo_oscuro','fragmento_g33']},
       4: {id:'doble_traicionero', name:'Doble Traicionero', icon:'👥', hp:2.90, atk:1.28, res:{fisico:10,fuego:5,hielo:5,veneno:5,aturdimiento:10}, boss:true, frontline:true,
@@ -831,13 +863,14 @@ const DECADE_BESTIARY = [
           punalada_traicionera:{label:'Puñalada Traicionera', mult:1.25, cooldown:3, condition:(ctx)=>ctx.targetStatusCount('Confusion')>=1, bonusVsTargetStatus:{name:'Confusion', mult:1.25}},
         },
         aiPriority:['identidad_robada_g36','punalada_traicionera','ataque_g36']},
-      7: {id:'maestro_reflejo', name:'Maestro del Reflejo', icon:'🪞', hp:3.20, atk:1.28, res:{fisico:10,fuego:5,hielo:5,veneno:5,aturdimiento:10}, boss:true,
+      7: {id:'maestro_reflejo', dmgMultWhileSummonsAlive:1.10, name:'Maestro del Reflejo', icon:'🪞', hp:3.20, atk:1.28, res:{fisico:10,fuego:5,hielo:5,veneno:5,aturdimiento:10}, boss:true,
         abilities:{
           fragmento_g37:{label:'Fragmento', mult:1.05},
           confusion_g37:{label:'Confusión', mult:0.75, applies:{name:'Confusion', chance:0.28, duration:2}, cooldown:4},
           reflexion:{label:'Reflexión', utility:'self_buff', selfBuff:{name:'Reflexión', duration:3, incomingDmgReduction:0.15}, cooldown:5},
+          duplicado:{label:'Duplicado', utility:'summon', cooldown:5, summon:{tpl:DECOY_DUPLICADO, count:1, maxAlive:1, oneHp:true}},
         },
-        aiPriority:['reflexion','confusion_g37','fragmento_g37']},
+        aiPriority:['duplicado','reflexion','confusion_g37','fragmento_g37']},
       8: {id:'maestro_rostros', name:'Maestro de Rostros', icon:'🎭', hp:3.35, atk:1.35, res:{fisico:10,fuego:5,hielo:5,veneno:5,aturdimiento:10}, boss:true, frontline:true,
         abilities:{
           golpe_g38:{label:'Golpe', mult:1.05},
@@ -845,16 +878,31 @@ const DECADE_BESTIARY = [
           golpe_copiado_g38:{label:'Golpe Copiado', mult:1.20, cooldown:3, condition:(ctx)=>ctx.targetStatusCount('Confusion')>=1, bonusVsTargetStatus:{name:'Confusion', mult:1.25}},
         },
         aiPriority:['rostro_falso_g38','golpe_copiado_g38','golpe_g38']},
-      9: {id:'usurpador_fragmentado', name:'Usurpador Fragmentado', icon:'🎭', hp:3.50, atk:1.40, res:{fisico:15,fuego:10,hielo:10,veneno:10,aturdimiento:15}, boss:true, frontline:true,
+      9: {id:'usurpador_fragmentado', reductionWhileSummonsAlive:0.25, name:'Usurpador Fragmentado', icon:'🎭', hp:3.50, atk:1.40, res:{fisico:15,fuego:10,hielo:10,veneno:10,aturdimiento:15}, boss:true, frontline:true,
         abilities:{
           ataque_g39:{label:'Ataque', mult:1.10},
           confusion_profunda:{label:'Confusión Profunda', mult:0.80, applies:{name:'Confusion', chance:0.30, duration:2}, cooldown:4},
+          duplicacion:{label:'Duplicación', utility:'summon', cooldown:5, summon:{tpl:DECOY_DUPLICADO, count:2, maxAlive:2, oneHp:true}},
           golpe_brutal_g39:{label:'Golpe Brutal', mult:1.35, cooldown:3, condition:(ctx)=>ctx.targetStatusCount('Confusion')>=1, bonusVsTargetStatus:{name:'Confusion', mult:1.20}},
         },
         hpThresholdBuff:{threshold:0.4, buff:{name:'Fragmentación', duration:99, dmgMult:1.15}},
-        aiPriority:['confusion_profunda','golpe_brutal_g39','ataque_g39']},
+        aiPriority:['duplicacion','confusion_profunda','golpe_brutal_g39','ataque_g39']},
     },
-    decadeBoss: {id:'usurpador', name:'El Usurpador Sin Nombre', icon:'🎭', hp:4.8, atk:1.8, res:{fisico:20,fuego:10,hielo:10,veneno:10,aturdimiento:20}, moves:['pegar','confundir','aplastar'], boss:true, frontline:true}
+    // Fases (2026-10-02, PDF Usurpador): Forma original -> Mimetismo ->
+    // Autorreplicación/Intercambio (copias al Frente; mientras vivan recibe
+    // -35% de daño) -> Cristalización. Stats del compendio intactos.
+    decadeBoss: {id:'usurpador', name:'El Usurpador Sin Nombre', icon:'🎭', hp:4.8, atk:1.8, res:{fisico:20,fuego:10,hielo:10,veneno:10,aturdimiento:20}, boss:true, frontline:true,
+      reductionWhileSummonsAlive:0.35,
+      phases:[{below:0.75, msg:'adopta tu forma (<b>Mimetismo</b>): imita tu estilo de pelea.'},{below:0.5, msg:'se <b>fragmenta en copias</b> e intercambia su lugar con ellas.'},{below:0.25, msg:'se <b>cristaliza</b>: su cuerpo se vuelve casi impenetrable por unos turnos.'}],
+      abilities:{
+        cristalizacion:{label:'Cristalización', utility:'self_buff', oncePerCombat:true, condition:(ctx)=>ctx.selfHpPct<0.25, selfBuff:{name:'Cristalización', duration:3, incomingDmgReduction:0.6}},
+        replicacion:{label:'Autorreplicación', utility:'summon', cooldown:5, condition:(ctx)=>ctx.selfHpPct<0.5, summon:{tpl:USURPADOR_COPY_TPL, count:2, maxAlive:2, hpPct:0.08, atkPct:0.4}},
+        mimetismo:{label:'Mimetismo', utility:'self_buff', oncePerCombat:true, condition:(ctx)=>ctx.selfHpPct<0.75, selfBuff:{name:'Forma Robada', duration:99, dmgMult:1.15}},
+        confundir_u:{label:'Confundir', mult:0.70, cooldown:4, applies:{name:'Confusion', chance:0.28, duration:2, procChance:0.35}},
+        golpe_mimetico:{label:'Golpe Mimético', mult:1.20, cooldown:3, condition:(ctx)=>ctx.selfHpPct<0.75, bonusVsTargetStatus:{name:'Confusion', mult:1.25}},
+        golpe_brutal_u:{label:'Golpe Brutal', mult:1.40, cooldown:3},
+        pegar_u:{label:'Golpe', mult:1.00}},
+      aiPriority:['cristalizacion','replicacion','mimetismo','confundir_u','golpe_mimetico','golpe_brutal_u','pegar_u']}
   },
   // Década 4 — pisos 41-50 — Isla Paraíso (REWORK 2026-09-25, pedido
   // explícito, PDF "Decada 4 - Isla Paraiso"). Ver reglas de generación
@@ -905,7 +953,7 @@ const DECADE_BESTIARY = [
         abilities:{
           baston:{label:'Bastón', mult:0.80},
           curacion_mc:{label:'Curación', utility:'heal_ally', healPct:0.10, cooldown:4, condition:(ctx)=>combat.enemies.some(e=>e.hp>0 && e.hp<e.maxHP)},
-          adrenalina:{label:'Adrenalina', utility:'self_buff', selfBuff:{name:'Adrenalina', duration:2, dmgMult:1.10}, cooldown:5},
+          adrenalina:{label:'Adrenalina', utility:'buff_allies', cooldown:5, buffAllies:{name:'Adrenalina', duration:2, dmgMult:1.10, single:true}},
         },
         aiPriority:['curacion_mc','adrenalina','baston']},
     ],
@@ -930,7 +978,7 @@ const DECADE_BESTIARY = [
           disparo_ejecutor:{label:'Disparo Ejecutor', mult:1.30, cooldown:4, bonusVsLowHp:{below:0.4, mult:1.30}},
         },
         aiPriority:['disparo_ejecutor','marca_mortal','disparo_cv']},
-      {id:'duelista_veterano', name:'Duelista Veterano', icon:'🤺', hp:1.80, atk:1.32, res:{fisico:5,fuego:0,hielo:0,veneno:0,aturdimiento:5}, elite:true, frontline:true,
+      {id:'duelista_veterano', riposte:{chance:0.30, mult:0.75}, name:'Duelista Veterano', icon:'🤺', hp:1.80, atk:1.32, res:{fisico:5,fuego:0,hielo:0,veneno:0,aturdimiento:5}, elite:true, frontline:true,
         abilities:{
           estocada_dv:{label:'Estocada', mult:1.05},
           corte_preciso:{label:'Corte Preciso', mult:1.00, applies:{name:'Sangrado', chance:0.25, duration:3, stack:true, maxStack:3}, cooldown:3},
@@ -939,7 +987,7 @@ const DECADE_BESTIARY = [
       {id:'capitan_mercenario', name:'Capitán Mercenario', icon:'🎖️', hp:2.00, atk:1.30, res:{fisico:10,fuego:0,hielo:0,veneno:0,aturdimiento:10}, elite:true, frontline:true,
         abilities:{
           espadazo:{label:'Espadazo', mult:1.05},
-          orden_ataque:{label:'Orden de Ataque', mult:0.60, cooldown:5, selfBuff:{name:'Fortalecido', duration:2, stacks:4}},
+          orden_ataque:{label:'Orden de Ataque', utility:'buff_allies', cooldown:5, buffAllies:{name:'Fortalecido', duration:2, stacks:4}},
           guarda_alta:{label:'Guarda Alta', utility:'self_buff', selfBuff:{name:'Guarda Alta', duration:2, incomingDmgReduction:0.15}, cooldown:5},
           golpe_mando:{label:'Golpe de Mando', mult:1.20, cooldown:3},
         },
@@ -989,7 +1037,7 @@ const DECADE_BESTIARY = [
           corriente_inversa:{label:'Corriente Inversa', mult:0.60, cooldown:4, applies:{name:'Ralentizado', chance:1, duration:2}},
         },
         aiPriority:['debilitar_th','corriente_inversa','descarga_acuatica']},
-      {id:'cangrejo_gigante', name:'Cangrejo Gigante', icon:'🦀', hp:1.30, atk:1.05, res:{fisico:20,fuego:0,hielo:-5,veneno:0,aturdimiento:10}, frontline:true,
+      {id:'cangrejo_gigante', immuneRetroceso:true, name:'Cangrejo Gigante', icon:'🦀', hp:1.30, atk:1.05, res:{fisico:20,fuego:0,hielo:-5,veneno:0,aturdimiento:10}, frontline:true,
         abilities:{
           pinza:{label:'Pinza', mult:1.00},
           pinza_aplastante:{label:'Pinza Aplastante', mult:1.20, applies:{name:'Paralisis', chance:0.15, duration:1}, cooldown:4},
@@ -1003,14 +1051,14 @@ const DECADE_BESTIARY = [
           ola_maldita:{label:'Ola Maldita', mult:0.75, applies:{name:'Debilitado', chance:0.15, duration:2}, cooldown:3, bonusVsTargetStatus:{name:'Confusion', mult:1.15}},
         },
         aiPriority:['canto_corrupto','ola_maldita','grito_cortante']},
-      {id:'naga_arquero', name:'Naga Arquero', icon:'🏹', hp:0.80, atk:1.10, res:{fisico:0,fuego:0,hielo:-5,veneno:5,aturdimiento:0},
+      {id:'naga_arquero', passiveDmgMult:1.10, name:'Naga Arquero', icon:'🏹', hp:0.80, atk:1.10, res:{fisico:0,fuego:0,hielo:-5,veneno:5,aturdimiento:0},
         abilities:{
           flecha_marina:{label:'Flecha Marina', mult:1.00},
           flecha_perforante:{label:'Flecha Perforante', mult:0.85, cooldown:3, ignoreResist:0.25},
           flecha_entumecedora:{label:'Flecha Entumecedora', mult:0.65, applies:{name:'Ralentizado', chance:0.20, duration:2}, cooldown:4},
         },
         aiPriority:['flecha_entumecedora','flecha_perforante','flecha_marina']},
-      {id:'garvel', name:'Garvel', icon:'🦠', hp:0.75, atk:0.90, res:{fisico:-10,fuego:0,hielo:-5,veneno:15,aturdimiento:0},
+      {id:'garvel', onDeathSpawn:{tpl:GARVEL_SMALL_TPL, chance:0.30}, name:'Garvel', icon:'🦠', hp:0.75, atk:0.90, res:{fisico:-10,fuego:0,hielo:-5,veneno:15,aturdimiento:0},
         abilities:{
           mordida_garvel:{label:'Mordida', mult:1.00},
           salpicadura_acida:{label:'Salpicadura Ácida', mult:0.65, applies:{name:'Veneno', chance:0.15, duration:3, stack:true, maxStack:3}, cooldown:3},
@@ -1026,14 +1074,14 @@ const DECADE_BESTIARY = [
           guardia_marea:{label:'Guardia de Marea', utility:'self_buff', selfBuff:{name:'Guardia de Marea', duration:2, incomingDmgReduction:0.15}, cooldown:5},
         },
         aiPriority:['guardia_marea','golpe_brutal_gp','estocada_profunda','tridente_gp']},
-      {id:'naga_capitan', name:'Naga Capitán', icon:'🏹', hp:1.90, atk:1.35, res:{fisico:5,fuego:0,hielo:-10,veneno:5,aturdimiento:5}, elite:true,
+      {id:'naga_capitan', reductionWithAllies:{min:2, value:0.10}, name:'Naga Capitán', icon:'🏹', hp:1.90, atk:1.35, res:{fisico:5,fuego:0,hielo:-10,veneno:5,aturdimiento:5}, elite:true,
         abilities:{
           ataque_nc:{label:'Ataque', mult:1.00},
           flecha_perforante_nc:{label:'Flecha Perforante', mult:0.90, cooldown:3, ignoreResist:0.35},
-          orden_ataque_nc:{label:'Orden de Ataque', mult:0.60, cooldown:5, selfBuff:{name:'Fortalecido', duration:2, stacks:4}},
+          orden_ataque_nc:{label:'Orden de Ataque', utility:'buff_allies', cooldown:5, buffAllies:{name:'Fortalecido', duration:2, stacks:4}},
         },
         aiPriority:['orden_ataque_nc','flecha_perforante_nc','ataque_nc']},
-      {id:'sacerdotisa_mareas', name:'Sacerdotisa de las Mareas', icon:'🌊', hp:1.70, atk:1.15, res:{fisico:0,fuego:5,hielo:-5,veneno:10,aturdimiento:5}, elite:true,
+      {id:'sacerdotisa_mareas', auraRegenPct:0.02, name:'Sacerdotisa de las Mareas', icon:'🌊', hp:1.70, atk:1.15, res:{fisico:0,fuego:5,hielo:-5,veneno:10,aturdimiento:5}, elite:true,
         abilities:{
           ataque_sm:{label:'Ataque', mult:0.80},
           debilitamiento_oceanico:{label:'Debilitamiento Oceánico', mult:0.65, applies:{name:'Debilitado', chance:0.25, duration:2}, cooldown:3},
@@ -1045,14 +1093,14 @@ const DECADE_BESTIARY = [
     guardians: [],
     // Guardián único y determinista por piso (51 a 59).
     guardianByFloor: {
-      1: {id:'campeon_triton', name:'Campeón Tritón', icon:'🔱', hp:2.70, atk:1.25, res:{fisico:10,fuego:5,hielo:-10,veneno:5,aturdimiento:5}, boss:true, frontline:true,
+      1: {id:'campeon_triton', passiveReduction:0.10, name:'Campeón Tritón', icon:'🔱', hp:2.70, atk:1.25, res:{fisico:10,fuego:5,hielo:-10,veneno:5,aturdimiento:5}, boss:true, frontline:true,
         abilities:{
           tridente_g51:{label:'Tridente', mult:1.05},
           estocada_g51:{label:'Estocada', mult:1.20, cooldown:3},
           golpe_brutal_g51:{label:'Golpe Brutal', mult:1.35, applies:{name:'Ralentizado', chance:0.20, duration:2}, cooldown:4},
         },
         aiPriority:['golpe_brutal_g51','estocada_g51','tridente_g51']},
-      2: {id:'naga_maestro', name:'Naga Maestro', icon:'🏹', hp:2.65, atk:1.35, res:{fisico:0,fuego:0,hielo:-10,veneno:5,aturdimiento:5}, boss:true,
+      2: {id:'naga_maestro', passiveDmgMult:1.15, name:'Naga Maestro', icon:'🏹', hp:2.65, atk:1.35, res:{fisico:0,fuego:0,hielo:-10,veneno:5,aturdimiento:5}, boss:true,
         abilities:{
           flecha_g52:{label:'Flecha', mult:1.05},
           perforante_g52:{label:'Perforante', mult:0.95, cooldown:3, ignoreResist:0.30},
@@ -1076,7 +1124,7 @@ const DECADE_BESTIARY = [
       // Física bajada de 30 a 18 (2026-09-26, pedido explícito): superaba al
       // propio jefe de década (Storm Gush, 25) — ningún guardián puede
       // resistir más golpe físico que su jefe.
-      5: {id:'gran_cangrejo_abisal', name:'Gran Cangrejo Abisal', icon:'🦀', hp:3.50, atk:1.20, res:{fisico:18,fuego:0,hielo:-5,veneno:5,aturdimiento:15}, boss:true, frontline:true,
+      5: {id:'gran_cangrejo_abisal', immuneRetroceso:true, name:'Gran Cangrejo Abisal', icon:'🦀', hp:3.50, atk:1.20, res:{fisico:18,fuego:0,hielo:-5,veneno:5,aturdimiento:15}, boss:true, frontline:true,
         abilities:{
           pinza_g55:{label:'Pinza', mult:1.05},
           aplastante_g55:{label:'Aplastante', mult:1.30, applies:{name:'Paralisis', chance:0.20, duration:1}, cooldown:4},
@@ -1109,11 +1157,27 @@ const DECADE_BESTIARY = [
         abilities:{
           tridente_g59:{label:'Tridente', mult:1.05},
           rayo_marino:{label:'Rayo Marino', mult:0.90, applies:{name:'Debilitado', chance:0.20, duration:2}, cooldown:3},
-          tormenta_menor:{label:'Tormenta Menor', mult:0.60, cooldown:5, selfBuff:{name:'Tormenta Menor', duration:2, dmgMult:1.15}},
+          tormenta_menor:{label:'Tormenta Menor', mult:0.60, cooldown:5, selfBuff:{name:'Tormenta Menor', duration:2, dmgMult:1.15, regenPct:0.05}},
         },
         aiPriority:['tormenta_menor','rayo_marino','tridente_g59']},
     },
-    decadeBoss: {id:'storm_gush', name:'Storm Gush, Tetrasea el Señor de las Lágrimas', icon:'🔱', hp:5.4, atk:1.85, res:{fisico:25,fuego:5,hielo:-15,veneno:10,aturdimiento:20}, moves:['pegar','aplastar','debilitar'], boss:true, frontline:true}
+    // Fases (2026-10-02, PDF Storm Gush): 1 Patrones (100-70%), 2 Lluvia
+    // (70-40%), 3 Tormenta (40-10%), 4 Sacerdote de la Tormenta (<10%,
+    // inmunidad 1 turno y luego solo ataques físicos). Stats intactos.
+    decadeBoss: {id:'storm_gush', name:'Storm Gush, Tetrasea el Señor de las Lágrimas', icon:'🔱', hp:5.4, atk:1.85, res:{fisico:25,fuego:5,hielo:-15,veneno:10,aturdimiento:20}, boss:true, frontline:true,
+      phases:[{below:0.7, msg:'inicia el <b>Ritual de Lluvia</b>: la tormenta lo fortalece (fase 2).'},{below:0.4, msg:'llama a la <b>Tormenta</b>: las aguas lo regeneran (fase 3).'},{below:0.1, msg:'se transforma en el <b>Sacerdote de la Tormenta</b>: carrera final (fase 4).'}],
+      abilities:{
+        sacerdote_tormenta:{label:'Sacerdote de la Tormenta', utility:'self_buff', oncePerCombat:true, condition:(ctx)=>ctx.selfHpPct<0.1, selfBuff:{name:'Sacerdote de la Tormenta', duration:2, incomingDmgReduction:1.0}},
+        ritual_lluvia:{label:'Ritual de Lluvia', utility:'self_buff', oncePerCombat:true, condition:(ctx)=>ctx.selfHpPct<0.7, selfBuff:{name:'Lluvia', duration:4, dmgMult:1.15, regenPct:0.03}, debuffTarget:{name:'Empapado', duration:4, evasionDelta:-10}},
+        ritual_lluvia_2:{label:'Ritual de Lluvia', utility:'self_buff', oncePerCombat:true, condition:(ctx)=>ctx.selfHpPct<0.4, selfBuff:{name:'Lluvia', duration:4, dmgMult:1.15, regenPct:0.03}, debuffTarget:{name:'Empapado', duration:4, evasionDelta:-10}},
+        llamado_tormenta:{label:'Llamado de la Tormenta', utility:'self_heal', cooldown:4, healPct:0.08, requiresStatus:'Lluvia', condition:(ctx)=>ctx.selfHpPct<0.4 && ctx.selfHpPct>=0.1, debuffTarget:{name:'Empapado', duration:2, evasionDelta:-10}},
+        sangre_tormenta:{label:'Sangre de la Tormenta', utility:'self_buff', cooldown:5, condition:(ctx)=>ctx.selfHpPct>=0.7, selfBuff:{name:'Sangre de la Tormenta', duration:2, dmgMult:1.10}},
+        rugido_tiranico:{label:'Rugido Tiránico', mult:0.60, cooldown:5, condition:(ctx)=>ctx.selfHpPct>=0.1, applies:{name:'Miedo', chance:0.20, duration:2, procChance:0.4}},
+        vena_dragon:{label:'Vena del Dragón', mult:0.60, cooldown:4, mpDrain:0.10, condition:(ctx)=>ctx.selfHpPct>=0.1, applies:{name:'Ralentizado', chance:0.20, duration:2}},
+        ojo_tormenta:{label:'Ojo de la Tormenta', mult:0.80, cooldown:3, applies:{name:'Ralentizado', chance:0.20, duration:2}},
+        golpe_cola_sg:{label:'Golpe de Cola', mult:1.25, cooldown:3},
+        tridente_sg:{label:'Tridente', mult:1.00}},
+      aiPriority:['sacerdote_tormenta','ritual_lluvia_2','ritual_lluvia','llamado_tormenta','sangre_tormenta','rugido_tiranico','vena_dragon','ojo_tormenta','golpe_cola_sg','tridente_sg']}
   }
 ];
 
@@ -7996,7 +8060,25 @@ function livingFrontlineEnemyIndices(){
   combat.enemies.forEach((e,i)=>{ if(e.hp>0 && e.tpl && e.tpl.frontline) idxs.push(i); });
   return idxs;
 }
+// Señuelos vivos (Clon de Sombra, Réplica, Duplicado): cubren el frente.
+function livingDecoyIndices(){
+  const idxs = [];
+  combat.enemies.forEach((e,i)=>{ if(e.hp>0 && e.tpl && e.tpl.decoy) idxs.push(i); });
+  return idxs;
+}
+// Un ataque a distancia contra un enemigo con señuelos vivos tiene 50% de
+// ser interceptado por uno de ellos (mitigación pedida 2026-10-02).
+function decoyIntercept(t){
+  if(!t || !t.tpl || t.tpl.decoy || !combat.enemies.includes(t)) return t;
+  const decoys = livingDecoyIndices();
+  if(!decoys.length || !chance(0.5)) return t;
+  const d = combat.enemies[decoys[Math.floor(Math.random()*decoys.length)]];
+  log(`¡<b>${d.name}</b> se interpone y recibe el golpe dirigido a ${t.name}!`);
+  return d;
+}
 function frontEnemyIndex(){
+  const decoyIdxs = livingDecoyIndices();
+  if(decoyIdxs.length) return decoyIdxs[0];
   const frontIdxs = livingFrontlineEnemyIndices();
   if(frontIdxs.length) return frontIdxs[0];
   for(let i=0;i<combat.enemies.length;i++) if(combat.enemies[i].hp>0) return i;
@@ -8009,6 +8091,9 @@ function frontEnemyIndex(){
 // frontal, se desbloquea la elección entre lo que quede vivo — que en ese
 // punto es pura retaguardia — en vez de auto-elegir sin dejar escoger.
 function playerFrontTargetIndices(){
+  // Mientras haya señuelos vivos, son lo único alcanzable cuerpo a cuerpo.
+  const decoys = livingDecoyIndices();
+  if(decoys.length) return decoys;
   const front = livingFrontlineEnemyIndices();
   if(front.length) return front;
   const idxs = [];
@@ -8052,6 +8137,7 @@ function computeCritEvasion(){
   ev -= levelGapEvasionBonus(monsterEffectiveLevel(), state.char.level);
   const furioso = hasStatus(combat.playerStatuses,'Furioso');
   if(furioso) ev += furioso.evasionDelta/100;
+  (combat.playerStatuses||[]).forEach(st=>{ if(st.name!=='Furioso' && st.evasionDelta) ev += st.evasionDelta/100; });
   if(combat.playerDefending) ev = Math.max(ev, 0.5);
   // Ralentizado: -20% de evasión plana mientras dure (corregido 2026-09-26:
   // el texto y el tooltip siempre dijeron -20%, el código aplicaba -15%).
@@ -8112,7 +8198,7 @@ function combatStatsSummary(){
     succionHechizo: sumBy('succion_hechizo','percent'),
     penetracionFisica: sumBy('penetracion_armadura','value'),
     penetracionMagica: sumBy('penetracion_magica','value'),
-    segundoAtaque: sumBy('segundo_ataque_basico','chance'),
+    segundoAtaque: Math.min(SEGUNDO_ATAQUE_CAP, sumBy('segundo_ataque_basico','chance')),
     dobleEncantamiento: sumBy('doble_encantamiento','chance'),
     razaBonuses: specials.filter(sp=>sp.type==='aumento_dano_raza'),
     posicionBonuses: specials.filter(sp=>sp.type==='aumento_dano_posicion')
@@ -8219,6 +8305,10 @@ function applyStatus(target, statusDef, isPlayer){
         if(chance(0.5)) return false;
       }
     }
+    if(target && target.tpl && target.tpl.firstMentalResist && isMental && !target.firstMentalUsed){
+      target.firstMentalUsed = true;
+      if(chance(0.5)){ log(`${target.name} refleja la alteración mental: no le afecta.`); return false; }
+    }
     if(!chance(effChance)) return false;
   }
   const list = isPlayer ? combat.playerStatuses : target.statuses;
@@ -8264,6 +8354,12 @@ const STATUS_INFO = {
   Debilitado:   {buff:false, desc:'Su daño cae un 15%.'},
   Voluntad:     {buff:true,  desc:'+Fortaleza mental (conjunto Voluntad Inquebrantable).'},
   'Último Bastión': {buff:true, desc:'-daño recibido (conjunto Guardián Eterno).'},
+  Empapado:     {buff:false, desc:'-10% de evasión mientras dura (Storm Gush).'},
+  Lluvia:       {buff:true,  desc:'Storm Gush: +15% de daño y regeneración mientras dura.'},
+  'Cristalización': {buff:true, desc:'El Usurpador recibe -60% de daño mientras dura.'},
+  'Forma Robada': {buff:true, desc:'El Usurpador imita tu forma: +15% de daño.'},
+  'Caos Desatado': {buff:true, desc:'Riakis: +20% de daño y +10% de evasión.'},
+  'Sacerdote de la Tormenta': {buff:true, desc:'Inmune al daño mientras dura.'},
   Mermado:      {buff:false, desc:'Su daño cae un poco mientras dura (armas de Paladín, Hechicero o Sacerdote).'},
   Ruina:        {buff:false, desc:'Pierde puntos en todas sus resistencias mientras dura (Vara de la Ruina).'},
   Paralisis:    {buff:false, desc:'Evasión a 0: no puede esquivar nada, ni defendiéndose.'},
@@ -8391,6 +8487,7 @@ function applyEquippedSpecials(target, dmgDealt, skill){
     } else if(sp.type==='retroceso'){
       // Inmediato: se aplica ya mismo, así que el enemigo pierde la acción
       // que le tocaba este mismo ciclo de turno (ver processEnemyTurns).
+      if(target.tpl && target.tpl.immuneRetroceso) return;
       if(chance(sp.chance)){
         applyStatus(target, {name:'Aturdido', duration:1}, false);
         log(`<b>${it.name}</b> aplica Retroceso a ${target.name}.`);
@@ -8525,6 +8622,13 @@ function effectiveSkillCost(skillId, skill){
   let v = Math.max(0, skill.cost.valor - controlDiscountFor(skillId));
   if(skill.cost.tipo==='espiritu' && combat && combat.espHalfNext) v = Math.ceil(v/2); // Piedra de Voluntad A+
   return v;
+}
+
+const SEGUNDO_ATAQUE_CAP = 0.5;
+// Probabilidad de segundo ataque que excede el tope -> % de daño extra del básico.
+function segundoAtaqueExcess(){
+  const total = specialsFromEquip(state.char.equip).filter(sp=>sp.type==='segundo_ataque_basico').reduce((sum,sp)=>sum+sp.chance, 0);
+  return Math.max(0, total - SEGUNDO_ATAQUE_CAP);
 }
 
 // isRepeat: true solo para la repetición gratuita de doble encantamiento
@@ -8675,6 +8779,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
     } else {
       t = combat.enemies[targetIdx];
       if(!t || t.hp<=0){ log('Objetivo inválido.'); return; }
+      if(!skill.utility) t = decoyIntercept(t);
     }
     targets = [t];
   } else if(skill.targetMode==='all' && skillId==='lluvia_flechas'){
@@ -8845,6 +8950,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
       if(sp.type==='set_choque_termico' && ((skill.dmgType==='fuego' && hasStatus(target.statuses,'Ralentizado')) || (skill.dmgType==='hielo' && hasStatus(target.statuses,'Quemadura')))) base *= (1+sp.value);
     });
     if(cataclismoBoost) base *= (1+cataclismoBoost);
+    if(skillId==='ataque_basico'){ const segExtra = segundoAtaqueExcess(); if(segExtra>0) base *= (1+segExtra); }
     if(lunaLlenaSp) base *= (1+lunaLlenaSp.bonus);
     // Cuchillo largo/gemelo Tier S ('cuchillo_s'): objetivo por debajo del
     // 25% de vida, +20% de daño — condición continua, se evalúa en cada
@@ -8925,6 +9031,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
     // Autobuffs defensivos del enemigo (Seda Protectora, Caparazón
     // Endurecido, etc. — ver utility:'self_buff' en resolveNewStyleEnemyMove).
     (target.statuses||[]).forEach(st=>{ if(st.incomingDmgReduction) base *= (1 - st.incomingDmgReduction); });
+    base *= enemyPassiveTakenMult(target);
 
     // Foco arcano Tier S ('foco_s'): cuando la habilidad consumió un estado
     // (cualquiera de los combos de arriba dejó comboText), +10% de daño más
@@ -9067,6 +9174,14 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
       }
     }
     applyEquippedSpecials(target, dmg, skill);
+    // Riposte (Duelista Veterano, Isla Paraíso): contraataque tras un golpe físico.
+    const rip = target.tpl && target.tpl.riposte;
+    if(rip && target.hp>0 && skill.dmgType==='fisico' && chance(rip.chance)){
+      const resV = totalRes('fisico');
+      const counter = Math.max(1, Math.round(target.atk*rip.mult*(1-resV/100)));
+      dealDamageToPlayer(counter);
+      log(`${target.name} contraataca (Riposte): ${counter} de daño.`);
+    }
   });
   if(combat.critNextUsed){ combat.critNext = false; combat.critNextUsed = false; }
   splashHits.forEach(sh=>{
@@ -9119,7 +9234,19 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
       return;
     }
     if(canRepeat && skillId==='ataque_basico'){
-      const segundoAtaque = equipSpecials.find(sp=>sp.type==='segundo_ataque_basico' && chance(sp.chance));
+      // Tope de segundo ataque (pedido explícito 2026-10-02): las fuentes se
+      // SUMAN (arma, carcaj, Artemisa, Caídos) y la probabilidad final nunca
+      // pasa de SEGUNDO_ATAQUE_CAP; lo que exceda se convierte en daño
+      // adicional del ataque básico (ver segundoAtaqueExcess). Se tira una
+      // sola vez; la fuente "ganadora" (para efectos de Tier S como el del
+      // Arco corto o el Carcaj) se elige en proporción a su probabilidad.
+      const segSources = equipSpecials.filter(sp=>sp.type==='segundo_ataque_basico');
+      const segTotal = segSources.reduce((sum,sp)=>sum+sp.chance, 0);
+      let segundoAtaque = null;
+      if(segSources.length && chance(Math.min(SEGUNDO_ATAQUE_CAP, segTotal))){
+        let r = Math.random()*segTotal;
+        segundoAtaque = segSources.find(sp=>(r -= sp.chance) < 0) || segSources[0];
+      }
       if(segundoAtaque){
         log('Realizas un segundo ataque básico.');
         // Carcaj Tier S ('carcaj_s'): 10% de que ESTE segundo ataque ignore
@@ -9594,6 +9721,7 @@ function resolveOneAllyTurn(ally){
     // no daban el daño extra que prometen ("recibe +20% de TODO el daño").
     if(hasStatus(enemyTarget.statuses,'Marcado')) dmg *= 1.2;
     (enemyTarget.statuses||[]).forEach(st=>{ if(st.incomingDmgReduction) dmg *= (1 - st.incomingDmgReduction); });
+    dmg *= enemyPassiveTakenMult(enemyTarget);
     if(hasStatus(enemyTarget.statuses,'Paralisis')) dmg *= 1.25;
     let resKey = 'fisico';
     let skillText = null;
@@ -9775,6 +9903,18 @@ async function processEnemyTurns(){
     if(enemy.hp<=0) return;
     stunFlags.set(enemy, tickStatuses(enemy.statuses, enemy.name, enemy));
   });
+  // Regeneración de enemigos: estados con regenPct (ej. Lluvia de Storm Gush)
+  // y aura de la Sacerdotisa de las Mareas (auraRegenPct, a todo su grupo).
+  const auraRegen = combat.enemies.filter(e=>e.hp>0 && e.tpl && e.tpl.auraRegenPct).reduce((m,e)=>Math.max(m, e.tpl.auraRegenPct), 0);
+  combat.enemies.forEach(enemy=>{
+    if(enemy.hp<=0 || enemy.hp>=enemy.maxHP || (enemy.tpl && enemy.tpl.decoy)) return;
+    const pct = (enemy.statuses||[]).reduce((sum,st)=>sum+(st.regenPct||0), 0) + auraRegen;
+    if(pct>0){
+      const before = enemy.hp;
+      enemy.hp = Math.min(enemy.maxHP, enemy.hp + Math.max(1, Math.round(enemy.maxHP*pct)));
+      if(enemy.hp>before) log(`${enemy.name} se regenera ${enemy.hp-before} de vida.`);
+    }
+  });
 
   checkCombatEnd();
   if(!combat || combat.over) return;
@@ -9785,6 +9925,7 @@ async function processEnemyTurns(){
     if(enemy.hp<=0) continue;
     combat.lastActor = {kind:'enemy', idx: combat.enemies.indexOf(enemy)};
     combat.lastAction = null;
+    if(enemy.tpl && enemy.tpl.decoy) continue; // los señuelos no actúan
     if(stunFlags.get(enemy)){ log(`${enemy.name} está aturdido y pierde su turno.`); combat.lastAction = {label:'Aturdido', effects:[]}; }
     else enemyAct(enemy);
     if(stepDelay>0){ renderCombat(); await withAnimTimeout(playBattleAnim(combat.lastActor, combat.lastAction)); combat.lastActor = null; combat.lastAction = null; }
@@ -9886,7 +10027,18 @@ function enemyAct(enemy){
   // lado (pedido explícito 2026-09-28).
   const rawEvasion = target.kind==='ally' ? computeAllyEvasion(target.ally) : computeCritEvasion().evasion;
   const evasion = Math.max(0.02, rawEvasion - (enemy.precision||0));
-  if(chance(evasion)){
+  // Sistema nuevo: se elige la habilidad ANTES de la esquiva — las de
+  // utilidad (fases de jefe, invocaciones, buffs, curas) no apuntan al
+  // jugador, así que no se pueden esquivar ni bloquear (antes un personaje
+  // muy evasivo impedía que los jefes activaran sus fases).
+  let utilityMove = false;
+  if(enemy.tpl && enemy.tpl.abilities){
+    enemy.pendingAbilityId = pickNewStyleAbilityId(enemy, newStyleCtx(enemy, target));
+    const ab = enemy.tpl.abilities[enemy.pendingAbilityId];
+    utilityMove = !!(ab && ab.utility);
+  }
+  if(!utilityMove && chance(evasion)){
+    delete enemy.pendingAbilityId;
     log(`${enemy.name} ataca a ${target.kind==='ally' ? target.ally.name : 'ti'}, ¡pero esquiva!`);
     // Celeridad A/S/SS: tras esquivar, el siguiente golpe propio es crítico.
     if(target.kind==='player'){
@@ -9909,7 +10061,8 @@ function enemyAct(enemy){
   if(target.kind==='player' && combat.playerDefending){
     defenderSpecials.forEach(sp=>{ if(sp.type==='defend_bloqueo_bonus') bChance += sp.value; });
   }
-  if(bChance>0 && chance(bChance)){
+  if(!utilityMove && bChance>0 && chance(bChance)){
+    delete enemy.pendingAbilityId;
     log(`${enemy.name} ataca a ${target.kind==='ally' ? target.ally.name : 'ti'}, ¡pero el escudo bloquea el golpe por completo!`);
     combat.lastAction = {label:'¡Bloqueado!', effects:[]};
     // Espadón pesado Tier S ('espadon_s'): 30% de devolver el 50% del
@@ -10198,6 +10351,136 @@ function enemyAct(enemy){
 // enemyAct() (Object.keys(enemy.cooldowns).forEach...), así que acá solo
 // hace falta leerlo y, al usar una habilidad con cooldown, volver a armarlo.
 // ============================================================
+// ============================================================
+// Extensiones del motor de enemigos (2026-10-02, pedido explícito: fases de
+// jefes de década, señuelos/invocaciones y refuerzos de grupo):
+// - tpl.phases: [{below, msg}] avisos de cambio de fase por % de vida.
+// - ability.oncePerCombat: la habilidad solo se usa una vez por combate.
+// - utility 'summon': invoca unidades (ability.summon = {tpl, count, maxAlive,
+//   hpPct|oneHp, atkPct}). Las invocadas llevan summoned=true y summoner; si
+//   su tpl tiene decoy:true son SEÑUELOS: no actúan, están al Frente y
+//   absorben los golpes dirigidos al frente.
+// - utility 'buff_allies': refuerza a TODO el grupo enemigo vivo, el que lo
+//   lanza incluido (antes "Aullido de Dominio" y similares solo se
+//   autobuffeaban). ability.buffAllies = estado; Fortalecido suma cargas.
+// - utility 'self_heal': cura un % de su vida (ability.healPct), opcionalmente
+//   solo si tiene cierto estado (requiresStatus).
+// - ability.debuffTarget: estado extra que una habilidad de soporte le pone a
+//   su objetivo (jugador/aliado).
+// - Pasivas de tpl: passiveReduction, reductionWithAllies {min, value},
+//   reductionWhileSummonsAlive, passiveDmgMult, dmgMultWhileSummonsAlive,
+//   immuneRetroceso, riposte {chance, mult}, onDeathSpawn {tpl, chance},
+//   auraRegenPct (cura a todo su grupo cada turno mientras vive).
+// - Estados enemigos con regenPct: curan ese % de vida por turno.
+// ============================================================
+function enemySummonsAlive(enemy){
+  return combat.enemies.some(e=>e.summoner===enemy && e.hp>0);
+}
+function enemyOtherAlliesAlive(enemy){
+  return combat.enemies.filter(e=>e!==enemy && e.hp>0 && !(e.tpl && e.tpl.decoy)).length;
+}
+// Multiplicador de daño RECIBIDO por un enemigo según sus pasivas.
+function enemyPassiveTakenMult(target){
+  const t = target && target.tpl;
+  if(!t) return 1;
+  let m = 1;
+  if(t.passiveReduction) m *= (1 - t.passiveReduction);
+  if(t.reductionWithAllies && enemyOtherAlliesAlive(target) >= t.reductionWithAllies.min) m *= (1 - t.reductionWithAllies.value);
+  if(t.reductionWhileSummonsAlive && enemySummonsAlive(target)) m *= (1 - t.reductionWhileSummonsAlive);
+  return m;
+}
+// Multiplicador de daño INFLIGIDO por un enemigo según sus pasivas.
+function enemyPassiveDealtMult(enemy){
+  const t = enemy.tpl;
+  let m = 1;
+  if(t.passiveDmgMult) m *= t.passiveDmgMult;
+  if(t.dmgMultWhileSummonsAlive && enemySummonsAlive(enemy)) m *= t.dmgMultWhileSummonsAlive;
+  return m;
+}
+// Refuerzo de grupo enemigo: a todos los vivos (el que lo lanza incluido), o
+// con single:true a UN compañero al azar (o a sí mismo si está solo).
+function applyEnemyGroupBuff(caster, b){
+  let group = combat.enemies.filter(e=>e.hp>0 && !(e.tpl && e.tpl.decoy));
+  if(b.single){ const others = group.filter(e=>e!==caster); group = [others.length ? pick(others) : caster]; }
+  group.forEach(e=>{
+    const ex = hasStatus(e.statuses, b.name);
+    if(b.name==='Fortalecido'){
+      if(ex){ ex.stacks = Math.min(b.maxStacks||8, (ex.stacks||0) + (b.stacks||1)); ex.duration = Math.max(ex.duration||0, b.duration); }
+      else e.statuses.push({name:'Fortalecido', duration:b.duration, stacks:b.stacks||1, stack:true});
+    } else {
+      const clean = Object.assign({}, b); delete clean.single; delete clean.maxStacks;
+      if(ex) Object.assign(ex, clean); else e.statuses.push(clean);
+    }
+  });
+  return group.length;
+}
+function summonEnemies(caster, spec){
+  const alive = combat.enemies.filter(e=>e.summoner===caster && e.hp>0).length;
+  const room = Math.min(spec.count||1, (spec.maxAlive||spec.count||1) - alive, 6 - livingEnemies().length);
+  const out = [];
+  for(let i=0;i<room;i++){
+    const e = makeEnemy(spec.tpl, state.dungeon.atFloor, state.dungeon.level);
+    if(spec.oneHp){ e.maxHP = 1; e.hp = 1; }
+    else if(spec.hpPct){ e.maxHP = Math.max(1, Math.round(caster.maxHP*spec.hpPct)); e.hp = e.maxHP; }
+    if(spec.atkPct) e.atk = Math.max(1, Math.round(caster.atk*spec.atkPct));
+    e.summoned = true;
+    e.summoner = caster;
+    combat.enemies.push(e);
+    out.push(e);
+  }
+  return out;
+}
+// Muertes con efecto (Garvel: 30% de dejar un Garvel pequeño). Se llama
+// desde checkCombatEnd, antes de decidir si el combate terminó.
+function processEnemyDeaths(){
+  combat.enemies.forEach(e=>{
+    if(e.hp>0 || e.deathProcessed) return;
+    e.deathProcessed = true;
+    const sp = e.tpl && e.tpl.onDeathSpawn;
+    if(sp && !e.summoned && livingEnemies().length < 6 && chance(sp.chance)){
+      const child = makeEnemy(sp.tpl, state.dungeon.atFloor, state.dungeon.level);
+      child.summoned = true;
+      combat.enemies.push(child);
+      log(`Del cuerpo de ${e.name} surge un <b>${child.name}</b>.`);
+    }
+  });
+}
+
+function newStyleCtx(enemy, target){
+  const onPlayer = target.kind==='player';
+  const targetStatuses = onPlayer ? combat.playerStatuses : target.ally.statuses;
+  const targetHp = onPlayer ? state.char.curHP : target.ally.hp;
+  const targetMaxHp = onPlayer ? derived().maxHP : target.ally.maxHP;
+  return {
+    selfHpPct: enemy.maxHP>0 ? enemy.hp/enemy.maxHP : 1,
+    targetHpPct: targetMaxHp>0 ? targetHp/targetMaxHp : 1,
+    targetStatuses,
+    targetStatusCount(name){ const st=targetStatuses.find(s=>s.name===name); return st?(st.stacks||1):0; },
+  };
+}
+
+// Elige (sin efectos secundarios) la habilidad que usará un enemigo del
+// sistema nuevo según aiPriority, cooldowns, oncePerCombat y condiciones.
+function pickNewStyleAbilityId(enemy, ctx){
+  const tpl = enemy.tpl;
+  const priority = tpl.aiPriority || Object.keys(tpl.abilities);
+  for(const id of priority){
+    const ab = tpl.abilities[id];
+    if(!ab) continue;
+    if(enemy.cooldowns[id] > 0) continue;
+    if(ab.oncePerCombat && enemy.usedOnce && enemy.usedOnce.has(id)) continue;
+    if(ab.condition && !ab.condition(ctx)) continue;
+    // Invocación sin espacio (ya tiene el máximo de copias/señuelos vivos):
+    // se salta para no desperdiciar el turno.
+    if(ab.utility==='summon' && ab.summon){
+      const alive = combat.enemies.filter(e=>e.summoner===enemy && e.hp>0).length;
+      if(alive >= (ab.summon.maxAlive||ab.summon.count||1) || livingEnemies().length >= 6) continue;
+    }
+    return id;
+  }
+  return priority[priority.length-1];
+}
+
 function resolveNewStyleEnemyMove(enemy, target, enemyCrit){
   const tpl = enemy.tpl;
   const onPlayer = target.kind==='player';
@@ -10216,25 +10499,56 @@ function resolveNewStyleEnemyMove(enemy, target, enemyCrit){
     log(`${enemy.name} reacciona al quedar herido: ${tpl.hpThresholdBuff.buff.name}.`);
   }
 
-  const ctx = {
-    selfHpPct: enemy.maxHP>0 ? enemy.hp/enemy.maxHP : 1,
-    targetHpPct: targetMaxHp>0 ? targetHp/targetMaxHp : 1,
-    targetStatuses,
-    targetStatusCount(name){ const st=targetStatuses.find(s=>s.name===name); return st?(st.stacks||1):0; },
-  };
+  const ctx = newStyleCtx(enemy, target);
 
-  const priority = tpl.aiPriority || Object.keys(tpl.abilities);
-  let chosenId = null;
-  for(const id of priority){
-    const ab = tpl.abilities[id];
-    if(!ab) continue;
-    if(enemy.cooldowns[id] > 0) continue;
-    if(ab.condition && !ab.condition(ctx)) continue;
-    chosenId = id; break;
-  }
-  if(!chosenId) chosenId = priority[priority.length-1];
+  // Avisos de fase (jefes de década).
+  (tpl.phases||[]).forEach((ph, i)=>{
+    if(!enemy.phasesShown) enemy.phasesShown = new Set();
+    if(ctx.selfHpPct < ph.below && !enemy.phasesShown.has(i)){
+      enemy.phasesShown.add(i);
+      log(`<b>${enemy.name}</b> ${ph.msg}`);
+    }
+  });
+  if(!enemy.usedOnce) enemy.usedOnce = new Set();
+  // enemyAct ya pudo haber elegido la habilidad (para saber si es esquivable).
+  const chosenId = enemy.pendingAbilityId || pickNewStyleAbilityId(enemy, ctx);
+  delete enemy.pendingAbilityId;
   const ability = tpl.abilities[chosenId];
   if(ability.cooldown) enemy.cooldowns[chosenId] = ability.cooldown;
+  if(ability.oncePerCombat) enemy.usedOnce.add(chosenId);
+  const applyDebuffTarget = ()=>{
+    if(!ability.debuffTarget) return;
+    if(onPlayer) applyStatus(null, Object.assign({}, ability.debuffTarget), true);
+    else applyStatus(target.ally, Object.assign({}, ability.debuffTarget), false);
+  };
+
+  if(ability.utility==='summon'){
+    const made = summonEnemies(enemy, ability.summon);
+    if(made.length && ability.selfBuff){
+      const ex = hasStatus(enemy.statuses, ability.selfBuff.name);
+      if(ex) Object.assign(ex, ability.selfBuff); else enemy.statuses.push(Object.assign({}, ability.selfBuff));
+    }
+    if(made.length) log(`${enemy.name} usa ${ability.label}: aparece${made.length>1?'n':''} ${made.length>1?made.length+' ':''}<b>${made[0].name}</b>${made.length>1?'':''}.`);
+    else log(`${enemy.name} usa ${ability.label}, pero no hay espacio para más.`);
+    combat.lastAction = {label:ability.label, effects:[]};
+    return;
+  }
+  if(ability.utility==='buff_allies'){
+    const n = applyEnemyGroupBuff(enemy, ability.buffAllies);
+    log(`${enemy.name} usa ${ability.label}: ${n>1?'su grupo se fortalece':(ability.buffAllies.single?'refuerza a un compañero':'se fortalece')}.`);
+    combat.lastAction = {label:ability.label, effects:[]};
+    return;
+  }
+  if(ability.utility==='self_heal'){
+    if(!ability.requiresStatus || hasStatus(enemy.statuses, ability.requiresStatus)){
+      const before = enemy.hp;
+      enemy.hp = Math.min(enemy.maxHP, enemy.hp + Math.round(enemy.maxHP*(ability.healPct||0.08)));
+      log(`${enemy.name} usa ${ability.label}: recupera ${enemy.hp-before} de vida.`);
+    } else log(`${enemy.name} usa ${ability.label}.`);
+    applyDebuffTarget();
+    combat.lastAction = {label:ability.label, effects:[]};
+    return;
+  }
 
   // Movimiento de soporte puro (no hace daño): se autobuffea (defensa,
   // ej. "Seda Protectora"/"Caparazón Endurecido") y termina el turno ahí.
@@ -10244,6 +10558,7 @@ function resolveNewStyleEnemyMove(enemy, target, enemyCrit){
     if(existing) Object.assign(existing, buff);
     else enemy.statuses.push(Object.assign({}, buff));
     log(`${enemy.name} usa ${ability.label}.`);
+    applyDebuffTarget();
     combat.lastAction = {label:ability.label, effects:[]};
     return;
   }
@@ -10288,6 +10603,7 @@ function resolveNewStyleEnemyMove(enemy, target, enemyCrit){
   if(hasStatus(enemy.statuses,'Debilitado')) dmg = Math.round(dmg*0.85);
   dmg = Math.round(dmg*enemyMermadoMult(enemy));
   enemy.statuses.forEach(st=>{ if(st.dmgMult) dmg = Math.round(dmg*st.dmgMult); });
+  dmg = Math.round(dmg*enemyPassiveDealtMult(enemy));
   if(tpl.bonusVsOwnStatus && ctx.targetStatusCount(tpl.bonusVsOwnStatus.name) >= tpl.bonusVsOwnStatus.minStacks){
     dmg = Math.round(dmg*tpl.bonusVsOwnStatus.mult);
   }
@@ -10390,6 +10706,7 @@ function resolveNewStyleEnemyMove(enemy, target, enemyCrit){
     if(existing) existing.duration = ability.selfBuff.duration;
     else enemy.statuses.push(Object.assign({}, ability.selfBuff));
   }
+  if(ability.buffAllies) applyEnemyGroupBuff(enemy, ability.buffAllies); // ej. Aullido del Rey: golpe + refuerzo
 }
 
 // Guarda la vida, MP y espíritu con la que terminó cada aliado en
@@ -10419,6 +10736,7 @@ function checkCombatEnd(){
     handleDefeat();
     return;
   }
+  processEnemyDeaths();
   if(livingEnemies().length===0){
     combat.over = true;
     syncAllyHPToDungeon();
@@ -10471,8 +10789,10 @@ function handleVictory(){
   const level = state.dungeon.level || 1;
   const rewardMult = 1 + (level-1)*0.08; // los niveles más duros pagan algo mejor (solo aplica al oro)
   const perKillXP = isBoss ? guardianXP(level) : isElite ? eliteXP(level) : mobXP(level);
-  const xpGain = Math.max(1, Math.round(perKillXP * xpGroupMultiplier(combat.enemies.length) * (race().id==='humano'?1.1:1) * xpGapMultiplier() * earlyXpBoost(level) * XP_GLOBAL_BOOST));
-  const goldGain = Math.round((rnd(6,14)*combat.enemies.length + (isBoss?60:isElite?20:0)) * rewardMult);
+  // Las invocaciones/señuelos no cuentan para la recompensa (2026-10-02).
+  const rewardEnemyCount = Math.max(1, combat.enemies.filter(e=>!e.summoned).length);
+  const xpGain = Math.max(1, Math.round(perKillXP * xpGroupMultiplier(rewardEnemyCount) * (race().id==='humano'?1.1:1) * xpGapMultiplier() * earlyXpBoost(level) * XP_GLOBAL_BOOST));
+  const goldGain = Math.round((rnd(6,14)*rewardEnemyCount + (isBoss?60:isElite?20:0)) * rewardMult);
   state.char.xp += xpGain;
   state.char.gold += goldGain;
   log(`Victoria. +${xpGain} experiencia, +${goldGain} de oro.`);
@@ -10522,7 +10842,7 @@ function handleVictory(){
   // también. Por ahora solo el jefe de década cuenta.
   const isRiftBoss = false;
   const stonesAllowedThisFight = isDecadeFinal || isRiftBoss;
-  const rollCount = combat.enemies.length * (isDecadeFinal ? 2 : 1);
+  const rollCount = rewardEnemyCount * (isDecadeFinal ? 2 : 1);
   // El jefe de década del piso 10 es la única excepción al piso mínimo de
   // Raro/Único (C/B): es el primer vistazo real a esos rangos, incluso para
   // un personaje que llega ahí todavía por debajo del nivel 11.
