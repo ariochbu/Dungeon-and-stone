@@ -100,6 +100,21 @@ const STYLES = {
     id:'mago', name:'Mago', icon:'🔥', scaleStat:'esp',
     desc:'Fuego y hielo. Siembra el elemento y detónalo después.',
     skills:['bola_fuego','lanza_hielo','explosion_arcana']
+  },
+  // Paladín y Hechicero (pedido explícito 2026-09-28, "Paso 1" del rediseño
+  // de clases). Paladín: línea frontal como el Guerrero, pero escala con
+  // Espíritu — tanque/soporte con daño ligero, reducción de daño y escudos.
+  // Hechicero: a distancia, escala con Habilidad — control y debuffs
+  // (Veneno, Miedo, Confusión; Parálisis queda reservada a su ultimate).
+  paladin: {
+    id:'paladin', name:'Paladín', icon:'⚜️', scaleStat:'esp',
+    desc:'Escudo y juramento. Encaja el golpe, protege al resto, nunca cae el primero.',
+    skills:['golpe_consagrado','muro_de_fe','escudo_del_juramento']
+  },
+  hechicero: {
+    id:'hechicero', name:'Hechicero', icon:'🌀', scaleStat:'hab',
+    desc:'Maldiciones y control. Envenena, aterra, confunde — y remata lo que ya no puede defenderse.',
+    skills:['toque_venenoso','grito_de_panico','mirada_de_locura']
   }
 };
 
@@ -151,7 +166,12 @@ const LEVEL30_SKILL_BONUS = {
   corte_rapido:     {maxStack: 4, duration: 4},              // maxStack era 3, duration era 3
   golpe_gracia:     {perStackMult: 0.32},                    // era 0.25
   marca_cazador:    {duration: 4},                           // era 3
-  explosion_arcana: {bonusMult: 0.75, penaltyIfNone: 0.20}   // era 0.60 / 0.30
+  explosion_arcana: {bonusMult: 0.75, penaltyIfNone: 0.20},  // era 0.60 / 0.30
+  golpe_consagrado: {healPct: 0.22},                          // era 0.15
+  muro_de_fe:       {reductionPct: 0.35},                     // era 0.25
+  escudo_del_juramento: {shieldPct: 0.30},                    // era 0.20
+  grito_de_panico:  {applyChance: 0.8},                       // era 0.6
+  mirada_de_locura: {applyChance: 0.8}                        // era 0.6
 };
 function skillBonus(skillId, field, base){
   if(!state || !state.char || state.char.level < LEVEL_30_MILESTONE) return base;
@@ -165,7 +185,7 @@ function skillBonus(skillId, field, base){
 // ver dónde se resetea/preserva ultimateUses en btn-enter-dungeon y en
 // "Continuar al nivel") y a un enfriamiento de ULTIMATE_COOLDOWN_TURNS
 // turnos propios tras usarse (ver endPlayerTurn).
-const ULTIMATE_BY_STYLE = {pesada:'furia_titan', doblefilo:'vals_sangre', tirador:'disparo_cazador_final', mago:'cataclismo_elemental'};
+const ULTIMATE_BY_STYLE = {pesada:'furia_titan', doblefilo:'vals_sangre', tirador:'disparo_cazador_final', mago:'cataclismo_elemental', paladin:'juicio_divino', hechicero:'grito_del_abismo'};
 const ULTIMATE_MAX_USES = 3;
 const ULTIMATE_COOLDOWN_TURNS = 5;
 
@@ -260,6 +280,45 @@ const SKILLS = {
     targetMode:'any'
   },
 
+  // ---------- Paladín ----------
+  golpe_consagrado: {
+    id:'golpe_consagrado', name:'Golpe Consagrado', cost:{tipo:'espiritu', valor:12}, dmgType:'fisico', mult:0.85,
+    requiresPos:'frente', selfHealPctOfDmg:0.15,
+    desc: ()=> `Daño físico. Te cura un ${Math.round(skillBonus('golpe_consagrado','healPct',0.15)*100)}% de lo infligido.`,
+    targetMode:'front'
+  },
+  muro_de_fe: {
+    id:'muro_de_fe', name:'Muro de Fe', cost:{tipo:'espiritu', valor:15}, utility:'buff_self',
+    applySelf:{name:'Fe Inquebrantable', duration:2, incomingDmgReduction:0.25},
+    desc: ()=> `Reduce el daño que recibes un ${Math.round(skillBonus('muro_de_fe','reductionPct',0.25)*100)}% durante 2 turnos.`,
+    targetMode:'self'
+  },
+  escudo_del_juramento: {
+    id:'escudo_del_juramento', name:'Escudo del Juramento', cost:{tipo:'espiritu', valor:20}, utility:'shield_self',
+    shieldPct:0.20,
+    desc: ()=> `Te otorga un escudo equivalente al ${Math.round(skillBonus('escudo_del_juramento','shieldPct',0.20)*100)}% de tu vida máxima.`,
+    targetMode:'self'
+  },
+
+  // ---------- Hechicero ----------
+  toque_venenoso: {
+    id:'toque_venenoso', name:'Toque Venenoso', cost:{tipo:'estamina', valor:15}, dmgType:'veneno', mult:0.85,
+    applies:{name:'Veneno', chance:0.85, duration:3, stack:true, maxStack:3},
+    desc:'Daño de veneno. Apila Veneno (hasta x3) durante 3 turnos.', targetMode:'any'
+  },
+  grito_de_panico: {
+    id:'grito_de_panico', name:'Grito de Pánico', cost:{tipo:'estamina', valor:20}, dmgType:'arcano', mult:0.5,
+    applies:{name:'Miedo', chance:0.6, duration:2, procChance:0.4},
+    desc: ()=> `Daño arcano menor. ${Math.round(skillBonus('grito_de_panico','applyChance',0.6)*100)}% de aplicar Miedo — cada turno que dure, 40% de que el objetivo pierda su turno.`,
+    targetMode:'any'
+  },
+  mirada_de_locura: {
+    id:'mirada_de_locura', name:'Mirada de Locura', cost:{tipo:'estamina', valor:20}, dmgType:'arcano', mult:0.5,
+    applies:{name:'Confusion', chance:0.6, duration:2, procChance:0.35},
+    desc: ()=> `Daño arcano menor. ${Math.round(skillBonus('mirada_de_locura','applyChance',0.6)*100)}% de aplicar Confusión — cada turno que dure, 35% de que el objetivo ataque a ciegas y falle.`,
+    targetMode:'any'
+  },
+
   // ---------- Ultimates (nivel 60) ----------
   furia_titan: {
     id:'furia_titan', name:'Furia del Titán', cost:null, dmgType:'fisico', mult:1.15, ultimate:true,
@@ -283,6 +342,16 @@ const SKILLS = {
     id:'cataclismo_elemental', name:'Cataclismo elemental', cost:null, dmgType:'mixto', mult:1.0, ultimate:true,
     targetMode:'all', applies:{name:'Quemadura', chance:1, duration:2},
     desc:'Ultimate del Mago. Fuego y hielo combinados a todos los enemigos, golpeando la resistencia más débil de cada uno entre las dos.'
+  },
+  juicio_divino: {
+    id:'juicio_divino', name:'Juicio Divino', cost:null, dmgType:'fisico', mult:0.8, ultimate:true,
+    requiresPos:'frente', targetMode:'all', selfHealPctOfDmg:0.25,
+    desc:'Ultimate del Paladín. Golpea a todos los enemigos y te cura el 25% de todo lo infligido.'
+  },
+  grito_del_abismo: {
+    id:'grito_del_abismo', name:'Grito del Abismo', cost:null, dmgType:'arcano', mult:1.2, ultimate:true,
+    targetMode:'any', applies:{name:'Paralisis', chance:1, duration:2},
+    desc:'Ultimate del Hechicero. Daño arcano fuerte a un objetivo y lo Paraliza por completo durante 2 turnos — garantizado, no depende de probabilidad.'
   }
 };
 
@@ -1719,8 +1788,60 @@ const WEAPON_CATALOG = {
       ],
     },
   },
+  // Paladín y Hechicero (pedido explícito 2026-09-28, "Paso 1") — catálogo
+  // mínimo por ahora: un arma con nombre propio por slot en vez de 2-3 como
+  // las sendas viejas, a propósito. Esto es provisorio: cuando llegue el
+  // equipamiento libre de clase (fase 2/3 del rediseño) este catálogo se
+  // revisa de nuevo; por ahora alcanza con que la clase sea jugable de
+  // verdad, no hace falta variedad todavía.
+  paladin: {
+    stat:'esp',
+    arma: {
+      'Espada del Juramento': [
+        wTier('comun', 12),
+        wTier('poco_comun', 18, [{type:'reduccion_dano', value:0.04, text:'de reducción de daño recibido'}]),
+        wTier('raro', 24, [{type:'reduccion_dano', value:0.06, text:'de reducción de daño recibido'}]),
+        wTier('rango_b', 30, [{type:'reduccion_dano', value:0.09, text:'de reducción de daño recibido'}]),
+        wTier('rango_a', 36, [{type:'reduccion_dano', value:0.09, text:'de reducción de daño recibido'}, {type:'bloqueo', chance:0.08, text:'de bloquear ataque'}]),
+        wTier('legendario', 46, [{type:'reduccion_dano', value:0.13, text:'de reducción de daño recibido'}, {type:'bloqueo', chance:0.12, text:'de bloquear ataque'}]),
+      ],
+    },
+    arma2: {
+      'Escudo Sagrado': [
+        wTier('comun', 0, [{type:'bloqueo', chance:0.10, text:'de bloquear ataque'}]),
+        wTier('poco_comun', 0, [{type:'bloqueo', chance:0.13, text:'de bloquear ataque'}]),
+        wTier('raro', 0, [{type:'bloqueo', chance:0.17, text:'de bloquear ataque'}]),
+        wTier('rango_b', 0, [{type:'bloqueo', chance:0.20, text:'de bloquear ataque'}]),
+        wTier('rango_a', 0, [{type:'bloqueo', chance:0.20, text:'de bloquear ataque'}, {type:'reflect', pct:0.10, text:'de devolver el daño recibido'}]),
+        wTier('legendario', 0, [{type:'bloqueo', chance:0.22, text:'de bloquear ataque'}, {type:'reflect', pct:0.15, text:'de devolver el daño recibido'}], {maxhp_flat:50}),
+      ],
+    },
+  },
+  hechicero: {
+    stat:'hab',
+    arma: {
+      'Cetro Maldito': [
+        wTier('comun', 13),
+        wTier('poco_comun', 18, [{type:'mp_refund', chance:0.05, amount:0.5, text:'de recuperar la mitad del MP gastado'}]),
+        wTier('raro', 22, [{type:'mp_refund', chance:0.08, amount:0.5, text:'de recuperar la mitad del MP gastado'}]),
+        wTier('rango_b', 26, [{type:'mp_refund', chance:0.12, amount:0.5, text:'de recuperar la mitad del MP gastado'}]),
+        wTier('rango_a', 30, [{type:'mp_refund', chance:0.15, amount:0.5, text:'de recuperar la mitad del MP gastado'}]),
+        wTier('legendario', 43, [{type:'mp_refund', chance:0.20, amount:0.5, text:'de recuperar la mitad del MP gastado'}, {type:'aumento_dano', value:0.08, text:'de aumento de daño'}]),
+      ],
+    },
+    arma2: {
+      'Orbe de la Maldición': [
+        wTier('comun', 10),
+        wTier('poco_comun', 15, [{type:'doble_encantamiento', chance:0.05, text:'de realizar doble encantamiento'}]),
+        wTier('raro', 20, [{type:'doble_encantamiento', chance:0.08, text:'de realizar doble encantamiento'}]),
+        wTier('rango_b', 24, [{type:'doble_encantamiento', chance:0.12, text:'de realizar doble encantamiento'}]),
+        wTier('rango_a', 28, [{type:'doble_encantamiento', chance:0.15, text:'de realizar doble encantamiento'}]),
+        wTier('legendario', 38, [{type:'doble_encantamiento', chance:0.20, text:'de realizar doble encantamiento'}, {type:'aumento_dano', value:0.08, text:'de aumento de daño'}]),
+      ],
+    },
+  },
 };
-const OFFHAND_LABELS = {pesada:'Escudo', doblefilo:'Arma 2', tirador:'Carcaj', mago:'Foco', sacerdote:'Grimorio'};
+const OFFHAND_LABELS = {pesada:'Escudo', doblefilo:'Arma 2', tirador:'Carcaj', mago:'Foco', sacerdote:'Grimorio', paladin:'Escudo', hechicero:'Orbe'};
 // rol de aliado -> senda de arma (WEAPON_CATALOG). Los 4 primeros calzan
 // 1-a-1 con las sendas de combate del jugador; sacerdote no tiene
 // equivalente entre esos 4, así que tiene su propia entrada en el catálogo.
@@ -1802,6 +1923,20 @@ const GEAR_NAMES = {
     botas:['Alpargatas de piedra','Alpargatas de bronce','Alpargatas de plata','Alpargatas de oro','Alpargatas de platino','Alpargatas de vacío'],
     guantes:['Vendas de piedra','Vendas de bronce','Vendas de plata','Vendas de oro','Vendas de platino','Vendas de vacío'],
     amuleto:['Reliquia rota','Reliquia','Reliquia imbuida con fe','Reliquia de sangre','Reliquia despertada','Reliquia del vacío'],
+  },
+  paladin: {
+    casco:['Yelmo de piedra','Yelmo de bronce','Yelmo de plata','Yelmo de oro','Yelmo de platino','Yelmo de vacío'],
+    armadura:['Coraza de piedra','Coraza de bronce','Coraza de plata','Coraza de oro','Coraza de platino','Coraza de vacío'],
+    botas:['Sabatones de piedra','Sabatones de bronce','Sabatones de plata','Sabatones de oro','Sabatones de platino','Sabatones de vacío'],
+    guantes:['Guanteletes de piedra','Guanteletes de bronce','Guanteletes de plata','Guanteletes de oro','Guanteletes de platino','Guanteletes de vacío'],
+    amuleto:['Sello roto','Sello','Sello imbuido con fe','Sello de sangre','Sello despertado','Sello del vacío'],
+  },
+  hechicero: {
+    casco:['Capirote de piedra','Capirote de bronce','Capirote de plata','Capirote de oro','Capirote de platino','Capirote de vacío'],
+    armadura:['Hopalanda de piedra','Hopalanda de bronce','Hopalanda de plata','Hopalanda de oro','Hopalanda de platino','Hopalanda de vacío'],
+    botas:['Botines de piedra','Botines de bronce','Botines de plata','Botines de oro','Botines de platino','Botines de vacío'],
+    guantes:['Manillas de piedra','Manillas de bronce','Manillas de plata','Manillas de oro','Manillas de platino','Manillas de vacío'],
+    amuleto:['Fetiche roto','Fetiche','Fetiche imbuido con magia','Fetiche de sangre','Fetiche despertado','Fetiche del vacío'],
   },
 };
 // Casco: vida máxima (flat, SIN el ×8 que sí aplica al viejo bonus.stat==
@@ -1898,13 +2033,19 @@ function guantesTiers(stat, penType, penText){
 //   (dmgType 'fisico' en sus 3 habilidades) — su penetración de guantes
 //   debía ser de armadura física, no de resistencia mágica (que para
 //   Asesino no hacía nada, nunca golpea con resKey!=='fisico').
-const GEAR_CLASS_STAT = {pesada:'fis', tirador:'fis', doblefilo:'hab', mago:'esp', sacerdote:'esp'};
+const GEAR_CLASS_STAT = {pesada:'fis', tirador:'fis', doblefilo:'hab', mago:'esp', sacerdote:'esp', paladin:'esp', hechicero:'hab'};
 const GEAR_PENETRATION = {
   pesada:['penetracion_armadura','de penetración de armadura física'],
   tirador:['penetracion_armadura','de penetración de armadura física'],
   doblefilo:['penetracion_armadura','de penetración de armadura física'],
   mago:['penetracion_magica','de penetración de resistencia mágica'],
   sacerdote:['penetracion_magica','de penetración de resistencia mágica'],
+  // Paladín dañá con Espíritu (igual que Mago/Sacerdote) pero sus 3
+  // habilidades son dmgType 'fisico' (igual razonamiento que Asesino arriba:
+  // la penetración debe calzar con el tipo de daño real, no con el stat que
+  // lo alimenta) — penetración de armadura física, no mágica.
+  paladin:['penetracion_armadura','de penetración de armadura física'],
+  hechicero:['penetracion_magica','de penetración de resistencia mágica'],
 };
 const GEAR_CATALOG = {};
 Object.keys(GEAR_NAMES).forEach(cls=>{
@@ -2899,7 +3040,10 @@ function totalRes(key){
 const HP_BASE = 40;
 // 2026-09-16, pedido explícito (segunda baja: el laberinto se sentía muy
 // fácil con la vida anterior) — Guerrero baja a x20, el resto a x10.
-const HP_PER_LEVEL = {pesada:20, tirador:10, doblefilo:10, mago:10, sacerdote:10};
+// Paladín: tanque/soporte, casi tanto HP como Guerrero pero no tanto (su
+// supervivencia también viene de reducción de daño/escudos, no solo vida
+// cruda). Hechicero: igual de frágil que Mago, mismo arquetipo de caster.
+const HP_PER_LEVEL = {pesada:20, tirador:10, doblefilo:10, mago:10, sacerdote:10, paladin:17, hechicero:10};
 // Paso 0 del rediseño de stats (pedido explícito 2026-09-28): Agilidad y
 // Vigor se suman como stats de verdad, y Habilidad/Espíritu/Físico cambian
 // de trabajo. Mago se deja intacto a propósito ("seguirá siendo con
@@ -3018,8 +3162,11 @@ function scaleStatValue(){
   return d.fis;
 }
 
+function baseDamageFromStat(statVal){
+  return 8 + statVal*2.2 + state.char.level*1.5;
+}
 function skillBaseDamage(){
-  return 8 + scaleStatValue()*2.2 + state.char.level*1.5;
+  return baseDamageFromStat(scaleStatValue());
 }
 
 /* ============================================================
@@ -3757,8 +3904,8 @@ function itemBonusText(item){
 // de un vistazo un casco de unas botas. Aproximado, no hay arte real por
 // ítem todavía.
 const EQUIP_SLOT_ICONS = {armadura:'🧥', amuleto:'📿', casco:'🪖', botas:'👢', guantes:'🧤'};
-const WEAPON_STYLE_ICONS = {pesada:'⚔️', doblefilo:'🗡️', tirador:'🏹', mago:'🪄', sacerdote:'✨'};
-const OFFHAND_STYLE_ICONS = {pesada:'🛡️', doblefilo:'🗡️', tirador:'🏹', mago:'🔮', sacerdote:'📖'};
+const WEAPON_STYLE_ICONS = {pesada:'⚔️', doblefilo:'🗡️', tirador:'🏹', mago:'🪄', sacerdote:'✨', paladin:'⚜️', hechicero:'🌀'};
+const OFFHAND_STYLE_ICONS = {pesada:'🛡️', doblefilo:'🗡️', tirador:'🏹', mago:'🔮', sacerdote:'📖', paladin:'🛡️', hechicero:'🔮'};
 function equipIcon(it){
   if(EQUIP_SLOT_ICONS[it.slot]) return EQUIP_SLOT_ICONS[it.slot];
   if(it.slot==='arma2') return OFFHAND_STYLE_ICONS[it.styleId] || '🗡️';
@@ -5695,7 +5842,7 @@ async function loadAdminList(){
 /* ============================================================
    RENDER: TIENDA (SHOP)
    ============================================================ */
-const SHOP_ROLE_LABELS = {pesada:'Guerrero', doblefilo:'Asesino', tirador:'Arquero', mago:'Mago', sacerdote:'Sacerdote'};
+const SHOP_ROLE_LABELS = {pesada:'Guerrero', doblefilo:'Asesino', tirador:'Arquero', mago:'Mago', sacerdote:'Sacerdote', paladin:'Paladín', hechicero:'Hechicero'};
 let shopWeaponRole = null; // null = usa tu propia senda por defecto
 let shopGoldTierFilter = 'todos'; // filtro de rareza de la tienda de oro (comun/poco_comun/raro)
 let shopSelloTierFilter = 'todos'; // filtro de rango de la tienda de Sellos (rango_b/rango_a)
@@ -7051,7 +7198,7 @@ function playerFrontTargetIndices(){
 // (disparo_certero/bola_fuego, ya targetMode:'any') sin importar si la línea
 // frontal enemiga sigue viva. Pedido explícito 2026-09-25.
 function isRangedStyle(){
-  return state.char.style==='tirador' || state.char.style==='mago';
+  return state.char.style==='tirador' || state.char.style==='mago' || state.char.style==='hechicero';
 }
 function resolvedTargetMode(skill){
   if(skill.targetMode==='front' && isRangedStyle()) return 'any';
@@ -7501,6 +7648,17 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
     log(`Te mueves a ${combat.playerPos==='frente'?'el Frente':'la Retaguardia'}.`);
     await endPlayerTurn(); return;
   }
+  // Escudo del Juramento (Paladín) — reusa el mismo pozo de escudo genérico
+  // (combat.playerShield/grantShield) que ya usan las piedras de Sabiduría y
+  // el Grimorio Tier S de Sacerdote, ahora como una habilidad propia del
+  // jugador en vez de solo un proc pasivo.
+  if(skill.utility==='shield_self'){
+    const pct = skillId==='escudo_del_juramento' ? skillBonus('escudo_del_juramento','shieldPct', skill.shieldPct) : skill.shieldPct;
+    const amount = Math.round(d.maxHP*pct);
+    grantShield(true, null, amount);
+    log(`Usas ${skill.name}: ganas un escudo de ${amount}.`);
+    await endPlayerTurn(); return;
+  }
 
   // spend cost
   if(skill.cost && !isRepeat){
@@ -7599,9 +7757,14 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
     // processEnemyTurns antes de que el jugador llegue a usarlo, así que sin este ajuste
     // un buff de "2 turnos" solo alcanzaba para un ataque bufado en vez de dos.
     const effectiveDuration = skill.applySelf.duration + 1;
+    // Muro de Fe (Paladín): su reducción de daño sube en nivel 30, igual
+    // criterio que el resto de los buff_self con mejora de hito.
+    const applySelfDef = skillId==='muro_de_fe'
+      ? Object.assign({}, skill.applySelf, {incomingDmgReduction: skillBonus('muro_de_fe','reductionPct', skill.applySelf.incomingDmgReduction)})
+      : skill.applySelf;
     const existingBuff = hasStatus(combat.playerStatuses, skill.applySelf.name);
     if(existingBuff) existingBuff.duration = effectiveDuration;
-    else combat.playerStatuses.push(Object.assign({}, skill.applySelf, {duration: effectiveDuration}));
+    else combat.playerStatuses.push(Object.assign({}, applySelfDef, {duration: effectiveDuration}));
     log(`Usas ${skill.name}. Te sientes más fuerte.`);
     // Nivel 30: Grito de guerra también cura y anima al equipo (pedido
     // explícito) - vive acá en vez de como campos genéricos de SKILLS
@@ -7653,9 +7816,12 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
     }
     // Esquivar del enemigo (equipo general: Precisión, ver GEAR_CATALOG) —
     // solo enemigos de verdad tienen tpl/evasion; un aliado hostil como
-    // objetivo no esquiva por esta vía.
+    // objetivo no esquiva por esta vía. Parálisis en el ENEMIGO (pedido
+    // explícito 2026-09-28, kit del Hechicero): mismo trato espejo que ya
+    // recibe el jugador con su propia Parálisis — evasión a 0, no puede
+    // esquivar nada.
     if(target.tpl){
-      const dodgeChance = clamp((target.evasion||0) + enemyStatusEvasionBonus(target.statuses) + levelGapEvasionBonus(monsterLevel, state.char.level) - d.precision, 0.02, 0.85);
+      const dodgeChance = hasStatus(target.statuses,'Paralisis') ? 0 : clamp((target.evasion||0) + enemyStatusEvasionBonus(target.statuses) + levelGapEvasionBonus(monsterLevel, state.char.level) - d.precision, 0.02, 0.85);
       if(chance(dodgeChance)){
         log(`${target.name} esquiva tu ataque.`);
         return;
@@ -7807,6 +7973,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
     // penetra un poco más a medida que subes de nivel, sin importar el tipo.
     if(resKey) resVal -= d.penetracionNivel*100;
     let dmg = base*(1-resVal/100)*outgoingLevelDiffMult;
+    if(hasStatus(target.statuses,'Paralisis')) dmg *= 1.25; // indefenso: mismo trato que recibe el jugador
     if(skill.penaltyIfFrente && combat.playerPos==='frente') dmg *= (1-skill.penaltyIfFrente);
     dmg = Math.max(1, Math.round(dmg));
     if(target.defending) dmg = Math.round(dmg*0.5);
@@ -7824,7 +7991,8 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
       ? {targetKind:'enemy', key: combat.enemies.indexOf(target), amount:dmg, kind:'dmg'}
       : {targetKind:'ally', key: target.id, amount:dmg, kind:'dmg'});
     if(skill.selfHealPctOfDmg){
-      const selfHeal = Math.max(1, Math.round(dmg*skill.selfHealPctOfDmg));
+      const healPct = skillId==='golpe_consagrado' ? skillBonus('golpe_consagrado','healPct', skill.selfHealPctOfDmg) : skill.selfHealPctOfDmg;
+      const selfHeal = Math.max(1, Math.round(dmg*healPct));
       const beforeHeal = state.char.curHP;
       state.char.curHP = Math.min(d.maxHP, state.char.curHP+selfHeal);
       if(state.char.curHP>beforeHeal) log(`Recuperas ${state.char.curHP-beforeHeal} de vida.`);
@@ -7839,6 +8007,8 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
         maxStack: skillBonus('corte_rapido','maxStack', skill.applies.maxStack),
         duration: skillBonus('corte_rapido','duration', skill.applies.duration)
       });
+      else if(skillId==='grito_de_panico') applyDef = Object.assign({}, skill.applies, {chance: skillBonus('grito_de_panico','applyChance', skill.applies.chance)});
+      else if(skillId==='mirada_de_locura') applyDef = Object.assign({}, skill.applies, {chance: skillBonus('mirada_de_locura','applyChance', skill.applies.chance)});
       applyStatus(target, applyDef, false);
     }
     applyEquippedSpecials(target, dmg, skill);
@@ -8468,12 +8638,18 @@ function tickStatuses(list, ownerName, target){
   let skip = false;
   list.forEach(st=>{
     if(st.name==='Sangrado'){
-      const dmg = Math.max(1, Math.round(skillBaseDamage()*0.08*(st.stacks||1)));
+      // Pedido explícito 2026-10-01: Sangrado escala con Físico (no con el
+      // stat de escalado de la senda) — así una herida sangrante pesa igual
+      // sin importar quién la tenga, en vez de seguir el daño mágico de un
+      // Mago/Hechicero.
+      const dmg = Math.max(1, Math.round(baseDamageFromStat(derived().fis)*0.08*(st.stacks||1)));
       if(target){ target.hp = Math.max(0, target.hp-dmg); log(`${ownerName} sangra por ${dmg}.`); }
       else { dealDamageToPlayer(dmg); log(`Sangras por ${dmg}.`); }
     }
     if(st.name==='Veneno'){
-      const dmg = Math.max(1, Math.round(skillBaseDamage()*0.06*(st.stacks||1)));
+      // Pedido explícito 2026-10-01: Veneno escala con Habilidad, mismo
+      // criterio que Sangrado/Físico de arriba.
+      const dmg = Math.max(1, Math.round(baseDamageFromStat(derived().hab)*0.06*(st.stacks||1)));
       if(target){ target.hp = Math.max(0, target.hp-dmg); log(`${ownerName} sufre el veneno por ${dmg}.`); }
       else { dealDamageToPlayer(dmg); log(`El veneno te quita ${dmg} de vida.`); }
     }
@@ -8573,6 +8749,25 @@ const MOVE_LABELS = {robar:'Robo', morder:'Mordisco', picar:'Picadura', debilita
 function enemyAct(enemy){
   if(!enemy.cooldowns) enemy.cooldowns = {};
   Object.keys(enemy.cooldowns).forEach(k=> enemy.cooldowns[k] = Math.max(0, enemy.cooldowns[k]-1));
+
+  // Miedo y Confusión en el ENEMIGO (pedido explícito 2026-09-28, kit del
+  // Hechicero): mismo trato espejo que ya recibe el jugador con sus propios
+  // Miedo/Confusión (ver playerUseSkill) — antes estos dos estados solo
+  // afligían al jugador, nunca a un enemigo, así que aplicárselos a uno no
+  // tenía ningún efecto real. Se tira ACÁ, antes de elegir objetivo/bifurcar
+  // entre el sistema viejo y el nuevo de IA, para cubrir ambos por igual.
+  const enemyMiedo = hasStatus(enemy.statuses,'Miedo');
+  if(enemyMiedo && chance(enemyMiedo.procChance||0.4)){
+    log(`${enemy.name} está paralizado por el Miedo y pierde su turno.`);
+    combat.lastAction = {label:'Miedo (pierde turno)', effects:[]};
+    return;
+  }
+  const enemyConfusion = hasStatus(enemy.statuses,'Confusion');
+  if(enemyConfusion && chance(enemyConfusion.procChance||0.35)){
+    log(`${enemy.name} ataca a ciegas por la Confusión y no golpea nada.`);
+    combat.lastAction = {label:'Confusión (falla)', effects:[]};
+    return;
+  }
 
   const target = frontlineTarget();
   // La Precisión del enemigo contrarresta la evasión de quien lo recibe —
@@ -9767,7 +9962,7 @@ function renderCreation(){
   const styleGrid = document.getElementById('style-grid');
   styleGrid.innerHTML = Object.values(STYLES).map(s=>`
     <button class="pick-card" data-style="${s.id}">
-      <img class="pick-card-art emblem" src="src/assets/clases/${s.id}.png" alt="" loading="lazy">
+      <img class="pick-card-art emblem" src="src/assets/clases/${s.id}.png" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'pick-card-art emblem', style:'display:flex; align-items:center; justify-content:center; font-size:48px;', textContent:'${s.icon}'}))">
       <h3>${s.icon} ${s.name}</h3>
       <div class="desc">${s.desc}</div>
     </button>
