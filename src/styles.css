@@ -1127,3 +1127,24 @@ details.admin-acc > summary > span{ flex:1; }
 .ws-hero{ width:auto; height:250px; object-fit:contain; image-rendering:auto; }
 .phud-portrait img{ image-rendering:auto; object-fit:cover; object-position:50% 10%; }
 @media (max-width:840px){ .cr-sprite{ height:260px; } }
+
+/* Mapa ilustrado de la ciudad (2026-10-02) — reemplaza al dibujado con CSS */
+.city-map{ height:auto !important; aspect-ratio:3/2; background-size:cover !important; background-position:center !important; background-color:#181819 !important; }
+.city-map.mobile{ aspect-ratio:2/3; }
+.city-map .cm-pin{ width:15%; transform:translate(-50%,-78%); }
+.city-map .cm-pin:hover{ transform:translate(-50%,-80%) scale(1.06); }
+.city-map.mobile .cm-pin{ width:27%; transform:translate(-50%,-78%); }
+.cm-bld-img{ display:block; width:100%; height:auto; filter:drop-shadow(0 6px 6px rgba(0,0,0,0.55)); transition:filter 0.15s; }
+.cm-pin:hover .cm-bld-img{ filter:drop-shadow(0 0 10px rgba(255,215,106,0.75)) drop-shadow(0 6px 6px rgba(0,0,0,0.55)); }
+.cm-pin.locked .cm-bld-img{ filter:grayscale(1) brightness(0.5) drop-shadow(0 6px 6px rgba(0,0,0,0.55)); }
+.city-map .cm-tag{ margin-top:-6%; font-size:0.7em; }
+.city-map .cm-mark{ top:6%; right:14%; font-size:0.62em; }
+.cm-portal-img{ position:absolute; width:19%; transform:translate(-50%,-55%); cursor:pointer; z-index:1; text-align:center; }
+.city-map.mobile .cm-portal-img{ width:36%; }
+.cm-portal-img img{ display:block; width:100%; height:auto; filter:drop-shadow(0 0 18px rgba(255,190,70,0.55)); animation:cm-pulse 2.8s infinite; }
+.cm-portal-img:hover img{ filter:drop-shadow(0 0 28px rgba(255,210,100,0.9)); }
+.cm-portal-tag{ margin:0 0 -6%; position:relative; z-index:2; color:#ffd76a !important; border-color:var(--bronze) !important; }
+@media (max-width:840px){
+  .city-map .cm-pin{ transform:translate(-50%,-78%); }
+  .city-map .cm-tag{ font-size:0.62em; padding:1px 5px; }
+}

@@ -2,8 +2,8 @@
 
 import { supabase } from './supabaseClient.js';
 import * as auth from './auth.js';
-import { syncBattleStage, playBattleAnim } from './battleStage.js?v=76';
-import { CLASS_SPRITES, ENEMY_SPRITES, playerSpriteFor } from './battleSprites.js?v=74';
+import { syncBattleStage, playBattleAnim } from './battleStage.js?v=77';
+import { CLASS_SPRITES, ENEMY_SPRITES, playerSpriteFor } from './battleSprites.js?v=75';
 
 /* ============================================================
    DATA
@@ -5437,19 +5437,19 @@ function closeAllPanels(){
 // Lugares de la ciudad: clave del menú, panel que abre y su introducción de
 // primera visita (viñetas provisionales hasta que haya ilustraciones).
 const CITY_PLACES = {
-  shop:    {name:'Tienda', ic:'⚒️', open:()=>{ shopOpen = true; }, x:20, y:68, keeper:'Gerd el herrero',
+  shop:    {name:'Tienda', ic:'⚒️', open:()=>{ shopOpen = true; }, img:'tienda', d:[24.4,62.7], m:[19.4,36.8], keeper:'Gerd el herrero',
             intro:['“¿Nuevo? Se nota por cómo agarras esa espada.”','“Vendo armas, armaduras y pociones. Compro lo que traigas de abajo.”','“Vuelve con oro… o con Sellos del Laberinto.”']},
-  home:    {name:'Hogar', ic:'🏠', open:()=>{ homeOpen = true; }, x:47, y:84, keeper:'Tu casera',
+  home:    {name:'Hogar', ic:'🏠', open:()=>{ homeOpen = true; }, img:'hogar', d:[30.4,79.0], m:[18.6,58.0], keeper:'Tu casera',
             intro:['“Tu cuarto está arriba. Guarda aquí lo que no quieras perder.”','“Lo que dejes en el Hogar no se pierde aunque caigas en el laberinto.”']},
-  taberna: {name:'Taberna', ic:'🍺', open:()=>{ tabernaOpen = true; }, x:30, y:38, keeper:'Bruno el tabernero',
+  taberna: {name:'Taberna', ic:'🍺', open:()=>{ tabernaOpen = true; }, img:'taberna', d:[29.6,34.5], m:[23.6,21.3], keeper:'Bruno el tabernero',
             intro:['“¡Otro valiente que viene a morir al laberinto!”','“Aquí se contratan espadas… si tienes fama y oro.”','“Cada aliado cobra su salario al salir del laberinto. No lo olvides.”']},
-  missions:{name:'Gremio', ic:'📜', open:()=>{ missionsOpen = true; }, x:44, y:34, keeper:'La maestra del Gremio',
+  missions:{name:'Gremio', ic:'📜', open:()=>{ missionsOpen = true; }, img:'gremio', d:[51.4,32.7], m:[54.4,21.1], keeper:'La maestra del Gremio',
             intro:['“El Gremio paga por trabajo bien hecho.”','“Cada 12 horas hay contratos nuevos en el tablón.”','“Cúmplelos y cobra oro, experiencia y Sellos del Laberinto.”']},
-  ofrenda: {name:'Árbol de ofrendas', ic:'🌳', open:()=>{ ofrendaOpen = true; }, x:80, y:62, keeper:'Yggdrasil',
+  ofrenda: {name:'Árbol de ofrendas', ic:'🌳', open:()=>{ ofrendaOpen = true; }, img:'arbol', d:[79.6,65.7], m:[74.4,75.3], keeper:'Yggdrasil',
             intro:['Las raíces del pequeño árbol brillan al acercarte…','Ofrécele oro o Sellos y te devolverá a uno de los Caídos del Laberinto.']},
-  checkin: {name:'Check-in diario', ic:'📅', open:()=>{ checkinOpen = true; }, x:68, y:30, keeper:'El campanero',
+  checkin: {name:'Check-in diario', ic:'📅', open:()=>{ checkinOpen = true; }, img:'campanario', d:[81.2,40.5], m:[79.6,58.9], keeper:'El campanero',
             intro:['“Cada día que vuelvas a la ciudad, el árbol te regala ofrendas.”','“El día 1 de cada mes empieza un calendario nuevo.”']},
-  ranking: {name:'Ranking', ic:'🏆', open:()=>{ rankingOpen = true; }, x:88, y:34, keeper:'El pregonero',
+  ranking: {name:'Ranking', ic:'🏆', open:()=>{ rankingOpen = true; }, img:'ranking', d:[50.8,71.4], m:[22.0,74.3], keeper:'El pregonero',
             intro:['“¡Escuchad! Aquí se graban los nombres de los que más hondo bajaron.”']},
 };
 function navBadges(){
@@ -5645,29 +5645,46 @@ function renderCityWelcome(){
   if(l) l.onclick = ()=>{ welcomeStep = 0; cityNavigate('laberinto'); };
   if(t) t.onclick = showTutorial;
 }
+// Mapa ilustrado (2026-10-02, arte de ariochbu): fondo con 7 parcelas y la
+// plataforma central del portal; cada edificio es un PNG aparte para poder
+// mostrarlo bloqueado/en gris y con avisos. En celular se usa la versión
+// vertical del fondo con sus propias posiciones (d = escritorio, m = celular).
+const CITY_PORTAL_POS = {d:[42.8,51.7], m:[40.0,46.7]};
+let cityMapMobile = null;
 function renderCityMap(){
+  const mobile = window.matchMedia('(max-width:640px)').matches;
+  cityMapMobile = mobile;
+  const L = mobile ? 'm' : 'd';
   const badges = navBadges();
   const tavernLocked = !tavernUnlocked();
   const pins = Object.entries(CITY_PLACES).map(([key,p])=>{
     const locked = key==='taberna' && tavernLocked;
     const b = badges[key];
-    return `<div class="cm-pin ${locked?'locked':''}" data-cm="${key}" style="left:${p.x}%; top:${p.y}%;">
-      <div class="cm-bld"><div class="cm-roof"></div>${p.ic}${b?`<span class="cm-mark ${b==='!'?'':'num'}">${b}</span>`:''}</div>
+    const [x,y] = p[L];
+    return `<div class="cm-pin ${locked?'locked':''}" data-cm="${key}" style="left:${x}%; top:${y}%;" title="${p.name}${locked?' (bloqueada)':''}">
+      <img class="cm-bld-img" src="src/assets/ciudad/${p.img}.png?v=1" alt="${p.name}">
+      ${b?`<span class="cm-mark ${b==='!'?'':'num'}">${b}</span>`:''}
       <div class="cm-tag">${p.name}${locked?' 🔒':''}</div></div>`;
   }).join('');
+  const [px,py] = CITY_PORTAL_POS[L];
   document.getElementById('main-panel').innerHTML = `
-    <div class="city-map">
-      <div class="cm-river"></div>
-      <div class="cm-road" style="left:8%; top:56%; width:80%; height:20px; transform:rotate(-6deg);"></div>
-      <div class="cm-road" style="left:45%; top:14%; width:20px; height:74%;"></div>
-      <div class="cm-plaza"></div>
+    <div class="city-map ${mobile?'mobile':''}" style="background-image:url(src/assets/ciudad/${mobile?'mapa_movil':'mapa'}.jpg?v=1)">
+      <div class="cm-portal-img" id="cm-portal" style="left:${px}%; top:${py}%;" title="Entrar al laberinto">
+        <div class="cm-tag cm-portal-tag">⚔ Laberinto</div>
+        <img src="src/assets/ciudad/portal.png?v=1" alt="Laberinto">
+      </div>
       ${pins}
-      <div class="cm-portal" id="cm-portal"><span>LABERINTO<small>Récord: nivel ${state.char.record ? state.char.record.level : 1}</small></span></div>
       <div class="cm-hint">Toca un edificio o usa el menú.</div>
     </div>`;
   document.querySelectorAll('.cm-pin').forEach(pin=>{ pin.onclick = ()=> cityNavigate(pin.dataset.cm); });
   document.getElementById('cm-portal').onclick = ()=> cityNavigate('laberinto');
 }
+// Si se cruza el corte celular/escritorio con el mapa abierto, se redibuja.
+window.addEventListener('resize', ()=>{
+  if(!state || cityView!=='map' || !document.querySelector('.city-map')) return;
+  const mobile = window.matchMedia('(max-width:640px)').matches;
+  if(mobile !== cityMapMobile) renderCityMap();
+});
 function renderCityDungeonEntry(){
   document.getElementById('main-panel').innerHTML = `
     <div class="city-art">
