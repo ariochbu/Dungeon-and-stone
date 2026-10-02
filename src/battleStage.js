@@ -13,7 +13,7 @@
 // combat.enemies/combat.allies/combat.lastActor/combat.lastAction y dibuja.
 // No aplica daño, no decide turnos, no cambia HP.
 
-import { CLASS_SPRITES, ALLY_SPRITES, ENEMY_SPRITES } from './battleSprites.js?v=66';
+import { CLASS_SPRITES, ALLY_SPRITES, ENEMY_SPRITES, playerSpriteFor } from './battleSprites.js?v=67';
 
 const TILE = 16;
 const SCALE = 3;
@@ -202,8 +202,8 @@ function keyFor(kind, entity, idx){
   return 'ally:'+entity.id;
 }
 
-function spriteFor(kind, entity, playerStyle){
-  if(kind==='player') return CLASS_SPRITES[playerStyle] || null;
+function spriteFor(kind, entity, playerStyle, playerRace){
+  if(kind==='player') return playerSpriteFor(playerStyle, playerRace);
   if(kind==='enemy') return ENEMY_SPRITES[entity.tpl && entity.tpl.id] || null;
   if(kind==='ally') return ALLY_SPRITES[entity.role] || null;
   return null;
@@ -269,7 +269,7 @@ function syncBattleStage(container, combat, playerInfo, onTargetClick){
     if(!a){ a = makeActor(k); actors.set(k, a); }
     const pp = partyPos[playerPartyIdx];
     a.baseX = pp.x; a.baseY = pp.y; a.x = a.baseX; a.y = a.baseY;
-    playerSpriteRef = spriteFor('player', null, playerInfo.style);
+    playerSpriteRef = spriteFor('player', null, playerInfo.style, playerInfo.race);
     Object.assign(a, {
       kind:'player', name: playerInfo.name, icon: playerInfo.icon, nameMaxW: pp.nameMaxW,
       sprite: playerSpriteRef, role: roleFor('player', null, playerInfo.style),

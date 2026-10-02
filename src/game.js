@@ -2,8 +2,8 @@
 
 import { supabase } from './supabaseClient.js';
 import * as auth from './auth.js';
-import { syncBattleStage, playBattleAnim } from './battleStage.js?v=68';
-import { CLASS_SPRITES, ENEMY_SPRITES } from './battleSprites.js?v=66';
+import { syncBattleStage, playBattleAnim } from './battleStage.js?v=69';
+import { CLASS_SPRITES, ENEMY_SPRITES, playerSpriteFor } from './battleSprites.js?v=67';
 
 /* ============================================================
    DATA
@@ -11257,7 +11257,7 @@ function renderCombat(){
   const PHUD_ICON_HP = `<svg viewBox="0 0 16 16" width="12" height="12"><path fill="currentColor" d="M8 14C8 14 2 9.6 2 5.9 2 3.7 3.8 2 5.9 2 7 2 8 2.7 8 2.7S9 2 10.1 2C12.2 2 14 3.7 14 5.9 14 9.6 8 14 8 14Z"/></svg>`;
   const PHUD_ICON_MP = `<svg viewBox="0 0 16 16" width="12" height="12"><path fill="currentColor" d="M8 1C8 1 3 7.3 3 10.3 3 12.7 5.2 14.6 8 14.6S13 12.7 13 10.3C13 7.3 8 1 8 1Z"/></svg>`;
   const PHUD_ICON_SPI = `<svg viewBox="0 0 16 16" width="12" height="12"><path fill="currentColor" d="M8 1 9.6 6.4 15 8 9.6 9.6 8 15 6.4 9.6 1 8 6.4 6.4Z"/></svg>`;
-  const playerSprite = CLASS_SPRITES[state.char.style];
+  const playerSprite = playerSpriteFor(state.char.style, state.char.race);
   const enemySprite = targetEnemy && targetEnemy.tpl ? ENEMY_SPRITES[targetEnemy.tpl.id] : null;
   const enemyHUD = targetEnemy ? `
     <div class="phud enemy">
@@ -11406,7 +11406,7 @@ function renderCombat(){
   });
 
   const playerInfo = {
-    name: state.char.nickname || s.name, icon: race().icon, style: state.char.style,
+    name: state.char.nickname || s.name, icon: race().icon, style: state.char.style, race: state.char.race,
     hp: state.char.curHP, maxHP: d.maxHP, mp: state.char.curSta, maxMP: d.maxSta,
     spirit: state.char.curSpi, maxSpirit: d.maxSpi, statuses: combat.playerStatuses||[],
     shield: combat.playerShield||0,
