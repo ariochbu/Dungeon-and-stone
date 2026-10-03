@@ -18,9 +18,12 @@ ALIAS = {
   'asesino_de_elite':'asesino_elite_isla', 'custodio_de_la_isla':'custodio_isla', 'guardia_de_las_profundidades':'guardia_profundidades',
   'sacerdotisa_de_las_mareas':'sacerdotisa_mareas', 'guardian_del_abismo':'guardian_abismo', 'serpiente_de_palpus':'serpiente_palpus',
   'heraldo_de_la_tormenta':'heraldo_tormenta', 'campeon_de_triton':'campeon_triton',
+  'usurpador_f1_limo':'usurpador', 'usurpador_f2_mimicry':'usurpador_f2', 'usurpador_f3_clon':'usurpador_f3', 'usurpador_f4_cristal':'usurpador_f4',
+  'custodio':'custodio_isla', 'goblin_jefe':'jefe_goblin', 'goblin_gilgoblin':'gilgoblin', 'goblin_hobgoblin':'hobgoblin', 'goblin_ogro':'ogro',
 }
 def to_id(base):
     b = re.sub(r'^(normal|elite)_', '', base)
+    b = re.sub(r'^p\d+_', '', b)
     b = re.sub(r'^jefe_(?=[a-z]+_)', '', b) if base.startswith('jefe_') else b
     b = re.sub(r'^piso_\d+_(jefe_)?', '', b)
     return ALIAS.get(b, b)

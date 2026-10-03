@@ -161,7 +161,7 @@ const HD_ENEMY_IDS = [
   'storm_gush', 'superviviente_curtido', 'superviviente_despiadado', 'tarantula_cazadora', 'tarantula_saltarina', 'tarantula_tejedora',
   'tigre_carmesi', 'tigre_sable', 'triton_guerrero', 'triton_hechicero', 'usurpador', 'usurpador_f2',
   'usurpador_f3', 'usurpador_f4', 'usurpador_fragmentado', 'viuda_alfa', 'viuda_carmesi', 'viuda_venenosa'];
-HD_ENEMY_IDS.forEach(id=>{ ENEMY_SPRITES[id] = `src/assets/enemigos/${id}.png?v=7`; });
+HD_ENEMY_IDS.forEach(id=>{ ENEMY_SPRITES[id] = `src/assets/enemigos/${id}.png?v=11`; });
 // Invocaciones de las fases de jefe (2026-10-02): reusan sprites existentes.
 ENEMY_SPRITES.cria_arana = ENEMY_SPRITES.tarantula_cazadora;
 ENEMY_SPRITES.cangrejo_isla = ENEMY_SPRITES.cangrejo_gigante;
