@@ -32,6 +32,8 @@
   <h1>Visor de batalla</h1>
   <p class="sub">Escenario de combate real del juego con datos de prueba, para comparar sprites. No guarda nada ni toca tu partida.</p>
   <div class="vb-bar" id="floors">
+    <button data-f="10">Piso 10 · Ogro</button>
+    <button data-f="20">Piso 20 · Matriarca Escarlata</button>
     <button data-f="30" class="on">Piso 30 · Riakis</button>
     <button data-f="39">Piso 39 · Usurpador Fragmentado</button>
     <button data-f="40">Piso 40 · Usurpador Sin Nombre</button>
@@ -62,6 +64,8 @@ import { ENEMY_SPRITES, enemySpriteFor } from './src/battleSprites.js';
 const E = (id, name, o={}) => ({ tpl:Object.assign({id, name, frontline:true}, o), name, icon:'👤', hp:1000, maxHP:1000, statuses:[] });
 const ALLY_IDS = [['aldric','Aldric','guerrero','frente'],['delyth','Delyth','sacerdote','retaguardia'],['neira','Neira','arquero','retaguardia'],['fennwick','Fennwick','mago','retaguardia']];
 const FLOORS = {
+  '10': { theme:'forest', enemies:()=>[E('ogro','Ogro',{boss:true}), E('goblin_guerrero','Goblin guerrero'), E('goblin_arquero','Goblin arquero',{frontline:false}), E('goblin_chaman','Chamán goblin',{frontline:false})] },
+  '20': { theme:'forest', enemies:()=>[E('matriarca_escarlata','Matriarca escarlata',{boss:true}), E('tarantula_cazadora','Cría de araña'), E('tarantula_cazadora','Cría de araña')] },
   '30': { theme:'cave',  boss:'riakis', enemies:()=>[E('riakis','Señor del Caos Riakis',{boss:true})] },
   '39': { theme:'cult',  boss:'usurpador_fragmentado', enemies:()=>[E('usurpador_fragmentado','Usurpador Fragmentado',{boss:true}), E('senuelo_duplicado','Duplicado',{decoy:true}), E('senuelo_duplicado','Duplicado',{decoy:true})] },
   '40': { theme:'cult',  boss:'usurpador', enemies:()=>[E('usurpador','El Usurpador Sin Nombre',{boss:true}), E('copia_usurpador','Copia del Usurpador'), E('copia_usurpador','Copia del Usurpador')] },
