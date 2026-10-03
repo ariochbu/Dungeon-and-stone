@@ -5864,6 +5864,56 @@ function flipAllOfrendaCards(){
     }, 700);
   }
 }
+// Cinemática de invocación (2026-10-03, pedido explícito): al otorgar una
+// ofrenda se oscurece la pantalla y el Ygdrasil se ilumina; cuando la tirada
+// ya está resuelta, la luz toma el color del MEJOR rango de la tanda (pista
+// antes de voltear las cartas) y con Épico+ además salen rayos. Se salta con
+// un toque. La ilustración es src/assets/ofrenda/invocacion.jpg (horizontal)
+// e invocacion_movil.jpg (vertical); mientras no existan, usa la del árbol.
+// Devuelve los resultados de la tirada cuando termina (o null si falló).
+function playOfrendaCinematic(pullPromise){
+  return new Promise(resolve=>{
+    const reduce = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    const div = document.createElement('div');
+    div.className = 'of-cine';
+    const sparks = Array.from({length:18}, (_,i)=>`<i style="--x:${(4+(i*53)%92)}%; --s:${3+(i%4)*2}px; --d:${2.2+(i%5)*0.5}s; --dl:${-((i*0.37)%3).toFixed(2)}s"></i>`).join('');
+    div.innerHTML = `
+      <picture>
+        <source media="(orientation:portrait)" srcset="src/assets/ofrenda/invocacion_movil.jpg?v=1">
+        <img class="of-cine-art" src="src/assets/ofrenda/invocacion.jpg?v=1" alt="">
+      </picture>
+      <div class="of-cine-glow"></div><div class="of-cine-rays"></div><div class="of-cine-beam"></div>
+      <div class="of-cine-sparks">${sparks}</div><div class="of-cine-flash"></div>
+      <div class="of-cine-hint">Toca para saltar</div>`;
+    const art = div.querySelector('.of-cine-art');
+    art.onerror = ()=>{ art.onerror = null; div.querySelectorAll('source').forEach(s=>s.remove()); art.src = 'src/assets/ofrenda/ygdrasil.jpg'; };
+    document.body.appendChild(div);
+    const t0 = performance.now();
+    let results = null, ready = false, done = false, skipAsked = false;
+    const finish = ()=>{
+      if(done) return;
+      done = true;
+      div.classList.add('out');
+      setTimeout(()=> div.remove(), 380);
+      resolve(results);
+    };
+    const reveal = ()=>{
+      if(done) return;
+      const best = results.reduce((b,r)=> Math.max(b, PET_RARITY_ORDER.indexOf(r.tpl.rarity)), 0);
+      div.style.setProperty('--oc', PET_RARITIES[PET_RARITY_ORDER[best]].color);
+      div.classList.add('reveal');
+      if(results.some(isRarePetResult)) div.classList.add('big');
+      setTimeout(finish, reduce ? 500 : 1700);
+    };
+    pullPromise.then(r=>{
+      results = r && r.length ? r : null;
+      ready = true;
+      if(!results || skipAsked) return finish();
+      setTimeout(reveal, Math.max(0, (reduce ? 150 : 1300) - (performance.now() - t0)));
+    }).catch(()=>{ ready = true; finish(); });
+    div.onclick = ()=>{ if(ready) finish(); else skipAsked = true; };
+  });
+}
 function renderOfrenda(){
   ensurePets();
   ofrendaPullResults = null;
@@ -5917,20 +5967,17 @@ function renderOfrenda(){
     const cost = payWith==='sellos' ? (kind==='x10'?GACHA_COST_SELLOS_X10:GACHA_COST_SELLOS_X1) : (kind==='x10'?GACHA_COST_X10:GACHA_COST_X1);
     const have = payWith==='sellos' ? (state.char.missionCurrency||0) : state.char.gold;
     if(have < cost) return;
-    const stage = document.getElementById('ygdrasil-stage');
-    stage.classList.add('shining');
     allPullBtns().forEach(b=>b.disabled = true);
     document.getElementById('ofrenda-results').innerHTML = '';
-    setTimeout(async ()=>{
-      const results = await pullGacha(kind, payWith);
-      stage.classList.remove('shining');
+    (async ()=>{
+      const results = await playOfrendaCinematic(pullGacha(kind, payWith));
       ofrendaPullResults = results ? results.map(r=>Object.assign({flipped:false}, r)) : null;
       refreshOfrendaResultsDOM();
       renderSheet();
       refreshBtnStates();
       document.querySelector('.ofrenda-collection-line').textContent =
         `Colección: ${Object.keys(state.char.pets.owned).length} / ${PET_CATALOG.length} Caídos del Laberinto reunidos · ${equippedPetIds().length}/${maxPetSlots()} equipadas`;
-    }, 900);
+    })();
   };
   document.getElementById('btn-pull-x1-gold').onclick = ()=>doPull('x1','gold');
   document.getElementById('btn-pull-x10-gold').onclick = ()=>doPull('x10','gold');
@@ -5941,15 +5988,12 @@ function renderOfrenda(){
     claimBtn.onclick = ()=>{
       const count = state.char.pets.pendingFreePulls;
       if(count<=0) return;
-      const stage = document.getElementById('ygdrasil-stage');
-      stage.classList.add('shining');
       claimBtn.disabled = true;
       allPullBtns().forEach(b=>b.disabled = true);
       document.getElementById('ofrenda-results').innerHTML = '';
-      setTimeout(async ()=>{
+      (async ()=>{
         state.char.pets.pendingFreePulls = 0;
-        const results = await grantFreePetPulls(count);
-        stage.classList.remove('shining');
+        const results = await playOfrendaCinematic(grantFreePetPulls(count));
         ofrendaPullResults = results ? results.map(r=>Object.assign({flipped:false}, r)) : null;
         refreshOfrendaResultsDOM();
         refreshBtnStates();
@@ -5957,7 +6001,7 @@ function renderOfrenda(){
         if(pendingBox) pendingBox.remove();
         document.querySelector('.ofrenda-collection-line').textContent =
           `Colección: ${Object.keys(state.char.pets.owned).length} / ${PET_CATALOG.length} Caídos del Laberinto reunidos · ${equippedPetIds().length}/${maxPetSlots()} equipadas`;
-      }, 900);
+      })();
     };
   }
 }

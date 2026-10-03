@@ -1156,3 +1156,32 @@ details.admin-acc > summary > span{ flex:1; }
 .ws-scene.has-art > :not(.ws-illus){ display:none; }
 .ws-portrait{ overflow:hidden; }
 .ws-portrait img{ width:100%; height:100%; object-fit:cover; }
+
+/* Cinemática de invocación de la ofrenda (2026-10-03). --oc es el color de la
+   luz: verde pálido mientras carga, y el del mejor rango al revelar. */
+.of-cine{ position:fixed; inset:0; z-index:9000; background:#050705; overflow:hidden; cursor:pointer; --oc:#bfe9c2; animation:of-cine-in 0.35s ease; }
+.of-cine.out{ opacity:0; transition:opacity 0.35s ease; pointer-events:none; }
+.of-cine picture{ position:absolute; inset:0; }
+.of-cine-art{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:center 65%; filter:brightness(0.5) saturate(0.85); animation:of-cine-zoom 3.4s ease-out forwards; transition:filter 0.5s ease; }
+.of-cine.reveal .of-cine-art{ filter:brightness(0.95) saturate(0.4); } /* casi sin color propio: manda el tinte del rango */
+.of-cine-glow{ position:absolute; inset:0; background:radial-gradient(ellipse at 50% 42%, var(--oc), transparent 62%); mix-blend-mode:screen; opacity:0.22; animation:of-cine-pulse 1.3s ease-in-out infinite; }
+.of-cine.reveal .of-cine-glow{ opacity:0.8; animation:none; transition:opacity 0.5s ease; }
+.of-cine-beam{ position:absolute; left:50%; top:-10%; width:26vmin; height:120%; transform:translateX(-50%) scaleX(0); background:linear-gradient(90deg, transparent, var(--oc) 42%, #fff 50%, var(--oc) 58%, transparent); mix-blend-mode:screen; opacity:0; filter:blur(6px); }
+.of-cine.reveal .of-cine-beam{ animation:of-cine-beam 1.6s ease-out forwards; }
+.of-cine-rays{ position:absolute; left:50%; top:42%; width:160vmax; height:160vmax; margin:-80vmax 0 0 -80vmax; background:repeating-conic-gradient(from 0deg, transparent 0 9deg, var(--oc) 10deg 12deg, transparent 13deg 20deg); mix-blend-mode:screen; opacity:0; -webkit-mask-image:radial-gradient(circle, #000 0, transparent 55%); mask-image:radial-gradient(circle, #000 0, transparent 55%); }
+.of-cine.reveal.big .of-cine-rays{ opacity:0.55; animation:of-cine-spin 9s linear infinite; transition:opacity 0.4s ease; }
+.of-cine-sparks i{ position:absolute; bottom:-12px; left:var(--x); width:var(--s); height:var(--s); border-radius:50%; background:var(--oc); box-shadow:0 0 8px var(--oc); opacity:0; animation:of-cine-rise var(--d) linear var(--dl) infinite; }
+.of-cine-flash{ position:absolute; inset:0; background:#fff; opacity:0; pointer-events:none; }
+.of-cine.reveal .of-cine-flash{ animation:of-cine-flash 0.7s ease-out; }
+.of-cine-hint{ position:absolute; left:0; right:0; bottom:18px; text-align:center; color:#d8ccb4; font-size:0.8em; letter-spacing:1px; opacity:0.7; text-shadow:0 1px 3px #000; }
+@keyframes of-cine-in{ from{ opacity:0; } to{ opacity:1; } }
+@keyframes of-cine-zoom{ from{ transform:scale(1.02); } to{ transform:scale(1.14); } }
+@keyframes of-cine-pulse{ 0%,100%{ opacity:0.14; } 50%{ opacity:0.34; } }
+@keyframes of-cine-beam{ 0%{ opacity:0; transform:translateX(-50%) scaleX(0); } 25%{ opacity:1; transform:translateX(-50%) scaleX(1.25); } 100%{ opacity:0.75; transform:translateX(-50%) scaleX(0.8); } }
+@keyframes of-cine-spin{ to{ transform:rotate(360deg); } }
+@keyframes of-cine-rise{ 0%{ opacity:0; transform:translateY(0); } 15%{ opacity:0.9; } 100%{ opacity:0; transform:translateY(-105vh); } }
+@keyframes of-cine-flash{ 0%{ opacity:0.85; } 100%{ opacity:0; } }
+@media (prefers-reduced-motion: reduce){
+  .of-cine-art, .of-cine-glow, .of-cine-sparks i, .of-cine.reveal.big .of-cine-rays, .of-cine.reveal .of-cine-flash{ animation:none; }
+  .of-cine.reveal .of-cine-beam{ animation:none; opacity:0.7; transform:translateX(-50%) scaleX(0.8); }
+}
