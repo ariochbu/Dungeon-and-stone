@@ -5615,9 +5615,12 @@ function renderCityWelcome(){
   document.getElementById('main-panel').innerHTML = `
     <div class="city-welcome">
       <h2 class="cw-title">La Última Ciudad</h2>
-      <div class="ws-scene" style="background:${WELCOME_SCENES[cur.scene]}">${welcomeSceneArt(cur.scene)}</div>
+      <div class="ws-scene" style="background:${WELCOME_SCENES[cur.scene]}">
+        <img class="ws-illus" src="src/assets/bienvenida/escena_${step+1}.png?v=1" alt="" onload="this.parentElement.classList.add('has-art')" onerror="this.remove()">
+        ${welcomeSceneArt(cur.scene)}
+      </div>
       <div class="ws-dialog">
-        <div class="ws-narrator"><div class="ws-portrait">📜</div><b>El Cronista</b></div>
+        <div class="ws-narrator"><div class="ws-portrait"><img src="src/assets/bienvenida/cronista.png?v=1" alt="" onerror="this.replaceWith('📜')"></div><b>El Cronista</b></div>
         <p class="ws-text">${cur.text}</p>
         <div class="ws-foot">
           <div class="ws-dots">${WELCOME_STORY.map((_,i)=>`<i class="${i===step?'on':(i<step?'done':'')}"></i>`).join('')}</div>

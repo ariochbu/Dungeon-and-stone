@@ -1148,3 +1148,11 @@ details.admin-acc > summary > span{ flex:1; }
   .city-map .cm-pin{ transform:translate(-50%,-78%); }
   .city-map .cm-tag{ font-size:0.62em; padding:1px 5px; }
 }
+
+/* Ilustraciones de la bienvenida (src/assets/bienvenida/escena_1..8.png, 1600x700).
+   Si existe la ilustración, tapa el arte provisional de la escena. */
+.ws-scene{ height:auto !important; aspect-ratio:16/7; }
+.ws-illus{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; z-index:1; animation:ws-in 0.5s ease; }
+.ws-scene.has-art > :not(.ws-illus){ display:none; }
+.ws-portrait{ overflow:hidden; }
+.ws-portrait img{ width:100%; height:100%; object-fit:cover; }
