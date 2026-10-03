@@ -2,8 +2,8 @@
 
 import { supabase } from './supabaseClient.js';
 import * as auth from './auth.js';
-import { syncBattleStage, playBattleAnim } from './battleStage.js?v=83';
-import { CLASS_SPRITES, ENEMY_SPRITES, playerSpriteFor, enemySpriteFor } from './battleSprites.js?v=81';
+import { syncBattleStage, playBattleAnim } from './battleStage.js?v=84';
+import { CLASS_SPRITES, ENEMY_SPRITES, playerSpriteFor, enemySpriteFor, ALLY_TEMPLATE_SPRITES } from './battleSprites.js?v=82';
 
 /* ============================================================
    DATA
@@ -3981,11 +3981,12 @@ async function mergeServerProgress(){
   c.maxLevelUnlocked = Math.max(c.maxLevelUnlocked, c.record.level);
   return true;
 }
+// Devuelve true solo si la partida quedó guardada en la base.
 async function flushSave(){
-  if(!state || !currentUser || sessionKicked) return;
+  if(!state || !currentUser || sessionKicked) return false;
   pendingSave = false;
   let { error } = await supabase.from('characters').update(characterToRow()).eq('id', state.char.id);
-  if(error && (error.message||'').includes('SESION_REEMPLAZADA')){ kickSession(); return; }
+  if(error && (error.message||'').includes('SESION_REEMPLAZADA')){ kickSession(); return false; }
   if(error && STALE_SESSION_ERR.test(error.message||'') && await mergeServerProgress()){
     ({ error } = await supabase.from('characters').update(characterToRow()).eq('id', state.char.id));
     if(!error) log('Se detectó progreso guardado desde otra pestaña o dispositivo con este personaje: se combinó con esta sesión. Evita jugar el mismo personaje en dos lugares a la vez.');
@@ -4001,6 +4002,7 @@ async function flushSave(){
       log(`<b style="color:var(--blood-light)">⚠ No se pudo guardar la partida</b> (${error.message}). Tu progreso de ahora podría perderse si recargas — avisa al administrador con este mensaje.`);
     }
   }
+  return !error;
 }
 
 async function save(){
@@ -5082,7 +5084,12 @@ function renderInventory(){
   if(targetRow){
     const ca = makeCombatAlly(targetRow);
     const tplA = ALLY_ROSTER.find(t=>t.templateId===targetRow.template_id) || {};
-    portraitHTML = `<img class="pj-ally-art" src="src/assets/aliados/${targetRow.template_id}.jpg" alt="" onerror="this.replaceWith('${tplA.icon||'🛡️'}')">`;
+    // Sprite de combate del aliado, como el del jugador; si alguno no
+    // tuviera, cae a su ilustración.
+    const allySprite = ALLY_TEMPLATE_SPRITES[targetRow.template_id];
+    portraitHTML = allySprite
+      ? `<img class="pj-sprite" src="${allySprite}" alt="">`
+      : `<img class="pj-ally-art" src="src/assets/aliados/${targetRow.template_id}.jpg" alt="" onerror="this.replaceWith('${tplA.icon||'🛡️'}')">`;
     plateSub = `Aliado · ${targetRow.role || tplA.role || ''} · Nivel ${targetRow.level||1}`;
     attrsHTML = [
       ['Ataque','Daño por golpe', ca.atk], ['Vida','Puntos de vida', ca.maxHP], ['MP','Maná', ca.maxMP],
@@ -5318,11 +5325,23 @@ function equipItem(uid){
   save();
 }
 
+// Bug reportado 2026-10-03 ("cuando desequipas, el objeto desaparece"): el
+// objeto sí volvía a la mochila, pero quedaba oculto si había un filtro
+// (ranura, rango o senda/conjunto) que no lo incluía, o si estaba abierta
+// otra pestaña. Al quitar algo se muestra la Mochila y se sueltan los
+// filtros que lo esconderían.
+function revealInBag(item){
+  invTab = 'mochila';
+  if(invGearFilter!=='todos' && invGearFilter!==item.slot) invGearFilter = 'todos';
+  if(invGearTierFilter!=='todos' && invGearTierFilter!==(item.rarity||'comun')) invGearTierFilter = 'todos';
+  if(invGearClassFilter!=='todos' && !(invGearClassFilter.startsWith('set:') ? item.setId===invGearClassFilter.slice(4) : item.styleId===invGearClassFilter)) invGearClassFilter = 'todos';
+}
 function unequipItem(slot){
   const item = state.char.equip[slot];
   if(!item) return;
   state.char.equip[slot] = null;
   state.char.inventory.push(ensureItemUid(item));
+  revealInBag(item);
   log(`Desequipas <b>${item.name}</b>.`);
   renderSheet();
   if(invOpen) renderInventory();
@@ -5332,6 +5351,26 @@ function unequipItem(slot){
 async function saveAllyEquip(row){
   const { error } = await supabase.from('character_allies').update({equip: row.equip||{}}).eq('id', row.id);
   if(error) console.error('No se pudo guardar el equipo del aliado:', error.message);
+  return !error;
+}
+// Bug reportado 2026-10-03 ("al desequipar de un aliado, el objeto
+// desaparece"): el equipo del aliado vive en character_allies y la mochila en
+// characters, y se guardaban por separado — el aliado al instante y sin
+// control de sesión, la mochila 1.5 s después. Si ese segundo guardado no
+// llegaba (cuenta abierta en otro dispositivo, recarga inmediata, rechazo del
+// servidor), el objeto ya no estaba en el aliado y nunca llegó a la mochila.
+// Ahora se guarda en orden, primero el lado que RECIBE el objeto: si el
+// segundo paso falla, a lo sumo el objeto queda en los dos lados, nunca en
+// ninguno. Y si esta sesión ya fue reemplazada, no se escribe nada.
+async function persistAllyEquipChange(row, toBag){
+  if(!(await checkSessionStillActive())) return;
+  if(saveTimer) clearTimeout(saveTimer);
+  if(toBag){
+    if(await flushSave()) await saveAllyEquip(row);
+  } else {
+    if(await saveAllyEquip(row)) await flushSave();
+    else log(`<b style="color:var(--blood-light)">⚠ No se pudo guardar el equipo de ${row.name}.</b> Recarga antes de seguir para no perder el objeto.`);
+  }
 }
 function equipItemOnAlly(uid, allyId){
   const row = (state.char.allies||[]).find(a=>a.id===allyId);
@@ -5357,9 +5396,9 @@ function equipItemOnAlly(uid, allyId){
   state.char.inventory.splice(idx,1);
   if(prior) state.char.inventory.push(ensureItemUid(prior));
   log(`Equipas <b>${item.name}</b> en <b>${row.name}</b>${prior ? ` (guardas ${prior.name} en la mochila)` : ''}.`);
-  saveAllyEquip(row);
   if(invOpen) renderInventory();
-  save();
+  saveLocalLog();
+  persistAllyEquipChange(row, false);
 }
 function unequipAllyItem(allyId, slot){
   const row = (state.char.allies||[]).find(a=>a.id===allyId);
@@ -5368,10 +5407,11 @@ function unequipAllyItem(allyId, slot){
   if(!item) return;
   row.equip[slot] = null;
   state.char.inventory.push(ensureItemUid(item));
+  revealInBag(item);
   log(`Desequipas <b>${item.name}</b> de <b>${row.name}</b>.`);
-  saveAllyEquip(row);
   if(invOpen) renderInventory();
-  save();
+  saveLocalLog();
+  persistAllyEquipChange(row, true);
 }
 
 function applyPotionEffect(potionId){

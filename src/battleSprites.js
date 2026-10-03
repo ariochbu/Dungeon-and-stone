@@ -167,9 +167,9 @@ ENEMY_SPRITES.cria_arana = ENEMY_SPRITES.tarantula_cazadora;
 ENEMY_SPRITES.cangrejo_isla = ENEMY_SPRITES.cangrejo_gigante;
 
 // Sprites HD de aliados por personaje (2026-10-02): verticales (2:3), el
-// escenario los dibuja respetando su proporción. Vex y Kael aún usan el de rol.
+// escenario los dibuja respetando su proporción. Vex y Kael se sumaron el 2026-10-03.
 export const ALLY_TEMPLATE_SPRITES = {};
-['aldric','brann','neira','lyra','fennwick','eira','delyth','seraphina'].forEach(id=>{ ALLY_TEMPLATE_SPRITES[id] = `src/assets/aliados/sprites/${id}.png?v=1`; });
+['aldric','brann','neira','lyra','fennwick','eira','delyth','seraphina','vex','kael'].forEach(id=>{ ALLY_TEMPLATE_SPRITES[id] = `src/assets/aliados/sprites/${id}.png?v=1`; });
 
 // Sprite de enemigo según su estado (2026-10-02): el Usurpador Sin Nombre
 // cambia de forma con sus fases — limo negro → mimetismo (75%) →
