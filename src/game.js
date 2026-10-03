@@ -7001,6 +7001,9 @@ async function loadAdminList(){
       if(error) msg.textContent = 'No se pudo otorgar: ' + error.message + (/admin_grant_pulls/.test(error.message) ? ' (falta correr la migración 0029)' : '');
       else msg.textContent = `Le diste ${n} ofrenda(s) gratis a ${target.nickname}. Le llegan en menos de 1 minuto si está conectado, o al entrar.`;
       await loadAdminList();
+      // El mensaje vive arriba del panel: con la lista larga quedaba fuera de
+      // pantalla y un fallo pasaba por "enviado" (2026-10-03).
+      msg.scrollIntoView({block:'center'});
     };
   });
   // Devolver a la ciudad (pedido explícito 2026-09-27, para no tener que
@@ -7021,6 +7024,7 @@ async function loadAdminList(){
       if(error) msg.textContent = 'No se pudo devolver a la ciudad: ' + error.message;
       else msg.textContent = `${target.nickname} vuelve a la ciudad.`;
       await loadAdminList();
+      msg.scrollIntoView({block:'center'});
     };
   });
   list.querySelectorAll('[data-delete-char]').forEach(btn=>{
