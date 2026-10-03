@@ -6997,9 +6997,28 @@ async function loadAdminList(){
       btn.disabled = true;
       // Vía RPC a gift_pulls (0029): el jugador las cobra solo, aunque esté
       // conectado en este momento (antes su propio guardado las pisaba).
+      // Solo se da por enviado tras RELEER el personaje y comprobar que sus
+      // pendientes subieron en n (pedido explícito 2026-10-03: hubo regalos que
+      // el servidor rechazaba y el panel no dejaba claro que habían fallado).
+      // Se compara la suma árbol + regaladas, que no cambia si el jugador las
+      // cobra justo en ese momento.
+      const readPending = async ()=>{
+        const { data, error } = await supabase.from('characters').select('pets, gift_pulls').eq('id', id).single();
+        return error || !data ? null : pendingPullsOf(data);
+      };
+      const before = await readPending();
       const { error } = await supabase.rpc('admin_grant_pulls', { p_char: id, p_n: n });
-      if(error) msg.textContent = 'No se pudo otorgar: ' + error.message + (/admin_grant_pulls/.test(error.message) ? ' (falta correr la migración 0029)' : '');
-      else msg.textContent = `Le diste ${n} ofrenda(s) gratis a ${target.nickname}. Le llegan en menos de 1 minuto si está conectado, o al entrar.`;
+      const after = error ? null : await readPending();
+      const ok = !error && before !== null && after !== null && after >= before + n;
+      let okText = '';
+      if(ok) okText = `✔ Enviado con éxito: ${n} ofrenda(s) gratis para ${target.nickname} (pendientes: ${before} → ${after}). Le llegan en menos de 1 minuto si está conectado, o al entrar.`;
+      else if(error) msg.textContent = `✖ Ocurrió un error: no se enviaron las ofrendas a ${target.nickname} (${error.message}${/admin_grant_pulls/.test(error.message) ? ' — falta correr la migración 0029' : ''}).`;
+      else msg.textContent = `✖ Ocurrió un error: el envío a ${target.nickname} no dio fallo, pero no se pudo confirmar que se contabilizara (pendientes antes: ${before===null?'?':before}, ahora: ${after===null?'?':after}). Revisa antes de volver a enviar.`;
+      if(ok){ // en verde; los errores quedan en el rojo normal del panel
+        const sp = document.createElement('span');
+        sp.style.color = 'var(--good)'; sp.textContent = okText;
+        msg.textContent = ''; msg.appendChild(sp);
+      }
       await loadAdminList();
       // El mensaje vive arriba del panel: con la lista larga quedaba fuera de
       // pantalla y un fallo pasaba por "enviado" (2026-10-03).
