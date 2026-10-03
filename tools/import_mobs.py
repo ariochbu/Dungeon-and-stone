@@ -19,7 +19,7 @@ ALIAS = {
   'sacerdotisa_de_las_mareas':'sacerdotisa_mareas', 'guardian_del_abismo':'guardian_abismo', 'serpiente_de_palpus':'serpiente_palpus',
   'heraldo_de_la_tormenta':'heraldo_tormenta', 'campeon_de_triton':'campeon_triton',
   'usurpador_f1_limo':'usurpador', 'usurpador_f2_mimicry':'usurpador_f2', 'usurpador_f3_clon':'usurpador_f3', 'usurpador_f4_cristal':'usurpador_f4',
-  'custodio':'custodio_isla', 'goblin_jefe':'jefe_goblin', 'goblin_gilgoblin':'gilgoblin', 'goblin_hobgoblin':'hobgoblin', 'goblin_ogro':'ogro',
+  'custodio':'custodio_isla', 'tetrasea':'storm_gush', 'tetrasea_fase_final':'storm_gush_final', 'goblin_jefe':'jefe_goblin', 'goblin_gilgoblin':'gilgoblin', 'goblin_hobgoblin':'hobgoblin', 'goblin_ogro':'ogro',
 }
 def to_id(base):
     b = re.sub(r'^(normal|elite)_', '', base)

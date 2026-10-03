@@ -158,10 +158,10 @@ const HD_ENEMY_IDS = [
   'naga_arquero', 'naga_capitan', 'naga_maestro', 'ogro', 'oso_acorazado', 'oso_cuevas',
   'oso_roca_lunar', 'reflejo_perfecto_g', 'reina_devoradora', 'reina_telaranha', 'rey_manada', 'riakis',
   'sacerdotisa_mareas', 'saltadora_alfa', 'serpiente_palpus', 'sirena_corrupta', 'sirena_matriarca', 'sombra_mimetica',
-  'storm_gush', 'superviviente_curtido', 'superviviente_despiadado', 'tarantula_cazadora', 'tarantula_saltarina', 'tarantula_tejedora',
+  'storm_gush', 'storm_gush_final', 'superviviente_curtido', 'superviviente_despiadado', 'tarantula_cazadora', 'tarantula_saltarina', 'tarantula_tejedora',
   'tigre_carmesi', 'tigre_sable', 'triton_guerrero', 'triton_hechicero', 'usurpador', 'usurpador_f2',
   'usurpador_f3', 'usurpador_f4', 'usurpador_fragmentado', 'viuda_alfa', 'viuda_carmesi', 'viuda_venenosa'];
-HD_ENEMY_IDS.forEach(id=>{ ENEMY_SPRITES[id] = `src/assets/enemigos/${id}.png?v=11`; });
+HD_ENEMY_IDS.forEach(id=>{ ENEMY_SPRITES[id] = `src/assets/enemigos/${id}.png?v=12`; });
 // Invocaciones de las fases de jefe (2026-10-02): reusan sprites existentes.
 ENEMY_SPRITES.cria_arana = ENEMY_SPRITES.tarantula_cazadora;
 ENEMY_SPRITES.cangrejo_isla = ENEMY_SPRITES.cangrejo_gigante;
@@ -182,6 +182,11 @@ export function enemySpriteFor(en){
     if(has('Cristalización') || pct < 0.25) return ENEMY_SPRITES.usurpador_f4;
     if(pct < 0.5) return ENEMY_SPRITES.usurpador_f3;
     if(pct < 0.75 || has('Forma Robada')) return ENEMY_SPRITES.usurpador_f2;
+  }
+  // Tetrasea: su fase final (Sacerdote de la Tormenta, bajo 10% de vida).
+  if(id==='storm_gush'){
+    const pct = en.maxHP ? en.hp/en.maxHP : 1;
+    if(pct < 0.1 || (en.statuses||[]).some(s=>s.name==='Sacerdote de la Tormenta')) return ENEMY_SPRITES.storm_gush_final;
   }
   return ENEMY_SPRITES[id] || null;
 }

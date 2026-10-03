@@ -2,8 +2,8 @@
 
 import { supabase } from './supabaseClient.js';
 import * as auth from './auth.js';
-import { syncBattleStage, playBattleAnim } from './battleStage.js?v=84';
-import { CLASS_SPRITES, ENEMY_SPRITES, playerSpriteFor, enemySpriteFor, ALLY_TEMPLATE_SPRITES } from './battleSprites.js?v=82';
+import { syncBattleStage, playBattleAnim } from './battleStage.js?v=85';
+import { CLASS_SPRITES, ENEMY_SPRITES, playerSpriteFor, enemySpriteFor, ALLY_TEMPLATE_SPRITES } from './battleSprites.js?v=83';
 
 /* ============================================================
    DATA
@@ -1293,7 +1293,59 @@ document.addEventListener('load', (e)=>{
     img.style.background = '#0d0b09';
   }
 }, true);
-function petArtPath(id){ return `src/assets/mascotas/mascota_${String(id).padStart(3,'0')}.png?v=2`; }
+// Arte limpio de los Caídos (2026-10-03, pedido explícito): las imágenes
+// originales son cartas completas con nombre, rango y bonos PINTADOS dentro
+// (ilegibles en chico, formatos mezclados, y quedan desactualizadas si cambia
+// un bono). Las nuevas son solo la ilustración (vertical 2:3, sin texto) en
+// src/assets/mascotas/arte/, y el juego dibuja la carta con los datos reales
+// (ver petCardHTML). Se migra por tandas: los ids listados acá ya tienen arte
+// limpio; el resto sigue con su carta vieja. Importar con tools/import_caidos.py.
+const PET_CLEAN_ART = new Set([]);
+function petHasCleanArt(id){ return PET_CLEAN_ART.has(Number(id)); }
+function petArtPath(id){
+  const n = String(id).padStart(3,'0');
+  return petHasCleanArt(id) ? `src/assets/mascotas/arte/mascota_${n}.jpg?v=1` : `src/assets/mascotas/mascota_${n}.png?v=2`;
+}
+// Texto de los bonos de un Caído, desde PET_CATALOG. Los del mismo tipo se
+// suman en una sola línea (dos "aumento_dano" de 10% y 12% -> "+22% daño").
+const PET_RAZA_LABELS = {goblin:'goblins', arana:'arañas', bestia:'bestias', humano:'humanos', criatura_marina:'criaturas marinas'};
+const PET_MOD_LABELS = {maxhp_flat:'HP', mp_flat:'MP', espiritu_flat:'Espíritu', res_magica:'Resistencia mágica', resistencia_estado:'Resistencia a estados', defensa_fisica:'Defensa física'};
+const PET_STAT_LABELS = {fis:'Físico', hab:'Habilidad', esp:'Espíritu', agi:'Agilidad', vig:'Vigor'};
+const PET_TYPE_LABELS = {aumento_dano:'daño', critico_dano:'daño crítico', prob_critico:'prob. de crítico', evasion_flat:'evasión',
+  reduccion_dano:'reducción de daño', penetracion_armadura:'penetración de armadura', bloqueo:'bloqueo', retroceso:'retroceso',
+  aturdir:'aturdir', segundo_ataque_basico:'segundo ataque básico', doble_encantamiento:'segundo hechizo'};
+function petBonusLines(tpl){
+  const acc = new Map();
+  (tpl.bonuses||[]).forEach(b=>{
+    const key = b.stat ? 'stat:'+b.stat : b.mod ? 'mod:'+b.mod : 'type:'+b.type+':'+(b.raza||b.posicion||'');
+    const cur = acc.get(key) || {b, total:0};
+    cur.total += (b.value!==undefined ? b.value : b.chance!==undefined ? b.chance : b.percent)||0;
+    acc.set(key, cur);
+  });
+  return [...acc.values()].map(({b,total})=>{
+    if(b.stat) return `+${total} ${PET_STAT_LABELS[b.stat]||b.stat}`;
+    if(b.mod) return `+${total} ${PET_MOD_LABELS[b.mod]||b.mod}`;
+    const pct = `+${Math.round(total*100)}%`;
+    if(b.type==='aumento_dano_raza') return `${pct} daño a ${PET_RAZA_LABELS[b.raza]||b.raza}`;
+    if(b.type==='aumento_dano_posicion') return `${pct} daño a la ${b.posicion==='frontline'?'primera línea':'retaguardia'}`;
+    return `${pct} ${PET_TYPE_LABELS[b.type]||b.type}`;
+  });
+}
+// Carta completa (zoom) de un Caído con arte limpio: ilustración + nombre,
+// rango, bonos y habilidad única escritos por el juego.
+function petCardHTML(petId){
+  const tpl = petTpl(petId);
+  const r = PET_RARITIES[tpl.rarity];
+  return `<div class="pet-card" style="--rc:${r.color}">
+    <div class="pet-card-art"><img src="${petArtPath(petId)}" alt=""><span class="pet-card-num">#${String(tpl.id).padStart(3,'0')}</span></div>
+    <div class="pet-card-body">
+      <div class="pet-card-name">${tpl.name}</div>
+      <div class="pet-card-rank">${r.name}</div>
+      <ul class="pet-card-bonuses">${petBonusLines(tpl).map(l=>`<li>${l}</li>`).join('')}</ul>
+      ${tpl.unique ? `<div class="pet-card-unique"><b>${tpl.unique.name}</b>${tpl.unique.desc}</div>` : ''}
+    </div>
+  </div>`;
+}
 // Zoom al pasar el cursor (o mantener presionado en celular) sobre una
 // carta de Caído del Laberinto (2026-09-25, pedido explícito: "se ven muy
 // diminutos... al pasar el puntero por encima... si estas en celular si se
@@ -1315,7 +1367,7 @@ function showPetZoom(petId){
   if(!tpl) return;
   const r = PET_RARITIES[tpl.rarity];
   const el = ensurePetZoomLayer();
-  el.innerHTML = `<img src="${petArtPath(petId)}" alt="${tpl.name}">`;
+  el.innerHTML = petHasCleanArt(petId) ? petCardHTML(petId) : `<img src="${petArtPath(petId)}" alt="${tpl.name}">`;
   el.style.boxShadow = `0 0 0 3px ${r.color}, 0 0 34px ${r.color}99`;
   el.classList.add('visible');
 }
@@ -5803,6 +5855,7 @@ function petFlipCardHTML(r, idx, locked){
         <div class="pet-flip-back">🎴</div>
         <div class="pet-flip-front" data-pet-zoom="${r.id}" style="box-shadow:0 0 0 2px ${rc.color}bb, 0 0 ${big?22:12}px ${rc.color}99;">
           <img src="${petArtPath(r.id)}" alt="${tpl.name}" loading="lazy">
+          ${petHasCleanArt(r.id) ? `<div class="pet-flip-name" style="color:${rc.color}">${tpl.name}</div>` : ''}
           ${r.isDup ? '<div class="pet-dup-badge">Duplicado</div>' : '<div class="pet-new-badge">¡Nuevo!</div>'}
         </div>
       </div>
