@@ -1,0 +1,541 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Piloto del laberinto — Dungeon &amp; Stone</title>
+<style>
+  body{ margin:0; background:#14110e; color:#e8dcc6; font-family:Georgia, serif; }
+  main{ max-width:620px; margin:0 auto; padding:12px; }
+  h1{ font-size:1.15em; color:#c9a25d; margin:0 0 4px; }
+  p{ color:#a89a84; font-size:0.88em; margin:4px 0 10px; line-height:1.4; }
+  canvas{ width:100%; height:auto; display:block; border:1px solid #3a332c; border-radius:6px; image-rendering:pixelated; background:#0d0b10; cursor:pointer; touch-action:manipulation; }
+  .row{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:10px 0; }
+  button, input, select{ background:#241e18; color:#e8dcc6; border:1px solid #3a332c; border-radius:4px; padding:7px 12px; font:inherit; font-size:0.9em; }
+  button{ cursor:pointer; } button:hover{ border-color:#c9a25d; }
+  button.main{ background:#7a2c2c; border-color:#a84444; }
+  input{ width:60px; } select{ padding:6px; }
+  label{ font-size:0.85em; color:#a89a84; display:flex; align-items:center; gap:6px; }
+  #msg{ min-height:44px; padding:10px 12px; border:1px solid #3a332c; border-radius:6px; background:rgba(0,0,0,0.25); font-size:0.92em; display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .legend{ display:flex; flex-wrap:wrap; gap:4px 12px; font-size:0.8em; color:#a89a84; }
+  .legend i{ display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:4px; vertical-align:-1px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Piloto del laberinto por salas</h1>
+  <p>Página de pruebas, aparte del juego. Usa las mismas reglas del laberinto actual (pisos, sendas, tipos de sala); solo cambia cómo se ve. Toca una sala iluminada para avanzar.</p>
+  <canvas id="stage" width="368" height="464"></canvas>
+  <div id="msg"><span id="msg-text"></span><span id="msg-btn"></span></div>
+  <div class="row">
+    <label>Nivel del laberinto <input type="number" id="level" value="7" min="1" max="60"></label>
+    <button id="regen">Nuevo laberinto</button>
+    <label>Personaje <select id="who"></select></label>
+    <label>Sentido <select id="orient"><option value="h">Horizontal</option><option value="v">Vertical</option></select></label>
+    <label>Aspecto <select id="look"><option value="fondo">Fondo con recuadros</option><option value="muros">Salas con muros</option></select></label>
+  </div>
+  <div class="legend">
+    <span><i style="background:#8a8f99"></i>Entrada</span><span><i style="background:#c44a4a"></i>Combate</span>
+    <span><i style="background:#9a5fd0"></i>Élite</span><span><i style="background:#e0b23f"></i>Tesoro</span>
+    <span><i style="background:#e8853a"></i>Descanso</span><span><i style="background:#ff3b3b"></i>Jefe</span><span><i style="background:#4a4650"></i>Sin explorar</span>
+  </div>
+</main>
+<script type="module">
+import { SpriteAnim, loadImage, sheetFromMeta } from './spriteAnim.js';
+const CHIBI = await fetch('./assets/sprites/chibi/index.json').then(r=>r.json()).catch(()=>({}));
+// ============================================================
+// REGLAS — copia de src/game.js (generateDungeon, isNodeReachable,
+// laneCountForLevel, numFloorsForLevel). Al integrar, esta página no aporta
+// reglas nuevas: el dibujo de abajo lee el mismo objeto `dungeon` del juego.
+// ============================================================
+const BASE_FLOORS = 5, MAX_FLOORS = 9;
+const laneCountForLevel = (level)=>{ const band = level % 10 === 0 ? 10 : level % 10; return band <= 4 ? 3 : 5; };
+const numFloorsForLevel = (level)=> Math.min(MAX_FLOORS, BASE_FLOORS + Math.floor((level-1)/2));
+const isParaiso = (level)=> Math.floor((level-1)/10) === 4;
+function generateDungeon(level){
+  const numFloors = numFloorsForLevel(level) + (isParaiso(level) ? 3 : 0);
+  const laneCount = laneCountForLevel(level), paraiso = isParaiso(level);
+  const floors = [];
+  for(let f=0; f<numFloors; f++){
+    if(f === numFloors-1){ floors.push([{type:'jefe', done:false}]); continue; }
+    if(f === 0){ floors.push([{type:'entrada', done:false}]); continue; }
+    const nodes = [];
+    for(let lane=0; lane<laneCount; lane++){
+      let type;
+      if(paraiso) type = Math.random() < 0.55 ? 'elite' : 'combate';
+      else { const roll = Math.random(); type = roll < 0.48 ? 'combate' : roll < 0.68 ? 'tesoro' : roll < 0.85 ? 'descanso' : 'elite'; }
+      nodes.push({type, done:false});
+    }
+    floors.push(nodes);
+  }
+  return {floors, atFloor:0, atNode:0, visited:{'0-0':true}, level};
+}
+function isNodeReachable(dg, fi, ni){
+  if(fi !== dg.atFloor+1) return false;
+  if(dg.floors[dg.floors.length-1][0].done) return false;
+  const fromNodes = dg.floors[dg.atFloor], toNodes = dg.floors[fi];
+  if(fromNodes.length === 1 || toNodes.length === 1) return true;
+  return Math.abs(ni - dg.atNode) <= 1;
+}
+
+// ============================================================
+// MUNDO: cada nodo es una sala; los pisos suben de abajo hacia arriba y un
+// pasillo horizontal une cada piso con el siguiente.
+// ============================================================
+const T = 16;                 // tamaño de baldosa
+const CELL_W = 9, CELL_H = 11;  // celda de una sala, en baldosas
+const ROOM_W = 7, ROOM_H = 5;   // interior de la sala
+const canvas = document.getElementById('stage'), ctx = canvas.getContext('2d');
+const $ = (id)=> document.getElementById(id);
+const tiles = new Image(); tiles.src = './assets/tilemap_packed.png';
+// Recortes del tileset Kenney Tiny Dungeon (CC0): [columna, fila]
+const SPR = { hero:[1,8], combate:[2,10], elite:[1,9], jefe:[2,9], chest:[5,7], chestOpen:[7,7] };
+const TYPE_COLOR = { entrada:'#8a8f99', combate:'#c44a4a', elite:'#9a5fd0', tesoro:'#e0b23f', descanso:'#e8853a', jefe:'#ff3b3b' };
+
+let dg, world, hero, cam = {x:0, y:0}, busy = false, pendingNode = null;
+
+function laneX(lanes, count, n){ return count === 1 ? Math.floor(lanes/2) : n; }
+const horiz = ()=> $('orient').value === 'h';
+// Cada sala guarda dónde está su puerta de entrada (door) para dibujar la
+// puerta o el candado sin importar el sentido del laberinto.
+function buildWorld(d){
+  const lanes = Math.max(...d.floors.map(f=>f.length)), F = d.floors.length, H_ = horiz();
+  // Horizontal: los pisos avanzan hacia la derecha (como el combate) y las
+  // sendas se apilan de arriba abajo. Vertical: los pisos suben.
+  const FX = ROOM_W + 4, LY = ROOM_H + 2;               // paso entre pisos / entre sendas (horizontal)
+  const W = H_ ? F*FX + 2 : lanes*CELL_W + 2, H = H_ ? lanes*LY + 2 : F*CELL_H + 2;
+  const grid = Array.from({length:H}, ()=> new Uint8Array(W)); // 1 = suelo
+  const cellTop = (f)=> 1 + (F-1-f)*CELL_H;
+  const rooms = [];
+  d.floors.forEach((nodes, f)=> nodes.forEach((node, n)=>{
+    const l = laneX(lanes, nodes.length, n);
+    const x0 = H_ ? 1 + f*FX : 1 + l*CELL_W + 1, y0 = H_ ? 1 + l*LY + 1 : cellTop(f) + 4;
+    for(let y=y0; y<y0+ROOM_H; y++) for(let x=x0; x<x0+ROOM_W; x++) grid[y][x] = 1;
+    const cx = x0 + 3, cy = y0 + 2;
+    rooms.push({f, n, node, lane:l, x0, y0, cx, cy, door: H_ ? [x0 - 1, cy] : [cx, y0 + ROOM_H]});
+  }));
+  const roomAt = (f, n)=> rooms.find(r=> r.f===f && r.n===n);
+  // Pasillos: de cada sala sale un tramo hasta el pasillo común de su piso, y
+  // de ahí otro tramo entra a cada sala del piso siguiente.
+  const halls = [];
+  for(let f=0; f<F-1; f++){
+    const lower = rooms.filter(r=>r.f===f), upper = rooms.filter(r=>r.f===f+1);
+    if(H_){
+      const hx = 1 + f*FX + ROOM_W + 2;
+      lower.forEach(r=>{ for(let x=r.x0+ROOM_W; x<=hx; x++) grid[r.cy][x] = 1; });
+      upper.forEach(r=>{ for(let x=hx; x<r.x0; x++) grid[r.cy][x] = 1; });
+      const ys = lower.concat(upper).map(r=>r.cy);
+      for(let y=Math.min(...ys); y<=Math.max(...ys); y++) grid[y][hx] = 1;
+      halls[f] = hx;
+    } else {
+      const hy = cellTop(f) + 1;
+      lower.forEach(r=>{ for(let y=hy; y<r.y0; y++) grid[y][r.cx] = 1; });
+      upper.forEach(r=>{ for(let y=r.y0+ROOM_H; y<=hy; y++) grid[y][r.cx] = 1; });
+      const xs = lower.concat(upper).map(r=>r.cx);
+      for(let x=Math.min(...xs); x<=Math.max(...xs); x++) grid[hy][x] = 1;
+      halls[f] = hy;
+    }
+  }
+  return {grid, W, H, rooms, roomAt, halls, lanes, horiz:H_, layer: paintWorld(grid, W, H)};
+}
+
+// --- dibujo del escenario, una sola vez por laberinto ---
+const hash = (x, y)=> ((x*73856093) ^ (y*19349663)) >>> 0;
+function paintWorld(grid, W, H){
+  const c = document.createElement('canvas'); c.width = W*T; c.height = H*T;
+  const g = c.getContext('2d');
+  const floor = (x, y)=> y>=0 && y<H && x>=0 && x<W && grid[y][x] === 1;
+  g.fillStyle = '#0d0b10'; g.fillRect(0, 0, c.width, c.height);
+  for(let y=0; y<H; y++) for(let x=0; x<W; x++){
+    const px = x*T, py = y*T, h = hash(x, y);
+    if(floor(x, y)){
+      g.fillStyle = ['#666a73','#6c7079','#62666f','#696d76'][h % 4]; g.fillRect(px, py, T, T);
+      g.fillStyle = '#4d5059'; g.fillRect(px, py+T-1, T, 1); g.fillRect(px+T-1, py, 1, T);
+      g.fillStyle = '#7b7f88'; g.fillRect(px, py, T-1, 1);
+      if(h % 11 === 0){ g.fillStyle = '#50535c'; g.fillRect(px+4, py+6, 5, 1); g.fillRect(px+8, py+7, 3, 1); }
+      continue;
+    }
+    let near = false;
+    for(let dy=-1; dy<=1 && !near; dy++) for(let dx=-1; dx<=1; dx++) if(floor(x+dx, y+dy)){ near = true; break; }
+    if(!near) continue;
+    if(floor(x, y+1)){ // muro visto de frente: ladrillo
+      g.fillStyle = '#6e4630'; g.fillRect(px, py, T, T);
+      g.fillStyle = '#4a2c1f';
+      g.fillRect(px, py+5, T, 1); g.fillRect(px, py+10, T, 1); g.fillRect(px, py+15, T, 1);
+      g.fillRect(px+7, py, 1, 5); g.fillRect(px+3, py+6, 1, 4); g.fillRect(px+11, py+6, 1, 4); g.fillRect(px+7, py+11, 1, 4);
+      g.fillStyle = '#8a5b3f'; g.fillRect(px, py, T, 1);
+    } else { // tope del muro
+      g.fillStyle = '#2b2026'; g.fillRect(px, py, T, T);
+      g.fillStyle = '#3c2e33'; g.fillRect(px+1, py+1, T-2, T-2);
+      g.fillStyle = '#2b2026'; if(h % 3 === 0) g.fillRect(px+5, py+5, 6, 1);
+    }
+  }
+  // sombra del muro sobre el suelo
+  for(let y=0; y<H; y++) for(let x=0; x<W; x++) if(floor(x, y) && !floor(x, y-1)){
+    g.fillStyle = 'rgba(0,0,0,0.28)'; g.fillRect(x*T, y*T, T, 4);
+  }
+  return c;
+}
+
+// ============================================================
+// ESTADO Y MOVIMIENTO
+// ============================================================
+function newDungeon(){
+  dg = generateDungeon(Math.max(1, Math.min(60, parseInt($('level').value, 10) || 1)));
+  if(horiz()){ canvas.width = 480; canvas.height = 384; } else { canvas.width = 368; canvas.height = 464; }
+  world = buildWorld(dg);
+  dressRooms();
+  const r = world.roomAt(0, 0);
+  hero = {x:(r.cx+0.5)*T, y:(r.cy+1.5)*T, path:[], step:0, flip:false};
+  cam.x = hero.x; cam.y = hero.y; busy = false; pendingNode = null;
+  say('Estás en la entrada. Toca una sala iluminada para avanzar.');
+}
+function say(text, btnLabel, onClick){
+  $('msg-text').innerHTML = text;
+  $('msg-btn').innerHTML = btnLabel ? `<button class="main">${btnLabel}</button>` : '';
+  if(btnLabel) $('msg-btn').firstChild.onclick = onClick;
+}
+function goTo(f, n){
+  if(busy || pendingNode || !isNodeReachable(dg, f, n)) return;
+  const a = world.roomAt(dg.atFloor, dg.atNode), b = world.roomAt(f, n), hy = world.halls[dg.atFloor];
+  const P = (tx, ty)=> ({x:(tx+0.5)*T, y:(ty+0.5)*T});
+  hero.path = world.horiz ? [P(a.cx, a.cy), P(hy, a.cy), P(hy, b.cy), P(b.cx - 1, b.cy + 1)]
+                          : [P(a.cx, a.cy+1), P(a.cx, hy), P(b.cx, hy), P(b.cx, b.cy+1)];
+  busy = true;
+  hero.onArrive = ()=>{
+    busy = false;
+    dg.atFloor = f; dg.atNode = n; dg.visited[f+'-'+n] = true;
+    arrive(b.node);
+  };
+}
+// Lo que pasa al entrar a una sala. En el juego real esto es enterNode():
+// combate de verdad, botín de verdad. Acá solo se simula el resultado.
+function arrive(node){
+  const names = {combate:'un grupo de monstruos', elite:'un monstruo de élite', jefe:'el guardián del nivel'};
+  if(names[node.type] && !node.done){
+    pendingNode = node;
+    say(`⚔️ Te encuentras con <b>${names[node.type]}</b>. (Aquí entra el combate del juego.)`, 'Vencer', ()=>{
+      node.done = true; pendingNode = null;
+      if(node.type === 'jefe') say('🏆 Guardián derrotado: nivel superado.', 'Siguiente nivel', ()=>{ $('level').value = Math.min(60, dg.level+1); newDungeon(); });
+      else say('Victoria. Elige la siguiente sala.');
+    });
+  } else if(node.type === 'tesoro' && !node.done){ node.done = true; say('💰 Abres el cofre: oro y quizá un objeto.'); }
+  else if(node.type === 'descanso' && !node.done){ node.done = true; say('🔥 Descansas junto a la hoguera: vida, MP y espíritu al máximo.'); }
+  else say('Elige la siguiente sala.');
+}
+canvas.addEventListener('click', (e)=>{
+  const r = canvas.getBoundingClientRect();
+  const wx = (e.clientX - r.left) * canvas.width / r.width + cam.x - canvas.width/2;
+  const wy = (e.clientY - r.top) * canvas.height / r.height + cam.y - canvas.height/2;
+  const tx = wx / T, ty = wy / T;
+  const room = world.rooms.find(m=> tx >= m.x0-1 && tx < m.x0+ROOM_W+1 && ty >= m.y0-1 && ty < m.y0+ROOM_H+1);
+  if(room) goTo(room.f, room.n);
+});
+$('regen').onclick = newDungeon; $('orient').onchange = newDungeon;
+// Monstruos de cada sala con su sprite chibi, según la década del nivel. Solo
+// hay arte chibi de goblins (1-10) y arañas (11-20); el resto usa el muñeco genérico.
+const DECADE_MOBS = [
+  {normal:['goblin_guerrero','goblin_saqueador','goblin_arquero','goblin_chaman'], elite:['jefe_goblin'], guardian:['hobgoblin','gilgoblin'], boss:'ogro'},
+  {normal:['tarantula_cazadora','tarantula_saltarina','tarantula_tejedora','viuda_alfa','viuda_carmesi','viuda_venenosa'],
+   elite:['saltadora_alfa','gran_tejedora','arana_caparazon'], guardian:['matriarca_telaranha','reina_telaranha','reina_devoradora'], boss:'matriarca_escarlata'},
+];
+async function dressRooms(){
+  const mine = world, pool = DECADE_MOBS[Math.floor((dg.level - 1)/10)];
+  if(!pool) return;
+  const pick = (list, k)=> list[k % list.length];
+  for(const m of world.rooms){
+    const k = m.f*7 + m.n*3 + dg.level, t = m.node.type;
+    const ids = t === 'combate' ? [pick(pool.normal, k), pick(pool.normal, k + 2)] : t === 'elite' ? [pick(pool.elite, k)]
+              : t === 'jefe' ? [dg.level % 10 === 0 ? pool.boss : pick(pool.guardian, dg.level)] : [];
+    const scale = t === 'jefe' ? 0.85 : t === 'elite' ? 0.62 : 0.45;
+    const mobs = [];
+    for(const id of ids){
+      const key = 'enemigo_' + id;
+      if(!CHIBI[key]) continue;
+      const anim = new SpriteAnim(await loadImage(`./assets/sprites/chibi/${key}.png`), sheetFromMeta(CHIBI[key]));
+      anim.t = mobs.length * 0.3;
+      mobs.push({anim, scale});
+    }
+    if(mine !== world) return; // se generó otro laberinto mientras cargaba
+    if(mobs.length) m.mobs = mobs;
+  }
+}
+// Dibuja el contenido de combate de una sala: chibi si lo hay, genérico si no.
+function drawFoes(m, cx, cy, t, dt){
+  if(m.mobs){
+    const n = m.mobs.length;
+    m.mobs.forEach((mob, i)=>{
+      mob.anim.update(dt);
+      mob.anim.draw(ctx, cx + (n > 1 ? (i ? 15 : -13) : 0), cy + 24 + (i ? 4 : 0), mob.scale, true);
+    });
+    return;
+  }
+  const bob = Math.round(Math.sin(t*3 + m.cx)*1), type = m.node.type;
+  if(type === 'jefe') sprite('jefe', cx, cy - 4 + bob, T*2.5);
+  else if(type === 'elite') sprite('elite', cx, cy + bob, T*1.5);
+  else { sprite('combate', cx - 9, cy + bob); sprite('combate', cx + 9, cy - bob + 3); }
+}
+let frameDt = 0.016, dust = [];
+// Íconos propios de cofre y hoguera (assets/sprites/iconos); si alguno no
+// carga, queda el dibujo de relleno.
+const ICONS = {};
+['cofre', 'cofre_abierto', 'hoguera'].forEach(n=> loadImage(`./assets/sprites/iconos/${n}.png`).then(img=> ICONS[n] = img).catch(()=>{}));
+function icon(name, cx, cy, h){
+  const img = ICONS[name];
+  if(!img) return false;
+  const w = img.naturalWidth * h / img.naturalHeight;
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(img, Math.round(cx - w/2), Math.round(cy - h/2), Math.round(w), h);
+  return true;
+}
+// Insignia del tipo de encuentro, en la esquina de la sala: normal, élite o
+// guardián. Los chibi solos no dejan distinguir cuál es cuál.
+const BADGE = {
+  combate: {icon:'⚔', label:'Normal',   bg:'#5a2a2a', fg:'#ffd9d4', line:'#c44a4a'},
+  elite:   {icon:'☠', label:'Élite',    bg:'#3f2a66', fg:'#e6d6ff', line:'#9a5fd0'},
+  jefe:    {icon:'♛', label:'Guardián', bg:'#7a1c1c', fg:'#ffe9a8', line:'#ffd76a'},
+};
+function drawBadge(m){
+  const b = BADGE[m.node.type];
+  if(!b || m.node.done) return;
+  const x = m.x0*T + 3, y = m.y0*T + 3;
+  ctx.font = 'bold 8px Georgia'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  const w = ctx.measureText(b.label).width + 19;
+  ctx.fillStyle = b.bg; ctx.fillRect(x, y, w, 12);
+  ctx.strokeStyle = b.line; ctx.lineWidth = 1; ctx.strokeRect(x + 0.5, y + 0.5, w - 1, 11);
+  ctx.fillStyle = b.fg; ctx.font = '9px serif'; ctx.fillText(b.icon, x + 3, y + 6.5);
+  ctx.font = 'bold 8px Georgia'; ctx.fillText(b.label, x + 14, y + 6.5);
+}
+// Personaje: la tira chibi del jugador (reposo), a media escala.
+const SENDAS = {pesada:'Arma pesada', tirador:'Tirador', doblefilo:'Doble filo', mago:'Mago', paladin:'Paladín', hechicero:'Hechicero'};
+const RAZAS = {barbaro:'Bárbaro', enano:'Enano', hada:'Hada', humano:'Humano', draconido:'Dracónido', bestia:'Bestia'};
+$('who').innerHTML = Object.entries(SENDAS).flatMap(([a, an])=> Object.entries(RAZAS).map(([r, rn])=> `<option value="${a}_${r}">${an} · ${rn}</option>`)).join('');
+let heroAnim = null;
+async function loadHero(){
+  const who = $('who').value;
+  // Si la raza tiene sprite de viaje (quieto + caminando), se usa ese en el
+  // laberinto; si no, el chibi de combate de su senda, que solo tiene reposo.
+  const travel = 'caminar_' + who.split('_')[1];
+  const key = CHIBI[travel] ? travel : who;
+  heroAnim = CHIBI[key] ? new SpriteAnim(await loadImage(`./assets/sprites/chibi/${key}.png`), sheetFromMeta(CHIBI[key])) : null;
+}
+$('who').onchange = loadHero;
+await loadHero();
+
+// ============================================================
+// DIBUJO POR CUADRO
+// ============================================================
+function sprite(key, x, y, size = T, flip = false){
+  const [c, r] = SPR[key];
+  ctx.save(); ctx.translate(Math.round(x), Math.round(y)); if(flip) ctx.scale(-1, 1);
+  ctx.drawImage(tiles, c*T, r*T, T, T, -size/2, -size/2, size, size);
+  ctx.restore();
+}
+function flame(x, y, t, big){
+  const s = big ? 1.6 : 1, fl = Math.sin(t*9 + x)*1.2;
+  ctx.fillStyle = 'rgba(255,170,60,0.16)'; ctx.beginPath(); ctx.arc(x, y, (big ? 22 : 12) + fl, 0, 7); ctx.fill();
+  ctx.fillStyle = '#e8622a'; ctx.fillRect(Math.round(x-3*s), Math.round(y-4*s+fl*0.4), Math.round(6*s), Math.round(7*s));
+  ctx.fillStyle = '#ffc247'; ctx.fillRect(Math.round(x-2*s), Math.round(y-2*s+fl*0.6), Math.round(4*s), Math.round(5*s));
+  ctx.fillStyle = '#fff3b0'; ctx.fillRect(Math.round(x-1*s), Math.round(y+fl*0.5), Math.round(2*s), Math.round(3*s));
+}
+// Puerta de entrada de la sala (en el muro de abajo): abierta si se puede
+// pasar o ya se pasó, cerrada con reja si no.
+function drawDoor(m, open, t){
+  const x = m.door[0]*T, y = m.door[1]*T;
+  if(open){
+    ctx.fillStyle = `rgba(255,215,110,${0.25 + 0.15*Math.sin(t*5)})`; ctx.fillRect(x, y, T, T);
+    ctx.fillStyle = '#8a5b3f'; ctx.fillRect(x - 2, y, 2, T); ctx.fillRect(x + T, y, 2, T);
+    return;
+  }
+  ctx.fillStyle = '#4a2f1c'; ctx.fillRect(x, y, T, T);
+  ctx.fillStyle = '#6b4526'; ctx.fillRect(x + 1, y + 1, 6, T - 2); ctx.fillRect(x + 9, y + 1, 6, T - 2);
+  ctx.fillStyle = '#2a2a30'; ctx.fillRect(x, y + 3, T, 2); ctx.fillRect(x, y + 11, T, 2);
+  ctx.fillStyle = '#c9a25d'; ctx.fillRect(x + 7, y + 7, 2, 2);
+}
+// ---- Aspecto "fondo con recuadros": el fondo ilustrado de la década detrás,
+// cada sala es un recuadro y los pasillos son senderos. Mismas reglas. ----
+const bgImgs = {};
+function decadeBg(){
+  const d = Math.min(5, Math.floor((dg.level - 1)/10)), key = `${d*10 + 1}-${d*10 + 10}`;
+  if(!(key in bgImgs)){ bgImgs[key] = null; loadImage(`./assets/fondos/${key}.jpg`).then(img=> bgImgs[key] = img).catch(()=>{}); }
+  return bgImgs[key];
+}
+function drawBackdrop(){
+  const img = decadeBg(), vw = canvas.width, vh = canvas.height;
+  if(img){
+    const k = Math.max(vw/img.naturalWidth, vh/img.naturalHeight)*1.15, w = img.naturalWidth*k, h = img.naturalHeight*k;
+    // leve paralaje: el fondo se desplaza un poco con la cámara
+    const px = (cam.x/(world.W*T) - 0.5)*(w - vw), py = (cam.y/(world.H*T) - 0.5)*(h - vh);
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(img, (vw - w)/2 - px, (vh - h)/2 - py, w, h);
+    ctx.imageSmoothingEnabled = false;
+  }
+  ctx.fillStyle = img ? 'rgba(10,8,12,0.5)' : '#14110e'; ctx.fillRect(0, 0, vw, vh);
+}
+function drawPaths(){
+  ctx.strokeStyle = 'rgba(232,220,198,0.32)'; ctx.lineWidth = 5; ctx.lineCap = 'round'; ctx.setLineDash([2, 9]);
+  const P = (tx, ty)=> [(tx + 0.5)*T, (ty + 0.5)*T];
+  world.halls.forEach((hy, f)=>{
+    const lower = world.rooms.filter(r=> r.f === f), upper = world.rooms.filter(r=> r.f === f + 1);
+    if(world.horiz){
+      const ys = lower.concat(upper).map(r=> r.cy);
+      ctx.beginPath(); ctx.moveTo(...P(hy, Math.min(...ys))); ctx.lineTo(...P(hy, Math.max(...ys)));
+      lower.forEach(r=>{ ctx.moveTo(...P(r.x0 + ROOM_W, r.cy)); ctx.lineTo(...P(hy, r.cy)); });
+      upper.forEach(r=>{ ctx.moveTo(...P(r.x0 - 1, r.cy)); ctx.lineTo(...P(hy, r.cy)); });
+      ctx.stroke();
+      return;
+    }
+    const xs = lower.concat(upper).map(r=> r.cx);
+    ctx.beginPath(); ctx.moveTo(...P(Math.min(...xs), hy)); ctx.lineTo(...P(Math.max(...xs), hy));
+    lower.forEach(r=>{ ctx.moveTo(...P(r.cx, r.y0 - 1)); ctx.lineTo(...P(r.cx, hy)); });
+    upper.forEach(r=>{ ctx.moveTo(...P(r.cx, r.y0 + ROOM_H)); ctx.lineTo(...P(r.cx, hy)); });
+    ctx.stroke();
+  });
+  ctx.setLineDash([]);
+}
+function roundRect(x, y, w, h, r){
+  ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+function drawRoomFrame(m, t){
+  const {node} = m, cx = (m.cx + 0.5)*T, cy = (m.cy + 0.5)*T - 10;
+  const x = m.x0*T, y = m.y0*T, w = ROOM_W*T, h = ROOM_H*T;
+  const here = m.f === dg.atFloor && m.n === dg.atNode, visited = !!dg.visited[m.f + '-' + m.n];
+  const reach = !busy && !pendingNode && isNodeReachable(dg, m.f, m.n);
+  const hidden = m.f > dg.atFloor + 1;
+  roundRect(x, y, w, h, 6);
+  ctx.fillStyle = hidden ? 'rgba(8,6,10,0.72)' : here ? 'rgba(255,255,255,0.10)' : visited ? 'rgba(8,6,10,0.55)' : 'rgba(8,6,10,0.34)';
+  ctx.fill();
+  ctx.lineWidth = reach || here ? 2 : 1;
+  ctx.strokeStyle = reach ? `rgba(255,215,110,${0.6 + 0.35*Math.sin(t*5)})` : here ? '#f2ead8' : hidden ? 'rgba(150,140,160,0.35)' : 'rgba(201,162,93,0.55)';
+  ctx.stroke();
+  if(hidden){
+    ctx.fillStyle = 'rgba(170,160,180,0.6)'; ctx.font = 'bold 20px Georgia'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('?', x + w/2, y + h/2); ctx.textAlign = 'left';
+    return;
+  }
+  if(node.type === 'descanso'){
+    ctx.fillStyle = `rgba(255,170,60,${0.13 + 0.05*Math.sin(t*7)})`; ctx.beginPath(); ctx.arc(cx, cy + 6, 26, 0, 7); ctx.fill();
+    if(!icon('hoguera', cx, cy + 6, 34)){ ctx.fillStyle = '#4a3020'; ctx.fillRect(cx - 7, cy + 3, 14, 3); ctx.fillRect(cx - 5, cy + 1, 10, 2); flame(cx, cy - 2, t, true); }
+  }
+  else if(node.type === 'tesoro'){ if(!icon(node.done ? 'cofre_abierto' : 'cofre', cx, cy + 6, 34)) sprite(node.done ? 'chestOpen' : 'chest', cx, cy + 4, T*1.6); }
+  else if(['combate','elite','jefe'].includes(node.type) && !node.done) drawFoes(m, cx, cy, t, frameDt);
+  drawBadge(m);
+  // sala del piso siguiente a la que no se puede pasar: candado
+  if(m.f === dg.atFloor + 1 && !reach && !pendingNode && !busy){
+    ctx.font = '11px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('🔒', (m.door[0] + 0.5)*T + (world.horiz ? 8 : 0), (m.door[1] + 0.5)*T - (world.horiz ? 0 : 7)); ctx.textAlign = 'left';
+    roundRect(x, y, w, h, 6); ctx.fillStyle = 'rgba(8,6,10,0.4)'; ctx.fill();
+  }
+}
+function drawRoom(m, t){
+  const {node} = m, cx = (m.cx+0.5)*T, cy = (m.cy+0.5)*T - 10;
+  const x = m.x0*T, y = m.y0*T, w = ROOM_W*T, h = ROOM_H*T;
+  const visitedRoom = !!dg.visited[m.f + '-' + m.n];
+  if(m.f > 0) drawDoor(m, visitedRoom || (!pendingNode && isNodeReachable(dg, m.f, m.n)), t);
+  // Niebla: lo que está a más de un piso de distancia no se ve.
+  if(m.f > dg.atFloor + 1){
+    ctx.fillStyle = '#0b090d'; ctx.fillRect(x - T, y - T, w + 2*T, h + T);
+    ctx.fillStyle = 'rgba(160,150,170,0.5)'; ctx.font = 'bold 20px Georgia'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('?', x + w/2, y + h/2 - 4); ctx.textAlign = 'left';
+    return;
+  }
+  // antorchas en el muro del fondo
+  flame(x + T*1.5, y - T*0.5, t); flame(x + w - T*1.5, y - T*0.5, t);
+  if(node.type === 'descanso'){
+    ctx.fillStyle = '#4a3020'; ctx.fillRect(cx-7, cy+3, 14, 3); ctx.fillRect(cx-5, cy+1, 10, 2);
+    flame(cx, cy-2, t, true);
+  } else if(node.type === 'tesoro'){
+    sprite(node.done ? 'chestOpen' : 'chest', cx, cy + 4, T*1.6);
+    if(!node.done){ ctx.fillStyle = `rgba(255,220,110,${0.10 + 0.06*Math.sin(t*4)})`; ctx.beginPath(); ctx.arc(cx, cy, 14, 0, 7); ctx.fill(); }
+  } else if(['combate','elite','jefe'].includes(node.type) && !node.done){
+    drawFoes(m, cx, cy, t, frameDt);
+    drawBadge(m);
+  } else if(node.type === 'entrada'){
+    ctx.fillStyle = '#3a2a1e'; ctx.fillRect(cx - 8, y + h - 5, 16, 5); // umbral
+  }
+  // estado: iluminada si se puede ir, oscura si no
+  const key = m.f + '-' + m.n, here = m.f === dg.atFloor && m.n === dg.atNode;
+  const reach = !busy && !pendingNode && isNodeReachable(dg, m.f, m.n);
+  if(reach){
+    ctx.strokeStyle = `rgba(255,215,110,${0.55 + 0.35*Math.sin(t*5)})`; ctx.lineWidth = 2;
+    ctx.strokeRect(x - 1, y - 1, w + 2, h + 2);
+  } else if(!here){
+    ctx.fillStyle = dg.visited[key] ? 'rgba(8,6,10,0.45)' : m.f > dg.atFloor + 1 ? 'rgba(8,6,10,0.62)' : 'rgba(8,6,10,0.5)';
+    ctx.fillRect(x - T, y - T, w + 2*T, h + 2*T);
+  }
+}
+function drawMinimap(){
+  const lanes = Math.max(...dg.floors.map(f=>f.length)), F = dg.floors.length;
+  const H_ = world.horiz, cw = H_ ? 8 : 9, ch = 7, pad = 4;
+  const mw = (H_ ? F : lanes)*cw + pad*2 - 2, mh = (H_ ? lanes : F)*ch + pad*2 - 2;
+  const ox = canvas.width - mw - 5, oy = 5;
+  ctx.fillStyle = 'rgba(10,8,12,0.78)'; ctx.fillRect(ox, oy, mw, mh);
+  ctx.strokeStyle = '#6b5d4d'; ctx.lineWidth = 1; ctx.strokeRect(ox + 0.5, oy + 0.5, mw - 1, mh - 1);
+  world.rooms.forEach(m=>{
+    const lx = laneX(lanes, dg.floors[m.f].length, m.n);
+    const x = ox + pad + (H_ ? m.f : lx)*cw, y = oy + pad + (H_ ? lx : F-1-m.f)*ch;
+    const here = m.f === dg.atFloor && m.n === dg.atNode;
+    ctx.globalAlpha = here || isNodeReachable(dg, m.f, m.n) ? 1 : dg.visited[m.f+'-'+m.n] ? 0.35 : 0.6;
+    ctx.fillStyle = m.f > dg.atFloor + 1 && m.node.type !== 'jefe' ? '#4a4650' : TYPE_COLOR[m.node.type]; ctx.fillRect(x, y, cw - 2, ch - 2);
+    ctx.globalAlpha = 1;
+    if(here){ ctx.strokeStyle = '#fff'; ctx.strokeRect(x - 0.5, y - 0.5, cw - 1, ch - 1); }
+  });
+}
+let last = performance.now();
+function frame(now){
+  const dt = Math.min(0.05, (now - last)/1000), t = now/1000; last = now;
+  // caminar por el pasillo
+  if(hero.path.length){
+    const p = hero.path[0], dx = p.x - hero.x, dy = p.y - hero.y, dist = Math.hypot(dx, dy), stepLen = 110*dt;
+    if(dx) hero.flip = dx < 0;
+    if(dist <= stepLen){ hero.x = p.x; hero.y = p.y; hero.path.shift(); if(!hero.path.length && hero.onArrive) hero.onArrive(); }
+    else {
+      hero.x += dx/dist*stepLen; hero.y += dy/dist*stepLen;
+      // polvo a los pies cada pocos pasos
+      const before = Math.floor(hero.step); hero.step += dt*7;
+      if(Math.floor(hero.step) !== before && !(heroAnim && heroAnim.sheet.states.walk)) dust.push({x:hero.x - dx/dist*4, y:hero.y + 7, t:0});
+    }
+  }
+  // cámara: sigue al héroe, mirando un poco hacia adelante (arriba)
+  const ww = world.W*T, wh = world.H*T, vw = canvas.width, vh = canvas.height;
+  frameDt = dt;
+  const ahead = world.horiz ? [70, 0] : [0, -50]; // mira un poco hacia donde se avanza
+  const tx = ww <= vw ? ww/2 : Math.max(vw/2, Math.min(ww - vw/2, hero.x + ahead[0]));
+  const ty = wh <= vh ? wh/2 : Math.max(vh/2, Math.min(wh - vh/2, hero.y + ahead[1]));
+  cam.x += (tx - cam.x)*Math.min(1, dt*6); cam.y += (ty - cam.y)*Math.min(1, dt*6);
+
+  ctx.imageSmoothingEnabled = false;
+  const fondo = $('look').value === 'fondo';
+  if(fondo) drawBackdrop(); else { ctx.fillStyle = '#0d0b10'; ctx.fillRect(0, 0, vw, vh); }
+  ctx.save();
+  ctx.translate(Math.round(vw/2 - cam.x), Math.round(vh/2 - cam.y));
+  if(fondo){ drawPaths(); world.rooms.forEach(m=> drawRoomFrame(m, t)); }
+  else { ctx.drawImage(world.layer, 0, 0); world.rooms.forEach(m=> drawRoom(m, t)); }
+  dust = dust.filter(d=> (d.t += dt) < 0.5);
+  dust.forEach(d=>{ ctx.fillStyle = `rgba(220,205,180,${0.35*(1 - d.t/0.5)})`; ctx.beginPath(); ctx.arc(d.x, d.y - d.t*6, 2 + d.t*5, 0, 7); ctx.fill(); });
+  ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.beginPath(); ctx.ellipse(hero.x, hero.y + 7, 6, 2, 0, 0, 7); ctx.fill();
+  const hop = 0;
+  if(heroAnim){
+    // Las tiras aún no traen cuadros de caminar: el personaje se desliza sin
+    // saltos ni balanceo (pedido 2026-10-04) y deja polvo a los pies.
+    const want = hero.path.length && heroAnim.sheet.states.walk ? 'walk' : 'idle';
+    if(heroAnim.state !== want) heroAnim.play(want);
+    heroAnim.update(dt);
+    ctx.save(); ctx.translate(Math.round(hero.x), Math.round(hero.y + 8));
+    heroAnim.draw(ctx, 0, 0, 0.5, hero.flip);
+    ctx.restore();
+  }
+  else sprite('hero', hero.x, hero.y - hop, T, hero.flip);
+  ctx.restore();
+
+  drawMinimap();
+  ctx.fillStyle = 'rgba(10,8,12,0.78)'; ctx.fillRect(5, 5, 104, 15);
+  ctx.fillStyle = '#e8dcc6'; ctx.font = '9px Georgia'; ctx.textBaseline = 'middle';
+  ctx.fillText(`Nivel ${dg.level} · Piso ${dg.atFloor}/${dg.floors.length-1}`, 9, 13);
+  requestAnimationFrame(frame);
+}
+newDungeon();
+if(tiles.complete) requestAnimationFrame(frame); else tiles.onload = ()=> requestAnimationFrame(frame);
+</script>
+</body>
+</html>

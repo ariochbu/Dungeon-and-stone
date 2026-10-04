@@ -15,18 +15,51 @@
 
 import { CLASS_SPRITES, ALLY_SPRITES, ENEMY_SPRITES, playerSpriteFor, RACE_SIZE, ALLY_TEMPLATE_SPRITES, enemySpriteFor } from './battleSprites.js?v=83';
 
+import { SpriteAnim, sheetFromMeta } from './spriteAnim.js?v=1';
+
 const TILE = 16;
 const SCALE = 3;
-const SIZE = TILE * SCALE; // 48px por actor a escala base
+const SIZE = TILE * SCALE; // 48px por actor a escala base (sprites fijos sin versión chibi)
+
+// Sprites chibi animados (2026-10-04): tiras con reposo/ataque/golpe/muerte
+// en src/assets/chibi, generadas por tools/import_chibi.py. index.json dice el
+// tamaño de celda y los cuadros de cada una. Quien no tenga tira (monstruos de
+// décadas aún sin arte chibi) sigue con su sprite fijo de siempre.
+let CHIBI = {};
+fetch('src/assets/chibi/index.json?v=1').then(r=> r.json()).then(j=>{ CHIBI = j; }).catch(()=>{});
+const chibiImgs = {}; // key -> Image (cargando o lista)
+function chibiAnimFor(key){
+  const meta = CHIBI[key];
+  if(!meta) return null;
+  if(!chibiImgs[key]){ chibiImgs[key] = new Image(); chibiImgs[key].src = `src/assets/chibi/${key}.png?v=1`; }
+  const img = chibiImgs[key];
+  return img.complete && img.naturalWidth > 0 ? new SpriteAnim(img, sheetFromMeta(meta)) : null;
+}
+// Fondo ilustrado por década (src/assets/fondos/<década>.jpg).
+const bgImgs = {};
+function decadeBgImage(decade){
+  if(decade == null) return null;
+  const key = `${decade*10 + 1}-${decade*10 + 10}`;
+  if(!(key in bgImgs)){ bgImgs[key] = new Image(); bgImgs[key].src = `src/assets/fondos/${key}.jpg?v=1`; }
+  const img = bgImgs[key];
+  return img.complete && img.naturalWidth > 0 ? img : null;
+}
+let currentDecade = null;
+const CHIBI_SCALE = 1.25; // las tiras miden 64px de alto; en la escena se ven un poco más grandes
 // Escena más grande (antes 480x300) para que quepan hasta 6 combatientes por
 // bando en filas separadas de frente/retaguardia sin encimarse — pedido
 // explícito 2026-09-28, tras ver enemigos y aliados montados unos sobre otros.
 const STAGE_W = 640;
-const STAGE_H = 440;
+const STAGE_H = 380;
 // Cuatro filas fijas, de arriba abajo: retaguardia enemiga, frente enemigo,
 // frente aliado, retaguardia aliada. Los dos frentes quedan cara a cara en el
 // centro; cada retaguardia es UNA sola fila detrás de su frente.
-const ROW_Y = { enemyBack: 76, enemyFront: 176, partyFront: 286, partyBack: 384 };
+const ROW_Y = { enemyBack: 76, enemyFront: 176, partyFront: 286, partyBack: 384 }; // (escena vertical anterior, sin uso)
+// Combate HORIZONTAL (2026-10-04, pedido explícito): el grupo a la izquierda y
+// los enemigos a la derecha, cada bando en dos columnas — retaguardia y frente —
+// con los dos frentes cara a cara en el centro (estilo Darkest Dungeon).
+const COL_X = { party: { back: 92, front: 214 }, enemy: { front: 426, back: 548 } };
+const COL_Y = { top: 190, bottom: 318 }; // rango de los pies dentro de una columna
 
 // --- estado de módulo: el canvas se crea UNA vez y se reinserta en cada
 // sync (renderCombat() destruye su contenedor con innerHTML= en cada
@@ -240,11 +273,31 @@ function layoutByDepth(items, isFront, frontY, backY){
   return out;
 }
 
+// Reparte los actores de un bando en sus dos columnas. Dentro de cada columna
+// se apilan de arriba abajo; con tres o más se alternan un poco hacia adelante
+// para que no queden uno encima del otro.
+function layoutColumns(items, isFront, side){
+  const out = new Array(items.length);
+  const fwd = side === 'party' ? 1 : -1;
+  [true, false].forEach(front=>{
+    const idxs = [];
+    items.forEach((it, i)=>{ if(isFront(it) === front) idxs.push(i); });
+    const n = idxs.length, x0 = COL_X[side][front ? 'front' : 'back'];
+    idxs.forEach((i, k)=>{
+      const y = n === 1 ? (COL_Y.top + COL_Y.bottom)/2 : COL_Y.top + (COL_Y.bottom - COL_Y.top) * k/(n - 1);
+      const stagger = n >= 3 ? (k % 2 ? 26 : -6) * fwd : 0;
+      out[i] = {x: x0 + stagger, y, gap: 110, nameMaxW: 104};
+    });
+  });
+  return out;
+}
+
 function syncBattleStage(container, combat, playerInfo, onTargetClick){
   ensureCanvas(container);
   clickHandler = onTargetClick;
   lastCombatRef = combat;
 
+  currentDecade = playerInfo.bgDecade != null ? playerInfo.bgDecade : null;
   const theme = playerInfo.bgTheme || 'forest';
   if(theme !== currentTheme){ currentTheme = theme; spawnBgParticles(theme); }
 
@@ -257,7 +310,7 @@ function syncBattleStage(container, combat, playerInfo, onTargetClick){
   const playerSlot = { isPlayer:true, pos: playerInfo.pos };
   const party = [playerSlot, ...allies];
   const playerPartyIdx = 0;
-  const partyPos = layoutByDepth(party, p=> p.pos==='frente', ROW_Y.partyFront, ROW_Y.partyBack);
+  const partyPos = layoutColumns(party, p=> p.pos==='frente', 'party');
 
   // jugador: su Y también refleja su formación real (Frente/Retaguardia, el
   // mismo botón "Reposicionarse" de siempre) en vez de quedar siempre fijo
@@ -271,7 +324,7 @@ function syncBattleStage(container, combat, playerInfo, onTargetClick){
     a.baseX = pp.x; a.baseY = pp.y; a.x = a.baseX; a.y = a.baseY;
     playerSpriteRef = spriteFor('player', null, playerInfo.style, playerInfo.race);
     Object.assign(a, {
-      kind:'player', name: playerInfo.name, icon: playerInfo.icon, nameMaxW: pp.nameMaxW,
+      kind:'player', name: playerInfo.name, icon: playerInfo.icon, nameMaxW: pp.nameMaxW, chibiKey: `${playerInfo.style}_${playerInfo.race}`,
       sprite: playerSpriteRef, role: roleFor('player', null, playerInfo.style), sizeMul: RACE_SIZE[playerInfo.race] || 1,
       hp: playerInfo.hp, maxHP: playerInfo.maxHP, mp: playerInfo.mp, maxMP: playerInfo.maxMP,
       spirit: playerInfo.spirit, maxSpirit: playerInfo.maxSpirit, alive: playerInfo.hp>0,
@@ -292,7 +345,7 @@ function syncBattleStage(container, combat, playerInfo, onTargetClick){
     a.baseX = allyPos[i].x; a.baseY = allyPos[i].y; a.x = a.baseX; a.y = a.baseY;
     const hostile = typeof clickHandler.isAllyHostile==='function' && clickHandler.isAllyHostile(ally.id);
     Object.assign(a, {
-      kind:'ally', refIdx:i, name: ally.name, icon: ally.icon, nameMaxW: allyPos[i].nameMaxW, sprite: spriteFor('ally', ally),
+      kind:'ally', refIdx:i, name: ally.name, icon: ally.icon, nameMaxW: allyPos[i].nameMaxW, sprite: spriteFor('ally', ally), chibiKey: 'aliado_' + ally.templateId,
       role: roleFor('ally', ally), hp: ally.hp, maxHP: ally.maxHP, mp: ally.mp, maxMP: ally.maxMP,
       spirit: ally.spirit, maxSpirit: ally.maxSpirit, alive: ally.hp>0, shield: ally.shield||0, showResources:true,
       statuses: ally.statuses||[], targetable: hostile && ally.hp>0, side:'party',
@@ -301,7 +354,7 @@ function syncBattleStage(container, combat, playerInfo, onTargetClick){
 
   // enemigos: los de línea frontal (tanques/melee, tpl.frontline) se dibujan
   // más cerca del grupo del jugador; los de soporte/distancia quedan atrás.
-  const enemyPos = layoutByDepth(combat.enemies||[], e=> !!(e.tpl && e.tpl.frontline), ROW_Y.enemyFront, ROW_Y.enemyBack);
+  const enemyPos = layoutColumns(combat.enemies||[], e=> !!(e.tpl && e.tpl.frontline), 'enemy');
   // Si ya no queda ningún enemigo de línea frontal vivo, la retaguardia
   // queda desbloqueada para elegir objetivo (ver playerFrontTargetIndices en
   // game.js) — el resaltado visual debe reflejar exactamente lo mismo.
@@ -313,7 +366,7 @@ function syncBattleStage(container, combat, playerInfo, onTargetClick){
     if(!a){ a = makeActor(k); actors.set(k, a); }
     a.baseX = enemyPos[i].x; a.baseY = enemyPos[i].y; a.x = a.baseX; a.y = a.baseY;
     Object.assign(a, {
-      kind:'enemy', refIdx:i, name: en.name, icon: en.icon, nameMaxW: enemyPos[i].nameMaxW, sprite: spriteFor('enemy', en), sizeMul: en.tpl && en.tpl.boss ? 1.3 : (en.tpl && en.tpl.elite ? 1.12 : (en.tpl && en.tpl.decoy ? 0.9 : 1)),
+      kind:'enemy', refIdx:i, name: en.name, icon: en.icon, nameMaxW: enemyPos[i].nameMaxW, sprite: spriteFor('enemy', en), chibiKey: 'enemigo_' + (en.tpl && en.tpl.id), sizeMul: en.tpl && en.tpl.boss ? 1.3 : (en.tpl && en.tpl.elite ? 1.12 : (en.tpl && en.tpl.decoy ? 0.9 : 1)),
       role: roleFor('enemy', en), hp: en.hp, maxHP: en.maxHP, alive: en.hp>0, showResources:false,
       statuses: en.statuses||[],
       // Con pendingTargetFilter==='front' (2026-09-25: elegir a cuál de 2+
@@ -389,6 +442,7 @@ async function playBattleAnim(lastActor, lastAction){
   const firstTarget = actorForEffect((lastAction.effects||[])[0]) || actor;
 
   shake = Math.max(shake, dmgs.length ? 3 : 0);
+  if(actor.anim && actor.alive !== false) actor.anim.play('attack');
 
   if(actor.role==='ranged'){
     await rangedAnim(actor, firstTarget, heals.length ? '#7ed957' : '#ffd58a');
@@ -404,10 +458,11 @@ async function playBattleAnim(lastActor, lastAction){
     const target = actorForEffect(ef);
     if(!target) return;
     target.flash = ef.kind==='dmg' ? 1 : 0;
+    if(ef.kind==='dmg' && target.anim && target.alive !== false && target !== actor) target.anim.play('hurt');
     const label = (ef.kind==='heal'?'+':'-') + ef.amount;
-    effects.floats.push({x:target.x||target.baseX, y:(target.y||target.baseY)-(SIZE-2), text:label, color: ef.kind==='heal'?'#7ed957':'#ff6b6b', life:1});
-    if(ef.kind==='heal') effects.healGlows.push({x:target.x||target.baseX, y:(target.y||target.baseY)-16, life:1});
-    else effects.bursts.push({x:target.x||target.baseX, y:(target.y||target.baseY)-16, life:1});
+    effects.floats.push({x:target.x||target.baseX, y:(target.y||target.baseY)-84, text:label, color: ef.kind==='heal'?'#7ed957':'#ff6b6b', life:1});
+    if(ef.kind==='heal') effects.healGlows.push({x:target.x||target.baseX, y:(target.y||target.baseY)-30, life:1});
+    else effects.bursts.push({x:target.x||target.baseX, y:(target.y||target.baseY)-30, life:1});
   });
 
   await sleep(120);
@@ -416,8 +471,8 @@ function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
 
 async function lungeAnim(actor, target){
   const sx=actor.baseX, sy=actor.baseY;
-  const dx = target.baseX + (actor.side==='party' ? -18 : 18);
-  const dy = target.baseY + (actor.side==='party' ? 14 : -14);
+  const dx = target.baseX + (actor.side==='party' ? -46 : 46);
+  const dy = target.baseY + 2;
   await tween(160, t=>{ const e=easeOutCubic(t); actor.x=sx+(dx-sx)*e; actor.y=sy+(dy-sy)*e; actor.scale=1+0.1*e; });
   await tween(80, ()=>{});
   await tween(180, t=>{ const e=easeInCubic(t); actor.x=dx+(sx-dx)*e; actor.y=dy+(sy-dy)*e; actor.scale=1.1-0.1*e; });
@@ -428,8 +483,8 @@ async function rangedAnim(actor, target, color){
   await tween(100, t=>{ actor.scale = 1-0.08*easeOutCubic(t); });
   await tween(80, t=>{ actor.scale = 0.92+0.08*easeOutCubic(t); });
   actor.scale = 1;
-  const ox = actor.baseX, oy = actor.baseY-18;
-  const dx = target.baseX, dy = target.baseY-18;
+  const ox = actor.baseX + (actor.side==='party' ? 18 : -18), oy = actor.baseY-32;
+  const dx = target.baseX, dy = target.baseY-32;
   const proj = {x:ox,y:oy,color};
   effects.projectiles.push(proj);
   await tween(220, t=>{ proj.x = ox+(dx-ox)*t; proj.y = oy+(dy-oy)*t; });
@@ -446,8 +501,8 @@ function onCanvasClick(evt){
   const cy = (evt.clientY-rect.top)*scaleY;
   for(const a of actors.values()){
     if(!a.targetable) continue;
-    const w=SIZE, h=SIZE;
-    const left=a.baseX-w/2, right=a.baseX+w/2, top=a.baseY-h, bottom=a.baseY+8;
+    const w=64, h=72*(a.sizeMul||1);
+    const left=a.baseX-w/2, right=a.baseX+w/2, top=a.baseY-h, bottom=a.baseY+10;
     if(cx>=left && cx<=right && cy>=top && cy<=bottom){
       if(a.kind==='ally') clickHandler.onTarget('ally:'+a.refIdx);
       else clickHandler.onTarget(a.refIdx);
@@ -476,9 +531,20 @@ function drawBar(x,y,w,h,pct,color){
   ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth=1; ctx.strokeRect(x+0.5,y+0.5,w-1,h-1);
 }
 
-function drawActor(a){
+function drawActor(a, hud, dt){
   const cx = a.x||a.baseX;
   const cy = a.y||a.baseY;
+  if(hud) return drawActorHud(a, cx, cy);
+
+  // Tira chibi: se crea cuando su imagen termina de cargar y se rehace si el
+  // actor de este puesto cambió (otro monstruo en el mismo índice).
+  if(a._chibiKey !== a.chibiKey){ a.anim = null; a._chibiKey = a.chibiKey; }
+  if(!a.anim && a.chibiKey) a.anim = chibiAnimFor(a.chibiKey);
+  if(a.anim){
+    if(a.alive === false && a.anim.state !== 'death') a.anim.play('death');
+    else if(a.alive !== false && a.anim.state === 'death') a.anim.play('idle');
+    a.anim.update(dt);
+  }
 
   ctx.save();
   ctx.globalAlpha = a.alive===false ? 0.3 : (a.opacity!=null?a.opacity:1);
@@ -489,7 +555,14 @@ function drawActor(a){
 
   const sz = SIZE*(a.scale||1)*(a.sizeMul||1);
   const w = sz, h = sz*(a.squashY||1);
-  if(a.sprite){
+  // sombra en el suelo
+  ctx.save(); ctx.filter = 'none'; ctx.fillStyle = 'rgba(0,0,0,0.32)';
+  ctx.beginPath(); ctx.ellipse(cx, cy + 1, 17*(a.sizeMul||1), 5, 0, 0, Math.PI*2); ctx.fill(); ctx.restore();
+  if(a.anim){
+    if(a.alive === false){ ctx.globalAlpha = 0.6; }
+    // las tiras miran a la derecha: el bando enemigo se dibuja espejado
+    a.anim.draw(ctx, cx, cy, CHIBI_SCALE*(a.sizeMul||1)*(a.scale||1), a.side === 'enemy');
+  } else if(a.sprite){
     // El actor de un slot (p.ej. 'enemy:0') sobrevive entre peleas distintas
     // que reusan el mismo índice — sin comparar contra la fuente ya
     // cacheada, un Goblin guerrero en el slot 0 de una pelea deja su imagen
@@ -520,19 +593,26 @@ function drawActor(a){
   }
   ctx.filter = 'none';
   ctx.restore();
-
+}
+// Nombre, barras, estados y marco de objetivo: en una pasada aparte, después
+// de todos los cuerpos, para que el de la fila de abajo no los tape.
+function drawActorHud(a, cx, cy){
   if(a.targetable){
     ctx.save();
-    ctx.strokeStyle = 'rgba(217,183,107,0.8)'; ctx.lineWidth = 1.5;
-    ctx.strokeRect(cx-w/2-2, cy-h-2, w+4, h+4);
+    ctx.strokeStyle = `rgba(255,215,110,${0.6 + 0.35*Math.sin(Date.now()/140)})`; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.ellipse(cx, cy + 1, 28*(a.sizeMul||1), 8, 0, 0, Math.PI*2); ctx.stroke();
     ctx.restore();
   }
+  if(a.alive === false) return;
 
   // barras
   let by = cy+7;
   ctx.save();
   ctx.font = `${Math.round(12*uiScale)}px monospace`; ctx.textAlign='center'; ctx.fillStyle='#e8dfcf';
-  ctx.fillText(fitText(a.name||'', a.nameMaxW), cx, by-10);
+  // el nombre va sobre la cabeza: bajo los pies se montaba sobre el cuerpo
+  ctx.strokeStyle = 'rgba(0,0,0,0.85)'; ctx.lineWidth = 3;
+  const nameY = cy - (a.anim ? 64*CHIBI_SCALE : SIZE*1.35)*(a.sizeMul||1) - 5;
+  ctx.strokeText(fitText(a.name||'', a.nameMaxW), cx, nameY); ctx.fillText(fitText(a.name||'', a.nameMaxW), cx, nameY);
   ctx.restore();
   drawBar(cx-22, by, 44, 5, (a.hp||0)/(a.maxHP||1), (a.hp/a.maxHP)<0.3 ? '#b24444' : '#8c2f2f');
   // Escudo (2026-09-25, pedido explícito): franja morada pegada justo
@@ -618,7 +698,15 @@ function draw(){
   ctx.save();
   if(shake>0){ ctx.translate((Math.random()*2-1)*shake, (Math.random()*2-1)*shake); shake = Math.max(0, shake-0.9); }
   ctx.clearRect(-10,-10,canvas.width+20,canvas.height+20);
-  drawBackground(currentTheme || 'forest');
+  const now = performance.now(), dt = Math.min(0.05, (now - (draw._last || now))/1000); draw._last = now;
+  const bg = decadeBgImage(currentDecade);
+  if(bg){
+    // "cover" anclado abajo: el suelo de la ilustración queda bajo los pies
+    const k = Math.max(canvas.width/bg.naturalWidth, canvas.height/bg.naturalHeight);
+    const bw = bg.naturalWidth*k, bh = bg.naturalHeight*k;
+    ctx.drawImage(bg, (canvas.width - bw)/2, canvas.height - bh, bw, bh);
+    ctx.fillStyle = 'rgba(8,6,10,0.2)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  } else drawBackground(currentTheme || 'forest');
   drawBgParticles();
 
   actors.forEach(a=>{
@@ -629,8 +717,9 @@ function draw(){
     if(a.y==null) a.y = a.baseY;
   });
 
-  const order = Array.from(actors.values());
-  order.forEach(a=> drawActor(a));
+  const order = Array.from(actors.values()).sort((a, b)=> (a.y||a.baseY) - (b.y||b.baseY));
+  order.forEach(a=> drawActor(a, false, dt));
+  order.forEach(a=> drawActor(a, true, dt));
 
   effects.projectiles.forEach(drawProjectile);
   effects.bursts.forEach(drawBurst);

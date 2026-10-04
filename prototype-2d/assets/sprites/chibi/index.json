@@ -1,0 +1,736 @@
+{
+ "aliado_aldric": {
+  "ch": 67,
+  "cw": 78,
+  "frames": [
+   3,
+   6,
+   2,
+   5
+  ]
+ },
+ "aliado_brann": {
+  "ch": 66,
+  "cw": 60,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "aliado_delyth": {
+  "ch": 66,
+  "cw": 86,
+  "frames": [
+   5,
+   6,
+   2,
+   5
+  ]
+ },
+ "aliado_eira": {
+  "ch": 66,
+  "cw": 76,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "aliado_fennwick": {
+  "ch": 67,
+  "cw": 74,
+  "frames": [
+   5,
+   6,
+   2,
+   4
+  ]
+ },
+ "aliado_kael": {
+  "ch": 66,
+  "cw": 90,
+  "frames": [
+   5,
+   6,
+   3,
+   5
+  ]
+ },
+ "aliado_lyra": {
+  "ch": 67,
+  "cw": 112,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "aliado_neira": {
+  "ch": 69,
+  "cw": 70,
+  "frames": [
+   5,
+   6,
+   2,
+   5
+  ]
+ },
+ "aliado_seraphina": {
+  "ch": 69,
+  "cw": 74,
+  "frames": [
+   3,
+   6,
+   2,
+   5
+  ]
+ },
+ "aliado_vex": {
+  "ch": 68,
+  "cw": 104,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "caminar_barbaro": {
+  "ch": 66,
+  "cw": 46,
+  "frames": [
+   4,
+   6
+  ],
+  "walk": true
+ },
+ "caminar_bestia": {
+  "ch": 66,
+  "cw": 50,
+  "frames": [
+   6,
+   6
+  ],
+  "walk": true
+ },
+ "caminar_draconido": {
+  "ch": 68,
+  "cw": 54,
+  "frames": [
+   4,
+   6
+  ],
+  "walk": true
+ },
+ "caminar_enano": {
+  "ch": 68,
+  "cw": 56,
+  "frames": [
+   4,
+   6
+  ],
+  "walk": true
+ },
+ "caminar_hada": {
+  "ch": 66,
+  "cw": 58,
+  "frames": [
+   4,
+   6
+  ],
+  "walk": true
+ },
+ "caminar_humano": {
+  "ch": 66,
+  "cw": 50,
+  "frames": [
+   4,
+   6
+  ],
+  "walk": true
+ },
+ "doblefilo_barbaro": {
+  "ch": 75,
+  "cw": 88,
+  "frames": [
+   3,
+   6,
+   2,
+   4
+  ]
+ },
+ "doblefilo_bestia": {
+  "ch": 66,
+  "cw": 72,
+  "frames": [
+   6,
+   6,
+   5,
+   5
+  ]
+ },
+ "doblefilo_draconido": {
+  "ch": 66,
+  "cw": 74,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "doblefilo_enano": {
+  "ch": 68,
+  "cw": 70,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "doblefilo_hada": {
+  "ch": 73,
+  "cw": 78,
+  "frames": [
+   6,
+   6,
+   4,
+   4
+  ]
+ },
+ "doblefilo_humano": {
+  "ch": 66,
+  "cw": 80,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "enemigo_arana_caparazon": {
+  "ch": 66,
+  "cw": 86,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "enemigo_devoradora_nido": {
+  "ch": 69,
+  "cw": 200,
+  "frames": [
+   4,
+   5,
+   2,
+   5
+  ]
+ },
+ "enemigo_gilgoblin": {
+  "ch": 66,
+  "cw": 166,
+  "frames": [
+   4,
+   5,
+   2,
+   5
+  ]
+ },
+ "enemigo_goblin_arquero": {
+  "ch": 68,
+  "cw": 78,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "enemigo_goblin_chaman": {
+  "ch": 71,
+  "cw": 68,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "enemigo_goblin_guerrero": {
+  "ch": 66,
+  "cw": 78,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "enemigo_goblin_saqueador": {
+  "ch": 69,
+  "cw": 86,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "enemigo_gran_tejedora": {
+  "ch": 72,
+  "cw": 92,
+  "frames": [
+   5,
+   6,
+   2,
+   5
+  ]
+ },
+ "enemigo_hobgoblin": {
+  "ch": 68,
+  "cw": 72,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "enemigo_jefe_goblin": {
+  "ch": 66,
+  "cw": 66,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "enemigo_matriarca_escarlata": {
+  "ch": 73,
+  "cw": 118,
+  "frames": [
+   5,
+   5,
+   2,
+   5
+  ]
+ },
+ "enemigo_matriarca_telaranha": {
+  "ch": 73,
+  "cw": 86,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "enemigo_ogro": {
+  "ch": 66,
+  "cw": 74,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "enemigo_reina_devoradora": {
+  "ch": 75,
+  "cw": 88,
+  "frames": [
+   5,
+   6,
+   2,
+   5
+  ]
+ },
+ "enemigo_reina_telaranha": {
+  "ch": 80,
+  "cw": 86,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "enemigo_saltadora_alfa": {
+  "ch": 76,
+  "cw": 108,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_tarantula_cazadora": {
+  "ch": 69,
+  "cw": 88,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_tarantula_saltarina": {
+  "ch": 74,
+  "cw": 98,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "enemigo_tarantula_tejedora": {
+  "ch": 68,
+  "cw": 108,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_viuda_alfa": {
+  "ch": 72,
+  "cw": 106,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "enemigo_viuda_carmesi": {
+  "ch": 74,
+  "cw": 94,
+  "frames": [
+   5,
+   6,
+   2,
+   5
+  ]
+ },
+ "enemigo_viuda_venenosa": {
+  "ch": 89,
+  "cw": 96,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "hechicero_barbaro": {
+  "ch": 69,
+  "cw": 78,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "hechicero_bestia": {
+  "ch": 66,
+  "cw": 70,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "hechicero_draconido": {
+  "ch": 70,
+  "cw": 80,
+  "frames": [
+   3,
+   6,
+   2,
+   5
+  ]
+ },
+ "hechicero_enano": {
+  "ch": 66,
+  "cw": 108,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "hechicero_hada": {
+  "ch": 66,
+  "cw": 70,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "hechicero_humano": {
+  "ch": 67,
+  "cw": 58,
+  "frames": [
+   4,
+   4,
+   2,
+   4
+  ]
+ },
+ "mago_barbaro": {
+  "ch": 67,
+  "cw": 188,
+  "frames": [
+   3,
+   5,
+   2,
+   5
+  ]
+ },
+ "mago_bestia": {
+  "ch": 68,
+  "cw": 92,
+  "frames": [
+   6,
+   6,
+   3,
+   6
+  ]
+ },
+ "mago_draconido": {
+  "ch": 76,
+  "cw": 156,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "mago_enano": {
+  "ch": 76,
+  "cw": 96,
+  "frames": [
+   4,
+   6,
+   2,
+   6
+  ]
+ },
+ "mago_hada": {
+  "ch": 67,
+  "cw": 64,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "mago_humano": {
+  "ch": 67,
+  "cw": 68,
+  "frames": [
+   4,
+   4,
+   2,
+   4
+  ]
+ },
+ "paladin_barbaro": {
+  "ch": 69,
+  "cw": 82,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "paladin_bestia": {
+  "ch": 66,
+  "cw": 68,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "paladin_draconido": {
+  "ch": 71,
+  "cw": 92,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "paladin_enano": {
+  "ch": 84,
+  "cw": 106,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "paladin_hada": {
+  "ch": 66,
+  "cw": 62,
+  "frames": [
+   5,
+   6,
+   3,
+   5
+  ]
+ },
+ "paladin_humano": {
+  "ch": 68,
+  "cw": 70,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "pesada_barbaro": {
+  "ch": 71,
+  "cw": 62,
+  "frames": [
+   3,
+   6,
+   2,
+   5
+  ]
+ },
+ "pesada_bestia": {
+  "ch": 66,
+  "cw": 72,
+  "frames": [
+   4,
+   6,
+   3,
+   5
+  ]
+ },
+ "pesada_draconido": {
+  "ch": 66,
+  "cw": 96,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "pesada_enano": {
+  "ch": 67,
+  "cw": 70,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "pesada_hada": {
+  "ch": 69,
+  "cw": 98,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "pesada_humano": {
+  "ch": 66,
+  "cw": 60,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "tirador_barbaro": {
+  "ch": 66,
+  "cw": 74,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "tirador_bestia": {
+  "ch": 70,
+  "cw": 62,
+  "frames": [
+   6,
+   6,
+   2,
+   6
+  ]
+ },
+ "tirador_draconido": {
+  "ch": 69,
+  "cw": 84,
+  "frames": [
+   4,
+   5,
+   2,
+   5
+  ]
+ },
+ "tirador_enano": {
+  "ch": 68,
+  "cw": 76,
+  "frames": [
+   4,
+   5,
+   2,
+   5
+  ]
+ },
+ "tirador_hada": {
+  "ch": 67,
+  "cw": 74,
+  "frames": [
+   5,
+   5,
+   2,
+   5
+  ]
+ },
+ "tirador_humano": {
+  "ch": 73,
+  "cw": 94,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ }
+}

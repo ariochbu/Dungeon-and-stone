@@ -1618,3 +1618,13 @@ body.city-mode:has(#screen-game.active) header.top{ display:none; }
 body.city-mode:has(#screen-game.active) #log-panel{ display:none; }
 .fx-toast.notice{ white-space:normal; max-width:min(90vw, 440px); font-size:0.9em; border-color:var(--bronze); }
 .fc-title-desc small{ display:block; opacity:0.8; }
+/* Capacidad de la mochila bajo los atributos (2026-10-04) */
+.pj-bag{ margin-top:10px; padding:10px 12px; border-radius:6px; border:1px solid var(--border); background:rgba(0,0,0,0.3); }
+.pj-bag-top{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px; }
+.pj-bag-top b{ font-family:'Cinzel'; font-size:0.95em; }
+.pj-bag-top span{ font-family:'Cinzel'; font-size:1.25em; color:#ffd76a; font-variant-numeric:tabular-nums; }
+.pj-bag-fill{ height:100%; border-radius:inherit; background:linear-gradient(180deg, #d9b25c, #a37a2c); }
+.pj-bag.near{ border-color:var(--blood-light); }
+.pj-bag.near .pj-bag-top span{ color:var(--blood-light); }
+.pj-bag.near .pj-bag-fill{ background:linear-gradient(180deg, #e0575c, #a82c31); }
+.pj-bag p{ margin:8px 0 0; font-size:0.85em; color:#ffb4ae; line-height:1.3; }

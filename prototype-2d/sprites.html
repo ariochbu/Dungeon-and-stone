@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Piloto de sprites — Dungeon &amp; Stone</title>
+<style>
+  body{ margin:0; background:#14110e; color:#e8dcc6; font-family:Georgia, serif; }
+  main{ max-width:760px; margin:0 auto; padding:16px; }
+  h1{ font-size:1.2em; color:#c9a25d; margin:0 0 4px; }
+  p{ color:#a89a84; font-size:0.9em; margin:4px 0 12px; line-height:1.4; }
+  canvas{ width:100%; height:auto; display:block; border:1px solid #3a332c; border-radius:6px; image-rendering:pixelated; background:#0d0b09; }
+  .row{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:10px 0; }
+  button, select, input[type=number]{ background:#241e18; color:#e8dcc6; border:1px solid #3a332c; border-radius:4px; padding:7px 12px; font:inherit; font-size:0.9em; }
+  button{ cursor:pointer; }
+  button:hover{ border-color:#c9a25d; }
+  label{ font-size:0.85em; color:#a89a84; display:flex; align-items:center; gap:6px; }
+  input[type=number]{ width:64px; padding:6px; }
+  #sheet-view{ max-width:100%; image-rendering:pixelated; border:1px solid #3a332c; background:repeating-conic-gradient(#1c1814 0 25%, #241e18 0 50%) 0 0/16px 16px; }
+  #msg{ color:#e58b84; font-size:0.85em; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Piloto de sprites animados</h1>
+  <p>Página de pruebas, aparte del juego. Los personajes actuales del juego, animados a partir de su ilustración fija. También puedes cargar tu propia tira.</p>
+  <canvas id="stage" width="640" height="320"></canvas>
+  <div class="row">
+    <button data-play="idle">Reposo</button>
+    <button data-play="attack">Atacar</button>
+    <button data-play="hurt">Golpe recibido</button>
+    <button data-play="death">Muerte</button>
+    <label>Tamaño <select id="scale"><option>1</option><option>2</option><option selected>3</option><option>4</option></select></label>
+    <label>Velocidad <select id="speed"><option value="0.5">0.5x</option><option value="1" selected>1x</option><option value="2">2x</option></select></label>
+  </div>
+  <div class="row">
+    <label>Personaje <select id="who"></select></label>
+    <label><input type="checkbox" id="ranged"> Ataca a distancia</label>
+    <label>Estilo <select id="style"><option value="chibi">Chibi (arte nuevo)</option><option value="px">Ilustración reducida (64 px)</option><option value="hd">Ilustración original (160 px)</option></select></label>
+  </div>
+  <div class="row">
+    <label>Tu tira (PNG) <input type="file" id="file" accept="image/png,image/webp"></label>
+    <label>Celda <input type="number" id="cell" value="64" min="16" max="256" step="8"> px</label>
+    <label>Cuadros: reposo <input type="number" id="n-idle" value="4" min="1" max="12"></label>
+    <label>ataque <input type="number" id="n-attack" value="6" min="1" max="12"></label>
+    <label>golpe <input type="number" id="n-hurt" value="2" min="1" max="12"></label>
+    <label>muerte <input type="number" id="n-death" value="4" min="1" max="12"></label>
+  </div>
+  <div id="msg"></div>
+  <p>Tira cargada (tamaño real, ampliada 2x):</p>
+  <img id="sheet-view" alt="">
+</main>
+<script type="module">
+import { SpriteAnim, DEFAULT_SHEET, loadImage, sheetFromMeta } from './spriteAnim.js';
+const CHIBI = await fetch('./assets/sprites/chibi/index.json').then(r=>r.json()).catch(()=>({}));
+
+const canvas = document.getElementById('stage');
+const ctx = canvas.getContext('2d');
+const GROUND = 250;
+const HERO_X = 190, ENEMY_X = 450;
+const $ = (id)=> document.getElementById(id);
+
+let hero = null, enemyImg = null;
+let lunge = 0;      // 0..1 avance del héroe hacia el enemigo durante el ataque
+let shot = null;    // proyectil en vuelo (ataques a distancia): {x, t}
+// Sendas que disparan en vez de golpear cuerpo a cuerpo: arco y magia.
+const RANGED = {tirador:'#e8dcc6', mago:'#7fb7ff', hechicero:'#b46bff'};
+let enemyFlash = 0; // segundos que el enemigo queda en blanco tras el impacto
+
+function sheetFromInputs(){
+  const sheet = structuredClone(DEFAULT_SHEET);
+  sheet.cell = parseInt($('cell').value, 10) || 64;
+  ['idle','attack','hurt','death'].forEach(k=>{ sheet.states[k].frames = parseInt($('n-'+k).value, 10) || 1; });
+  return sheet;
+}
+function setHero(img, sheet){
+  hero = new SpriteAnim(img, sheet || sheetFromInputs());
+  hero.speed = parseFloat($('speed').value);
+  const view = $('sheet-view');
+  view.src = img.src; view.width = img.naturalWidth * 2;
+  const s = hero.sheet, needW = Math.max(...Object.values(s.states).map(st=>st.frames)) * (s.cw || s.cell), needH = 4 * (s.ch || s.cell);
+  $('msg').textContent = img.naturalWidth < needW || img.naturalHeight < needH
+    ? `La tira mide ${img.naturalWidth}x${img.naturalHeight} y con esta configuración se esperan al menos ${needW}x${needH}.` : '';
+}
+
+document.querySelectorAll('[data-play]').forEach(b=> b.onclick = ()=> hero && hero.play(b.dataset.play));
+$('speed').onchange = ()=>{ if(hero) hero.speed = parseFloat($('speed').value); };
+['cell','n-idle','n-attack','n-hurt','n-death'].forEach(id=> $(id).onchange = ()=>{ if(hero) setHero(hero.img); });
+$('file').onchange = async (e)=>{
+  const f = e.target.files[0];
+  if(f) setHero(await loadImage(URL.createObjectURL(f)));
+};
+
+function drawBackground(){
+  ctx.fillStyle = '#1b2a1e'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#243a27'; ctx.fillRect(0, GROUND - 30, canvas.width, canvas.height);
+  ctx.fillStyle = '#2d4a30';
+  for(let x = 0; x < canvas.width; x += 16) for(let y = GROUND - 30; y < canvas.height; y += 16){
+    if(((x >> 4) + (y >> 4)) % 2 === 0) ctx.fillRect(x, y, 16, 16);
+  }
+}
+function shadow(x, w){
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.beginPath(); ctx.ellipse(x, GROUND + 2, w, w / 4, 0, 0, Math.PI * 2); ctx.fill();
+}
+
+let last = performance.now();
+function frame(now){
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  drawBackground();
+  const scale = parseInt($('scale').value, 10);
+  if(hero){
+    hero.update(dt);
+    // Avance durante el ataque: sale, golpea a mitad de la animación y vuelve.
+    const ranged = $('ranged').checked;
+    if(hero.state === 'attack' && !ranged){
+      const st = hero.sheet.states.attack, p = Math.min(1, hero.t * st.fps / st.frames);
+      const before = lunge;
+      lunge = Math.sin(p * Math.PI);
+      if(before < 0.95 && lunge >= 0.95) enemyFlash = 0.15;
+    } else lunge = 0;
+    // A distancia: el personaje se queda en su sitio y a mitad de la
+    // animación suelta un proyectil que viaja hasta el enemigo.
+    if(hero.state === 'attack' && ranged && !hero.fired && hero.frameIndex() >= 3){
+      hero.fired = true;
+      shot = {x: HERO_X + 30, color: RANGED[$('who').value.split('_')[0]] || ALLY_RANGED[$('who').value] || '#e8dcc6', arrow: /^tirador|neira|lyra/.test($('who').value)};
+    }
+    if(hero.state !== 'attack') hero.fired = false;
+    const hx = HERO_X + lunge * (ENEMY_X - HERO_X - 90);
+    shadow(hx, (hero.sheet.ch || hero.sheet.cell) * scale * 0.18);
+    hero.draw(ctx, hx, GROUND, scale, false);
+  }
+  if(shot){
+    shot.x += 620 * dt;
+    const sy = GROUND - (hero.sheet.ch || hero.sheet.cell) * scale * 0.5;
+    if(shot.arrow){ ctx.fillStyle = shot.color; ctx.fillRect(shot.x - 14, sy - 1, 18, 2); ctx.fillRect(shot.x + 4, sy - 3, 3, 6); }
+    else {
+      ctx.fillStyle = shot.color; ctx.globalAlpha = 0.35; ctx.beginPath(); ctx.arc(shot.x, sy, 11, 0, 7); ctx.fill();
+      ctx.globalAlpha = 1; ctx.beginPath(); ctx.arc(shot.x, sy, 6, 0, 7); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(shot.x, sy, 2.5, 0, 7); ctx.fill();
+    }
+    if(shot.x >= ENEMY_X - 30){ shot = null; enemyFlash = 0.15; }
+  }
+  if(enemyImg){
+    const h = 150, w = enemyImg.naturalWidth * h / enemyImg.naturalHeight;
+    shadow(ENEMY_X, 44);
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    if(enemyFlash > 0){ ctx.filter = 'brightness(3)'; enemyFlash -= dt; }
+    ctx.drawImage(enemyImg, ENEMY_X - w / 2 + (enemyFlash > 0 ? 4 : 0), GROUND - h, w, h);
+    ctx.restore();
+  }
+  requestAnimationFrame(frame);
+}
+
+// Personajes actuales del juego (tiras hechas por tools/make_player_sheets.py).
+const SENDAS = {pesada:'Arma pesada', tirador:'Tirador', doblefilo:'Doble filo', mago:'Mago', paladin:'Paladín', hechicero:'Hechicero'};
+const RAZAS = {barbaro:'Bárbaro', enano:'Enano', hada:'Hada', humano:'Humano', draconido:'Dracónido', bestia:'Bestia'};
+$('who').innerHTML = Object.entries(SENDAS).flatMap(([s, sn])=> Object.entries(RAZAS).map(([r, rn])=> `<option value="${s}_${r}">${sn} · ${rn}</option>`)).join('')
+  + Object.entries({aldric:'Aldric', brann:'Brann', neira:'Neira', lyra:'Lyra', vex:'Vex', kael:'Kael', fennwick:'Fennwick', eira:'Eira', delyth:'Delyth', seraphina:'Seraphina'})
+      .map(([id, n])=> `<option value="aliado_${id}">Aliado · ${n}</option>`).join('')
+  + '<option value="piloto">Muñeco de relleno</option>';
+const ALLY_RANGED = {aliado_neira:'#e8dcc6', aliado_lyra:'#e8dcc6', aliado_fennwick:'#ff8a3d', aliado_eira:'#9fd8ff', aliado_delyth:'#ffe9a8', aliado_seraphina:'#ffe9a8'};
+async function loadSelected(){
+  const who = $('who').value, style = $('style').value;
+  const img = await loadImage(who === 'piloto' ? './assets/sprites/piloto_pesada_barbaro.png' : `./assets/sprites/${style}/${who}.png`);
+  if(style === 'chibi' && CHIBI[who]){
+    $('scale').value = '2';
+    $('ranged').checked = who.split('_')[0] in RANGED || who in ALLY_RANGED;
+    return setHero(img, sheetFromMeta(CHIBI[who]));
+  }
+  $('cell').value = img.naturalHeight / 4; // 4 filas
+  ['idle','attack','hurt','death'].forEach(k=> $('n-'+k).value = DEFAULT_SHEET.states[k].frames);
+  // la versión de detalle ya es grande: se dibuja a escala 1
+  $('scale').value = img.naturalHeight / 4 > 100 ? '1' : '3';
+  $('ranged').checked = who.split('_')[0] in RANGED;
+  setHero(img);
+}
+$('who').onchange = loadSelected; $('style').onchange = loadSelected;
+await loadSelected();
+loadImage('../src/assets/enemigos/alfa_manada.png').then(img=> enemyImg = img).catch(()=>{});
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

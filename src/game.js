@@ -2,7 +2,7 @@
 
 import { supabase } from './supabaseClient.js';
 import * as auth from './auth.js';
-import { syncBattleStage, playBattleAnim } from './battleStage.js?v=85';
+import { syncBattleStage, playBattleAnim } from './battleStage.js?v=87';
 import { CLASS_SPRITES, ENEMY_SPRITES, playerSpriteFor, enemySpriteFor, ALLY_TEMPLATE_SPRITES } from './battleSprites.js?v=83';
 
 /* ============================================================
@@ -5625,6 +5625,15 @@ function renderInventory(){
       ['MP','Maná', d.maxSta], ['Espíritu máx.','Recurso de habilidades', d.maxSpi]
     ].map(([k,sub,v])=>`<div class="pj-attr"><div><b>${k}</b><small>${sub}</small></div><span>${v}</span></div>`).join('');
   }
+  // Capacidad de la mochila, bajo los atributos (2026-10-04: en la cabecera
+  // pasaba inadvertida). El aviso de venta automática solo sale cerca del tope.
+  const bagCount = state.char.inventory.length, bagNear = bagCount >= INVENTORY_CAP - 10;
+  const bagMeterHTML = `
+    <div class="pj-bag ${bagNear ? 'near' : ''}">
+      <div class="pj-bag-top"><b>🎒 Mochila</b><span>${bagCount} / ${INVENTORY_CAP}</span></div>
+      <div class="bar-track"><div class="pj-bag-fill" style="width:${Math.min(100, bagCount/INVENTORY_CAP*100)}%"></div></div>
+      ${bagNear ? '<p>⚠ Si excedes el límite, cualquier equipamiento se venderá automáticamente.</p>' : ''}
+    </div>`;
   const dollHTML = `
     <div class="pj-who">
       <button class="pj-arrow" id="pj-prev" ${targets.length<2?'disabled':''} title="Anterior">‹</button>
@@ -5641,7 +5650,8 @@ function renderInventory(){
       <div class="pj-col">${slotTile('amuleto')}${slotTile('botas')}</div>
     </div>
     ${soulSlotsSource.length ? `<div class="pj-stones-row"><span>Piedras de alma</span>${stoneTiles}</div>` : ''}
-    <div class="pj-attrs">${attrsHTML}</div>`; // el "Detalle del equipo" se quitó (2026-10-04): cada ranura ya muestra su carta
+    <div class="pj-attrs">${attrsHTML}</div>
+    ${bagMeterHTML}`; // el "Detalle del equipo" se quitó (2026-10-04): cada ranura ya muestra su carta
   const tabs = [['mochila','🎒 Mochila'],['pociones','🧪 Pociones'],['piedras','💎 Piedras']].concat(targetRow ? [] : [['caidos','🐾 Caídos']]);
   if(!tabs.some(t=>t[0]===invTab)) invTab = 'mochila';
   const tabBody = invTab==='pociones' ? potionHTML
@@ -5651,7 +5661,6 @@ function renderInventory(){
   document.getElementById('main-panel').innerHTML = `
     <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:6px;">
       <h3 style="color:var(--bronze-light);">Personaje e inventario</h3>
-      <span class="sc-aside" title="Objetos en la mochila / capacidad. Al llenarse se vende solo el de menor valor." style="margin-left:auto; ${state.char.inventory.length >= INVENTORY_CAP*0.9 ? 'color:var(--blood-light); font-weight:700;' : ''}">🎒 ${state.char.inventory.length}/${INVENTORY_CAP}</span>
       <button class="reset-btn" id="btn-close-inv">Cerrar</button>
     </div>
     <div class="pj-layout">
@@ -13009,7 +13018,7 @@ function renderCombat(){
     hp: state.char.curHP, maxHP: d.maxHP, mp: state.char.curSta, maxMP: d.maxSta,
     spirit: state.char.curSpi, maxSpirit: d.maxSpi, statuses: combat.playerStatuses||[],
     shield: combat.playerShield||0,
-    pos: combat.playerPos, bgTheme: DECADE_BG_THEME[decadeIndexForLevel(state.dungeon.level)],
+    pos: combat.playerPos, bgTheme: DECADE_BG_THEME[decadeIndexForLevel(state.dungeon.level)], bgDecade: decadeIndexForLevel(state.dungeon.level),
   };
   syncBattleStage(document.getElementById('battle-stage-mount'), combat, playerInfo, {
     isAllyHostile,

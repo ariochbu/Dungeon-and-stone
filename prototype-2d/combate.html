@@ -1,0 +1,496 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Piloto de combate horizontal — Dungeon &amp; Stone</title>
+<style>
+  body{ margin:0; background:#14110e; color:#e8dcc6; font-family:Georgia, serif; }
+  main{ max-width:760px; margin:0 auto; padding:12px; }
+  h1{ font-size:1.15em; color:#c9a25d; margin:0 0 4px; }
+  p{ color:#a89a84; font-size:0.88em; margin:4px 0 10px; line-height:1.4; }
+  canvas{ width:100%; height:auto; display:block; border:1px solid #3a332c; border-radius:6px; image-rendering:pixelated; background:#0d0b09; cursor:pointer; touch-action:manipulation; }
+  .row{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:10px 0; }
+  button, select{ background:#241e18; color:#e8dcc6; border:1px solid #3a332c; border-radius:4px; padding:9px 14px; font:inherit; font-size:0.92em; cursor:pointer; }
+  button:hover:not(:disabled){ border-color:#c9a25d; }
+  button:disabled{ opacity:0.4; cursor:default; }
+  button.on{ border-color:#c9a25d; background:#3a2e1c; }
+  label{ font-size:0.85em; color:#a89a84; display:flex; align-items:center; gap:6px; }
+  #msg{ min-height:22px; padding:9px 12px; border:1px solid #3a332c; border-radius:6px; background:rgba(0,0,0,0.25); font-size:0.92em; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Piloto de combate horizontal</h1>
+  <p>Página de pruebas, aparte del juego. Reglas simplificadas: solo sirve para ver la presentación (dos filas por bando, orden de turnos, intención del enemigo, defender, habilidades y estados).</p>
+  <canvas id="stage" width="640" height="340"></canvas>
+  <div id="msg"></div>
+  <div class="row" id="cmds">
+    <button data-cmd="basic">⚔ Básico</button>
+    <button data-cmd="skill">💥 Habilidad</button>
+    <button data-cmd="defend">🛡 Defender</button>
+    <button data-cmd="swap">↔ Reposicionarse</button>
+  </div>
+  <div class="row" id="skills" style="display:none"></div>
+  <div class="row">
+    <label>Tu personaje <select id="who"></select></label>
+    <label>Encuentro <select id="enc"><option value="mobs">Grupo de goblins</option><option value="full">Combate grande: 5 contra 6</option><option value="spiders">Nido de arañas</option><option value="spiderboss">Jefe: Matriarca Escarlata</option><option value="elite">Élite: Jefe goblin</option><option value="boss">Jefe: Ogro</option></select></label>
+    <label>Fondo <select id="bg"><option value="auto">Según el encuentro</option><option value="1-10">Goblins (1-10)</option><option value="11-20">Arañas (11-20)</option><option value="21-30">Bestias (21-30)</option><option value="31-40">Usurpador (31-40)</option><option value="41-50">Isla Paraíso (41-50)</option><option value="51-60">Mar (51-60)</option></select></label>
+    <button id="restart">Reiniciar combate</button>
+  </div>
+</main>
+<script type="module">
+import { SpriteAnim, loadImage, sheetFromMeta } from './spriteAnim.js';
+const CHIBI = await fetch('./assets/sprites/chibi/index.json').then(r=>r.json()).catch(()=>({}));
+
+const canvas = document.getElementById('stage'), ctx = canvas.getContext('2d');
+const $ = (id)=> document.getElementById(id);
+const GROUND_TOP = 150;
+// Columnas, al estilo Darkest Dungeon: retaguardia y frente de cada bando,
+// con los dos frentes cara a cara en el centro.
+const COL_X = { party:{back:95, front:215}, enemy:{front:425, back:545} };
+const LANE_Y = [196, 258, 320];
+const SENDAS = {pesada:'Arma pesada', tirador:'Tirador', doblefilo:'Doble filo', mago:'Mago', paladin:'Paladín', hechicero:'Hechicero'};
+const RAZAS = {barbaro:'Bárbaro', enano:'Enano', hada:'Hada', humano:'Humano', draconido:'Dracónido', bestia:'Bestia'};
+const RANGED_SENDAS = {tirador:'#e8dcc6', mago:'#7fb7ff', hechicero:'#b46bff'};
+$('who').innerHTML = Object.entries(SENDAS).flatMap(([a, an])=> Object.entries(RAZAS).map(([r, rn])=> `<option value="${a}_${r}">${an} · ${rn}</option>`)).join('');
+
+// Estados visibles. dot: daño por turno (fracción de la vida máxima) · skip:
+// probabilidad de perder el turno · dealt/taken: multiplicador del daño que
+// hace/recibe · good: es un beneficio. Los nombres son los del juego real; los
+// números son de relleno para el piloto.
+const STATUS = {
+  'Veneno':     {icon:'☠', color:'#8cff8a', dot:0.05},
+  'Sangrado':   {icon:'🩸', color:'#ff6b6b', dot:0.04},
+  'Quemadura':  {icon:'🔥', color:'#ff9a3d', dot:0.05},
+  'Aturdido':   {icon:'💫', color:'#ffe066', skip:1},
+  'Miedo':      {icon:'😱', color:'#c9a0ff', skip:0.5},
+  'Confusión':  {icon:'🌀', color:'#c9a0ff', skip:0.4},
+  'Debilitado': {icon:'⬇', color:'#aab0b8', dealt:0.7},
+  'Ralentizado':{icon:'🐌', color:'#9fd8ff', dealt:0.8},
+  'Marcado':    {icon:'🎯', color:'#ffb347', taken:1.3},
+  'Furia':      {icon:'⬆', color:'#ff8a5c', dealt:1.3, good:true},
+  'Escudo':     {icon:'🔰', color:'#9fd8ff', taken:0.5, good:true},
+};
+// Habilidades por senda (nombres reales del juego, efecto simplificado).
+// applies: [estado, probabilidad, turnos] · buff: [estado, turnos] · aoe: a todos
+const SKILLS = {
+  pesada:    [{name:'Golpe Bruto', mult:1.5, applies:['Aturdido', 0.4, 1], cd:2}, {name:'Machacar', mult:2.2, cd:3}, {name:'Grito de Guerra', buff:['Furia', 3], party:true, cd:4}],
+  tirador:   [{name:'Disparo Certero', mult:1.7, cd:2}, {name:'Marca del Cazador', mult:0.8, applies:['Marcado', 1, 3], cd:3}, {name:'Lluvia de Flechas', mult:0.9, aoe:true, cd:4}],
+  doblefilo: [{name:'Corte Rápido', mult:1.2, applies:['Sangrado', 0.85, 3], cd:1}, {name:'Danza de Cuchillas', mult:0.9, aoe:true, cd:3}, {name:'Golpe de Gracia', mult:2.4, cd:4}],
+  mago:      [{name:'Bola de Fuego', mult:1.5, applies:['Quemadura', 0.8, 3], cd:2}, {name:'Lanza de Hielo', mult:1.3, applies:['Ralentizado', 0.9, 2], cd:2}, {name:'Explosión Arcana', mult:1.0, aoe:true, cd:4}],
+  paladin:   [{name:'Golpe Consagrado', mult:1.5, applies:['Debilitado', 0.6, 2], cd:2}, {name:'Muro de Fe', buff:['Escudo', 2], party:true, cd:4}, {name:'Escudo del Juramento', buff:['Escudo', 3], cd:3}],
+  hechicero: [{name:'Toque Venenoso', mult:1.1, applies:['Veneno', 1, 3], cd:1}, {name:'Grito de Pánico', mult:0.5, aoe:true, applies:['Miedo', 0.6, 2], cd:4}, {name:'Mirada de Locura', mult:0.8, applies:['Confusión', 0.9, 2], cd:3}],
+};
+let banner = null; // nombre de la habilidad en uso, arriba al centro
+
+let units = [], order = [], turnIdx = 0, floats = [], shots = [], busy = true, over = false;
+let pendingCmd = null, shake = 0;
+const imgCache = {};
+const getImg = (src)=> imgCache[src] || (imgCache[src] = loadImage(src));
+
+async function makeChibi(key, o){
+  const anim = new SpriteAnim(await getImg(`./assets/sprites/chibi/${key}.png`), sheetFromMeta(CHIBI[key]));
+  return Object.assign({side:'party', anim, scale:1, defending:false, cds:{}, statuses:[], flash:0, alpha:1, ox:0, oy:0}, o);
+}
+async function makeEnemy(id, o){
+  const img = await getImg(`../src/assets/enemigos/${id}.png`);
+  return Object.assign({side:'enemy', img, defending:false, statuses:[], cds:{}, flash:0, alpha:1, ox:0, oy:0, intent:null, size:84}, o);
+}
+async function setup(){
+  busy = true; over = false; floats = []; shots = []; pendingCmd = null; banner = null; $('skills').style.display = 'none';
+  const who = $('who').value, senda = who.split('_')[0], ranged = senda in RANGED_SENDAS;
+  const party = [
+    await makeChibi(who, {name:'Tú', player:true, senda, row: ranged ? 'back' : 'front', hp:260, atk:34, spd:11, ranged, color:RANGED_SENDAS[senda], arrow:senda==='tirador'}),
+    await makeChibi('aliado_aldric', {name:'Aldric', row:'front', hp:320, atk:24, spd:8, ranged:false}),
+    await makeChibi('aliado_neira', {name:'Neira', row:'back', hp:180, atk:28, spd:13, ranged:true, color:'#e8dcc6', arrow:true}),
+    await makeChibi('aliado_delyth', {name:'Delyth', row:'back', hp:170, atk:16, spd:9, ranged:true, color:'#ffe9a8', healer:true}),
+  ];
+  // Combate grande: tú + 4 aliados (el máximo del juego) contra 6 enemigos.
+  if($('enc').value === 'full') party.push(await makeChibi('aliado_brann', {name:'Brann', row:'front', hp:340, atk:22, spd:7, ranged:false}));
+  // Monstruos chibi: las tiras miran a la derecha y se dibujan espejadas.
+  const foe = (id, o)=> makeChibi('enemigo_' + id, Object.assign({side:'enemy', intent:null}, o));
+  const arquero = ()=> foe('goblin_arquero', {name:'Goblin arquero', row:'back', hp:120, atk:22, spd:14, ranged:true, color:'#e8dcc6', arrow:true});
+  const chaman = ()=> foe('goblin_chaman', {name:'Chamán goblin', row:'back', hp:130, atk:20, spd:10, ranged:true, color:'#8cff8a', heavySkill:{name:'Maldición', mult:1.2, applies:['Debilitado', 0.8, 2]}});
+  const spider = (id, name, o)=> foe(id, Object.assign({name, row:'front', hp:170, atk:22, spd:11, onHit:['Veneno', 0.35, 3], heavySkill:{name:'Mordida venenosa', mult:1.6, applies:['Veneno', 1, 3]}}, o));
+  const web = {name:'Telaraña', mult:0.8, applies:['Ralentizado', 1, 2]};
+  const enc = $('enc').value;
+  const enemies = enc === 'full' ? [
+    await foe('goblin_guerrero', {name:'Goblin guerrero', row:'front', hp:190, atk:26, spd:9}),
+    await foe('hobgoblin', {name:'Hobgoblin', row:'front', hp:260, atk:26, spd:8}),
+    await foe('goblin_saqueador', {name:'Goblin saqueador', row:'front', hp:160, atk:24, spd:12}),
+    await arquero(), await chaman(),
+    await foe('goblin_arquero', {name:'Arquero veterano', row:'back', hp:140, atk:24, spd:13, ranged:true, color:'#e8dcc6', arrow:true}),
+  ] : enc === 'spiders' ? [
+    await spider('viuda_alfa', 'Viuda alfa'), await spider('tarantula_cazadora', 'Tarántula cazadora', {hp:200, spd:8}),
+    await spider('tarantula_tejedora', 'Tarántula tejedora', {row:'back', ranged:true, color:'#e8e8e8', heavySkill:web}),
+    await spider('saltadora_alfa', 'Saltadora alfa', {row:'back', hp:140, spd:15}),
+  ] : enc === 'spiderboss' ? [
+    await spider('matriarca_escarlata', 'Matriarca Escarlata', {hp:950, atk:40, spd:9, boss:true, scale:1.5, size:105, heavySkill:{name:'Colmillos escarlata', mult:2.0, applies:['Veneno', 1, 3]}}),
+    await spider('viuda_carmesi', 'Viuda carmesí'), await spider('gran_tejedora', 'Gran tejedora', {row:'back', ranged:true, color:'#e8e8e8', heavySkill:web}),
+  ] : enc === 'boss' ? [
+    await foe('ogro', {name:'Ogro', row:'front', hp:900, atk:46, spd:7, boss:true, scale:1.7, size:112, heavySkill:{name:'Aplastar', mult:2.2, applies:['Aturdido', 0.5, 1]}}),
+    await foe('hobgoblin', {name:'Hobgoblin', row:'front', hp:260, atk:26, spd:8}),
+    await chaman(),
+  ] : enc === 'elite' ? [
+    await foe('jefe_goblin', {name:'Jefe goblin', row:'front', hp:420, atk:34, spd:10, boss:true, scale:1.3, size:86}),
+    await foe('gilgoblin', {name:'Gilgoblin', row:'front', hp:240, atk:30, spd:13}),
+    await arquero(),
+  ] : [
+    await foe('goblin_guerrero', {name:'Goblin guerrero', row:'front', hp:190, atk:26, spd:9}),
+    await foe('goblin_saqueador', {name:'Goblin saqueador', row:'front', hp:160, atk:24, spd:12}),
+    await arquero(), await chaman(),
+  ];
+  units = party.concat(enemies);
+  units.forEach(u=>{ u.maxhp = u.hp; });
+  layout(true);
+  order = units.slice().sort((a, b)=> b.spd - a.spd);
+  turnIdx = -1;
+  units.filter(u=>u.side==='enemy').forEach(planIntent);
+  nextTurn();
+}
+// Coloca a cada unidad en su columna (frente/retaguardia) repartida en carriles.
+function layout(snap){
+  ['party','enemy'].forEach(side=> ['front','back'].forEach(row=>{
+    const list = units.filter(u=> u.side===side && u.row===row && u.hp > 0);
+    list.forEach((u, i)=>{
+      const lanes = list.length === 1 ? [1] : list.length === 2 ? [0, 2] : [0, 1, 2];
+      const fwd = side === 'party' ? 1 : -1;
+      u.hx = COL_X[side][row] + (list.length === 3 ? (i === 1 ? 26*fwd : -4*fwd) : (i % 2 ? 14 : 0)); u.hy = LANE_Y[lanes[i % 3]];
+      if(snap){ u.x = u.hx; u.y = u.hy; }
+    });
+  }));
+}
+const alive = (side)=> units.filter(u=> u.side===side && u.hp > 0);
+// Regla de filas: cuerpo a cuerpo solo alcanza el frente contrario mientras
+// quede alguien ahí; a distancia alcanza a cualquiera.
+function validTargets(u){
+  const foes = alive(u.side === 'party' ? 'enemy' : 'party');
+  const front = foes.filter(f=> f.row === 'front');
+  return u.ranged || !front.length ? foes : front;
+}
+// Intención del enemigo: se decide al terminar su turno y se muestra sobre su
+// cabeza hasta que vuelve a actuar. El golpe fuerte es el que conviene defender.
+function planIntent(e){
+  const targets = validTargets(e);
+  if(!targets.length){ e.intent = null; return; }
+  const heavy = e.boss ? Math.random() < 0.5 : Math.random() < 0.2;
+  const target = heavy && targets.find(t=>t.player) ? targets.find(t=>t.player) : targets[Math.floor(Math.random()*targets.length)];
+  e.intent = {heavy, target};
+}
+
+// ---------- animación ----------
+const sleep = (ms)=> new Promise(r=> setTimeout(r, ms));
+function tween(ms, fn){
+  return new Promise(res=>{
+    const t0 = performance.now();
+    (function step(){
+      const p = Math.min(1, (performance.now() - t0)/ms); fn(p);
+      p < 1 ? requestAnimationFrame(step) : res();
+    })();
+  });
+}
+function play(u, state){ if(u.anim) u.anim.play(state); }
+function float(u, text, color){ floats.push({x:u.x, y:u.y - (u.size || 70), text, color, t:0}); }
+async function strike(a, t, mult, label, applies){
+  const dir = a.side === 'party' ? 1 : -1;
+  if(!a.ranged){ // ir, golpear y volver (como Sea of Stars)
+    const tx = t.x - dir*58, ty = t.y, sx = a.x, sy = a.y;
+    await tween(240, p=>{ a.x = sx + (tx - sx)*p; a.y = sy + (ty - sy)*p; });
+    play(a, 'attack');
+    if(!a.anim) await tween(140, p=>{ a.ox = dir*18*Math.sin(p*Math.PI); });
+    else await sleep(260);
+    hit(a, t, mult, label, applies);
+    await sleep(240);
+    await tween(240, p=>{ a.x = tx + (sx - tx)*p; a.y = ty + (sy - ty)*p; });
+  } else {   // desde su sitio: animación + proyectil
+    play(a, 'attack');
+    if(!a.anim) await tween(160, p=>{ a.ox = -dir*8*Math.sin(p*Math.PI); });
+    else await sleep(230);
+    const s = {x:a.x + dir*24, y:a.y - 34, color:a.color || '#e8dcc6', arrow:a.arrow, dir};
+    shots.push(s);
+    const sx = s.x, sy = s.y, ey = t.y - 34;
+    await tween(260, p=>{ s.x = sx + (t.x - sx)*p; s.y = sy + (ey - sy)*p; });
+    shots.splice(shots.indexOf(s), 1);
+    hit(a, t, mult, label, applies);
+    await sleep(260);
+  }
+}
+function applyStatus(u, name, turns){
+  if(u.hp <= 0) return;
+  const cur = u.statuses.find(s=> s.name === name);
+  if(cur) cur.turns = Math.max(cur.turns, turns); else u.statuses.push({name, turns});
+  floats.push({x:u.x, y:u.y - (u.size || 70) - 14, text:STATUS[name].icon + ' ' + name, color:STATUS[name].color, t:-0.35});
+}
+const statMult = (u, key)=> u.statuses.reduce((m, s)=> m * (STATUS[s.name][key] || 1), 1);
+function hit(a, t, mult, label, applies){
+  let dmg = Math.round(a.atk * mult * (0.9 + Math.random()*0.2) * statMult(a, 'dealt') * statMult(t, 'taken'));
+  if(t.defending) dmg = Math.round(dmg * 0.35);
+  t.hp = Math.max(0, t.hp - dmg);
+  t.flash = 0.18; shake = mult > 1.4 ? 7 : 3;
+  float(t, (label ? label + ' ' : '') + '-' + dmg + (t.defending ? ' 🛡' : ''), t.defending ? '#9fd8ff' : mult > 1.4 ? '#ffb347' : '#fff');
+  if(t.hp <= 0){ play(t, 'death'); t.dying = true; }
+  else {
+    play(t, 'hurt');
+    const ap = applies || a.onHit;
+    // defender también protege de los estados del golpe
+    if(ap && !t.defending && Math.random() < ap[1]) applyStatus(t, ap[0], ap[2]);
+  }
+}
+// Habilidad sobre uno, sobre todos, o un beneficio propio/del grupo.
+async function useSkill(a, sk, target){
+  banner = {text: sk.name, t: 0, side: a.side};
+  if(sk.buff){
+    play(a, 'attack'); await sleep(280);
+    (sk.party ? alive(a.side) : [a]).forEach(u=> applyStatus(u, sk.buff[0], sk.buff[1]));
+    await sleep(450);
+  } else if(sk.aoe){
+    play(a, 'attack'); await sleep(300);
+    alive(a.side === 'party' ? 'enemy' : 'party').forEach(u=> hit(a, u, sk.mult, '', sk.applies));
+    await sleep(500);
+  } else await strike(a, target, sk.mult, '', sk.applies);
+}
+
+// ---------- turnos ----------
+function upcoming(n){
+  const out = []; let i = turnIdx;
+  while(out.length < n && out.length < 40){ i = (i + 1) % order.length; if(order[i].hp > 0) out.push(order[i]); if(alive('party').length + alive('enemy').length === 0) break; }
+  return out;
+}
+async function nextTurn(){
+  if(!alive('enemy').length) return finish('🏆 Victoria.');
+  if(!alive('party').length || !units.find(u=>u.player).hp) return finish('☠ Has caído.');
+  do { turnIdx = (turnIdx + 1) % order.length; } while(order[turnIdx].hp <= 0);
+  const u = order[turnIdx];
+  u.defending = false;
+  Object.keys(u.cds).forEach(k=>{ if(u.cds[k] > 0) u.cds[k]--; });
+  // Estados al empezar el turno: daño por turno, turnos perdidos y caducidad.
+  let skipped = null;
+  for(const st of u.statuses.slice()){
+    const def = STATUS[st.name];
+    if(def.dot){
+      const d = Math.max(1, Math.round(u.maxhp * def.dot));
+      u.hp = Math.max(0, u.hp - d); u.flash = 0.12;
+      floats.push({x:u.x, y:u.y - (u.size || 70), text:def.icon + ' -' + d, color:def.color, t:0});
+    }
+    if(def.skip && !skipped && Math.random() < def.skip) skipped = st.name;
+    if(--st.turns <= 0) u.statuses.splice(u.statuses.indexOf(st), 1);
+  }
+  if(u.hp <= 0){ play(u, 'death'); say(`${u.name} cae por sus heridas.`); await sleep(600); return nextTurn(); }
+  if(skipped){
+    busy = true; refreshCmds();
+    floats.push({x:u.x, y:u.y - (u.size || 70) - 14, text:STATUS[skipped].icon + ' pierde el turno', color:STATUS[skipped].color, t:-0.2});
+    say(`${u.name} está bajo ${skipped} y pierde el turno.`);
+    if(u.side === 'enemy') planIntent(u);
+    await sleep(900); return nextTurn();
+  }
+  layout(false);
+  await tween(160, p=> units.forEach(q=>{ if(q.hp > 0){ q.x += (q.hx - q.x)*p; q.y += (q.hy - q.y)*p; } }));
+  if(u.player){ busy = false; say('Tu turno. Elige una acción.'); refreshCmds(); return; }
+  busy = true; refreshCmds();
+  await sleep(250);
+  if(u.side === 'party'){
+    const hurt = alive('party').filter(p=> p.hp < p.maxhp*0.55).sort((a, b)=> a.hp/a.maxhp - b.hp/b.maxhp)[0];
+    if(u.healer && hurt){
+      play(u, 'attack'); await sleep(300);
+      const heal = Math.round(hurt.maxhp*0.28); hurt.hp = Math.min(hurt.maxhp, hurt.hp + heal);
+      float(hurt, '+' + heal, '#8cff8a'); say(`${u.name} cura a ${hurt.name}.`); await sleep(350);
+    } else {
+      const t = validTargets(u).sort((a, b)=> a.hp - b.hp)[0];
+      say(`${u.name} ataca a ${t.name}.`); await strike(u, t, 1);
+    }
+  } else {
+    const it = u.intent && u.intent.target.hp > 0 && validTargets(u).includes(u.intent.target) ? u.intent : {heavy:u.intent && u.intent.heavy, target:validTargets(u)[0]};
+    if(it.target){
+      const hs = it.heavy ? (u.heavySkill || {name:'Golpe fuerte', mult:2.2}) : null;
+      say(hs ? `${u.name} usa <b>${hs.name}</b> sobre ${it.target.name}.` : `${u.name} ataca a ${it.target.name}.`);
+      if(hs) await useSkill(u, hs, it.target); else await strike(u, it.target, 1, '');
+    }
+    planIntent(u);
+  }
+  nextTurn();
+}
+function finish(text){ over = true; busy = true; say(text + ' Pulsa "Reiniciar combate" para repetir.'); refreshCmds(); }
+function say(t){ $('msg').innerHTML = t; }
+function refreshCmds(){
+  document.querySelectorAll('[data-cmd]').forEach(b=>{
+    b.disabled = busy || over;
+    b.classList.toggle('on', pendingCmd === b.dataset.cmd || (b.dataset.cmd === 'skill' && $('skills').style.display !== 'none'));
+  });
+  if(busy || over) $('skills').style.display = 'none';
+}
+// Submenú de habilidades de la senda, con su enfriamiento.
+function showSkills(){
+  const me = units.find(u=>u.player), box = $('skills');
+  box.style.display = 'flex';
+  box.innerHTML = SKILLS[me.senda].map((sk, i)=>{
+    const cd = me.cds[sk.name] || 0;
+    const what = sk.buff ? `${STATUS[sk.buff[0]].icon} ${sk.buff[0]}${sk.party ? ' al grupo' : ''}` : `${sk.aoe ? 'a todos' : 'x' + sk.mult}${sk.applies ? ' · ' + STATUS[sk.applies[0]].icon + ' ' + sk.applies[0] : ''}`;
+    return `<button data-skill="${i}" ${cd ? 'disabled' : ''}>${sk.name}<br><small style="color:#a89a84">${cd ? 'lista en ' + cd : what}</small></button>`;
+  }).join('');
+  box.querySelectorAll('[data-skill]').forEach(b=> b.onclick = ()=>{
+    const sk = SKILLS[me.senda][parseInt(b.dataset.skill, 10)];
+    if(sk.buff || sk.aoe) return act(sk);
+    const ts = validTargets(me);
+    if(ts.length === 1) return act(sk, ts[0]);
+    pendingCmd = sk; say(`<b>${sk.name}</b>: toca al enemigo objetivo.`);
+  });
+  refreshCmds();
+}
+async function act(cmd, target){
+  const me = units.find(u=>u.player);
+  busy = true; pendingCmd = null; refreshCmds();
+  if(cmd === 'defend'){ me.defending = true; float(me, 'Defensa', '#9fd8ff'); say('Te cubres: recibes mucho menos daño y no te afectan los estados hasta tu próximo turno.'); await sleep(350); }
+  else if(cmd === 'swap'){ me.row = me.row === 'front' ? 'back' : 'front'; say(`Pasas a la ${me.row === 'front' ? 'primera línea' : 'retaguardia'}.`); layout(false); await tween(260, p=>{ me.x += (me.hx - me.x)*p; me.y += (me.hy - me.y)*p; }); }
+  else if(cmd === 'basic'){ say(`Atacas a ${target.name}.`); await strike(me, target, 1); }
+  else { me.cds[cmd.name] = (cmd.cd || 0) + 1; say(`Usas <b>${cmd.name}</b>${target ? ' sobre ' + target.name : ''}.`); await useSkill(me, cmd, target); }
+  nextTurn();
+}
+document.querySelectorAll('[data-cmd]').forEach(b=> b.onclick = ()=>{
+  if(busy || over) return;
+  const cmd = b.dataset.cmd, me = units.find(u=>u.player);
+  if(cmd !== 'skill') $('skills').style.display = 'none';
+  if(cmd === 'defend' || cmd === 'swap') return act(cmd);
+  if(cmd === 'skill'){
+    pendingCmd = null;
+    if($('skills').style.display === 'none') return showSkills();
+    $('skills').style.display = 'none'; return refreshCmds();
+  }
+  const ts = validTargets(me);
+  if(ts.length === 1) return act(cmd, ts[0]);
+  pendingCmd = cmd; refreshCmds(); say('Toca al enemigo que quieres atacar.');
+});
+canvas.addEventListener('click', (e)=>{
+  if(!pendingCmd || busy) return;
+  const r = canvas.getBoundingClientRect();
+  const x = (e.clientX - r.left)*canvas.width/r.width, y = (e.clientY - r.top)*canvas.height/r.height;
+  const me = units.find(u=>u.player);
+  const t = validTargets(me).find(u=> Math.abs(x - u.x) < 42 && y < u.y + 8 && y > u.y - (u.size || 70));
+  if(t){ const c = pendingCmd; act(c, t); }
+});
+$('restart').onclick = setup; $('who').onchange = setup; $('enc').onchange = setup;
+
+// ---------- dibujo ----------
+// Fondo ilustrado de la década (assets/fondos/<década>.jpg); si no cargó, el
+// de relleno dibujado por código.
+const bgImgs = {};
+function currentBg(){
+  const pick = $('bg').value;
+  const key = pick !== 'auto' ? pick : /spider/.test($('enc').value) ? '11-20' : '1-10';
+  if(!(key in bgImgs)){ bgImgs[key] = null; loadImage(`./assets/fondos/${key}.jpg`).then(img=> bgImgs[key] = img).catch(()=>{}); }
+  return bgImgs[key];
+}
+function drawBackground(){
+  const img = currentBg();
+  if(img){
+    // "cover": llena el lienzo recortando lo que sobra, anclado abajo (el suelo)
+    const k = Math.max(canvas.width/img.naturalWidth, canvas.height/img.naturalHeight);
+    const w = img.naturalWidth*k, h = img.naturalHeight*k;
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(img, (canvas.width - w)/2, canvas.height - h, w, h);
+    ctx.fillStyle = 'rgba(8,6,10,0.18)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    return;
+  }
+  const g = ctx.createLinearGradient(0, 0, 0, GROUND_TOP);
+  g.addColorStop(0, '#15241c'); g.addColorStop(1, '#22392a');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, canvas.width, GROUND_TOP);
+  ctx.fillStyle = '#1a2c20';
+  for(let x = -20; x < canvas.width; x += 46){ ctx.beginPath(); ctx.moveTo(x, GROUND_TOP); ctx.lineTo(x + 26, GROUND_TOP - 70 - (x*7 % 30)); ctx.lineTo(x + 52, GROUND_TOP); ctx.fill(); }
+  ctx.fillStyle = '#2c4a32'; ctx.fillRect(0, GROUND_TOP, canvas.width, canvas.height);
+  ctx.fillStyle = '#335539';
+  for(let x = 0; x < canvas.width; x += 16) for(let y = GROUND_TOP; y < canvas.height; y += 16) if(((x >> 4) + (y >> 4)) % 2 === 0) ctx.fillRect(x, y, 16, 16);
+  ctx.fillStyle = 'rgba(0,0,0,0.18)'; ctx.fillRect(canvas.width/2 - 1, GROUND_TOP, 2, canvas.height);
+}
+function bar(x, y, w, pct, color){
+  ctx.fillStyle = '#120e0c'; ctx.fillRect(x - w/2 - 1, y - 1, w + 2, 6);
+  ctx.fillStyle = color; ctx.fillRect(x - w/2, y, Math.max(0, w*pct), 4);
+}
+function drawUnit(u, t, me, dt, hud){
+  if(u.hp <= 0 && u.alpha <= 0) return;
+  const x = u.x + u.ox, y = u.y + u.oy, top = y - (u.size || 70);
+  if(hud){ if(u.hp > 0) drawHud(u, t, me, x, y, top); return; }
+  ctx.save(); ctx.globalAlpha = u.alpha;
+  ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.beginPath(); ctx.ellipse(u.x, u.y + 2, (u.size || 60)*0.3, 5, 0, 0, 7); ctx.fill();
+  if(u.flash > 0){ ctx.filter = 'brightness(3)'; u.flash -= dt; }
+  if(u.anim){ u.anim.update(dt); u.anim.draw(ctx, x, y, u.scale, u.side === 'enemy'); }
+  else { ctx.imageSmoothingEnabled = false; const s = u.size; ctx.drawImage(u.img, x - s/2, y - s, s, s); }
+  ctx.restore();
+  if(u.hp <= 0){ if(!u.anim || u.anim.frameIndex() >= u.anim.sheet.states.death.frames - 1) u.alpha = Math.max(0, u.alpha - dt*(u.anim ? 0.6 : 2)); }
+}
+// Vida, estados, marcador de turno e intención: se dibujan después de todos
+// los cuerpos, para que con filas de tres no los tape el personaje de abajo.
+function drawHud(u, t, me, x, y, top){
+  bar(u.x, y + 6, 46, u.hp/u.maxhp, u.side === 'party' ? '#5fbf6a' : '#c44a4a');
+  if(u.defending){ ctx.font = '14px serif'; ctx.textAlign = 'center'; ctx.fillText('🛡', u.x - 26, top + 26); }
+  // estados: ícono + turnos que le quedan, bajo la barra de vida
+  u.statuses.forEach((st, i)=>{
+    const def = STATUS[st.name], sx = u.x - (u.statuses.length*19)/2 + i*19 + 9, sy = y + 20;
+    ctx.fillStyle = def.good ? 'rgba(20,50,70,0.9)' : 'rgba(60,18,18,0.9)'; ctx.fillRect(sx - 9, sy - 7, 18, 14);
+    ctx.strokeStyle = def.color; ctx.lineWidth = 1; ctx.strokeRect(sx - 8.5, sy - 6.5, 17, 13);
+    ctx.font = '9px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff'; ctx.fillText(def.icon, sx - 3, sy);
+    ctx.font = 'bold 8px Georgia'; ctx.fillStyle = def.color; ctx.fillText(st.turns, sx + 5, sy + 1);
+  });
+  if(order[turnIdx] === u){ ctx.fillStyle = '#ffd76a'; ctx.beginPath(); ctx.moveTo(u.x - 6, top - 12 + Math.sin(t*6)*2); ctx.lineTo(u.x + 6, top - 12 + Math.sin(t*6)*2); ctx.lineTo(u.x, top - 4 + Math.sin(t*6)*2); ctx.fill(); }
+  // intención del enemigo
+  if(u.side === 'enemy' && u.intent && u.intent.target.hp > 0){
+    const heavy = u.intent.heavy, label = (heavy ? '⚠ ' : '⚔ ') + u.intent.target.name;
+    ctx.font = 'bold 10px Georgia'; ctx.textAlign = 'center';
+    const w = ctx.measureText(label).width + 10;
+    ctx.fillStyle = heavy ? `rgba(160,40,30,${0.8 + 0.2*Math.sin(t*8)})` : 'rgba(20,16,14,0.8)'; ctx.fillRect(u.x - w/2, top - 30, w, 14);
+    ctx.fillStyle = heavy ? '#fff' : '#e8dcc6'; ctx.textBaseline = 'middle'; ctx.fillText(label, u.x, top - 23);
+  }
+  // objetivo elegible
+  if(pendingCmd && me && validTargets(me).includes(u)){
+    ctx.strokeStyle = `rgba(255,215,110,${0.5 + 0.4*Math.sin(t*7)})`; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.ellipse(u.x, u.y + 2, 30, 8, 0, 0, 7); ctx.stroke();
+  }
+}
+function drawTurnBar(){
+  const list = upcoming(7), w = 34, x0 = canvas.width/2 - (list.length*w)/2;
+  ctx.fillStyle = 'rgba(12,10,9,0.75)'; ctx.fillRect(x0 - 6, 4, list.length*w + 12, 40);
+  list.forEach((u, i)=>{
+    const x = x0 + i*w;
+    ctx.fillStyle = u.side === 'party' ? '#23402b' : '#4a2020'; ctx.fillRect(x + 1, 8, w - 2, 32);
+    if(i === 0){ ctx.strokeStyle = '#ffd76a'; ctx.lineWidth = 2; ctx.strokeRect(x + 1, 8, w - 2, 32); }
+    ctx.save(); ctx.beginPath(); ctx.rect(x + 2, 9, w - 4, 30); ctx.clip(); ctx.imageSmoothingEnabled = false;
+    if(u.anim){ const s = u.anim.sheet, cw = s.cw; ctx.drawImage(u.anim.img, 0, 0, cw, s.ch*0.55, x + w/2 - cw*0.3, 10, cw*0.6, s.ch*0.33); }
+    else ctx.drawImage(u.img, 0, 0, u.img.naturalWidth, u.img.naturalHeight*0.7, x + 3, 10, w - 6, (w - 6)*0.7);
+    ctx.restore();
+  });
+}
+let last = performance.now();
+function frame(now){
+  const dt = Math.min(0.05, (now - last)/1000), t = now/1000; last = now;
+  ctx.save();
+  if(shake > 0){ ctx.translate((Math.random() - 0.5)*shake, (Math.random() - 0.5)*shake); shake -= dt*30; }
+  drawBackground();
+  const me = units.find(u=>u.player);
+  const sorted = units.slice().sort((a, b)=> a.y - b.y);
+  sorted.forEach(u=> drawUnit(u, t, me, dt, false));
+  sorted.forEach(u=> drawUnit(u, t, me, dt, true));
+  shots.forEach(s=>{
+    if(s.arrow){ ctx.fillStyle = s.color; ctx.fillRect(s.x - 9, s.y - 1, 18, 2); ctx.fillRect(s.x + s.dir*7, s.y - 3, 3, 6); }
+    else { ctx.fillStyle = s.color; ctx.globalAlpha = 0.35; ctx.beginPath(); ctx.arc(s.x, s.y, 10, 0, 7); ctx.fill(); ctx.globalAlpha = 1; ctx.beginPath(); ctx.arc(s.x, s.y, 5, 0, 7); ctx.fill(); }
+  });
+  floats = floats.filter(f=> (f.t += dt) < 1);
+  floats.filter(f=> f.t >= 0).forEach(f=>{ ctx.globalAlpha = 1 - f.t; ctx.font = 'bold 15px Georgia'; ctx.textAlign = 'center'; ctx.lineWidth = 3; ctx.strokeStyle = '#000'; ctx.strokeText(f.text, f.x, f.y - f.t*26); ctx.fillStyle = f.color; ctx.fillText(f.text, f.x, f.y - f.t*26); ctx.globalAlpha = 1; });
+  ctx.restore();
+  if(units.length) drawTurnBar();
+  if(banner){
+    banner.t += dt;
+    const al = banner.t < 0.15 ? banner.t/0.15 : banner.t > 1.1 ? Math.max(0, 1 - (banner.t - 1.1)/0.3) : 1;
+    ctx.globalAlpha = al; ctx.font = 'bold 15px Georgia'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const w = ctx.measureText(banner.text).width + 28;
+    ctx.fillStyle = banner.side === 'party' ? 'rgba(28,52,36,0.92)' : 'rgba(84,24,24,0.92)'; ctx.fillRect(canvas.width/2 - w/2, 52, w, 24);
+    ctx.strokeStyle = '#c9a25d'; ctx.lineWidth = 1; ctx.strokeRect(canvas.width/2 - w/2 + 0.5, 52.5, w - 1, 23);
+    ctx.fillStyle = '#ffe9a8'; ctx.fillText(banner.text, canvas.width/2, 64);
+    ctx.globalAlpha = 1;
+    if(banner.t > 1.4) banner = null;
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+setup();
+</script>
+</body>
+</html>
