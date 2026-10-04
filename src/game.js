@@ -4493,6 +4493,9 @@ function inCityMode(){
 }
 function renderSheet(){
   const el = document.getElementById('sheet');
+  // En la ciudad la barra de arriba se esconde (ver body.city-mode en el CSS):
+  // todo lo que tenía vive ahora en el menú lateral (pedido 2026-10-04).
+  document.body.classList.toggle('city-mode', inCityMode());
   if(inCityMode()){ el.classList.add('side-nav-mode'); renderSideNav(); return; }
   el.classList.remove('side-nav-mode');
   renderSheetPanel('sheet');
@@ -4622,6 +4625,91 @@ function renderSheetPanel(targetId){
       renderAll();
     };
   }
+}
+
+// Ficha del personaje (rediseño 2026-10-04, pedido explícito: "hacerlo algo más
+// dinámico"): retrato grande con nivel y experiencia, vida/MP/espíritu, los
+// cinco atributos como barras, y las estadísticas de combate repartidas en
+// pestañas (Ataque / Defensa / Conjuntos) como fichas de valor en vez de la
+// nube de etiquetas. El panel lateral del laberinto sigue usando la versión
+// compacta (renderSheetPanel).
+let fichaTab = 'ataque';
+function renderFicha(){
+  const d = derived(), r = race(), st = style(), cs = combatStatsSummary();
+  const xpNeeded = xpNeededForLevel(state.char.level), xpPct = clamp(state.char.xp/xpNeeded*100,0,100);
+  const pct = (v)=> `${Math.round(v*100)}%`;
+  const bar = (label, cur, max, cls)=> `<div class="fc-vital"><div class="bar-label"><span>${label}</span><span>${cur} / ${max}</span></div>
+    <div class="bar-track"><div class="bar-fill ${cls}" style="width:${clamp(cur/max*100,0,100)}%"></div></div></div>`;
+  const attrs = [['⚔️','Físico','Daño físico',d.fis],['✨','Espíritu','Espíritu y curación',d.esp],['🔮','Habilidad','MP y magia',d.hab],['💨','Agilidad','Crítico y evasión',d.agi],['🛡️','Vigor','Vida y aguante',d.vig]];
+  const attrMax = Math.max(...attrs.map(a=>a[3]), 1);
+  const attrsHTML = attrs.map(([ic,name,sub,v])=>`<div class="fc-attr">
+      <span class="fc-attr-ic">${ic}</span>
+      <span class="fc-attr-txt"><b>${name}</b><small>${sub}</small></span>
+      <span class="fc-attr-bar"><i style="width:${(v/attrMax*100).toFixed(1)}%"></i></span>
+      <span class="fc-attr-val">${v}</span></div>`).join('');
+  const stunChance = totalStunChance();
+  const tile = (label, value, on)=> on===false ? '' : `<div class="fc-tile"><b>${value}</b><span>${label}</span></div>`;
+  const ataque = [
+    tile('Prob. de crítico', pct(d.critChance)),
+    tile('Daño crítico', pct(1.5+cs.criticoDano)),
+    tile('Aumento de daño', '+'+pct(cs.aumentoDano), cs.aumentoDano>0),
+    tile('Precisión', pct(d.precision), Math.round(d.precision*100)>0),
+    tile('Penetración física', pct(cs.penetracionFisica), cs.penetracionFisica>0),
+    tile('Penetración mágica', pct(cs.penetracionMagica), cs.penetracionMagica>0),
+    tile('Penetración por nivel', (d.penetracionNivel*100).toFixed(1)+'%', d.penetracionNivel>0),
+    tile('Segundo ataque básico', pct(cs.segundoAtaque), cs.segundoAtaque>0),
+    tile('Doble encantamiento', pct(cs.dobleEncantamiento), cs.dobleEncantamiento>0),
+    tile('Succión de vida', pct(cs.robovida), cs.robovida>0),
+    tile('Succión de hechizo', pct(cs.succionHechizo), cs.succionHechizo>0),
+    tile('Aturdir al golpear', pct(stunChance), stunChance>0),
+    tile('Retroceso', pct(cs.retroceso), cs.retroceso>0),
+    ...cs.razaBonuses.map(sp=> tile(`Daño vs ${RAZA_TAG_LABEL[sp.raza]||sp.raza}`, '+'+pct(sp.value))),
+    ...cs.posicionBonuses.map(sp=> tile(`Daño vs ${POSICION_TAG_LABEL[sp.posicion]||sp.posicion}`, '+'+pct(sp.value))),
+  ].join('');
+  const resKeys = [['fisico','Res. física'],['fuego','Res. al fuego'],['hielo','Res. al hielo'],['veneno','Res. al veneno'],['aturdimiento','Res. al aturdimiento']];
+  const defensa = [
+    tile('Evasión', pct(d.evasionBase)),
+    tile('Bloqueo', pct(cs.bloqueo), cs.bloqueo>0),
+    tile('Reducción de daño (equipo)', pct(cs.reduccionDano), cs.reduccionDano>0),
+    tile('Reducción de daño (Vigor)', pct(d.reduccionVigor), d.reduccionVigor>0),
+    tile('Resistencia mágica', (d.resMagica>=0?'+':'')+Math.round(d.resMagica)+'%', d.resMagica!==0),
+    tile('Resistencia a estados', pct(d.resistenciaEstado), d.resistenciaEstado>0),
+    tile('Fortaleza mental', pct(d.fortalezaMental), d.fortalezaMental>0),
+    ...resKeys.map(([k,label])=>{ const v = totalRes(k); return tile(label, (v>=0?'+':'')+v+'%'); }),
+  ].join('');
+  const setCounts = Object.entries(setPieceCounts(state.char.equip));
+  const conjuntos = setCounts.length ? setCounts.map(([setId,n])=>{
+    const set = SET_CATALOG[setId], b = SET_BONUSES[setId];
+    return `<div class="fc-set"><div class="fc-set-head"><b>${set.name}</b><span>${n} / 5 piezas</span></div>
+      ${[2,3,5].filter(k=>b[k]).map(k=>`<div class="fc-set-line ${n>=k?'on':''}"><i>${k}</i><span><b>${b[k].name}</b> ${b[k].text}</span></div>`).join('')}</div>`;
+  }).join('') : '<p class="inv-empty-msg">No llevas piezas de ningún conjunto.</p>';
+  const equipTiles = EQUIP_SLOTS.map(slot=>{
+    const it = state.char.equip[slot];
+    return it ? `<div class="fc-eq" style="--rc:${RARITIES[it.rarity||'comun'].color}">${itemArtTileHTML(it, 52)}</div>`
+              : `<div class="fc-eq empty" title="${slotLabel(slot)}: vacío"><span>${slotLabel(slot)}</span></div>`;
+  }).join('');
+  const tabs = [['ataque','⚔️ Ataque'],['defensa','🛡️ Defensa'],['conjuntos','✨ Conjuntos']];
+  document.getElementById('main-panel').innerHTML = `
+    <div class="fc">
+      <div class="fc-left">
+        <div class="fc-portrait"><img src="${playerSpriteFor(state.char.style, state.char.race)||''}" alt=""><span class="fc-lvl">Nivel ${state.char.level}</span></div>
+        <div class="fc-name">${state.char.nickname}${renownBadge(myBossesBeaten())}</div>
+        <div class="fc-sub"><img src="src/assets/razas/${r.id}.png" alt="" onerror="this.remove()">${r.name} · <img src="src/assets/clases/${st.id}.png" alt="" onerror="this.remove()">${st.name}</div>
+        <div class="fc-xp"><div class="bar-track"><div class="bar-fill xp" style="width:${xpPct}%"></div></div><small>${state.char.xp} / ${xpNeeded} de experiencia</small></div>
+        <div class="fc-passive"><b>Rasgo: ${r.passive}</b>${r.passiveDesc}</div>
+        <div class="fc-equip">${equipTiles}</div>
+        <button class="reset-btn" id="fc-inv">🎒 Abrir inventario</button>
+      </div>
+      <div class="fc-right">
+        <div class="fc-vitals">${bar('Vida', state.char.curHP, d.maxHP, 'hp')}${bar('MP', state.char.curSta, d.maxSta, 'st')}${bar('Espíritu', state.char.curSpi, d.maxSpi, 'sp')}</div>
+        <div class="fc-attrs">${attrsHTML}</div>
+        <div class="rk-tabs fc-tabs">${tabs.map(([k,l])=>`<button class="${fichaTab===k?'on':''}" data-fc-tab="${k}">${l}</button>`).join('')}</div>
+        <div class="${fichaTab==='conjuntos'?'':'fc-tiles'}">${fichaTab==='ataque' ? ataque : fichaTab==='defensa' ? defensa : conjuntos}</div>
+        ${fichaTab==='defensa' ? '<p class="sc-note" style="margin-top:8px;">La evasión mostrada es fuera de combate; en combate varía según el nivel del enemigo y tus efectos activos.</p>' : ''}
+      </div>
+    </div>`;
+  document.querySelectorAll('[data-fc-tab]').forEach(b=>{ b.onclick = ()=>{ fichaTab = b.dataset.fcTab; renderFicha(); }; });
+  document.getElementById('fc-inv').onclick = ()=> cityNavigate('inv');
 }
 
 /* ============================================================
@@ -5722,7 +5810,10 @@ function renderSideNav(){
       : opts.badge ? `<span class="sn-badge${opts.badge==='!'?' bang':''}">${opts.badge}</span>` : '';
     return `<div class="sn-item ${active===key?'on':''} ${opts.locked?'locked':''}" data-sn="${key}" ${opts.locked?`title="${opts.lockWhy||''}"`:''}><span class="sn-ic">${ic}</span><span class="sn-txt">${name}</span>${right}</div>`;
   };
+  const hdrShown = (id)=>{ const b = document.getElementById(id); return !!b && b.style.display !== 'none'; };
+  const muted = /🔇/.test((document.getElementById('btn-music-toggle')||{}).textContent||'');
   el.innerHTML = `
+    <div class="sn-brand"><b>Dungeon &amp; Stone</b><span id="sn-clock" title="Hora de Ecuador (UTC-5)">${(document.getElementById('clock-time')||{}).textContent||''}</span></div>
     <div class="sn-me">
       <div class="sn-ava"><img src="${playerSpriteFor(state.char.style, state.char.race)||''}" alt=""><span class="sn-lvl">${state.char.level}</span></div>
       <div class="sn-who">
@@ -5759,9 +5850,21 @@ function renderSideNav(){
     <div class="sn-sec"><h5>Cuenta</h5>
       ${item('tutorial','❓','¿Cómo jugar?')}
       ${item('options','⚙️','Opciones')}
+      ${item('hdr:btn-music-toggle', muted?'🔇':'🔊', muted?'Música: silenciada':'Música: activada')}
+      ${hdrShown('btn-switch-char') ? item('hdr:btn-switch-char','👥','Cambiar de personaje') : ''}
+      ${item('hdr:btn-slots','🚪','Cerrar sesión')}
+      ${hdrShown('btn-reset') ? `<div class="sn-item sn-danger" data-sn="hdr:btn-reset"><span class="sn-ic">🗑️</span><span class="sn-txt">Borrar personaje</span></div>` : ''}
     </div>
     </div>`;
-  el.querySelectorAll('.sn-item').forEach(it=>{ it.onclick = ()=> cityNavigate(it.dataset.sn); });
+  el.querySelectorAll('.sn-item').forEach(it=>{ it.onclick = ()=>{
+    // "hdr:<id>": acciones de cuenta que siguen cableadas en la barra de arriba (oculta en la ciudad).
+    if(it.dataset.sn.startsWith('hdr:')){
+      document.getElementById(it.dataset.sn.slice(4)).click();
+      if(it.dataset.sn==='hdr:btn-music-toggle') renderSideNav();
+      return;
+    }
+    cityNavigate(it.dataset.sn);
+  }; });
 }
 function cityNavigate(key){
   if(!state || (combat && combat.active)) return;
@@ -5809,11 +5912,7 @@ function renderCity(){
   ensureCityView();
   if(cityView==='welcome') return renderCityWelcome();
   if(cityView==='laberinto') return renderCityDungeonEntry();
-  if(cityView==='ficha'){
-    renderSheetPanel('main-panel');
-    document.getElementById('main-panel').insertAdjacentHTML('afterbegin', `<h3 style="color:var(--bronze-light); margin-bottom:10px;">Ficha del personaje</h3>`);
-    return;
-  }
+  if(cityView==='ficha') return renderFicha();
   return renderCityMap();
 }
 // Bienvenida narrada (2026-10-02, pedido explícito): un cronista cuenta el
@@ -13174,6 +13273,8 @@ function updateClockBadge(){
   const hh = String(ecuadorHour).padStart(2,'0');
   const mm = String(now.getUTCMinutes()).padStart(2,'0');
   document.getElementById('clock-time').textContent = `${hh}:${mm}`;
+  const snClock = document.getElementById('sn-clock');
+  if(snClock) snClock.textContent = `${hh}:${mm}`;
 }
 
 // hide(id): getElementById + set display, sin reventar si el header todavía
