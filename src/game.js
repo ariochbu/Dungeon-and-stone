@@ -4648,7 +4648,7 @@ function specialDisplayText(sp){
 const MOD_LABELS = {maxhp_flat:'Vida máxima', precision:'Precisión', res_magica:'Resistencia mágica', resistencia_estado:'Resistencia a efectos de estado', fortaleza_mental:'Fortaleza mental', mp_flat:'MP', espiritu_flat:'Espíritu máximo',
   fis:'Físico', hab:'Habilidad', esp:'Espíritu', agi:'Agilidad', vig:'Vigor', res_fisica:'Resistencia física'};
 const MOD_IS_PERCENT = new Set(['precision','resistencia_estado','fortaleza_mental','res_fisica']);
-function itemBonusText(item){
+function itemBonusLines(item){
   const parts = [];
   if(item.bonus && item.bonus.value!==0){
     parts.push(item.bonus.stat
@@ -4661,6 +4661,10 @@ function itemBonusText(item){
   });
   const specials = item.specials || (item.special ? [item.special] : []);
   specials.forEach(sp=> parts.push(specialDisplayText(sp)));
+  return parts;
+}
+function itemBonusText(item){
+  const parts = itemBonusLines(item);
   return parts.join(', ') + (parts.length ? '.' : '');
 }
 // Ícono por tipo de slot (y, en arma/arma2, por senda del arma) — pedido
@@ -4755,8 +4759,7 @@ const WEAPON_CLEAN_ART = new Set(['arco_corto', 'arco_largo', 'baston_runico', '
 function weaponArtPath(it){
   const slug = WEAPON_NAME_SLUG[weaponBaseName(it.name)];
   if(!slug || !WEAPON_ART_RARITIES.has(it.rarity)) return null;
-  if(WEAPON_CLEAN_ART.has(slug)) return `src/assets/armas/arte/${slug}.jpg?v=2`;
-  return `src/assets/armas/${slug}_${it.rarity}.png`;
+  return WEAPON_CLEAN_ART.has(slug) ? `src/assets/armas/arte/${slug}.jpg?v=2` : null; // las imágenes viejas por rango se retiraron
 }
 // Arte real de equipo general por senda (2026-09-25, pedido explícito:
 // "continúa con cascos y armadura", luego "guantes y botas"). A diferencia
@@ -4769,8 +4772,15 @@ function weaponArtPath(it){
 // Conjuntos con imagen recortada (src/assets/equipo/sets/<set>_<slot>_<rango>.png).
 // Los que no figuran acá caen a la silueta genérica sin pedir un 404.
 const SET_ART = {jack:SET_SLOTS, artemisa:SET_SLOTS, soberano:SET_SLOTS, bastion:SET_SLOTS, eclipse:SET_SLOTS, gracia:SET_SLOTS, guardian:SET_SLOTS, voluntad:SET_SLOTS};
+// Arte limpio de piezas de conjunto (2026-10-03): igual que las armas, una
+// ilustración por pieza para todos los rangos en
+// src/assets/equipo/arte/<set>_<slot>.jpg (el SS queda fuera). Las claves
+// "<set>_<slot>" listadas acá ya la tienen; el resto sigue con su imagen
+// vieja por rango. Importar con tools/import_equipo.py.
+const GEAR_CLEAN_ART = new Set([]);
 function gearArtPath(it){
   if(!it.setId || !(SET_ART[it.setId]||[]).includes(it.slot) || !WEAPON_ART_RARITIES.has(it.rarity)) return null;
+  if(GEAR_CLEAN_ART.has(`${it.setId}_${it.slot}`)) return `src/assets/equipo/arte/${it.setId}_${it.slot}.jpg?v=1`;
   return `src/assets/equipo/sets/${it.setId}_${it.slot}_${it.rarity}.png`;
 }
 // Una piedra de alma SIEMPRE trae `.tier` (letra E-SS) y NUNCA `.rarity`; el
@@ -4797,7 +4807,68 @@ function itemArtShape(it){
 // respaldo para cualquier tier que falte.
 const SOUL_STONE_ART = {};
 ['F','E','D','C','B','A','S','SS'].forEach(t=> SOUL_STONE_ART[t] = `src/assets/piedras/${t}.png`);
-function itemArtTileHTML(it, px){
+// Carta de objeto al pasar el cursor / mantener presionado (2026-10-03,
+// pedido explícito: "que al pasar por encima del arma se revelen las
+// estadísticas, como sucede con los Caídos"). Cada tile de objeto se registra
+// con una clave (data-item-zoom) y un único par de listeners delegados en
+// document muestra la carta en la misma capa de zoom de los Caídos. Sirve
+// para armas, equipo y piedras de alma, en cualquier pantalla que use
+// itemArtTileHTML (mochila, ranuras, tienda, botín...).
+const ITEM_ZOOM_REG = new Map();
+let itemZoomSeq = 0, itemZoomShown = null;
+function registerItemZoom(it){
+  const key = 'z' + (++itemZoomSeq);
+  ITEM_ZOOM_REG.set(key, it);
+  if(ITEM_ZOOM_REG.size > 3000){ // las entradas viejas son de pantallas ya redibujadas
+    let n = 0;
+    for(const k of ITEM_ZOOM_REG.keys()){ ITEM_ZOOM_REG.delete(k); if(++n >= 1500) break; }
+  }
+  return key;
+}
+function itemCardHTML(it){
+  const isStone = isSoulStoneLike(it);
+  const color = isStone ? (SOUL_TIER_COLORS[it.tier]||'#9a958c') : RARITIES[it.rarity||'comun'].color;
+  const rankName = isStone ? `Piedra de alma · ${it.tier}` : RARITIES[it.rarity||'comun'].name;
+  const set = !isStone && it.setId ? SET_CATALOG[it.setId] : null;
+  const subParts = isStone ? [] : [slotLabel(it.slot)];
+  if(!isStone && it.styleId) subParts.push(SHOP_ROLE_LABELS[it.styleId] || it.styleId);
+  if(set) subParts.push(`Conjunto: ${set.name}`);
+  const lines = isStone ? (it.desc ? [it.desc] : []) : itemBonusLines(it);
+  const minLvl = isStone ? stoneEquipMinLevel(it.tier) : gearEquipMinLevel(it.rarity);
+  const setB = set && SET_BONUSES[it.setId];
+  return `<div class="pet-card item-card" style="--rc:${color}">
+    <div class="pet-card-art item">${itemArtTileHTML(it, 190, true)}</div>
+    <div class="pet-card-body">
+      <div class="pet-card-name">${it.name}</div>
+      <div class="pet-card-rank">${rankName}</div>
+      ${subParts.length ? `<div class="item-card-sub">${subParts.join(' · ')}</div>` : ''}
+      <ul class="pet-card-bonuses">${lines.length ? lines.map(l=>`<li>${l}</li>`).join('') : '<li>Sin bonificaciones.</li>'}</ul>
+      ${setB ? `<div class="pet-card-unique"><b>Bonos del conjunto</b>${[2,3,5].filter(k=>setB[k]).map(k=>`<span class="item-card-setline"><i>${k} piezas · ${setB[k].name}</i> ${setB[k].text}</span>`).join('')}</div>` : ''}
+      ${minLvl>0 ? `<div class="item-card-sub">Nivel requerido: ${minLvl}</div>` : ''}
+    </div>
+  </div>`;
+}
+function showItemZoom(key){
+  const it = ITEM_ZOOM_REG.get(key);
+  if(!it) return;
+  const el = ensurePetZoomLayer();
+  if(itemZoomShown === key && el.classList.contains('visible')) return;
+  itemZoomShown = key;
+  const color = isSoulStoneLike(it) ? (SOUL_TIER_COLORS[it.tier]||'#9a958c') : RARITIES[it.rarity||'comun'].color;
+  el.innerHTML = itemCardHTML(it);
+  el.style.boxShadow = `0 0 0 3px ${color}, 0 0 34px ${color}99`;
+  el.classList.add('visible');
+}
+(()=>{
+  const tileOf = (e)=>{ const t = e.target && e.target.closest ? e.target.closest('[data-item-zoom]') : null; return t && !t.closest('#pet-zoom-preview') ? t : null; };
+  document.addEventListener('mouseover', (e)=>{ const t = tileOf(e); if(t) showItemZoom(t.dataset.itemZoom); });
+  document.addEventListener('mouseout', (e)=>{ const t = tileOf(e); if(t && !(e.relatedTarget && t.contains(e.relatedTarget))){ itemZoomShown = null; hidePetZoom(); } });
+  document.addEventListener('touchstart', (e)=>{ const t = tileOf(e); if(t) showItemZoom(t.dataset.itemZoom); }, {passive:true});
+  const end = ()=>{ if(itemZoomShown){ itemZoomShown = null; hidePetZoom(); } };
+  document.addEventListener('touchend', end);
+  document.addEventListener('touchcancel', end);
+})();
+function itemArtTileHTML(it, px, noZoom){
   px = px || 36;
   const isStone = isSoulStoneLike(it);
   const color = isStone ? (SOUL_TIER_COLORS[it.tier]||'#9a958c') : RARITIES[it.rarity||'comun'].color;
@@ -4815,7 +4886,7 @@ function itemArtTileHTML(it, px){
     inner = `<span style="font-size:${Math.round(px*0.55)}px;">${equipIcon(it)}</span>`;
   }
   const clean = !!artImg && artImg.includes('/arte/');
-  return `<div class="item-art-tile ${clean?'clean':''}" style="width:${px}px; height:${px}px; color:${color}; --rc:${color}; box-shadow:0 0 0 2px ${color}55 inset${glow};">${inner}</div>`;
+  return `<div class="item-art-tile ${clean?'clean':''}" ${noZoom ? '' : `data-item-zoom="${registerItemZoom(it)}"`} style="width:${px}px; height:${px}px; color:${color}; --rc:${color}; box-shadow:0 0 0 2px ${color}55 inset${glow};">${inner}</div>`;
 }
 // Envuelve el tile de ícono + el bloque de texto existente (nombre/pill/
 // descripción) en una fila flex — el texto no cambia una letra, solo se le
@@ -5154,7 +5225,7 @@ function renderInventory(){
     const label = slotLabel(slot);
     if(!it) return `<div class="pj-slot empty" title="${label}: vacío"><span>${label}</span></div>`;
     const r = RARITIES[it.rarity||'comun'];
-    return `<div class="pj-slot" data-unequip="${slot}" title="${label}: ${plainText(it.name)} — ${plainText(itemBonusText(it))}. Clic para quitar." style="--rc:${r.color}">
+    return `<div class="pj-slot" data-unequip="${slot}" title="Clic para quitar" style="--rc:${r.color}">
       ${itemArtTileHTML(it, 68)}<span class="pj-rank">${r.name}</span></div>`;
   };
   const stoneTiles = soulSlotsSource.map((stone, idx)=>{

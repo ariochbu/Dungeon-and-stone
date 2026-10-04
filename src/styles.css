@@ -1304,3 +1304,12 @@ details.admin-acc > summary > span{ flex:1; }
 /* "lighten": el fondo oscuro de la ilustración deja ver el aura y el objeto queda nítido encima */
 .item-art-tile.clean img{ position:relative; mix-blend-mode:lighten; }
 .pj-slot .item-art-tile.clean{ border-radius:4px; }
+
+/* Carta de objeto en el zoom (2026-10-03): misma carta que los Caídos */
+.pet-card-art.item{ aspect-ratio:auto; display:flex; align-items:center; justify-content:center; padding:16px 0 30px; background:radial-gradient(circle at 50% 45%, color-mix(in srgb, var(--rc) 22%, #14100c), #0e0b08 75%); }
+.pet-card-art.item::after{ height:30%; }
+.pet-card-art.item .item-art-tile{ border-radius:10px; }
+.item-card-sub{ font-size:0.82em; color:var(--text-dim); margin:0 0 8px; }
+.item-card .pet-card-bonuses + .item-card-sub, .item-card .pet-card-unique + .item-card-sub{ margin:8px 0 0; }
+.item-card-setline{ display:block; margin-top:4px; }
+.item-card-setline i{ font-style:normal; color:var(--rc); }
