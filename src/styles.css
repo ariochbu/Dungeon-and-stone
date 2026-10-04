@@ -1295,3 +1295,12 @@ details.admin-acc > summary > span{ flex:1; }
 }
 .of-offers.three .of-offer-miss{ font-size:0.68em; }
 .of-offers.three .of-offer-badge{ right:50%; transform:translateX(50%); white-space:nowrap; }
+
+/* Arte limpio de equipo (2026-10-03): una ilustración por objeto sobre fondo
+   oscuro; el color del rango (--rc) se suma encima como un aura. */
+.item-art-tile.clean{ position:relative; overflow:hidden; isolation:isolate; }
+.item-art-tile.clean::before{ content:''; position:absolute; inset:0; pointer-events:none;
+  background:radial-gradient(circle at 50% 55%, color-mix(in srgb, var(--rc) 62%, #000) 0%, color-mix(in srgb, var(--rc) 26%, #000) 55%, #0b0a09 100%); }
+/* "lighten": el fondo oscuro de la ilustración deja ver el aura y el objeto queda nítido encima */
+.item-art-tile.clean img{ position:relative; mix-blend-mode:lighten; }
+.pj-slot .item-art-tile.clean{ border-radius:4px; }

@@ -4744,9 +4744,18 @@ const WEAPON_NAME_SLUG = {
   'Cetro de Penitencia':'cetro_de_penitencia', 'Vara de la Salvaguarda':'vara_de_la_salvaguarda'
 };
 const WEAPON_ART_RARITIES = new Set(['comun','poco_comun','raro','rango_b','rango_a','legendario']);
+// Arte limpio de armas (2026-10-03, decisión de ariochbu: "un solo diseño
+// para todos"): una ilustración por arma, sin fondo de color, en
+// src/assets/armas/arte/<slug>.jpg; el rango lo pinta el juego (ver
+// .item-art-tile.clean). El rango SS queda FUERA a propósito: sus armas aún
+// no tienen ni estadísticas ni forma definidas, así que sigue sin arte como
+// hasta ahora. Lo que no figure acá sigue con su imagen vieja por rango.
+// Importar con tools/import_armas.py, que imprime la lista.
+const WEAPON_CLEAN_ART = new Set(['arco_corto', 'arco_largo', 'baston_runico', 'carcaj_de_cuero', 'cetro_de_penitencia', 'cetro_del_devorador', 'cuchillo_gemelo', 'cuchillo_largo', 'daga_curva', 'daga_gemela', 'escudo_de_hierro', 'escudo_de_la_vigilia', 'espada_del_heraldo', 'espadon_pesado', 'foco_arcano', 'grimorio_de_plegarias', 'libro_de_las_maldiciones', 'martillo_de_guerra', 'maza_de_combate', 'maza_del_guardian', 'orbe_de_las_almas', 'sello_de_la_sentencia', 'tomo_sagrado', 'vara_arcana', 'vara_de_la_ruina', 'vara_de_la_salvaguarda']);
 function weaponArtPath(it){
   const slug = WEAPON_NAME_SLUG[weaponBaseName(it.name)];
   if(!slug || !WEAPON_ART_RARITIES.has(it.rarity)) return null;
+  if(WEAPON_CLEAN_ART.has(slug)) return `src/assets/armas/arte/${slug}.jpg?v=2`;
   return `src/assets/armas/${slug}_${it.rarity}.png`;
 }
 // Arte real de equipo general por senda (2026-09-25, pedido explícito:
@@ -4799,13 +4808,14 @@ function itemArtTileHTML(it, px){
   let inner;
   if(artImg){
     const fallbackIcon = isStone ? '💎' : equipIcon(it);
-    inner = `<img src="${artImg}" alt="" style="width:100%; height:100%; object-fit:contain;" onerror="this.replaceWith(Object.assign(document.createElement('span'),{style:'font-size:${Math.round(px*0.55)}px', textContent:'${fallbackIcon}'}))">`;
+    inner = `<img src="${artImg}" alt="" style="width:100%; height:100%; object-fit:${artImg.includes('/arte/')?'cover':'contain'};" onerror="this.replaceWith(Object.assign(document.createElement('span'),{style:'font-size:${Math.round(px*0.55)}px', textContent:'${fallbackIcon}'}))">`;
   } else if(shape){
     inner = `<svg viewBox="0 0 24 24" width="${Math.round(px*0.62)}" height="${Math.round(px*0.62)}" fill="currentColor">${ITEM_ART_SHAPES[shape]}</svg>`;
   } else {
     inner = `<span style="font-size:${Math.round(px*0.55)}px;">${equipIcon(it)}</span>`;
   }
-  return `<div class="item-art-tile" style="width:${px}px; height:${px}px; color:${color}; box-shadow:0 0 0 2px ${color}55 inset${glow};">${inner}</div>`;
+  const clean = !!artImg && artImg.includes('/arte/');
+  return `<div class="item-art-tile ${clean?'clean':''}" style="width:${px}px; height:${px}px; color:${color}; --rc:${color}; box-shadow:0 0 0 2px ${color}55 inset${glow};">${inner}</div>`;
 }
 // Envuelve el tile de ícono + el bloque de texto existente (nombre/pill/
 // descripción) en una fila flex — el texto no cambia una letra, solo se le
