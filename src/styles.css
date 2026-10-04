@@ -877,6 +877,11 @@ details.admin-acc > summary > span{ flex:1; }
   border:1px solid rgba(201,162,93,0.45); color:var(--bronze-light); background:rgba(201,162,93,0.08); letter-spacing:0.03em; }
 .renown-badge.renown-3{ color:#e9d27a; border-color:rgba(233,210,122,0.6); background:rgba(233,210,122,0.10); }
 .renown-badge.renown-4{ color:#ffd76a; border-color:#ffd76a; background:rgba(255,215,106,0.14); box-shadow:0 0 8px rgba(255,215,106,0.35); }
+/* Títulos altos (pisos 60, 80 y 100) */
+.renown-badge.renown-5{ color:#8fc3ea; border-color:rgba(143,195,234,0.6); background:rgba(143,195,234,0.10); }
+.renown-badge.renown-6{ color:#c09bea; border-color:rgba(192,155,234,0.6); background:rgba(192,155,234,0.10); }
+.renown-badge.renown-7{ color:#e58b84; border-color:rgba(229,139,132,0.65); background:rgba(229,139,132,0.10); }
+.renown-badge.renown-8{ color:#ff8f86; border-color:#e0393f; background:rgba(224,57,63,0.16); box-shadow:0 0 8px rgba(224,57,63,0.4); }
 .renown-note{ font-size:0.88em; color:var(--text); background:rgba(201,162,93,0.07); border-left:3px solid var(--bronze-light); padding:6px 10px; border-radius:4px; }
 
 /* ============================================================
@@ -1579,7 +1584,7 @@ body.city-mode:has(#screen-game.active) header.top{ display:none; }
   .fc-attr{ grid-template-columns:24px minmax(86px, 0.8fr) 1fr 40px; gap:8px; padding:6px 8px; }
   .fc-tiles{ grid-template-columns:repeat(2, 1fr); }
 }
-.fc-title{ display:flex; align-items:center; justify-content:center; gap:8px; margin:6px 0 2px; font-size:0.86em; color:var(--text-dim); }
+.fc-title{ display:flex; align-items:center; gap:10px; font-size:0.9em; color:var(--text-dim); }
 .fc-title label{ font-family:'Cinzel'; text-transform:uppercase; letter-spacing:1px; font-size:0.85em; }
 .fc-title select{ width:auto; margin:0; padding:4px 8px; }
 
@@ -1605,3 +1610,11 @@ body.city-mode:has(#screen-game.active) header.top{ display:none; }
 .bag-worn{ font-size:0.8em; color:var(--text-dim); margin-bottom:8px; }
 .bag-detail .btn-main{ width:100%; }
 @media (max-width:640px){ .bag-grid{ grid-template-columns:repeat(auto-fill, minmax(54px, 1fr)); gap:6px; padding:8px; } }
+.fc-titlebox{ --rc:#6b5d4d; margin-top:12px; padding:10px 12px; border-radius:6px; border:1px solid var(--border); background:rgba(0,0,0,0.2); }
+.fc-title-desc{ margin-top:6px; font-size:0.86em; color:var(--text-dim); line-height:1.35; }
+/* Beneficios del título: líneas como las de una pieza de equipo (2026-10-04, sin dorado) */
+.fc-title-desc .pet-card-bonuses{ margin:6px 0 4px; color:var(--text); }
+/* La Crónica solo se ve dentro del laberinto (2026-10-04) */
+body.city-mode:has(#screen-game.active) #log-panel{ display:none; }
+.fx-toast.notice{ white-space:normal; max-width:min(90vw, 440px); font-size:0.9em; border-color:var(--bronze); }
+.fc-title-desc small{ display:block; opacity:0.8; }

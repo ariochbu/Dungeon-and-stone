@@ -167,17 +167,93 @@ const MAX_ALLIES = 4;
 // Al lanzar la beta: poner true (y el límite equivalente en hire_ally).
 // ============================================================
 let BETA_ALLY_UNLOCKS = false;
-const RENOWN_TITLES = ['', 'Aventurero', 'Renombrado', 'Héroe', 'Leyenda'];
-// Jefes de década derrotados (0-4) a partir del checkpoint y del récord:
-// llegar al nivel 11 implica haber vencido al Ogro, al 21 a la Matriarca...
-function decadeBossesBeaten(checkpointLevel, recordLevel){
-  const n = Math.max(Math.floor(((checkpointLevel||1)-1)/10), Math.floor(((recordLevel||1)-1)/10));
-  return Math.max(0, Math.min(4, n));
+const RENOWN_TITLES = ['', 'Aventurero', 'Renombrado', 'Héroe', 'Leyenda',
+  'El que sobrevivió a la tormenta', 'Inmune al caos', 'Retornado del laberinto', 'El primer retornado'];
+// Títulos altos (pedido explícito 2026-10-04): pisos 60, 80 y 100. Jefes de
+// década que exige cada título (índice = id del título). Los dos últimos
+// piden el jefe del piso 100; "El primer retornado" además solo lo tiene el
+// PRIMER personaje que lo derrota (characters.first_retornado, lo decide la
+// base — migración 0032 —, nunca el cliente).
+const TITLE_BOSSES = [0, 1, 2, 3, 4, 6, 8, 10, 10];
+const TITLE_FIRST_RETORNADO = 8;
+// Beneficios del título EN USO — "Fama" (opción elegida por ariochbu el
+// 2026-10-04: beneficios muy sutiles, de economía y no de combate, donde cada
+// título mejora al anterior). Solo cuenta el título que el jugador lleva
+// puesto (myTitleN()), nunca se suman varios.
+//   gold: más oro del laberinto (combates y cofres)
+//   tax:  parte del impuesto del 10% al volver a la ciudad que se perdona
+//   xp:   más experiencia para el jugador (los aliados reciben la base)
+//   wage: rebaja del sueldo de los aliados
+const TITLE_PERKS = [
+  {gold:0,    tax:0,    xp:0,    wage:0},
+  {gold:0.02, tax:0,    xp:0,    wage:0},     // Aventurero
+  {gold:0.04, tax:0.05, xp:0,    wage:0},     // Renombrado
+  {gold:0.06, tax:0.10, xp:0.02, wage:0},     // Héroe
+  {gold:0.08, tax:0.15, xp:0.04, wage:0.05},  // Leyenda
+  {gold:0.08, tax:0.15, xp:0.04, wage:0.05},  // del piso 60 en adelante: la economía de Leyenda...
+  {gold:0.08, tax:0.15, xp:0.04, wage:0.05},
+  {gold:0.08, tax:0.15, xp:0.04, wage:0.05},
+  {gold:0.08, tax:0.15, xp:0.04, wage:0.05},
+];
+// ...y además stats de COMBATE (pedido explícito 2026-10-04: "estos ya deben
+// dar stats de combate"). Mismo vocabulario que los bonuses de PET_CATALOG:
+// entran por petModSum/specialsFromPets, así que reutilizan toda la lógica de
+// combate existente. Solo para el jugador, y solo el título que lleva puesto.
+const TITLE_BONUSES = [[], [], [], [], [],
+  [{type:'aumento_dano', value:0.03}, {mod:'maxhp_flat', value:150}],
+  [{type:'aumento_dano', value:0.05}, {mod:'maxhp_flat', value:250}, {mod:'resistencia_estado', value:10}],
+  [{type:'aumento_dano', value:0.08}, {mod:'maxhp_flat', value:400}, {type:'reduccion_dano', value:0.05}],
+  [{type:'aumento_dano', value:0.10}, {mod:'maxhp_flat', value:500}, {type:'reduccion_dano', value:0.05}, {type:'prob_critico', value:0.05}],
+];
+function titlePerks(){ return TITLE_PERKS[state && state.char ? myTitleN() : 0] || TITLE_PERKS[0]; }
+function titleBonuses(){ return TITLE_BONUSES[state && state.char ? myTitleN() : 0] || []; }
+function titlePerksText(n){
+  const p = TITLE_PERKS[n] || TITLE_PERKS[0];
+  const pc = (v)=> Math.round(v*100)+'%';
+  return petBonusLines({bonuses: TITLE_BONUSES[n] || []}).concat(
+         [p.gold ? `+${pc(p.gold)} de oro en el laberinto` : '', p.tax ? `−${pc(p.tax)} de impuestos al volver` : '',
+          p.xp ? `+${pc(p.xp)} de experiencia` : '', p.wage ? `−${pc(p.wage)} en el sueldo de tus aliados` : ''].filter(Boolean));
+}
+const RENOWN_TITLE_HOW = ['',
+  'Lo ganaste al derrotar al Ogro, guardián del nivel 10.',
+  'Lo ganaste al derrotar a la Matriarca Escarlata, guardiana del nivel 20.',
+  'Lo ganaste al derrotar a Riakis, guardián del nivel 30.',
+  'Lo ganaste al derrotar al Usurpador Sin Nombre, guardián del nivel 40.',
+  'Lo ganaste al derrotar a Storm Gush, guardián del nivel 60.',
+  'Lo ganaste al derrotar al guardián del nivel 80.',
+  'Lo ganaste al derrotar al guardián del nivel 100.',
+  'Fuiste el primero en derrotar al guardián del nivel 100. Nadie más puede llevarlo.'];
+// Jefes de década derrotados (0-10). Hasta el 40 se deduce del checkpoint y
+// del récord (llegar al nivel 11 implica haber vencido al Ogro, al 21 a la
+// Matriarca...). Eso no alcanza para el último jefe implementado: el
+// checkpoint y el récord topan en LEVEL_CAP, así que vencer al del piso 60 no
+// dejaba rastro. Por eso `stored` (characters.bosses_beaten, migración 0032)
+// guarda la cuenta real; se toma el mayor de los tres.
+function decadeBossesBeaten(checkpointLevel, recordLevel, stored){
+  const n = Math.max(Math.floor(((checkpointLevel||1)-1)/10), Math.floor(((recordLevel||1)-1)/10), stored||0);
+  return Math.max(0, Math.min(10, n));
 }
 function myBossesBeaten(){
-  return decadeBossesBeaten(state.char.checkpointLevel, state.char.record && state.char.record.level);
+  return decadeBossesBeaten(state.char.checkpointLevel, state.char.record && state.char.record.level, state.char.bossesBeaten);
 }
-function renownTitle(n){ return RENOWN_TITLES[Math.max(0, Math.min(4, n||0))] || ''; }
+// Anota un jefe de década vencido (ver handleVictory).
+function noteDecadeBossBeaten(clearedLevel){
+  state.char.bossesBeaten = Math.max(state.char.bossesBeaten||0, Math.floor(clearedLevel/10));
+}
+// Jefes que cuentan para títulos: sin la migración 0032 (bosses_beaten y el
+// check ampliado de title_choice) solo existen los cuatro primeros — elegir
+// uno más alto haría que la base rechazara el guardado.
+function myTitleBosses(){ return state.char.bossesColumn ? myBossesBeaten() : Math.min(4, myBossesBeaten()); }
+// Ids de los títulos ganados, de menor a mayor.
+function earnedTitles(bosses, firstRetornado){
+  const out = [];
+  for(let k=1; k<RENOWN_TITLES.length; k++){
+    if(bosses >= TITLE_BOSSES[k] && (k!==TITLE_FIRST_RETORNADO || firstRetornado)) out.push(k);
+  }
+  return out;
+}
+function myEarnedTitles(){ return earnedTitles(myTitleBosses(), !!state.char.firstRetornado); }
+function renownTitle(n){ return RENOWN_TITLES[Math.max(0, Math.min(RENOWN_TITLES.length-1, n||0))] || ''; }
 function renownBadge(n){
   const t = renownTitle(n);
   return t ? ` <span class="renown-badge renown-${n}" title="Título por jefes de década derrotados">${t}</span>` : '';
@@ -188,9 +264,12 @@ function renownBadge(n){
 // characters.title_choice (migración 0031) para que lo vean los demás en el
 // ranking; si esa columna aún no existe, queda guardado solo en este
 // dispositivo. Nunca puede mostrarse un título no ganado: se recorta al
-// número de jefes de década derrotados.
-function titleFromChoice(choice, earned){
-  return choice===null || choice===undefined ? earned : Math.max(0, Math.min(earned, choice));
+// más alto de los ganados que no pase del elegido.
+function titleFromChoice(choice, bosses, firstRetornado){
+  const earned = earnedTitles(bosses, firstRetornado);
+  const top = earned.length ? earned[earned.length-1] : 0;
+  if(choice===null || choice===undefined) return top;
+  return earned.filter(k=> k<=choice).pop() || 0;
 }
 function myTitleN(){
   let choice = state.char.titleChoice;
@@ -198,7 +277,7 @@ function myTitleN(){
     const local = lsGet(charKey('title'));
     choice = local===null || local==='' ? null : parseInt(local, 10);
   }
-  return titleFromChoice(Number.isFinite(choice) ? choice : null, myBossesBeaten());
+  return titleFromChoice(Number.isFinite(choice) ? choice : null, myTitleBosses(), !!state.char.firstRetornado);
 }
 function setMyTitle(choice){
   state.char.titleChoice = choice;
@@ -1615,6 +1694,7 @@ function petStatSum(key){
 function petModSum(key){
   let total = 0;
   equippedPets().forEach(p=> p.bonuses.forEach(b=>{ if(b.mod===key) total += b.value; }));
+  titleBonuses().forEach(b=>{ if(b.mod===key) total += b.value; }); // título en uso (ver TITLE_BONUSES)
   return total;
 }
 // Todos los bonuses {type:...} de las mascotas equipadas, en el MISMO
@@ -1626,6 +1706,7 @@ function petModSum(key){
 function specialsFromPets(){
   const out = [];
   equippedPets().forEach(p=> p.bonuses.forEach(b=>{ if(b.type) out.push(b); }));
+  titleBonuses().forEach(b=>{ if(b.type) out.push(b); }); // título en uso (ver TITLE_BONUSES)
   return out;
 }
 function petUniqueEffects(){
@@ -3542,7 +3623,21 @@ function log(msg){
   state.log.push(msg);
   if(state.log.length > 60) state.log.shift();
   renderLog();
+  cityNotice(msg);
   save();
+}
+// La Crónica ya no se ve en la ciudad (decisión de ariochbu 2026-10-04: solo
+// queda en el laberinto, como relato de los turnos). El registro se sigue
+// escribiendo igual, oculto. Para que una acción rechazada en la ciudad no
+// quede sin explicación ("No tienes esa cantidad de oro", "requiere nivel
+// 20", "El Hogar está lleno") ni pase inadvertido un regalo, esas líneas
+// salen como un aviso breve. Los fallos de guardado NO se muestran al jugador.
+function cityNotice(msg){
+  if(!inCityMode()) return;
+  const plain = String(msg).replace(/<[^>]+>/g,'').trim();
+  if(!/^(No |Ingresa )|requiere nivel|está lleno|no puede usarla|^🎁/.test(plain) || /No se pudo guardar/.test(plain)) return;
+  const gift = plain.startsWith('🎁');
+  spawnFxToast('notice', gift ? '🎁' : '❕', plain.replace(/^🎁\s*/, ''), null);
 }
 
 /* ============================================================
@@ -3851,6 +3946,7 @@ function characterToRow(){
     checkin: state.char.checkin,
     dungeon: state.dungeon,
     ...(state.char.titleColumn ? {title_choice: state.char.titleChoice===undefined ? null : state.char.titleChoice} : {}),
+    ...(state.char.bossesColumn ? {bosses_beaten: myBossesBeaten()} : {}),
     ...(sessionEnforced ? {last_session: SESSION_ID} : {})
   };
 }
@@ -3933,6 +4029,7 @@ function rowToState(row){
       id: row.id, slotNumber: row.slot_number, nickname: row.nickname,
       role: row.role, hiddenFromLeaderboard: row.hidden_from_leaderboard,
       titleChoice: row.title_choice===undefined ? null : row.title_choice, titleColumn: row.title_choice !== undefined,
+      bossesBeaten: row.bosses_beaten || 0, bossesColumn: row.bosses_beaten !== undefined, firstRetornado: !!row.first_retornado,
       race: row.race, style: row.style,
       level: row.level, xp: row.xp, gold: row.gold, missionCurrency: row.mission_currency || 0,
       missionRerollCycle: row.mission_reroll_cycle || null, missionRerollCount: row.mission_reroll_count || 0,
@@ -4037,25 +4134,42 @@ document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState=
 // medio de un combate: espera a que termine.
 // ============================================================
 const LOADED_VERSION = (()=>{ const m = import.meta.url.match(/[?&]v=(\d+)/); return m ? parseInt(m[1],10) : 0; })();
-let updatePending = false, updateShown = false;
+let updatePending = false, updateShown = false, updateChecking = false, updateVersion = 0;
 async function checkForUpdate(){
-  if(updateShown || !LOADED_VERSION) return;
+  if(updateShown || updateChecking || !LOADED_VERSION) return;
+  updateChecking = true;
+  try{ await checkForUpdateInner(); } finally { updateChecking = false; }
+}
+async function checkForUpdateInner(){
   if(!updatePending){
     try{
       const html = await (await fetch('index.html?_=' + Date.now(), {cache:'no-store'})).text();
       const m = html.match(/game\.js\?v=(\d+)/);
-      if(m && parseInt(m[1],10) > LOADED_VERSION) updatePending = true;
+      if(m && parseInt(m[1],10) > LOADED_VERSION){ updatePending = true; updateVersion = parseInt(m[1],10); }
     }catch(e){ return; }
   }
   if(!updatePending || (combat && !combat.over)) return; // en combate: esperar
-  updateShown = true;
   if(pendingSave) await flushSave();
+  // Bug real reportado 2026-10-04: el aviso salía en pleno combate. El
+  // guardado de arriba puede tardar varios segundos (más en datos móviles) y
+  // en ese lapso el jugador ya entró al siguiente combate desde el mapa. Se
+  // vuelve a comprobar DESPUÉS de guardar; si hay combate, se reintenta luego.
+  if(combat && !combat.over) return;
+  updateShown = true;
   const div = document.createElement('div');
   div.className = 'overlay-msg';
   div.style.zIndex = '99998';
   div.innerHTML = `<div class="overlay-card"><h2>¡Actualización disponible!</h2><p>Hay una nueva versión de Dungeon &amp; Stone. Tu progreso ya está guardado — recarga para seguir jugando con la versión nueva.</p><button class="btn-main" id="btn-update-reload">Recargar ahora</button></div>`;
   document.body.appendChild(div);
-  div.querySelector('#btn-update-reload').onclick = ()=> location.reload();
+  // Bug real reportado 2026-10-04: location.reload() podía volver a servir el
+  // index.html viejo desde la caché del navegador (sobre todo en el celular) y
+  // había que recargar una segunda vez. Ahora se refresca la copia en caché y
+  // se entra por una dirección nueva (?u=versión), que nunca está en caché.
+  div.querySelector('#btn-update-reload').onclick = async (e)=>{
+    e.target.disabled = true; e.target.textContent = 'Recargando…';
+    try{ await fetch(location.pathname, {cache:'reload'}); }catch(err){ /* igual se recarga */ }
+    location.replace(location.pathname + '?u=' + (updateVersion || Date.now()));
+  };
 }
 setInterval(()=>{ checkForUpdate(); }, 180000);
 // Mientras haya una actualización esperando a que termine un combate, se
@@ -4730,11 +4844,6 @@ function renderFicha(){
       <div class="fc-left">
         <div class="fc-portrait"><img src="${playerSpriteFor(state.char.style, state.char.race)||''}" alt=""><span class="fc-lvl">Nivel ${state.char.level}</span></div>
         <div class="fc-name">${state.char.nickname}${renownBadge(myTitleN())}</div>
-        <div class="fc-title">${myBossesBeaten()>0 ? `<label for="fc-title-sel">Título</label>
-          <select id="fc-title-sel" class="auth-input">
-            <option value="0" ${myTitleN()===0?'selected':''}>Sin título</option>
-            ${Array.from({length:myBossesBeaten()}, (_,i)=>i+1).map(k=>`<option value="${k}" ${myTitleN()===k?'selected':''}>${renownTitle(k)}</option>`).join('')}
-          </select>` : '<small>Aún sin títulos: el primero se gana al derrotar al Ogro (nivel 10).</small>'}</div>
         <div class="fc-sub"><img src="src/assets/razas/${r.id}.png" alt="" onerror="this.remove()">${r.name} · <img src="src/assets/clases/${st.id}.png" alt="" onerror="this.remove()">${st.name}</div>
         <div class="fc-xp"><div class="bar-track"><div class="bar-fill xp" style="width:${xpPct}%"></div></div><small>${state.char.xp} / ${xpNeeded} de experiencia</small></div>
         <div class="fc-passive"><b>Rasgo: ${r.passive}</b>${r.passiveDesc}</div>
@@ -4747,6 +4856,18 @@ function renderFicha(){
         <div class="rk-tabs fc-tabs">${tabs.map(([k,l])=>`<button class="${fichaTab===k?'on':''}" data-fc-tab="${k}">${l}</button>`).join('')}</div>
         <div class="${fichaTab==='conjuntos'?'':'fc-tiles'}">${fichaTab==='ataque' ? ataque : fichaTab==='defensa' ? defensa : conjuntos}</div>
         ${fichaTab==='defensa' ? '<p class="sc-note" style="margin-top:8px;">La evasión mostrada es fuera de combate; en combate varía según el nivel del enemigo y tus efectos activos.</p>' : ''}
+        <div class="fc-titlebox">
+          ${myEarnedTitles().length ? `
+          <div class="fc-title"><label for="fc-title-sel">Título</label>
+            <select id="fc-title-sel" class="auth-input">
+              <option value="0" ${myTitleN()===0?'selected':''}>Sin título</option>
+              ${myEarnedTitles().map(k=>`<option value="${k}" ${myTitleN()===k?'selected':''}>${renownTitle(k)}</option>`).join('')}
+            </select></div>
+          <div class="fc-title-desc">${myTitleN()>0 ? `${RENOWN_TITLE_HOW[myTitleN()]}
+            <ul class="pet-card-bonuses">${titlePerksText(myTitleN()).map(t=>`<li>${t}</li>`).join('')}</ul>
+            <small>Solo cuenta el título que llevas puesto.</small>` : 'No llevas ningún título puesto, así que no recibes sus beneficios.'}</div>`
+          : '<div class="fc-title-desc">Aún sin títulos: el primero, Aventurero, se gana al derrotar al Ogro (nivel 10).</div>'}
+        </div>
       </div>
     </div>`;
   document.querySelectorAll('[data-fc-tab]').forEach(b=>{ b.onclick = ()=>{ fichaTab = b.dataset.fcTab; renderFicha(); }; });
@@ -7037,7 +7158,7 @@ const ALLY_DESERTION_THRESHOLD = 15;
 function allyWage(row){
   const tpl = ALLY_ROSTER.find(t=>t.templateId===row.template_id);
   if(!tpl) return 0;
-  return Math.round(tpl.baseCost*0.08 + (row.level||1)*3);
+  return Math.round((tpl.baseCost*0.08 + (row.level||1)*3) * (1 - titlePerks().wage));
 }
 function desertAlly(row, reason){
   state.char.allies = (state.char.allies||[]).filter(a=>a.id!==row.id);
@@ -7189,7 +7310,7 @@ function renderTaberna(){
   // sentado a la mesa (tocar la mesa = satisfacción de todos; tocar a un
   // aliado = "¿pasa algo?" y ahí la opción de despedir, con confirmación).
   // Los aliados reales se dibujan con su sprite sobre las sillas vacías.
-  const famaHTML = BETA_ALLY_UNLOCKS ? `<p class="renown-note">Tu fama: <b>${renownTitle(myBossesBeaten())||'Desconocido'}</b>. Cada jefe de década que derrotes te da un cupo más (máximo ${MAX_ALLIES}).</p>` : '';
+  const famaHTML = BETA_ALLY_UNLOCKS ? `<p class="renown-note">Tu fama: <b>${renownTitle(titleFromChoice(null, myTitleBosses(), !!state.char.firstRetornado))||'Desconocido'}</b>. Cada jefe de década que derrotes te da un cupo más (máximo ${MAX_ALLIES}).</p>` : '';
   if(tabernaSection && tabernaSection.startsWith('ally:') && !allies.some(a=>a.id===tabernaSection.slice(5))) tabernaSection = null;
   if(!tabernaSection){
     const pendingGear = allies.some(a=>a.auto_gear_pending);
@@ -7356,7 +7477,7 @@ async function renderRanking(){
     return src ? `<img src="${src}" alt="">` : `<em>${(row.nickname||'?').charAt(0).toUpperCase()}</em>`;
   };
   const isMine = (row)=> row.nickname.toLowerCase() === state.char.nickname.toLowerCase();
-  const fame = (row)=> row.record_level ? renownBadge(titleFromChoice(row.title_choice, decadeBossesBeaten(1, row.record_level))) : '';
+  const fame = (row)=> row.record_level ? renownBadge(titleFromChoice(row.title_choice, decadeBossesBeaten(1, row.record_level, row.bosses_beaten), !!row.first_retornado)) : '';
   const podium = data.slice(0,3).map((row,i)=>`
     <div class="rk-pod p${i+1} ${isMine(row)?'mine':''}">
       <div class="rk-medal">${['🥇','🥈','🥉'][i]}</div>
@@ -8466,7 +8587,7 @@ function enterNode(f,n){
     // (ver rewardMult en handleVictory) ya escalaba bien con dg.level; los
     // cofres ahora usan el mismo +8% por piso real.
     const rewardMult = 1 + (dg.level-1)*0.08;
-    const gold = Math.round((rnd(8,18) + f*3) * rewardMult);
+    const gold = Math.round((rnd(8,18) + f*3) * rewardMult * (1 + titlePerks().gold));
     state.char.gold += gold;
     let msg = `Encuentras un cofre. +${gold} de oro.`;
     if(chance(0.6)){
@@ -12176,10 +12297,11 @@ function handleVictory(){
   // Las invocaciones/señuelos no cuentan para la recompensa (2026-10-02).
   const rewardEnemyCount = Math.max(1, combat.enemies.filter(e=>!e.summoned).length);
   const xpGain = Math.max(1, Math.round(perKillXP * xpGroupMultiplier(rewardEnemyCount) * (race().id==='humano'?1.1:1) * xpGapMultiplier() * earlyXpBoost(level) * XP_GLOBAL_BOOST));
-  const goldGain = Math.round((rnd(6,14)*rewardEnemyCount + (isBoss?60:isElite?20:0)) * rewardMult);
-  state.char.xp += xpGain;
+  const goldGain = Math.round((rnd(6,14)*rewardEnemyCount + (isBoss?60:isElite?20:0)) * rewardMult * (1 + titlePerks().gold));
+  const myXpGain = Math.max(1, Math.round(xpGain * (1 + titlePerks().xp))); // el bono del título es solo del jugador
+  state.char.xp += myXpGain;
   state.char.gold += goldGain;
-  log(`Victoria. +${xpGain} experiencia, +${goldGain} de oro.`);
+  log(`Victoria. +${myXpGain} experiencia, +${goldGain} de oro.`);
   combat.node.done = true;
 
   // La experiencia no se reparte: cada aliado recibe el mismo xpGain completo
@@ -12304,6 +12426,14 @@ function handleVictory(){
     // maxLevelUnlocked justo arriba.
     if(isDecadeFinal){
       state.char.checkpointLevel = Math.min(LEVEL_CAP, Math.max(state.char.checkpointLevel||1, clearedLevel+1));
+      noteDecadeBossBeaten(clearedLevel);
+      // "El primer retornado": lo concede la base al guardar el jefe del piso
+      // 100 (trigger de la migración 0032), así que se relee tras el guardado.
+      if(clearedLevel===100 && state.char.bossesColumn){
+        flushSave().then(()=> supabase.from('characters').select('first_retornado').eq('id', state.char.id).single())
+          .then(r=>{ if(r && r.data && r.data.first_retornado){ state.char.firstRetornado = true; log('Eres el primero en volver del fondo del laberinto: recibes el título <b>El primer retornado</b>.'); renderAll(); } })
+          .catch(()=>{});
+      }
     }
     // Jefe de la década 30: el Sacerdote desbloquea su equipo Épico (A)
     // completo, sin importar su propio nivel — a diferencia de Raro/Único,
@@ -12347,7 +12477,7 @@ function handleVictory(){
       }});
     }
     buttons.push({label:'Retirarse a la ciudad', primary:!canContinue, onClick:()=>{
-      const tax = Math.round(state.char.gold*0.1);
+      const tax = Math.round(state.char.gold*0.1 * (1 - titlePerks().tax));
       state.char.gold -= tax;
       log(`Regresas a la ciudad conservando tu botín. Se te cobran ${tax} de oro en impuestos.`);
       combat = null;
@@ -13221,7 +13351,7 @@ function renderCharacterSelect(rows){
       <div style="display:flex; align-items:center; gap:10px; min-width:0; flex:1;">
         <div class="sheet-emblem" style="width:40px; height:40px; font-size:1.3em;"><img src="src/assets/razas/${r.id}.png" alt="" onerror="this.replaceWith('${r.icon}')"></div>
         <div style="min-width:0; flex:1;">
-          <b>${row.nickname}</b>${renownBadge(titleFromChoice(row.title_choice, decadeBossesBeaten(row.checkpoint_level, row.record_level)))} <span class="slot-tag">${r.name} · ${s.name}</span>${row.role==='admin' ? ' <span class="slot-tag">admin</span>' : ''}
+          <b>${row.nickname}</b>${renownBadge(titleFromChoice(row.title_choice, decadeBossesBeaten(row.checkpoint_level, row.record_level, row.bosses_beaten), !!row.first_retornado))} <span class="slot-tag">${r.name} · ${s.name}</span>${row.role==='admin' ? ' <span class="slot-tag">admin</span>' : ''}
           <div class="inv-item-bonus neutral">Nivel ${row.level} · Récord: Nivel ${row.record_level} · Piso ${row.record_floor_idx}</div>
         </div>
       </div>
