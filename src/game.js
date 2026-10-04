@@ -3,6 +3,7 @@
 import { supabase } from './supabaseClient.js';
 import * as auth from './auth.js';
 import { syncBattleStage, playBattleAnim } from './battleStage.js?v=90';
+import { mountLabyrinth } from './labyrinthMap.js?v=1';
 import { CLASS_SPRITES, ENEMY_SPRITES, playerSpriteFor, enemySpriteFor, ALLY_TEMPLATE_SPRITES } from './battleSprites.js?v=83';
 
 /* ============================================================
@@ -8519,59 +8520,42 @@ function renderMap(){
     return;
   }
   const th = visualThreat(dg.level, state.char.level);
-  let html = `<h3 style="color:var(--bronze-light); margin-bottom:6px;">El laberinto — Nivel ${dg.level}</h3>
-  <p style="color:var(--text-dim); font-size:0.85em; margin-top:0;">Avanza piso a piso hasta el guardián. Elige tu ruta con cuidado. Amenaza: ⚠ ${th} · ${dg.floors.length} pisos.</p>
-  <div class="map-wrap"><div class="map-track">`;
-
-  dg.floors.forEach((nodes, fi)=>{
-    html += `<div class="floor-col">`;
-    if(fi===0) html += `<div class="floor-idx">Entrada</div>`;
-    else if(fi===dg.floors.length-1) html += `<div class="floor-idx">Guardián</div>`;
-    else html += `<div class="floor-idx">Piso ${fi}</div>`;
-
-    nodes.forEach((node, ni)=>{
-      const key = fi+'-'+ni;
-      const isCurrent = (fi===dg.atFloor && ni===dg.atNode);
-      const isVisited = !!dg.visited[key] && !isCurrent;
-      const isReachable = isNodeReachable(dg, fi, ni);
-      let cls = 'node';
-      if(isCurrent) cls += ' current';
-      else if(isVisited) cls += ' visited';
-      else if(isReachable) cls += ' reachable';
-      else cls += ' locked';
-      html += `<div class="${cls}" data-f="${fi}" data-n="${ni}" title="${nodeLabel(node.type)}">${nodeIcon(node.type)}${fi>0?`<div class="connector"></div>`:''}</div>`;
-    });
-    html += `</div>`;
-  });
-
-  html += `</div></div>
+  // Laberinto por salas (2026-10-04): el mapa de nodos con íconos pasó a ser
+  // una vista sobre el fondo de la década, con cada sala como un recuadro y el
+  // personaje caminando hasta la que se elige (ver labyrinthMap.js). Las
+  // reglas no cambian: mismas salas, misma isNodeReachable, mismo enterNode.
+  document.getElementById('main-panel').innerHTML = `<h3 style="color:var(--bronze-light); margin-bottom:6px;">El laberinto — Nivel ${dg.level}</h3>
+  <p style="color:var(--text-dim); font-size:0.85em; margin-top:0;">Toca una sala iluminada para avanzar; arrastra para mirar el resto. Amenaza: ⚠ ${th} · ${dg.floors.length} pisos.</p>
+  <div id="labyrinth-mount"></div>
   <div class="map-legend">
-    <span>🚪 Entrada</span><span>⚔️ Combate</span><span>💰 Tesoro</span><span>🔥 Descanso</span><span>☠️ Élite</span><span>🛡️ Jefe</span>
+    <span>⚔ Normal</span><span>☠ Élite</span><span>♛ Guardián</span><span>💰 Tesoro</span><span>🔥 Descanso</span><span>? Sin explorar</span>
   </div>`;
-
-  // El mapa se reconstruye entero en cada avance (elegir una senda,
-  // recuperación automática de combate interrumpido, etc.) — sin esto,
-  // reemplazar el innerHTML de #main-panel reseteaba el scroll horizontal
-  // de .map-wrap a 0 cada vez, obligando a desplazarse de nuevo desde el
-  // principio a cada rato a medida que las sendas avanzan hacia la derecha.
-  const prevWrap = document.querySelector('.map-wrap');
-  const prevScrollLeft = prevWrap ? prevWrap.scrollLeft : null;
-
-  document.getElementById('main-panel').innerHTML = html;
-
-  const wrap = document.querySelector('.map-wrap');
-  if(wrap){
-    if(prevScrollLeft !== null) wrap.scrollLeft = prevScrollLeft;
-    const currentNode = wrap.querySelector('.node.current');
-    if(currentNode) currentNode.scrollIntoView({inline:'nearest', block:'nearest'});
-  }
-
-  document.querySelectorAll('.node.reachable').forEach(el=>{
-    el.onclick = ()=>{
-      const f = parseInt(el.dataset.f), n = parseInt(el.dataset.n);
-      enterNode(f,n);
-    };
+  mountLabyrinth(document.getElementById('labyrinth-mount'), dg, {
+    level: dg.level, race: state.char.race, style: state.char.style,
+    isReachable: (f, n)=> isNodeReachable(dg, f, n),
+    onEnter: (f, n)=> enterNode(f, n),
+    previewIds: (node, f)=> roomPreviewIds(node.type, dg, f),
+    spriteUrl: (id)=> ENEMY_SPRITES[id] || null,
   });
+}
+// Qué monstruos se muestran dentro de una sala del laberinto. Es solo una
+// vista previa representativa de la década: el grupo real se sortea al entrar
+// (buildEncounterGroup). El guardián y el jefe de década sí son los reales.
+function roomPreviewIds(nodeType, dg, f){
+  const level = dg.level, bestiary = DECADE_BESTIARY[decadeIndexForLevel(level)];
+  const at = (list, k)=> list && list.length ? list[k % list.length] : null;
+  if(nodeType === 'jefe'){
+    if(level % 10 === 0) return [bestiary.decadeBoss.id];
+    const bossF = dg.floors.length - 1;
+    const g = (bestiary.guardianByFloor && bestiary.guardianByFloor[bossF % 10]) || at(bestiary.guardians, level) || at(bestiary.elite, 0);
+    return g ? [g.id] : [];
+  }
+  if(nodeType === 'elite'){ const e = at(bestiary.elite, f + level); return e ? [e.id] : []; }
+  if(nodeType === 'combate'){
+    const a1 = at(bestiary.regular, f*3 + level), a2 = at(bestiary.regular, f*3 + level + 2);
+    return [a1, a2].filter(Boolean).map(t=> t.id);
+  }
+  return [];
 }
 
 // Arma el grupo de enemigos de un nodo de combate (extraído de enterNode,
