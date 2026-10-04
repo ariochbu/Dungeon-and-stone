@@ -4691,9 +4691,80 @@ function renderSheet(){
   // En la ciudad la barra de arriba se esconde (ver body.city-mode en el CSS):
   // todo lo que tenía vive ahora en el menú lateral (pedido 2026-10-04).
   document.body.classList.toggle('city-mode', inCityMode());
-  if(inCityMode()){ el.classList.add('side-nav-mode'); renderSideNav(); return; }
-  el.classList.remove('side-nav-mode');
-  renderSheetPanel('sheet');
+  document.body.classList.toggle('dungeon-mode', !inCityMode());
+  el.classList.add('side-nav-mode');
+  if(inCityMode()){ renderSideNav(); return; }
+  renderDungeonNav();
+}
+// Panel izquierdo dentro del laberinto y en combate (2026-10-04, pedido
+// explícito): antes era la hoja larga de estadísticas más una barra arriba con
+// todos los botones. Ahora es una tarjeta del personaje (nombre, título, raza,
+// senda, nivel y sus cuatro barras) y un menú corto, igual que en la ciudad:
+//   · Ficha del personaje: se abre encima, sin salir del laberinto ni del
+//     combate; ahí los títulos no se pueden cambiar (solo en la ciudad).
+//   · Inventario: fuera de combate. En combate está la Mochila del menú.
+//   · Opciones (con cerrar sesión y borrar personaje dentro) y música.
+function renderDungeonNav(){
+  const el = document.getElementById('sheet');
+  const d = derived(), r = race(), st = style();
+  const xpNeeded = xpNeededForLevel(state.char.level);
+  const shieldAmt = (combat && combat.playerShield) || 0, hpScale = d.maxHP + shieldAmt;
+  const pct = (a, b)=> clamp(a/b*100, 0, 100);
+  const hpLabel = shieldAmt > 0 ? `${state.char.curHP} (${shieldAmt}) / ${d.maxHP}` : `${state.char.curHP} / ${d.maxHP}`;
+  const low = (state.char.curHP/d.maxHP) <= 0.3 ? ' low' : '';
+  const inCombat = !!(combat && combat.active);
+  const muted = /🔇/.test((document.getElementById('btn-music-toggle')||{}).textContent||'');
+  const bar = (label, text, cls, w, extra = '')=> `<div class="bar-row"><div class="bar-label"><span>${label}</span><span>${text}</span></div>
+      <div class="bar-track"><div class="bar-fill ${cls}" style="width:${w}%"></div>${extra}</div></div>`;
+  const item = (key, ic, name, o = {})=> `<div class="sn-item ${o.locked ? 'locked' : ''}" data-dn="${key}" ${o.why ? `title="${o.why}"` : ''}><span class="sn-ic">${ic}</span><span class="sn-txt">${name}</span>${o.locked ? '<span class="sn-lock">🔒</span>' : ''}</div>`;
+  el.innerHTML = `
+    <div class="sn-brand"><b>Dungeon &amp; Stone</b><span id="sn-clock" title="Hora de Ecuador (UTC-5)">${(document.getElementById('clock-time')||{}).textContent||''}</span></div>
+    <div class="dn-hero">
+      <div class="dn-who">
+        <div class="sn-ava"><img src="${playerSpriteFor(state.char.style, state.char.race)||''}" alt=""><span class="sn-lvl">${state.char.level}</span></div>
+        <div class="sn-who">
+          <div class="sn-name">${state.char.nickname}${renownBadge(myTitleN())}</div>
+          <div class="sn-sub"><img src="src/assets/razas/${r.id}.png" alt="" onerror="this.remove()">${r.name} · <img src="src/assets/clases/${st.id}.png" alt="" onerror="this.remove()">${st.name}</div>
+          <div class="sn-sub">Nivel ${state.char.level}</div>
+        </div>
+      </div>
+      ${bar('Vida', hpLabel, 'hp' + low, pct(state.char.curHP, hpScale), shieldAmt > 0 ? `<div class="bar-fill shield" style="width:${pct(shieldAmt, hpScale)}%; left:${pct(state.char.curHP, hpScale)}%;"></div>` : '')}
+      ${bar('MP', `${state.char.curSta} / ${d.maxSta}`, 'st', pct(state.char.curSta, d.maxSta))}
+      ${bar('Espíritu', `${state.char.curSpi} / ${d.maxSpi}`, 'sp', pct(state.char.curSpi, d.maxSpi))}
+      ${bar('Experiencia', `${state.char.xp} / ${xpNeeded}`, 'xp', pct(state.char.xp, xpNeeded))}
+      <div class="dn-chips"><span title="Oro">⛁ ${state.char.gold.toLocaleString('es')}</span>${state.dungeon ? `<span title="Nivel del laberinto y su amenaza">Nivel ${state.dungeon.level} · ⚠ ${visualThreat(state.dungeon.level, state.char.level)}</span>` : ''}</div>
+    </div>
+    <div class="sn-nav">
+      <div class="sn-sec">
+        ${item('ficha', '🧝', 'Ficha del personaje')}
+        ${inCombat ? '' : item('hdr:btn-inventory', '🎒', 'Personaje e inventario')}
+        ${item('hdr:btn-options', '⚙️', 'Opciones', inCombat ? {locked:true, why:'No disponible en pleno combate'} : {})}
+        ${item('hdr:btn-music-toggle', muted ? '🔇' : '🔊', muted ? 'Música: silenciada' : 'Música: activada')}
+      </div>
+    </div>`;
+  el.querySelectorAll('[data-dn]').forEach(it=>{ it.onclick = ()=>{
+    if(it.classList.contains('locked')) return;
+    const key = it.dataset.dn;
+    if(key === 'ficha') return openFichaOverlay();
+    document.getElementById(key.slice(4)).click();
+    if(key === 'hdr:btn-music-toggle') renderDungeonNav();
+  }; });
+}
+// Ficha del personaje encima de la pantalla actual (laberinto o combate).
+let fichaHostEl = null;
+function openFichaOverlay(){
+  if(fichaHostEl) return;
+  const div = document.createElement('div');
+  div.className = 'overlay-msg ficha-ov';
+  div.innerHTML = `<div class="overlay-card ficha-card">
+    <div class="ficha-ov-top"><h3>Ficha del personaje</h3><button class="reset-btn" id="ficha-ov-close">Cerrar</button></div>
+    <div id="ficha-ov-body"></div></div>`;
+  document.body.appendChild(div);
+  const close = ()=>{ fichaHostEl = null; div.remove(); };
+  div.querySelector('#ficha-ov-close').onclick = close;
+  div.onclick = (e)=>{ if(e.target === div) close(); };
+  fichaHostEl = div.querySelector('#ficha-ov-body');
+  renderFicha();
 }
 function renderSheetPanel(targetId){
   const d = derived();
@@ -4885,7 +4956,7 @@ function renderFicha(){
               : `<div class="fc-eq empty" title="${slotLabel(slot)}: vacío"><span>${slotLabel(slot)}</span></div>`;
   }).join('');
   const tabs = [['ataque','⚔️ Ataque'],['defensa','🛡️ Defensa'],['conjuntos','✨ Conjuntos']];
-  document.getElementById('main-panel').innerHTML = `
+  (fichaHostEl || document.getElementById('main-panel')).innerHTML = `
     <div class="fc">
       <div class="fc-left">
         <div class="fc-portrait"><img src="${playerSpriteFor(state.char.style, state.char.race)||''}" alt=""><span class="fc-lvl">Nivel ${state.char.level}</span></div>
@@ -4917,7 +4988,15 @@ function renderFicha(){
       </div>
     </div>`;
   document.querySelectorAll('[data-fc-tab]').forEach(b=>{ b.onclick = ()=>{ fichaTab = b.dataset.fcTab; renderFicha(); }; });
-  document.getElementById('fc-inv').onclick = ()=> cityNavigate('inv');
+  const fcInv = document.getElementById('fc-inv');
+  if(fichaHostEl){
+    // Fuera de la ciudad la ficha es de consulta: sin atajo al inventario y
+    // con el título bloqueado (pedido 2026-10-04: solo se cambia en la ciudad).
+    if(fcInv) fcInv.remove();
+    const sel = fichaHostEl.querySelector('#fc-title-sel'), box = fichaHostEl.querySelector('.fc-titlebox');
+    if(sel) sel.disabled = true;
+    if(box) box.insertAdjacentHTML('beforeend', '<p class="fc-title-lock">🔒 El título solo se puede cambiar en la ciudad.</p>');
+  } else if(fcInv) fcInv.onclick = ()=> cityNavigate('inv');
   const titleSel = document.getElementById('fc-title-sel');
   if(titleSel) titleSel.onchange = ()=> setMyTitle(parseInt(titleSel.value, 10));
 }
@@ -6134,8 +6213,6 @@ function renderSideNav(){
       ${item('options','⚙️','Opciones')}
       ${item('hdr:btn-music-toggle', muted?'🔇':'🔊', muted?'Música: silenciada':'Música: activada')}
       ${hdrShown('btn-switch-char') ? item('hdr:btn-switch-char','👥','Cambiar de personaje') : ''}
-      ${item('hdr:btn-slots','🚪','Cerrar sesión')}
-      ${hdrShown('btn-reset') ? `<div class="sn-item sn-danger" data-sn="hdr:btn-reset"><span class="sn-ic">🗑️</span><span class="sn-txt">Borrar personaje</span></div>` : ''}
     </div>
     </div>`;
   el.querySelectorAll('.sn-item').forEach(it=>{ it.onclick = ()=>{
@@ -6805,7 +6882,20 @@ function renderOptions(){
     <p style="color:var(--text-dim); font-size:0.82em; margin-top:0;">Solo funcionan durante un combate activo. "Cambiar" reemplaza ambas teclas por defecto de esa acción por la que presiones a continuación.</p>
     ${rowsHTML}
     <button class="reset-btn" id="opt-reset-keybinds" style="margin-top:10px;">Restablecer atajos por defecto</button>
+
+    <div class="section-label" style="margin-top:18px;">Cuenta</div>
+    <div class="opt-account">
+      <button class="reset-btn" id="opt-switch-char">👥 Cambiar de personaje</button>
+      <button class="reset-btn" id="opt-logout">🚪 Cerrar sesión</button>
+      <button class="reset-btn danger-btn" id="opt-delete-char">🗑️ Borrar personaje</button>
+    </div>
   `;
+  // Acciones de cuenta: siguen cableadas en la barra de arriba (oculta); acá
+  // solo se pulsan. Antes estaban sueltas en esa barra y en el menú lateral.
+  [['opt-switch-char', 'btn-switch-char'], ['opt-logout', 'btn-slots'], ['opt-delete-char', 'btn-reset']].forEach(([mine, hdr])=>{
+    const b = document.getElementById(mine), h = document.getElementById(hdr);
+    if(!h || h.style.display === 'none') b.remove(); else b.onclick = ()=> h.click();
+  });
   document.getElementById('btn-close-options').onclick = ()=>{ optionsOpen=false; renderAll(); };
   const slider = document.getElementById('opt-volume-slider');
   const valueLabel = document.getElementById('opt-volume-value');
