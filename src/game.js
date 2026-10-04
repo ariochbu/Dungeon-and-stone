@@ -1628,6 +1628,15 @@ const GACHA_COST_X1 = 10000;
 const GACHA_COST_X10 = 100000; // entrega 11 tiradas
 const GACHA_COST_SELLOS_X1 = 100;
 const GACHA_COST_SELLOS_X10 = 1000; // entrega 11 tiradas
+// x100 (2026-10-03, pedido explícito): diez x10 de una vez — mismo precio por
+// tirada y mismo regalo (10 x 11 = 110 Caídos).
+const GACHA_COST_X100 = GACHA_COST_X10 * 10;
+const GACHA_COST_SELLOS_X100 = GACHA_COST_SELLOS_X10 * 10;
+const GACHA_KINDS = {
+  x1:   {count:1,   gold:GACHA_COST_X1,   sellos:GACHA_COST_SELLOS_X1,   label:'x1'},
+  x10:  {count:11,  gold:GACHA_COST_X10,  sellos:GACHA_COST_SELLOS_X10,  label:'x10 +1'},
+  x100: {count:110, gold:GACHA_COST_X100, sellos:GACHA_COST_SELLOS_X100, label:'x100 +10'}
+};
 function rollPetId(){
   const rarity = pickWeighted(PET_RARITY_ORDER.map(r=>({tpl:r, weight:PET_RARITIES[r].weight})));
   const pool = PET_CATALOG.filter(p=>p.rarity===rarity);
@@ -1670,22 +1679,23 @@ async function pullGacha(kind, payWith){
   if(!(await checkSessionStillActive())) return null;
   ensurePets();
   payWith = payWith==='sellos' ? 'sellos' : 'gold';
-  const count = kind==='x10' ? 11 : 1;
+  const k = GACHA_KINDS[kind] || GACHA_KINDS.x1;
+  const count = k.count;
   let cost, costLabel;
   if(payWith==='sellos'){
-    cost = kind==='x10' ? GACHA_COST_SELLOS_X10 : GACHA_COST_SELLOS_X1;
+    cost = k.sellos;
     if((state.char.missionCurrency||0) < cost) return null;
     state.char.missionCurrency -= cost;
     costLabel = `${cost.toLocaleString('es')} Sellos del Laberinto`;
   } else {
-    cost = kind==='x10' ? GACHA_COST_X10 : GACHA_COST_X1;
+    cost = k.gold;
     if(state.char.gold < cost) return null;
     state.char.gold -= cost;
     costLabel = `${cost.toLocaleString('es')} de oro`;
   }
   const results = doPetPulls(count);
   const rareCount = results.filter(r=>['epico','legendario','mitico'].includes(r.tpl.rarity)).length;
-  log(`Otorgas una ofrenda al árbol (${count===11?'x10 +1':'x1'}, -${costLabel}): consigues ${count} Caído(s) del Laberinto${rareCount?`, ¡${rareCount} de rango Épico o superior!`:''}.`);
+  log(`Otorgas una ofrenda al árbol (${k.label}, -${costLabel}): consigues ${count} Caído(s) del Laberinto${rareCount?`, ¡${rareCount} de rango Épico o superior!`:''}.`);
   renderSheet();
   await flushSave();
   return results;
@@ -5871,7 +5881,7 @@ function petFlipCardHTML(r, idx, order){
   const rc = PET_RARITIES[tpl.rarity];
   return `<div class="pet-flip-card deal ${big?'big':''} ${r.flipped?'flipped':''}" data-flip-idx="${idx}" style="--i:${order}; --rc:${rc.color}" title="Voltear">
     <div class="pet-flip-inner">
-      <div class="pet-flip-back">🎴</div>
+      <div class="pet-flip-back"><img class="pet-back-art" src="src/assets/ofrenda/reverso.jpg?v=1" alt="" onload="this.parentElement.classList.add('has-art')" onerror="this.remove()"><span>🎴</span></div>
       <div class="pet-flip-front" style="box-shadow:0 0 0 2px ${rc.color}bb, 0 0 ${big?22:12}px ${rc.color}99; --rc:${rc.color}">
         <img src="${petArtPath(r.id)}" alt="">
         ${petHasCleanArt(r.id) ? `<div class="pet-flip-name" style="color:${rc.color}">${tpl.name}</div>` : ''}
@@ -5893,7 +5903,7 @@ function updateOfrendaControls(){
     const locked = isRarePetResult(r) && !r.flipped && !allNonRareFlipped;
     el.classList.toggle('locked', locked);
     el.title = r.flipped ? '' : (locked ? 'Voltea las demás primero' : 'Voltear');
-    const back = el.querySelector('.pet-flip-back');
+    const back = el.querySelector('.pet-flip-back span');
     if(back) back.textContent = locked ? '🔒' : '🎴';
   });
   const pages = ofrendaPages();
@@ -6021,39 +6031,70 @@ function playOfrendaCinematic(pullPromise){
     div.onclick = ()=>{ if(ready) finish(); else skipAsked = true; };
   });
 }
+// Colección: total, barra de progreso y cuántos se tienen de cada rango.
+function ofrendaCollectionHTML(){
+  const have = PET_CATALOG.filter(p=>ownedPetCount(p.id)>0);
+  const chips = PET_RARITY_ORDER.map(rk=>{
+    const all = PET_CATALOG.filter(p=>p.rarity===rk);
+    const n = have.filter(p=>p.rarity===rk).length;
+    return `<span class="of-col-chip ${n===all.length?'full':''}" style="--rc:${PET_RARITIES[rk].color}"><i></i>${PET_RARITIES[rk].name} <b>${n}/${all.length}</b></span>`;
+  }).join('');
+  return `<div class="of-col-head"><span>Colección de Caídos</span><b>${have.length} / ${PET_CATALOG.length}</b></div>
+    <div class="of-col-bar"><i style="width:${(have.length/PET_CATALOG.length*100).toFixed(1)}%"></i></div>
+    <div class="of-col-chips">${chips}<span class="of-col-eq">${equippedPetIds().length}/${maxPetSlots()} equipados</span></div>`;
+}
+function updateOfrendaCollection(){
+  const el = document.getElementById('of-collection');
+  if(el) el.innerHTML = ofrendaCollectionHTML();
+}
+// Pantalla de Ofrenda (rediseño 2026-10-03, pedido explícito: "hacerlo
+// visualmente más agradable"): cabecera con la ilustración del árbol de la
+// invocación, colección con barra de progreso, y cada ofrenda como una
+// tarjeta con su arte, precio y lo que falta si no alcanza. Las ilustraciones
+// de las tarjetas (src/assets/ofrenda/oferta_<oro|sellos>_<x1|x10>.jpg) y el
+// reverso de carta (reverso.jpg) son opcionales: sin ellas se ve el emoji.
 function renderOfrenda(){
   ensurePets();
   ofrendaPullResults = null;
-  const ownedCount = Object.keys(state.char.pets.owned).length;
+  const offerHTML = (id, cur, kind)=>{
+    const k = GACHA_KINDS[kind];
+    const cost = cur==='oro' ? k.gold : k.sellos;
+    const gift = k.count - parseInt(kind.slice(1), 10);
+    return `<button class="of-offer ${cur} ${kind!=='x1'?'x10':''}" id="${id}">
+      ${gift>0 ? `<span class="of-offer-badge">+${gift} de regalo</span>` : ''}
+      <span class="of-offer-art"><span class="of-offer-emoji">${kind==='x1'?'🎴':kind==='x10'?'🎴🎴':'🎴🎴🎴'}</span><img src="src/assets/ofrenda/oferta_${cur}_${kind}.jpg?v=1" alt="" onerror="this.remove()"></span>
+      <span class="of-offer-name">Ofrenda ${kind}</span>
+      <span class="of-offer-sub">${k.count===1?'1 Caído':k.count+' Caídos'}</span>
+      <span class="of-offer-price">${cur==='oro'?'⛁':'🎖️'} ${cost.toLocaleString('es')}</span>
+      <span class="of-offer-miss"></span>
+    </button>`;
+  };
   document.getElementById('main-panel').innerHTML = `
-    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:4px;">
-      <h3 style="color:var(--bronze-light);">🌳 Otorgar ofrenda</h3>
-      <button class="reset-btn" id="btn-close-ofrenda">Cerrar</button>
+    <div class="of-hero">
+      <img class="of-hero-art" src="src/assets/ofrenda/invocacion.jpg?v=1" alt="" onerror="this.onerror=null; this.src='src/assets/ofrenda/ygdrasil.jpg'">
+      <div class="of-hero-glow"></div>
+      <div class="of-hero-sparks">${Array.from({length:10}, (_,i)=>`<i style="--x:${8+(i*37)%84}%; --d:${3+(i%4)*0.8}s; --dl:${-(i*0.6).toFixed(1)}s"></i>`).join('')}</div>
+      <button class="reset-btn of-hero-close" id="btn-close-ofrenda">Cerrar</button>
+      <div class="of-hero-txt">
+        <h3>Otorgar ofrenda</h3>
+        <p>El Ygdrasil crece en el corazón de la ciudad. Ofrécele oro o Sellos del Laberinto y te devolverá un Caído para tu colección.</p>
+      </div>
     </div>
-    <p style="color:var(--text-dim); font-size:0.85em; margin-top:0;">Un Ygdrasil en miniatura crece en el corazón de la ciudad. Ofrécele oro, Sellos del Laberinto o una recarga y te devolverá un Caído del Laberinto para tu colección.</p>
+    <div class="of-collection" id="of-collection">${ofrendaCollectionHTML()}</div>
     <div id="ofrenda-results"></div>
-    <div class="ygdrasil-stage" id="ygdrasil-stage">
-      <div class="ygdrasil-glow"></div>
-      <img class="ygdrasil-tree" src="src/assets/ofrenda/ygdrasil.jpg" alt="Ygdrasil" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'ygdrasil-tree-fallback', textContent:'🌳'}))">
+    <div id="of-free"></div>
+    <div class="of-group">
+      <div class="of-group-head"><span>Con oro</span><b id="of-bal-oro"></b></div>
+      <div class="of-offers three">${offerHTML('btn-pull-x1-gold','oro','x1')}${offerHTML('btn-pull-x10-gold','oro','x10')}${offerHTML('btn-pull-x100-gold','oro','x100')}</div>
     </div>
-    <p class="ofrenda-collection-line" style="color:var(--bronze-light); font-size:0.85em; text-align:center; margin:6px 0;">Colección: ${ownedCount} / ${PET_CATALOG.length} Caídos del Laberinto reunidos · ${equippedPetIds().length}/${maxPetSlots()} equipadas</p>
-    ${state.char.pets.pendingFreePulls>0 ? `
-    <div class="ofrenda-pending-box">
-      <div>🎁 Tienes <b>${state.char.pets.pendingFreePulls}</b> ofrenda(s) gratis pendientes (check-in diario y/o regalos del equipo).</div>
-      <button class="btn-main" id="btn-claim-pending">Reclamar todas</button>
-    </div>` : ''}
-    <div class="section-label" style="margin-top:4px;">Pagar con oro (⛁ ${state.char.gold.toLocaleString('es')})</div>
-    <div class="ofrenda-btn-row">
-      <button class="btn-main" id="btn-pull-x1-gold" ${state.char.gold<GACHA_COST_X1?'disabled':''}>Ofrenda x1 — ${GACHA_COST_X1.toLocaleString('es')} oro</button>
-      <button class="btn-main" id="btn-pull-x10-gold" ${state.char.gold<GACHA_COST_X10?'disabled':''}>Ofrenda x10 (+1 regalo) — ${GACHA_COST_X10.toLocaleString('es')} oro</button>
+    <div class="of-group">
+      <div class="of-group-head"><span>Con Sellos del Laberinto</span><b id="of-bal-sellos"></b></div>
+      <div class="of-offers three">${offerHTML('btn-pull-x1-sellos','sellos','x1')}${offerHTML('btn-pull-x10-sellos','sellos','x10')}${offerHTML('btn-pull-x100-sellos','sellos','x100')}</div>
     </div>
-    <div class="section-label">Pagar con Sellos del Laberinto (🎖️ ${(state.char.missionCurrency||0).toLocaleString('es')})</div>
-    <div class="ofrenda-btn-row">
-      <button class="btn-main secondary-choice" id="btn-pull-x1-sellos" ${(state.char.missionCurrency||0)<GACHA_COST_SELLOS_X1?'disabled':''}>Ofrenda x1 — ${GACHA_COST_SELLOS_X1.toLocaleString('es')} Sellos</button>
-      <button class="btn-main secondary-choice" id="btn-pull-x10-sellos" ${(state.char.missionCurrency||0)<GACHA_COST_SELLOS_X10?'disabled':''}>Ofrenda x10 (+1 regalo) — ${GACHA_COST_SELLOS_X10.toLocaleString('es')} Sellos</button>
+    <div class="of-links">
+      <button class="reset-btn" id="btn-buy-pulls">💎 Recargar para más tiradas</button>
+      <button class="reset-btn" id="btn-pet-rates">Cómo funciona</button>
     </div>
-    <button class="reset-btn" id="btn-buy-pulls" style="margin:6px auto 0; display:block;">💎 Recargar para más tiradas</button>
-    <button class="reset-btn" id="btn-pet-rates" style="margin:10px auto 0; display:block;">Cómo funciona</button>
   `;
   document.getElementById('btn-close-ofrenda').onclick = ()=>{ ofrendaOpen=false; renderAll(); };
   document.getElementById('btn-pet-rates').onclick = showPetRates;
@@ -6063,15 +6104,60 @@ function renderOfrenda(){
       <p style="color:var(--bronze-light);">Discord: <b>xariochix5266</b></p>
     `, ()=>{});
   };
-  const allPullBtns = ()=> ['btn-pull-x1-gold','btn-pull-x10-gold','btn-pull-x1-sellos','btn-pull-x10-sellos'].map(id=>document.getElementById(id));
-  const refreshBtnStates = ()=>{
-    document.getElementById('btn-pull-x1-gold').disabled = state.char.gold < GACHA_COST_X1;
-    document.getElementById('btn-pull-x10-gold').disabled = state.char.gold < GACHA_COST_X10;
-    document.getElementById('btn-pull-x1-sellos').disabled = (state.char.missionCurrency||0) < GACHA_COST_SELLOS_X1;
-    document.getElementById('btn-pull-x10-sellos').disabled = (state.char.missionCurrency||0) < GACHA_COST_SELLOS_X10;
+  const allPullBtns = ()=> ['btn-pull-x1-gold','btn-pull-x10-gold','btn-pull-x100-gold','btn-pull-x1-sellos','btn-pull-x10-sellos','btn-pull-x100-sellos'].map(id=>document.getElementById(id))
+    .concat([...document.querySelectorAll('#of-free button')]);
+  // Ofrendas gratis pendientes (check-in y regalos): se reclaman de a 1, 10 o
+  // 100, igual que las pagadas (pedido explícito 2026-10-03: antes solo había
+  // "Reclamar todas" y obligaba a abrirlas todas juntas). x10 da exactamente
+  // 10 — el "+1 de regalo" es solo de las ofrendas pagadas.
+  const renderFree = ()=>{
+    const box = document.getElementById('of-free');
+    if(!box) return;
+    const pending = state.char.pets.pendingFreePulls||0;
+    if(pending<=0){ box.innerHTML = ''; return; }
+    box.innerHTML = `<div class="of-group">
+      <div class="of-group-head"><span>Ofrendas gratis</span><b>🎁 ${pending}</b></div>
+      <div class="of-offers three">${[1,10,100].map(n=>`
+        <button class="of-offer gratis ${n>1?'x10':''}" data-free="${n}" ${pending<n?'disabled':''}>
+          <span class="of-offer-art"><span class="of-offer-emoji">${n===1?'🎁':n===10?'🎁🎁':'🎁🎁🎁'}</span><img src="src/assets/ofrenda/oferta_gratis_x${n}.jpg?v=1" alt="" onerror="this.remove()"></span>
+          <span class="of-offer-name">Reclamar x${n}</span>
+          <span class="of-offer-sub">${n===1?'1 Caído':n+' Caídos'}</span>
+          <span class="of-offer-price">Gratis</span>
+          <span class="of-offer-miss">${pending<n?`Tienes ${pending}`:''}</span>
+        </button>`).join('')}</div>
+      ${![1,10,100].includes(pending) ? `<button class="reset-btn of-free-all" data-free="${pending}">Reclamar las ${pending} de una vez</button>` : ''}
+      <div class="of-free-note">Del check-in diario y de regalos del equipo.</div>
+    </div>`;
+    box.querySelectorAll('[data-free]').forEach(b=>{ b.onclick = ()=> claimFree(parseInt(b.dataset.free, 10)); });
   };
+  const claimFree = (n)=>{
+    const pending = state.char.pets.pendingFreePulls||0;
+    if(!(n>0) || pending<n) return;
+    allPullBtns().forEach(b=>b.disabled = true);
+    document.getElementById('ofrenda-results').innerHTML = '';
+    (async ()=>{
+      state.char.pets.pendingFreePulls = pending - n;
+      const results = await playOfrendaCinematic(grantFreePetPulls(n));
+      ofrendaPullResults = results ? results.map(r=>Object.assign({flipped:false}, r)) : null;
+      refreshOfrendaResultsDOM();
+      refreshBtnStates();
+      updateOfrendaCollection();
+    })();
+  };
+  const refreshBtnStates = ()=>{
+    const gold = state.char.gold, sellos = state.char.missionCurrency||0;
+    Object.entries(GACHA_KINDS).flatMap(([kind, k])=> [[`btn-pull-${kind}-gold`, gold, k.gold, 'de oro'], [`btn-pull-${kind}-sellos`, sellos, k.sellos, 'Sellos']]).forEach(([id, have, cost, unit])=>{
+      const btn = document.getElementById(id);
+      btn.disabled = have < cost;
+      btn.querySelector('.of-offer-miss').textContent = have < cost ? `Te faltan ${(cost-have).toLocaleString('es')} ${unit}` : '';
+    });
+    document.getElementById('of-bal-oro').textContent = `⛁ ${gold.toLocaleString('es')}`;
+    document.getElementById('of-bal-sellos').textContent = `🎖️ ${sellos.toLocaleString('es')}`;
+    renderFree();
+  };
+  refreshBtnStates();
   const doPull = (kind, payWith)=>{
-    const cost = payWith==='sellos' ? (kind==='x10'?GACHA_COST_SELLOS_X10:GACHA_COST_SELLOS_X1) : (kind==='x10'?GACHA_COST_X10:GACHA_COST_X1);
+    const cost = payWith==='sellos' ? GACHA_KINDS[kind].sellos : GACHA_KINDS[kind].gold;
     const have = payWith==='sellos' ? (state.char.missionCurrency||0) : state.char.gold;
     if(have < cost) return;
     allPullBtns().forEach(b=>b.disabled = true);
@@ -6082,35 +6168,15 @@ function renderOfrenda(){
       refreshOfrendaResultsDOM();
       renderSheet();
       refreshBtnStates();
-      document.querySelector('.ofrenda-collection-line').textContent =
-        `Colección: ${Object.keys(state.char.pets.owned).length} / ${PET_CATALOG.length} Caídos del Laberinto reunidos · ${equippedPetIds().length}/${maxPetSlots()} equipadas`;
+      updateOfrendaCollection();
     })();
   };
   document.getElementById('btn-pull-x1-gold').onclick = ()=>doPull('x1','gold');
   document.getElementById('btn-pull-x10-gold').onclick = ()=>doPull('x10','gold');
+  document.getElementById('btn-pull-x100-gold').onclick = ()=>doPull('x100','gold');
+  document.getElementById('btn-pull-x100-sellos').onclick = ()=>doPull('x100','sellos');
   document.getElementById('btn-pull-x1-sellos').onclick = ()=>doPull('x1','sellos');
   document.getElementById('btn-pull-x10-sellos').onclick = ()=>doPull('x10','sellos');
-  const claimBtn = document.getElementById('btn-claim-pending');
-  if(claimBtn){
-    claimBtn.onclick = ()=>{
-      const count = state.char.pets.pendingFreePulls;
-      if(count<=0) return;
-      claimBtn.disabled = true;
-      allPullBtns().forEach(b=>b.disabled = true);
-      document.getElementById('ofrenda-results').innerHTML = '';
-      (async ()=>{
-        state.char.pets.pendingFreePulls = 0;
-        const results = await playOfrendaCinematic(grantFreePetPulls(count));
-        ofrendaPullResults = results ? results.map(r=>Object.assign({flipped:false}, r)) : null;
-        refreshOfrendaResultsDOM();
-        refreshBtnStates();
-        const pendingBox = document.querySelector('.ofrenda-pending-box');
-        if(pendingBox) pendingBox.remove();
-        document.querySelector('.ofrenda-collection-line').textContent =
-          `Colección: ${Object.keys(state.char.pets.owned).length} / ${PET_CATALOG.length} Caídos del Laberinto reunidos · ${equippedPetIds().length}/${maxPetSlots()} equipadas`;
-      })();
-    };
-  }
 }
 
 /* ============================================================
