@@ -1300,11 +1300,11 @@ document.addEventListener('load', (e)=>{
 // src/assets/mascotas/arte/, y el juego dibuja la carta con los datos reales
 // (ver petCardHTML). Se migra por tandas: los ids listados acá ya tienen arte
 // limpio; el resto sigue con su carta vieja. Importar con tools/import_caidos.py.
-const PET_CLEAN_ART = new Set([]);
+const PET_CLEAN_ART = new Set(Array.from({length:100}, (_,i)=>i+1)); // 1..100: todos migrados
 function petHasCleanArt(id){ return PET_CLEAN_ART.has(Number(id)); }
 function petArtPath(id){
   const n = String(id).padStart(3,'0');
-  return petHasCleanArt(id) ? `src/assets/mascotas/arte/mascota_${n}.jpg?v=1` : `src/assets/mascotas/mascota_${n}.png?v=2`;
+  return `src/assets/mascotas/arte/mascota_${n}.jpg?v=1`; // las cartas viejas (mascota_NNN.png) se retiraron al completar los 100
 }
 // Texto de los bonos de un Caído, desde PET_CATALOG. Los del mismo tipo se
 // suman en una sola línea (dos "aumento_dano" de 10% y 12% -> "+22% daño").
@@ -5839,83 +5839,137 @@ function showPetRates(){
   `, ()=>{});
 }
 function isRarePetResult(r){ return ['epico','legendario','mitico'].includes(r.tpl.rarity); }
-// Boca abajo, todas idénticas (nunca delatan el rango antes de voltearse).
-// Bloqueadas (Épico+) mientras queden comunes/raras/únicas sin voltear —
-// mismo espíritu que el "reveal" de espíritus de MIR4: se voltean las
-// normales primero, y hasta no acabar esas no se puede tocar la que
-// resultó especial, así que por descarte ya genera expectativa antes de
-// tocarla siquiera.
-function petFlipCardHTML(r, idx, locked){
+// Revelado de la ofrenda al estilo MIR4 (2026-10-03, pedido explícito: "que
+// no aparezcan de manera brusca... si tienen x100 lanzamientos se irán
+// abriendo de 10 en 10"). Las cartas se reparten boca abajo de a una, en
+// TANDAS de 10 (la tirada x10+1 va entera en una sola tanda de 11), y se
+// voltean con su giro: al tocarlas, o en cadena con "Voltear todo". Al
+// terminar una tanda aparece el botón para repartir la siguiente.
+// - Boca abajo todas idénticas en color (nunca delatan el rango exacto).
+// - Las Épico+ quedan bloqueadas hasta voltear el resto de SU tanda.
+// - El DOM de la tanda se arma UNA vez y los giros solo cambian clases: antes
+//   cada giro re-renderizaba todo y la carta aparecía ya volteada, sin animar.
+const OFRENDA_PAGE_SIZE = 10;
+let ofrendaPullResults = null;
+let ofrendaPage = 0;
+let ofrendaFlipTimers = [];
+function ofrendaPages(){
+  const n = ofrendaPullResults ? ofrendaPullResults.length : 0;
+  const pages = [];
+  for(let i=0; i<n; i+=OFRENDA_PAGE_SIZE) pages.push([i, Math.min(n, i+OFRENDA_PAGE_SIZE)]);
+  // Una carta suelta al final (x10 +1 regalo = 11) se suma a la tanda anterior.
+  if(pages.length>1 && pages[pages.length-1][1]-pages[pages.length-1][0]===1){ const last = pages.pop(); pages[pages.length-1][1] = last[1]; }
+  return pages;
+}
+function ofrendaPageIdxs(){
+  const pg = ofrendaPages()[ofrendaPage];
+  return pg ? Array.from({length:pg[1]-pg[0]}, (_,i)=>pg[0]+i) : [];
+}
+function petFlipCardHTML(r, idx, order){
   const tpl = r.tpl;
   const big = isRarePetResult(r);
-  if(r.flipped){
-    const rc = PET_RARITIES[tpl.rarity];
-    return `<div class="pet-flip-card ${big?'big':''} flipped">
-      <div class="pet-flip-inner">
-        <div class="pet-flip-back">🎴</div>
-        <div class="pet-flip-front" data-pet-zoom="${r.id}" style="box-shadow:0 0 0 2px ${rc.color}bb, 0 0 ${big?22:12}px ${rc.color}99;">
-          <img src="${petArtPath(r.id)}" alt="${tpl.name}" loading="lazy">
-          ${petHasCleanArt(r.id) ? `<div class="pet-flip-name" style="color:${rc.color}">${tpl.name}</div>` : ''}
-          ${r.isDup ? '<div class="pet-dup-badge">Duplicado</div>' : '<div class="pet-new-badge">¡Nuevo!</div>'}
-        </div>
-      </div>
-    </div>`;
-  }
-  return `<div class="pet-flip-card ${big?'big':''} ${locked?'locked':''}" data-flip-idx="${idx}" title="${locked?'Voltea las demás primero':'Voltear'}">
+  const rc = PET_RARITIES[tpl.rarity];
+  return `<div class="pet-flip-card deal ${big?'big':''} ${r.flipped?'flipped':''}" data-flip-idx="${idx}" style="--i:${order}; --rc:${rc.color}" title="Voltear">
     <div class="pet-flip-inner">
-      <div class="pet-flip-back">${locked?'🔒':'🎴'}</div>
-      <div class="pet-flip-front"></div>
+      <div class="pet-flip-back">🎴</div>
+      <div class="pet-flip-front" style="box-shadow:0 0 0 2px ${rc.color}bb, 0 0 ${big?22:12}px ${rc.color}99; --rc:${rc.color}">
+        <img src="${petArtPath(r.id)}" alt="">
+        ${petHasCleanArt(r.id) ? `<div class="pet-flip-name" style="color:${rc.color}">${tpl.name}</div>` : ''}
+        ${r.isDup ? '<div class="pet-dup-badge">Duplicado</div>' : '<div class="pet-new-badge">¡Nuevo!</div>'}
+      </div>
     </div>
   </div>`;
 }
-// Estado de la tanda de revelación actual — vive fuera del closure de
-// renderOfrenda() porque cada click voltea UNA carta con un re-render
-// parcial (refreshOfrendaResultsDOM), no toda la pantalla.
-let ofrendaPullResults = null;
-function renderOfrendaResultsHTML(){
-  if(!ofrendaPullResults || !ofrendaPullResults.length) return '';
-  const allNonRareFlipped = ofrendaPullResults.filter(r=>!isRarePetResult(r)).every(r=>r.flipped);
-  const cardsHTML = ofrendaPullResults.map((r,idx)=>{
-    const locked = isRarePetResult(r) && !r.flipped && !allNonRareFlipped;
-    return petFlipCardHTML(r, idx, locked);
-  }).join('');
-  const anyUnflipped = ofrendaPullResults.some(r=>!r.flipped);
-  return `<div class="pet-reveal-grid">${cardsHTML}</div>${anyUnflipped ? `<button class="btn-main" id="btn-flip-all" style="margin-top:10px;">Voltear todo</button>` : ''}`;
-}
-function refreshOfrendaResultsDOM(){
+// Estado de bloqueo y botones de la tanda actual, sin tocar las cartas.
+function updateOfrendaControls(){
   const container = document.getElementById('ofrenda-results');
-  if(!container) return;
-  container.innerHTML = renderOfrendaResultsHTML();
-  container.querySelectorAll('[data-flip-idx]').forEach(el=>{
-    el.onclick = ()=> flipOfrendaCard(parseInt(el.dataset.flipIdx, 10));
+  if(!container || !ofrendaPullResults) return;
+  const idxs = ofrendaPageIdxs();
+  const allNonRareFlipped = idxs.every(i=> isRarePetResult(ofrendaPullResults[i]) || ofrendaPullResults[i].flipped);
+  idxs.forEach(i=>{
+    const r = ofrendaPullResults[i];
+    const el = container.querySelector(`[data-flip-idx="${i}"]`);
+    if(!el) return;
+    const locked = isRarePetResult(r) && !r.flipped && !allNonRareFlipped;
+    el.classList.toggle('locked', locked);
+    el.title = r.flipped ? '' : (locked ? 'Voltea las demás primero' : 'Voltear');
+    const back = el.querySelector('.pet-flip-back');
+    if(back) back.textContent = locked ? '🔒' : '🎴';
   });
+  const pages = ofrendaPages();
+  const pageDone = idxs.every(i=>ofrendaPullResults[i].flipped);
+  const left = ofrendaPullResults.length - (pages[ofrendaPage] ? pages[ofrendaPage][1] : 0);
+  const ctr = container.querySelector('.pet-reveal-controls');
+  if(!ctr) return;
+  ctr.innerHTML = !pageDone
+    ? `<button class="btn-main" id="btn-flip-all">Voltear todo</button>${pages.length>1 ? `<button class="reset-btn" id="btn-reveal-skip">Ver todas de una vez</button>` : ''}`
+    : (left>0 ? `<button class="btn-main" id="btn-next-page">Siguiente tanda (quedan ${left})</button>` : (pages.length>1 ? `<span class="pet-reveal-done">Ofrenda completa: ${ofrendaPullResults.length} Caídos.</span>` : ''));
   const flipAllBtn = document.getElementById('btn-flip-all');
   if(flipAllBtn) flipAllBtn.onclick = flipAllOfrendaCards;
-  wirePetZoomEvents(container);
+  const nextBtn = document.getElementById('btn-next-page');
+  if(nextBtn) nextBtn.onclick = ()=>{ ofrendaPage++; renderOfrendaPage(); };
+  const skipBtn = document.getElementById('btn-reveal-skip');
+  if(skipBtn) skipBtn.onclick = ()=>{ ofrendaPullResults.forEach(r=> r.flipped = true); renderOfrendaPage(true); };
+}
+// Arma (reparte) la tanda actual. showAll: todas las cartas juntas, ya
+// volteadas (el "Ver todas de una vez" de las ofrendas grandes).
+function renderOfrendaPage(showAll){
+  ofrendaFlipTimers.forEach(clearTimeout); ofrendaFlipTimers = [];
+  const container = document.getElementById('ofrenda-results');
+  if(!container) return;
+  if(!ofrendaPullResults || !ofrendaPullResults.length){ container.innerHTML = ''; return; }
+  const pages = ofrendaPages();
+  if(showAll) ofrendaPage = pages.length-1;
+  const idxs = showAll ? ofrendaPullResults.map((_,i)=>i) : ofrendaPageIdxs();
+  container.innerHTML = `
+    ${pages.length>1 && !showAll ? `<div class="pet-reveal-step">Tanda ${ofrendaPage+1} de ${pages.length}</div>` : ''}
+    <div class="pet-reveal-grid">${idxs.map((i,k)=>petFlipCardHTML(ofrendaPullResults[i], i, showAll ? Math.min(k,12) : k)).join('')}</div>
+    <div class="pet-reveal-controls"></div>`;
+  container.querySelectorAll('[data-flip-idx]').forEach(el=>{
+    const i = parseInt(el.dataset.flipIdx, 10);
+    el.onclick = ()=> flipOfrendaCard(i);
+    if(ofrendaPullResults[i].flipped) armFlippedCard(el, ofrendaPullResults[i]);
+  });
+  updateOfrendaControls();
+  container.scrollIntoView({block:'nearest', behavior:'smooth'});
+}
+function refreshOfrendaResultsDOM(){ ofrendaPage = 0; renderOfrendaPage(); }
+// Una carta ya volteada: habilita su zoom (antes de voltearla no, para no
+// delatar qué es al pasar el cursor).
+function armFlippedCard(el, r){
+  const front = el.querySelector('.pet-flip-front');
+  if(front && !front.dataset.petZoom){ front.dataset.petZoom = r.id; wirePetZoomEvents(el); }
 }
 function flipOfrendaCard(idx){
   const r = ofrendaPullResults && ofrendaPullResults[idx];
   if(!r || r.flipped) return;
-  const allNonRareFlipped = ofrendaPullResults.filter(x=>!isRarePetResult(x)).every(x=>x.flipped);
+  const idxs = ofrendaPageIdxs();
+  if(!idxs.includes(idx)) return;
+  const allNonRareFlipped = idxs.every(i=> isRarePetResult(ofrendaPullResults[i]) || ofrendaPullResults[i].flipped);
   if(isRarePetResult(r) && !allNonRareFlipped) return; // bloqueada todavía
   r.flipped = true;
-  refreshOfrendaResultsDOM();
+  const el = document.querySelector(`#ofrenda-results [data-flip-idx="${idx}"]`);
+  if(el){
+    el.classList.remove('locked');
+    el.classList.add('flipped');
+    if(isRarePetResult(r)) el.classList.add('burst');
+    armFlippedCard(el, r);
+  }
+  updateOfrendaControls();
 }
-// "Voltear todo": primero las comunes/raras/únicas (todas a la vez), y solo
-// después de una pausa las Épico+ — mismo orden que ya pedías para el
-// reveal automático viejo, ahora como una animación de volteo en cadena.
+// "Voltear todo": las comunes/raras/únicas de la tanda en cadena, y tras una
+// pausa las Épico+, de a una y más despacio.
 function flipAllOfrendaCards(){
   if(!ofrendaPullResults) return;
-  const nonRare = ofrendaPullResults.filter(r=>!isRarePetResult(r) && !r.flipped);
-  const rare = ofrendaPullResults.filter(r=>isRarePetResult(r) && !r.flipped);
-  nonRare.forEach(r=> r.flipped = true);
-  refreshOfrendaResultsDOM();
-  if(rare.length){
-    setTimeout(()=>{
-      rare.forEach(r=> r.flipped = true);
-      refreshOfrendaResultsDOM();
-    }, 700);
-  }
+  const btn = document.getElementById('btn-flip-all');
+  if(btn) btn.disabled = true;
+  const idxs = ofrendaPageIdxs().filter(i=>!ofrendaPullResults[i].flipped);
+  const nonRare = idxs.filter(i=>!isRarePetResult(ofrendaPullResults[i]));
+  const rare = idxs.filter(i=>isRarePetResult(ofrendaPullResults[i]));
+  let t = 0;
+  nonRare.forEach(i=>{ ofrendaFlipTimers.push(setTimeout(()=>flipOfrendaCard(i), t)); t += 110; });
+  t += rare.length ? 450 : 0;
+  rare.forEach(i=>{ ofrendaFlipTimers.push(setTimeout(()=>flipOfrendaCard(i), t)); t += 420; });
 }
 // Cinemática de invocación (2026-10-03, pedido explícito): al otorgar una
 // ofrenda se oscurece la pantalla y el Ygdrasil se ilumina; cuando la tirada
