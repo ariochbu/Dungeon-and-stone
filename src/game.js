@@ -4810,7 +4810,7 @@ const SOUL_STONE_ART = {};
 // (SOUL_TIER_COLORS) sobre fondo oscuro. Los rangos listados acá ya la tienen;
 // el resto sigue con su PNG viejo. Importar con tools/import_objetos.py.
 const SOUL_STONE_CLEAN_ART = new Set(['F','E','D','C','B','A','S','SS']);
-['F','E','D','C','B','A','S','SS'].forEach(t=> SOUL_STONE_ART[t] = SOUL_STONE_CLEAN_ART.has(t) ? `src/assets/piedras/arte/${t}.jpg?v=1` : `src/assets/piedras/${t}.png`);
+['F','E','D','C','B','A','S','SS'].forEach(t=> { if(SOUL_STONE_CLEAN_ART.has(t)) SOUL_STONE_ART[t] = `src/assets/piedras/arte/${t}.jpg?v=1`; }); // los PNG viejos se retiraron
 // Lo mismo para las pociones: src/assets/pociones/arte/<id>.jpg.
 const POTION_CLEAN_ART = new Set(['vida_menor','vida_mayor','estamina','espiritu','antidoto']);
 // Carta de objeto al pasar el cursor / mantener presionado (2026-10-03,
@@ -4949,7 +4949,7 @@ function potionArtTileHTML(potionId, px){
   px = px || 36;
   const tpl = POTION_TEMPLATES[potionId];
   const clean = POTION_CLEAN_ART.has(potionId);
-  const inner = `<img src="${clean ? `src/assets/pociones/arte/${potionId}.jpg?v=1` : `src/assets/pociones/${potionId}.png`}" alt="" style="width:100%; height:100%; object-fit:${clean?'cover':'contain'};" onerror="this.replaceWith(Object.assign(document.createElement('span'),{style:'font-size:${Math.round(px*0.55)}px', textContent:'${tpl.icon}'}))">`;
+  const inner = `<img src="src/assets/pociones/arte/${potionId}.jpg?v=1" alt="" style="width:100%; height:100%; object-fit:${clean?'cover':'contain'};" onerror="this.replaceWith(Object.assign(document.createElement('span'),{style:'font-size:${Math.round(px*0.55)}px', textContent:'${tpl.icon}'}))">`;
   return `<div class="item-art-tile ${clean?'clean':''}" style="width:${px}px; height:${px}px; --rc:#3a3128; box-shadow:0 0 0 2px var(--border) inset;">${inner}</div>`;
 }
 function potionRowWithArt(potionId, textHTML, px){
@@ -12203,7 +12203,7 @@ function renderCombat(){
   const potionSubmenuHTML = potionItems.length ? potionItems.map(it=>{
     const tpl = POTION_TEMPLATES[it.potionId];
     return `<div class="submenu-item ${combat.turnBusy?'disabled':''}" data-potion="${it.potionId}">
-      <span class="item-name"><img src="src/assets/pociones/${it.potionId}.png" alt="" style="width:18px; height:18px; object-fit:contain; vertical-align:-4px; margin-right:3px;" onerror="this.replaceWith('${tpl.icon} ')">${tpl.name} x${it.qty}</span>
+      <span class="item-name"><img src="src/assets/pociones/arte/${it.potionId}.jpg?v=1" alt="" style="width:18px; height:18px; object-fit:cover; border-radius:3px; vertical-align:-4px; margin-right:3px;" onerror="this.replaceWith('${tpl.icon} ')">${tpl.name} x${it.qty}</span>
       <span>${tpl.desc}</span>
     </div>`;
   }).join('') : `<p class="inv-empty-msg">No tienes pociones para usar.</p>`;
