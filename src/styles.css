@@ -1579,3 +1579,29 @@ body.city-mode:has(#screen-game.active) header.top{ display:none; }
   .fc-attr{ grid-template-columns:24px minmax(86px, 0.8fr) 1fr 40px; gap:8px; padding:6px 8px; }
   .fc-tiles{ grid-template-columns:repeat(2, 1fr); }
 }
+.fc-title{ display:flex; align-items:center; justify-content:center; gap:8px; margin:6px 0 2px; font-size:0.86em; color:var(--text-dim); }
+.fc-title label{ font-family:'Cinzel'; text-transform:uppercase; letter-spacing:1px; font-size:0.85em; }
+.fc-title select{ width:auto; margin:0; padding:4px 8px; }
+
+/* Mochila en cuadrícula (2026-10-04) */
+.bag-selects{ display:flex; gap:8px; flex-wrap:wrap; margin:2px 0 10px; }
+.bag-selects select{ flex:1; min-width:150px; margin:0; padding:6px 8px; font-size:0.9em; }
+.bag-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(64px, 1fr)); gap:8px; padding:10px; border-radius:8px; border:1px solid var(--border);
+  background:repeating-linear-gradient(0deg, rgba(255,255,255,0.015) 0 1px, transparent 1px 72px), repeating-linear-gradient(90deg, rgba(255,255,255,0.015) 0 1px, transparent 1px 72px), #110e0b; }
+.bag-tile{ position:relative; aspect-ratio:1; padding:0; display:flex; align-items:center; justify-content:center; border-radius:7px; cursor:pointer;
+  border:2px solid color-mix(in srgb, var(--rc) 70%, #2a231c); background:radial-gradient(circle, #2a231c, #120f0c); transition:transform 0.1s ease, box-shadow 0.1s ease; }
+.bag-tile .item-art-tile{ width:100% !important; height:100% !important; box-shadow:none !important; border-radius:5px; }
+.bag-tile:hover{ transform:translateY(-2px); box-shadow:0 4px 12px color-mix(in srgb, var(--rc) 40%, transparent); }
+.bag-tile.sel{ border-color:#ffe9a8; box-shadow:0 0 0 2px #ffd76a, 0 0 16px rgba(255,215,106,0.55); transform:translateY(-2px); }
+.bag-tile.blocked .item-art-tile{ filter:grayscale(0.7) brightness(0.6); }
+.bag-lock{ position:absolute; right:2px; top:1px; font-style:normal; font-size:0.8em; }
+.bag-qty{ position:absolute; right:3px; bottom:1px; font-style:normal; font-family:'Cinzel'; font-size:0.74em; color:#fff; text-shadow:0 0 3px #000, 0 0 3px #000; }
+.bag-hint{ text-align:center; color:var(--text-dim); font-size:0.84em; margin:10px 0 2px; }
+.bag-detail{ margin-top:10px; padding:12px; border-radius:8px; border:1px solid color-mix(in srgb, var(--rc) 60%, #2a231c); background:linear-gradient(160deg, color-mix(in srgb, var(--rc) 12%, #17120d), #100d0a 70%); animation:ws-in 0.2s ease; }
+.bag-detail-head{ display:flex; align-items:center; gap:12px; margin-bottom:8px; }
+.bag-detail-head b{ display:block; font-family:'Cinzel'; font-size:1.08em; }
+.bag-detail-head small{ color:var(--text-dim); font-size:0.8em; }
+.bag-detail .pet-card-bonuses{ margin-bottom:8px; font-size:0.9em; }
+.bag-worn{ font-size:0.8em; color:var(--text-dim); margin-bottom:8px; }
+.bag-detail .btn-main{ width:100%; }
+@media (max-width:640px){ .bag-grid{ grid-template-columns:repeat(auto-fill, minmax(54px, 1fr)); gap:6px; padding:8px; } }

@@ -182,6 +182,30 @@ function renownBadge(n){
   const t = renownTitle(n);
   return t ? ` <span class="renown-badge renown-${n}" title="Título por jefes de década derrotados">${t}</span>` : '';
 }
+// Título en uso (pedido explícito 2026-10-04): el jugador elige en la Ficha
+// cuál de sus títulos ganados lleva, o ninguno; solo ese se muestra. Sin
+// elección (null) se usa el más alto, como antes. Se guarda en
+// characters.title_choice (migración 0031) para que lo vean los demás en el
+// ranking; si esa columna aún no existe, queda guardado solo en este
+// dispositivo. Nunca puede mostrarse un título no ganado: se recorta al
+// número de jefes de década derrotados.
+function titleFromChoice(choice, earned){
+  return choice===null || choice===undefined ? earned : Math.max(0, Math.min(earned, choice));
+}
+function myTitleN(){
+  let choice = state.char.titleChoice;
+  if(!state.char.titleColumn){
+    const local = lsGet(charKey('title'));
+    choice = local===null || local==='' ? null : parseInt(local, 10);
+  }
+  return titleFromChoice(Number.isFinite(choice) ? choice : null, myBossesBeaten());
+}
+function setMyTitle(choice){
+  state.char.titleChoice = choice;
+  if(!state.char.titleColumn) lsSet(charKey('title'), choice===null ? '' : String(choice));
+  save();
+  renderAll();
+}
 function allyCap(){ return BETA_ALLY_UNLOCKS ? Math.min(MAX_ALLIES, myBossesBeaten()) : MAX_ALLIES; }
 function tavernUnlocked(){ return state.char.level >= ALLY_MIN_LEVEL && (!BETA_ALLY_UNLOCKS || myBossesBeaten() >= 1); }
 function allyHireCost(tpl, charLevel){ return tpl.baseCost + charLevel*tpl.costPerLevel; }
@@ -2468,12 +2492,20 @@ function setPieceCounts(equip){
   return counts;
 }
 // Bonos activos (umbrales 2/3/5 alcanzados) como lista plana.
+// Umbral que se aplica con n piezas de un conjunto: SOLO el más alto alcanzado
+// (corrección de ariochbu, 2026-10-04: "si tienen los 5 solo debe aplicarse el
+// 5; se puso 2 y 3 por si escogen dos conjuntos distintos"). Antes se sumaban
+// los tres. 2 piezas -> bono de 2; 3 o 4 -> bono de 3; 5 -> bono de 5.
+function setBonusTier(setId, n){
+  const b = SET_BONUSES[setId];
+  if(!b) return 0;
+  return [5,3,2].find(k=> n>=k && b[k]) || 0;
+}
 function activeSetBonuses(equip){
   const out = [];
   Object.entries(setPieceCounts(equip)).forEach(([setId, n])=>{
-    const b = SET_BONUSES[setId];
-    if(!b) return;
-    [2,3,5].forEach(k=>{ if(n>=k && b[k]) out.push(Object.assign({setId, pieces:k}, b[k])); });
+    const k = setBonusTier(setId, n);
+    if(k) out.push(Object.assign({setId, pieces:k}, SET_BONUSES[setId][k]));
   });
   return out;
 }
@@ -2484,7 +2516,8 @@ function setBonusMod(equip, key){ return activeSetBonuses(equip).reduce((sum,b)=
 function setBonusChipsHTML(equip){
   return Object.entries(setPieceCounts(equip)).map(([setId, n])=>{
     const set = SET_CATALOG[setId], b = SET_BONUSES[setId];
-    const active = [2,3,5].filter(k=>n>=k && b[k]).map(k=>b[k].name);
+    const tier = setBonusTier(setId, n);
+    const active = tier ? [b[tier].name] : [];
     const desc = [2,3,5].map(k=>`${k} piezas — ${b[k].name}: ${b[k].text}`).join(' | ').replace(/"/g,'&quot;');
     return `<span class="res-chip ${active.length?'pos':''}" title="${desc}">${set.name} ${n}/5${active.length?': '+active.join(' · '):''}</span>`;
   }).join('');
@@ -3817,6 +3850,7 @@ function characterToRow(){
     pets: state.char.pets,
     checkin: state.char.checkin,
     dungeon: state.dungeon,
+    ...(state.char.titleColumn ? {title_choice: state.char.titleChoice===undefined ? null : state.char.titleChoice} : {}),
     ...(sessionEnforced ? {last_session: SESSION_ID} : {})
   };
 }
@@ -3898,6 +3932,7 @@ function rowToState(row){
     char:{
       id: row.id, slotNumber: row.slot_number, nickname: row.nickname,
       role: row.role, hiddenFromLeaderboard: row.hidden_from_leaderboard,
+      titleChoice: row.title_choice===undefined ? null : row.title_choice, titleColumn: row.title_choice !== undefined,
       race: row.race, style: row.style,
       level: row.level, xp: row.xp, gold: row.gold, missionCurrency: row.mission_currency || 0,
       missionRerollCycle: row.mission_reroll_cycle || null, missionRerollCount: row.mission_reroll_count || 0,
@@ -4541,7 +4576,7 @@ function renderSheetPanel(targetId){
     <div class="sheet-title">
       <div class="sheet-emblem"><img src="src/assets/razas/${r.id}.png" alt="" onerror="this.replaceWith('${r.icon}')"></div>
       <div>
-        <div class="name">${state.char.nickname}${renownBadge(myBossesBeaten())} · ${r.name} · <img src="src/assets/clases/${s.id}.png" alt="" style="width:1.1em; height:1.1em; object-fit:contain; vertical-align:-2px;" onerror="this.replaceWith('${s.icon} ')"> ${s.name}</div>
+        <div class="name">${state.char.nickname}${renownBadge(myTitleN())} · ${r.name} · <img src="src/assets/clases/${s.id}.png" alt="" style="width:1.1em; height:1.1em; object-fit:contain; vertical-align:-2px;" onerror="this.replaceWith('${s.icon} ')"> ${s.name}</div>
         <div class="tag">Nivel ${state.char.level}</div>
       </div>
     </div>
@@ -4681,8 +4716,9 @@ function renderFicha(){
   const conjuntos = setCounts.length ? setCounts.map(([setId,n])=>{
     const set = SET_CATALOG[setId], b = SET_BONUSES[setId];
     return `<div class="fc-set"><div class="fc-set-head"><b>${set.name}</b><span>${n} / 5 piezas</span></div>
-      ${[2,3,5].filter(k=>b[k]).map(k=>`<div class="fc-set-line ${n>=k?'on':''}"><i>${k}</i><span><b>${b[k].name}</b> ${b[k].text}</span></div>`).join('')}</div>`;
-  }).join('') : '<p class="inv-empty-msg">No llevas piezas de ningún conjunto.</p>';
+      ${[2,3,5].filter(k=>b[k]).map(k=>`<div class="fc-set-line ${setBonusTier(setId,n)===k?'on':''}"><i>${k}</i><span><b>${b[k].name}</b> ${b[k].text}</span></div>`).join('')}</div>`;
+  }).join('') + '<p class="sc-note" style="margin-top:6px;">De cada conjunto se aplica solo el bono más alto que alcances; los de 2 y 3 piezas sirven para combinar dos conjuntos.</p>'
+  : '<p class="inv-empty-msg">No llevas piezas de ningún conjunto.</p>';
   const equipTiles = EQUIP_SLOTS.map(slot=>{
     const it = state.char.equip[slot];
     return it ? `<div class="fc-eq" style="--rc:${RARITIES[it.rarity||'comun'].color}">${itemArtTileHTML(it, 52)}</div>`
@@ -4693,7 +4729,12 @@ function renderFicha(){
     <div class="fc">
       <div class="fc-left">
         <div class="fc-portrait"><img src="${playerSpriteFor(state.char.style, state.char.race)||''}" alt=""><span class="fc-lvl">Nivel ${state.char.level}</span></div>
-        <div class="fc-name">${state.char.nickname}${renownBadge(myBossesBeaten())}</div>
+        <div class="fc-name">${state.char.nickname}${renownBadge(myTitleN())}</div>
+        <div class="fc-title">${myBossesBeaten()>0 ? `<label for="fc-title-sel">Título</label>
+          <select id="fc-title-sel" class="auth-input">
+            <option value="0" ${myTitleN()===0?'selected':''}>Sin título</option>
+            ${Array.from({length:myBossesBeaten()}, (_,i)=>i+1).map(k=>`<option value="${k}" ${myTitleN()===k?'selected':''}>${renownTitle(k)}</option>`).join('')}
+          </select>` : '<small>Aún sin títulos: el primero se gana al derrotar al Ogro (nivel 10).</small>'}</div>
         <div class="fc-sub"><img src="src/assets/razas/${r.id}.png" alt="" onerror="this.remove()">${r.name} · <img src="src/assets/clases/${st.id}.png" alt="" onerror="this.remove()">${st.name}</div>
         <div class="fc-xp"><div class="bar-track"><div class="bar-fill xp" style="width:${xpPct}%"></div></div><small>${state.char.xp} / ${xpNeeded} de experiencia</small></div>
         <div class="fc-passive"><b>Rasgo: ${r.passive}</b>${r.passiveDesc}</div>
@@ -4710,6 +4751,8 @@ function renderFicha(){
     </div>`;
   document.querySelectorAll('[data-fc-tab]').forEach(b=>{ b.onclick = ()=>{ fichaTab = b.dataset.fcTab; renderFicha(); }; });
   document.getElementById('fc-inv').onclick = ()=> cityNavigate('inv');
+  const titleSel = document.getElementById('fc-title-sel');
+  if(titleSel) titleSel.onchange = ()=> setMyTitle(parseInt(titleSel.value, 10));
 }
 
 /* ============================================================
@@ -4949,7 +4992,7 @@ function itemCardHTML(it){
       <div class="pet-card-rank">${rankName}</div>
       ${subParts.length ? `<div class="item-card-sub">${subParts.join(' · ')}</div>` : ''}
       <ul class="pet-card-bonuses">${lines.length ? lines.map(l=>`<li>${l}</li>`).join('') : '<li>Sin bonificaciones.</li>'}</ul>
-      ${setB ? `<div class="pet-card-unique"><b>Bonos del conjunto</b>${[2,3,5].filter(k=>setB[k]).map(k=>`<span class="item-card-setline"><i>${k} piezas · ${setB[k].name}</i> ${setB[k].text}</span>`).join('')}</div>` : ''}
+      ${setB ? `<div class="pet-card-unique"><b>Bonos del conjunto (se aplica el más alto)</b>${[2,3,5].filter(k=>setB[k]).map(k=>`<span class="item-card-setline"><i>${k} piezas · ${setB[k].name}</i> ${setB[k].text}</span>`).join('')}</div>` : ''}
       ${minLvl>0 ? `<div class="item-card-sub">Nivel requerido: ${minLvl}</div>` : ''}
     </div>
   </div>`;
@@ -5186,6 +5229,7 @@ function renderPetSectionHTML(){
 // Mochila / Pociones / Piedras / Caídos. Toda la lógica (equipar, quitar,
 // engarzar, filtros) es la misma de siempre: solo cambia la distribución.
 let invTab = 'mochila';
+let invSel = null; // casilla seleccionada en la mochila: uid del objeto o 'potion:<id>'
 function renderInventory(){
   const allies = state.char.allies || [];
   const targetRow = equipTarget!=='player' ? allies.find(a=>a.id===equipTarget) : null;
@@ -5201,24 +5245,6 @@ function renderInventory(){
       ${allies.map(a=>`<option value="${a.id}" ${equipTarget===a.id?'selected':''}>${a.name} (${a.role})</option>`).join('')}
     </select>
   ` : '';
-
-  const equippedHTML = EQUIP_SLOTS.map(slot=>{
-    const it = targetEquip[slot];
-    const label = slotLabel(slot);
-    if(!it){
-      return `<div class="inv-slot">
-        <div class="inv-slot-label">${label}</div>
-        <div class="inv-empty">— vacío —</div>
-      </div>`;
-    }
-    return `<div class="inv-slot">
-      <div class="inv-slot-label">${label}</div>
-      <div class="inv-item-row" style="margin-bottom:0; ${rarityRowStyle(it)}">
-        ${itemRowCompact(it)}
-        <button class="inv-btn danger" data-unequip="${slot}">Quitar</button>
-      </div>
-    </div>`;
-  }).join('');
 
   const gearItems = state.char.inventory.filter(i=>i.kind==='equip');
   const potionItems = state.char.inventory.filter(i=>i.kind==='potion');
@@ -5239,10 +5265,7 @@ function renderInventory(){
   // chips, ahora una segunda fila para el rango en vez del slot.
   const gearTiersPresent = Object.keys(RARITIES).filter(rk=> gearItems.some(it=>(it.rarity||'comun')===rk));
   if(invGearTierFilter!=='todos' && !gearTiersPresent.includes(invGearTierFilter)) invGearTierFilter = 'todos';
-  const gearTierFilterHTML = gearTiersPresent.length>1 ? `<div class="inv-filter-bar">
-    <button class="nav-btn ${invGearTierFilter==='todos'?'active':''}" data-geartierfilter="todos">Todos los rangos</button>
-    ${gearTiersPresent.map(rk=>`<button class="nav-btn ${invGearTierFilter===rk?'active':''}" data-geartierfilter="${rk}" style="${invGearTierFilter===rk?`border-color:${RARITIES[rk].color}; color:${RARITIES[rk].color};`:''}">${RARITIES[rk].name}</button>`).join('')}
-  </div>` : '';
+  const gearTierFilterHTML = ''; // ahora va como desplegable junto al de senda (ver gearSelectsHTML)
   // Filtro por senda (2026-09-26, pedido explícito: "en el inventario
   // tambien coloca por clase como filtro") — mismo patrón, tercera fila.
   // 2026-10-02: desde que el equipo general son piezas de CONJUNTO (sin
@@ -5252,36 +5275,63 @@ function renderInventory(){
     .concat(SET_IDS.filter(id=> gearItems.some(it=>it.setId===id)).map(id=>'set:'+id));
   if(invGearClassFilter!=='todos' && !gearClassesPresent.includes(invGearClassFilter)) invGearClassFilter = 'todos';
   const gearClassLabel = (cid)=> cid.startsWith('set:') ? 'Conjunto: '+SET_CATALOG[cid.slice(4)].name : SHOP_ROLE_LABELS[cid];
-  const gearClassFilterHTML = gearClassesPresent.length>=1 ? `<div class="inv-filter-bar">
-    <button class="nav-btn ${invGearClassFilter==='todos'?'active':''}" data-gearclassfilter="todos">Todas las sendas</button>
-    ${gearClassesPresent.map(cid=>`<button class="nav-btn ${invGearClassFilter===cid?'active':''}" data-gearclassfilter="${cid}">${gearClassLabel(cid)}</button>`).join('')}
+  const gearClassFilterHTML = '';
+  const gearSelectsHTML = (gearTiersPresent.length>1 || gearClassesPresent.length>=1) ? `<div class="bag-selects">
+    ${gearTiersPresent.length>1 ? `<select class="auth-input" id="bag-tier-select">
+      <option value="todos">Todos los rangos</option>
+      ${gearTiersPresent.map(rk=>`<option value="${rk}" ${invGearTierFilter===rk?'selected':''}>${RARITIES[rk].name}</option>`).join('')}
+    </select>` : ''}
+    ${gearClassesPresent.length>=1 ? `<select class="auth-input" id="bag-class-select">
+      <option value="todos">Todas las sendas y conjuntos</option>
+      ${gearClassesPresent.map(cid=>`<option value="${cid}" ${invGearClassFilter===cid?'selected':''}>${gearClassLabel(cid)}</option>`).join('')}
+    </select>` : ''}
   </div>` : '';
-  const gearHTML = gearItems.length ? EQUIP_SLOTS.filter(slot=> invGearFilter==='todos' || slot===invGearFilter).map(slot=>{
-    const items = gearItems.filter(it=>it.slot===slot
+  // Mochila en cuadrícula (rediseño 2026-10-04, pedido: "hacer la interfaz más
+  // bonita"): cada objeto es una casilla con su arte y el color de su rango.
+  // Al tocar una casilla se selecciona y debajo sale su detalle con lo que
+  // llevas puesto en esa ranura y el botón de equipar. La carta al pasar el
+  // cursor sigue funcionando para un vistazo rápido.
+  const rarityIdx = (it)=> Object.keys(RARITIES).indexOf(it.rarity||'comun');
+  const gearShown = gearItems.filter(it=> (invGearFilter==='todos' || it.slot===invGearFilter)
       && (invGearTierFilter==='todos' || (it.rarity||'comun')===invGearTierFilter)
-      && (invGearClassFilter==='todos' || (invGearClassFilter.startsWith('set:') ? it.setId===invGearClassFilter.slice(4) : it.styleId===invGearClassFilter)));
-    if(!items.length) return '';
-    const rows = items.map(it=>{
-      const minLvl = gearEquipMinLevel(it.rarity);
-      const levelBlocked = minLvl>0 && targetLevel<minLvl;
-      const levelNote = levelBlocked ? `<div class="inv-item-bonus" style="color:var(--blood-light);">Nivel requerido: ${minLvl}</div>` : '';
-      return `
-      <div class="inv-item-row" style="${rarityRowStyle(it)}">
-        ${itemRowCompact(it, levelNote)}
-        <button class="inv-btn" data-equip="${it.uid}" ${levelBlocked?'disabled':''}>Equipar en ${targetName}</button>
-      </div>
-    `;
-    }).join('');
-    return `<div class="section-label" style="margin-top:6px; font-size:0.85em;">${slotLabel(slot)}</div>${rows}`;
-  }).join('') || `<p class="inv-empty-msg">No hay equipo con ese filtro.</p>` : `<p class="inv-empty-msg">No llevas equipo suelto en la mochila.</p>`;
-
-  const potionHTML = potionItems.length ? potionItems.map(it=>{
-    const tpl = POTION_TEMPLATES[it.potionId];
-    return `<div class="inv-item-row">
-      ${potionRowWithArt(it.potionId, `<b>${tpl.name}</b> <span class="slot-tag">x${it.qty}</span>`)}
-      <button class="inv-btn" data-usepotion="${it.potionId}">Usar</button>
+      && (invGearClassFilter==='todos' || (invGearClassFilter.startsWith('set:') ? it.setId===invGearClassFilter.slice(4) : it.styleId===invGearClassFilter)))
+    .sort((a,b)=> (EQUIP_SLOTS.indexOf(a.slot)-EQUIP_SLOTS.indexOf(b.slot)) || (rarityIdx(b)-rarityIdx(a)));
+  const selGear = gearShown.find(it=>it.uid===invSel) || null;
+  const gearDetailHTML = (it)=>{
+    const r = RARITIES[it.rarity||'comun'];
+    const minLvl = gearEquipMinLevel(it.rarity);
+    const levelBlocked = minLvl>0 && targetLevel<minLvl;
+    const worn = targetEquip[it.slot];
+    const sub = [slotLabel(it.slot), it.styleId ? (SHOP_ROLE_LABELS[it.styleId]||it.styleId) : null, it.setId && SET_CATALOG[it.setId] ? 'Conjunto: '+SET_CATALOG[it.setId].name : null].filter(Boolean).join(' · ');
+    const lines = itemBonusLines(it);
+    return `<div class="bag-detail" style="--rc:${r.color}">
+      <div class="bag-detail-head">${itemArtTileHTML(it, 60, true)}
+        <div><b style="color:${r.color}">${it.name}</b><small>${r.name} · ${sub}</small></div></div>
+      <ul class="pet-card-bonuses">${lines.length ? lines.map(l=>`<li>${l}</li>`).join('') : '<li>Sin bonificaciones.</li>'}</ul>
+      <div class="bag-worn">${worn ? `Llevas puesto: <b style="color:${RARITIES[worn.rarity||'comun'].color}">${worn.name}</b> — ${itemBonusText(worn) || 'sin bonificaciones.'}` : 'No llevas nada en esa ranura.'}</div>
+      ${levelBlocked ? `<div class="bag-worn" style="color:var(--blood-light);">Nivel requerido: ${minLvl}</div>` : ''}
+      <button class="btn-main" data-equip="${it.uid}" ${levelBlocked?'disabled':''}>Equipar en ${targetName}</button>
     </div>`;
-  }).join('') : `<p class="inv-empty-msg">No tienes pociones. Búscalas en cofres del laberinto.</p>`;
+  };
+  const gearHTML = gearItems.length ? (gearShown.length ? `
+    <div class="bag-grid">${gearShown.map(it=>{
+      const minLvl = gearEquipMinLevel(it.rarity);
+      const blocked = minLvl>0 && targetLevel<minLvl;
+      return `<button class="bag-tile ${it.uid===invSel?'sel':''} ${blocked?'blocked':''}" data-bag-sel="${it.uid}" style="--rc:${RARITIES[it.rarity||'comun'].color}">${itemArtTileHTML(it, 54)}${blocked?'<i class="bag-lock">🔒</i>':''}</button>`;
+    }).join('')}</div>
+    ${selGear ? gearDetailHTML(selGear) : '<p class="bag-hint">Toca un objeto para ver su detalle y equiparlo.</p>'}`
+    : `<p class="inv-empty-msg">No hay equipo con ese filtro.</p>`) : `<p class="inv-empty-msg">No llevas equipo suelto en la mochila.</p>`;
+
+  const selPotion = potionItems.find(it=>'potion:'+it.potionId===invSel) || null;
+  const potionHTML = potionItems.length ? `
+    <div class="bag-grid">${potionItems.map(it=>`<button class="bag-tile ${'potion:'+it.potionId===invSel?'sel':''}" data-bag-sel="potion:${it.potionId}" style="--rc:#b8934a">${potionArtTileHTML(it.potionId, 54)}<i class="bag-qty">x${it.qty}</i></button>`).join('')}</div>
+    ${selPotion ? `<div class="bag-detail" style="--rc:#b8934a">
+      <div class="bag-detail-head">${potionArtTileHTML(selPotion.potionId, 60)}
+        <div><b>${POTION_TEMPLATES[selPotion.potionId].name}</b><small>Poción · tienes ${selPotion.qty}</small></div></div>
+      <ul class="pet-card-bonuses"><li>${POTION_TEMPLATES[selPotion.potionId].desc}</li></ul>
+      <button class="btn-main" data-usepotion="${selPotion.potionId}">Usar</button>
+    </div>` : '<p class="bag-hint">Toca una poción para ver qué hace y usarla.</p>'}`
+    : `<p class="inv-empty-msg">No tienes pociones. Búscalas en cofres del laberinto.</p>`;
 
   ensureSoulSlots();
   // Piedras de alma: el jugador usa state.char.soulSlots (crece con el
@@ -5328,21 +5378,32 @@ function renderInventory(){
     ${stoneTiersPresent.map(t=>`<button class="nav-btn ${invStoneTierFilter===t?'active':''}" data-stonetierfilter="${t}" style="${invStoneTierFilter===t?`border-color:${SOUL_TIER_COLORS[t]}; color:${SOUL_TIER_COLORS[t]};`:''}">${t}</button>`).join('')}
   </div>` : '';
   const stoneItemsFiltered = invStoneTierFilter==='todos' ? stoneItems : stoneItems.filter(it=>it.tier===invStoneTierFilter);
-  const stoneBagHTML = stoneItemsFiltered.length ? stoneItemsFiltered.map(it=>{
-    const c = SOUL_TIER_COLORS[it.tier] || 'var(--text)';
-    const sameFamily = soulSlotsSource.find(s=>s && s.family===it.family);
-    const noRoom = soulSlotsSource.length===0 || soulSlotsSource.every(s=>s);
+  const stoneInfo = (it)=>{
+    const sameFamily = soulSlotsSource.find(st=>st && st.family===it.family);
+    const noRoom = soulSlotsSource.length===0 || soulSlotsSource.every(st=>st);
     const minLvl = stoneEquipMinLevel(it.tier);
     const levelBlocked = minLvl>0 && targetLevel<minLvl;
-    const blocked = (sameFamily ? soulTierIdx(it.tier) < soulTierIdx(sameFamily.tier) : noRoom) || levelBlocked;
-    const btnLabel = sameFamily ? 'Reemplazar' : 'Engarzar';
-    const socketAttr = isAllyTargetForStones ? `data-socket-ally="${it.uid}|${targetRow.id}"` : `data-socket="${it.uid}"`;
-    const levelNote = levelBlocked ? `<div class="inv-item-bonus" style="color:var(--blood-light);">Nivel requerido: ${minLvl}</div>` : '';
-    return `<div class="inv-item-row">
-      ${itemRowCompact(it, levelNote)}
-      <button class="inv-btn" ${socketAttr} ${blocked?'disabled':''}>${btnLabel} en ${targetName}</button>
-    </div>`;
-  }).join('') : (stoneItems.length ? `<p class="inv-empty-msg">No hay piedras con ese filtro.</p>` : `<p class="inv-empty-msg">No tienes piedras de alma. Las dejan caer los guardianes de nivel 4 en adelante.</p>`);
+    return {sameFamily, minLvl, levelBlocked, blocked: (sameFamily ? soulTierIdx(it.tier) < soulTierIdx(sameFamily.tier) : noRoom) || levelBlocked};
+  };
+  const selStone = stoneItemsFiltered.find(it=>it.uid===invSel) || null;
+  const stoneBagHTML = stoneItemsFiltered.length ? `
+    <div class="bag-grid">${stoneItemsFiltered.map(it=>{
+      const info = stoneInfo(it);
+      return `<button class="bag-tile ${it.uid===invSel?'sel':''} ${info.blocked?'blocked':''}" data-bag-sel="${it.uid}" style="--rc:${SOUL_TIER_COLORS[it.tier]||'#9a958c'}">${itemArtTileHTML(it, 54)}${info.levelBlocked?'<i class="bag-lock">🔒</i>':''}</button>`;
+    }).join('')}</div>
+    ${selStone ? (()=>{
+      const it = selStone, info = stoneInfo(it), c = SOUL_TIER_COLORS[it.tier] || 'var(--text)';
+      const socketAttr = isAllyTargetForStones ? `data-socket-ally="${it.uid}|${targetRow.id}"` : `data-socket="${it.uid}"`;
+      return `<div class="bag-detail" style="--rc:${c}">
+        <div class="bag-detail-head">${itemArtTileHTML(it, 60, true)}
+          <div><b style="color:${c}">${it.name}</b><small>Piedra de alma · rango ${it.tier}</small></div></div>
+        <ul class="pet-card-bonuses"><li>${it.desc}</li></ul>
+        ${info.sameFamily ? `<div class="bag-worn">Ya llevas una de esta familia: <b>${info.sameFamily.name}</b>. Se reemplazará.</div>` : ''}
+        ${info.levelBlocked ? `<div class="bag-worn" style="color:var(--blood-light);">Nivel requerido: ${info.minLvl}</div>` : ''}
+        <button class="btn-main" ${socketAttr} ${info.blocked?'disabled':''}>${info.sameFamily ? 'Reemplazar' : 'Engarzar'} en ${targetName}</button>
+      </div>`;
+    })() : '<p class="bag-hint">Toca una piedra para ver su detalle y engarzarla.</p>'}`
+    : (stoneItems.length ? `<p class="inv-empty-msg">No hay piedras con ese filtro.</p>` : `<p class="inv-empty-msg">No tienes piedras de alma. Las dejan caer los guardianes de nivel 4 en adelante.</p>`);
 
   const fragmentItems = state.char.inventory.filter(i=>i.kind==='fragmento');
   const fragmentHTML = fragmentItems.length ? `<div class="inv-item-row" style="flex-wrap:wrap; gap:8px;">
@@ -5414,14 +5475,13 @@ function renderInventory(){
       <div class="pj-col">${slotTile('amuleto')}${slotTile('botas')}</div>
     </div>
     ${soulSlotsSource.length ? `<div class="pj-stones-row"><span>Piedras de alma</span>${stoneTiles}</div>` : ''}
-    <div class="pj-attrs">${attrsHTML}</div>
-    <details class="pj-details"><summary>Detalle del equipo de ${targetName}</summary>${equippedHTML}</details>`;
+    <div class="pj-attrs">${attrsHTML}</div>`; // el "Detalle del equipo" se quitó (2026-10-04): cada ranura ya muestra su carta
   const tabs = [['mochila','🎒 Mochila'],['pociones','🧪 Pociones'],['piedras','💎 Piedras']].concat(targetRow ? [] : [['caidos','🐾 Caídos']]);
   if(!tabs.some(t=>t[0]===invTab)) invTab = 'mochila';
   const tabBody = invTab==='pociones' ? potionHTML
     : invTab==='piedras' ? `${soulSlotsHTML}${stoneTierFilterHTML}${stoneBagHTML}${fragmentSection}`
     : invTab==='caidos' ? renderPetSectionHTML()
-    : `${gearFilterHTML}${gearTierFilterHTML}${gearClassFilterHTML}${gearHTML}`;
+    : `${gearFilterHTML}${gearSelectsHTML}${gearHTML}`;
   document.getElementById('main-panel').innerHTML = `
     <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:6px;">
       <h3 style="color:var(--bronze-light);">Personaje e inventario</h3>
@@ -5440,7 +5500,12 @@ function renderInventory(){
   const pjPrev = document.getElementById('pj-prev'), pjNext = document.getElementById('pj-next');
   if(pjPrev) pjPrev.onclick = ()=> goTarget(-1);
   if(pjNext) pjNext.onclick = ()=> goTarget(1);
-  document.querySelectorAll('[data-invtab]').forEach(b=>{ b.onclick = ()=>{ invTab = b.dataset.invtab; renderInventory(); }; });
+  document.querySelectorAll('[data-invtab]').forEach(b=>{ b.onclick = ()=>{ invTab = b.dataset.invtab; invSel = null; renderInventory(); }; });
+  document.querySelectorAll('[data-bag-sel]').forEach(b=>{ b.onclick = ()=>{ invSel = invSel===b.dataset.bagSel ? null : b.dataset.bagSel; hidePetZoom(); renderInventory(); }; });
+  const bagTierSel = document.getElementById('bag-tier-select');
+  if(bagTierSel) bagTierSel.onchange = ()=>{ invGearTierFilter = bagTierSel.value; renderInventory(); };
+  const bagClassSel = document.getElementById('bag-class-select');
+  if(bagClassSel) bagClassSel.onchange = ()=>{ invGearClassFilter = bagClassSel.value; renderInventory(); };
   document.getElementById('btn-close-inv').onclick = ()=>{ invOpen=false; renderAll(); };
   document.querySelectorAll('[data-pet-unequip]').forEach(el=>{
     el.onclick = ()=>{ togglePetEquip(el.dataset.petUnequip); renderSheet(); renderInventory(); save(); };
@@ -5624,6 +5689,7 @@ function equipItem(uid){
 // filtros que lo esconderían.
 function revealInBag(item){
   invTab = 'mochila';
+  invSel = item.uid || null; // queda seleccionado en la cuadrícula
   if(invGearFilter!=='todos' && invGearFilter!==item.slot) invGearFilter = 'todos';
   if(invGearTierFilter!=='todos' && invGearTierFilter!==(item.rarity||'comun')) invGearTierFilter = 'todos';
   if(invGearClassFilter!=='todos' && !(invGearClassFilter.startsWith('set:') ? item.setId===invGearClassFilter.slice(4) : item.styleId===invGearClassFilter)) invGearClassFilter = 'todos';
@@ -5817,7 +5883,7 @@ function renderSideNav(){
     <div class="sn-me">
       <div class="sn-ava"><img src="${playerSpriteFor(state.char.style, state.char.race)||''}" alt=""><span class="sn-lvl">${state.char.level}</span></div>
       <div class="sn-who">
-        <div class="sn-name">${state.char.nickname}${renownBadge(myBossesBeaten())}</div>
+        <div class="sn-name">${state.char.nickname}${renownBadge(myTitleN())}</div>
         <div class="sn-sub">${r.name} · ${st.name}</div>
         <div class="sn-cur"><span title="Oro">⛁ ${state.char.gold}</span><span title="Sellos del Laberinto">🔷 ${state.char.missionCurrency||0}</span></div>
         <div class="sn-bar hp" title="Vida ${state.char.curHP}/${d.maxHP}"><i style="width:${hpPct}%"></i></div>
@@ -7290,7 +7356,7 @@ async function renderRanking(){
     return src ? `<img src="${src}" alt="">` : `<em>${(row.nickname||'?').charAt(0).toUpperCase()}</em>`;
   };
   const isMine = (row)=> row.nickname.toLowerCase() === state.char.nickname.toLowerCase();
-  const fame = (row)=> row.record_level ? renownBadge(decadeBossesBeaten(1, row.record_level)) : '';
+  const fame = (row)=> row.record_level ? renownBadge(titleFromChoice(row.title_choice, decadeBossesBeaten(1, row.record_level))) : '';
   const podium = data.slice(0,3).map((row,i)=>`
     <div class="rk-pod p${i+1} ${isMine(row)?'mine':''}">
       <div class="rk-medal">${['🥇','🥈','🥉'][i]}</div>
@@ -13155,7 +13221,7 @@ function renderCharacterSelect(rows){
       <div style="display:flex; align-items:center; gap:10px; min-width:0; flex:1;">
         <div class="sheet-emblem" style="width:40px; height:40px; font-size:1.3em;"><img src="src/assets/razas/${r.id}.png" alt="" onerror="this.replaceWith('${r.icon}')"></div>
         <div style="min-width:0; flex:1;">
-          <b>${row.nickname}</b>${renownBadge(decadeBossesBeaten(row.checkpoint_level, row.record_level))} <span class="slot-tag">${r.name} · ${s.name}</span>${row.role==='admin' ? ' <span class="slot-tag">admin</span>' : ''}
+          <b>${row.nickname}</b>${renownBadge(titleFromChoice(row.title_choice, decadeBossesBeaten(row.checkpoint_level, row.record_level)))} <span class="slot-tag">${r.name} · ${s.name}</span>${row.role==='admin' ? ' <span class="slot-tag">admin</span>' : ''}
           <div class="inv-item-bonus neutral">Nivel ${row.level} · Récord: Nivel ${row.record_level} · Piso ${row.record_floor_idx}</div>
         </div>
       </div>
