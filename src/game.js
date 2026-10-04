@@ -4825,7 +4825,19 @@ function registerItemZoom(it){
   }
   return key;
 }
+const POTION_CARD_COLOR = '#b8934a';
 function itemCardHTML(it){
+  if(it.potionCard){
+    const tpl = POTION_TEMPLATES[it.potionCard];
+    return `<div class="pet-card item-card" style="--rc:${POTION_CARD_COLOR}">
+      <div class="pet-card-art item">${potionArtTileHTML(it.potionCard, 150)}</div>
+      <div class="pet-card-body">
+        <div class="pet-card-name">${tpl.name}</div>
+        <div class="pet-card-rank">Poción</div>
+        <ul class="pet-card-bonuses"><li>${tpl.desc}</li></ul>
+      </div>
+    </div>`;
+  }
   const isStone = isSoulStoneLike(it);
   const color = isStone ? (SOUL_TIER_COLORS[it.tier]||'#9a958c') : RARITIES[it.rarity||'comun'].color;
   const rankName = isStone ? `Piedra de alma · ${it.tier}` : RARITIES[it.rarity||'comun'].name;
@@ -4854,7 +4866,7 @@ function showItemZoom(key){
   const el = ensurePetZoomLayer();
   if(itemZoomShown === key && el.classList.contains('visible')) return;
   itemZoomShown = key;
-  const color = isSoulStoneLike(it) ? (SOUL_TIER_COLORS[it.tier]||'#9a958c') : RARITIES[it.rarity||'comun'].color;
+  const color = it.potionCard ? POTION_CARD_COLOR : isSoulStoneLike(it) ? (SOUL_TIER_COLORS[it.tier]||'#9a958c') : RARITIES[it.rarity||'comun'].color;
   el.innerHTML = itemCardHTML(it);
   el.style.boxShadow = `0 0 0 3px ${color}, 0 0 34px ${color}99`;
   el.classList.add('visible');
@@ -4868,6 +4880,21 @@ function showItemZoom(key){
   document.addEventListener('touchend', end);
   document.addEventListener('touchcancel', end);
 })();
+// Barras de filtros (.inv-filter-bar): sin la barra de scroll nativa (se veía
+// como una franja blanca, pedido 2026-10-03). Se desplazan arrastrando en
+// celular y con la rueda del mouse en escritorio, y al elegir un filtro la
+// barra redibujada vuelve a donde estaba en vez de saltar al inicio.
+document.addEventListener('wheel', (e)=>{
+  const bar = e.target && e.target.closest ? e.target.closest('.inv-filter-bar') : null;
+  if(!bar || bar.scrollWidth <= bar.clientWidth || Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+  bar.scrollLeft += e.deltaY;
+  e.preventDefault();
+}, {passive:false});
+document.addEventListener('click', (e)=>{
+  if(!(e.target && e.target.closest && e.target.closest('.inv-filter-bar'))) return;
+  const pos = [...document.querySelectorAll('.inv-filter-bar')].map(b=>b.scrollLeft);
+  setTimeout(()=>{ document.querySelectorAll('.inv-filter-bar').forEach((b,i)=>{ if(pos[i]) b.scrollLeft = pos[i]; }); }, 0);
+}, true);
 function itemArtTileHTML(it, px, noZoom){
   px = px || 36;
   const isStone = isSoulStoneLike(it);
@@ -4919,7 +4946,8 @@ function potionArtTileHTML(potionId, px){
   return `<div class="item-art-tile" style="width:${px}px; height:${px}px; box-shadow:0 0 0 2px var(--border) inset;">${inner}</div>`;
 }
 function potionRowWithArt(potionId, textHTML, px){
-  return `<div style="display:flex; align-items:center; gap:10px; min-width:0; flex:1;">${potionArtTileHTML(potionId, px)}<div style="min-width:0; flex:1;">${textHTML}</div></div>`;
+  // Toda la zona ícono + nombre abre la carta de la poción (2026-10-03).
+  return `<div class="item-row-zoom" data-item-zoom="${registerItemZoom({potionCard:potionId})}" style="display:flex; align-items:center; gap:10px; min-width:0; flex:1;">${potionArtTileHTML(potionId, px)}<div style="min-width:0; flex:1;">${textHTML}</div></div>`;
 }
 // Halo de color por rareza para toda la fila (no solo el nombre) — mismo
 // criterio que pedía distinguir de un vistazo un objeto Rango A/Legendario
@@ -5130,7 +5158,7 @@ function renderInventory(){
   if(invGearClassFilter!=='todos' && !gearClassesPresent.includes(invGearClassFilter)) invGearClassFilter = 'todos';
   const gearClassLabel = (cid)=> cid.startsWith('set:') ? 'Conjunto: '+SET_CATALOG[cid.slice(4)].name : SHOP_ROLE_LABELS[cid];
   const gearClassFilterHTML = gearClassesPresent.length>=1 ? `<div class="inv-filter-bar">
-    <button class="nav-btn ${invGearClassFilter==='todos'?'active':''}" data-gearclassfilter="todos">Todas las sendas y conjuntos</button>
+    <button class="nav-btn ${invGearClassFilter==='todos'?'active':''}" data-gearclassfilter="todos">Todas las sendas</button>
     ${gearClassesPresent.map(cid=>`<button class="nav-btn ${invGearClassFilter===cid?'active':''}" data-gearclassfilter="${cid}">${gearClassLabel(cid)}</button>`).join('')}
   </div>` : '';
   const gearHTML = gearItems.length ? EQUIP_SLOTS.filter(slot=> invGearFilter==='todos' || slot===invGearFilter).map(slot=>{
@@ -5155,7 +5183,7 @@ function renderInventory(){
   const potionHTML = potionItems.length ? potionItems.map(it=>{
     const tpl = POTION_TEMPLATES[it.potionId];
     return `<div class="inv-item-row">
-      ${potionRowWithArt(it.potionId, `<b>${tpl.name}</b> <span class="slot-tag">x${it.qty}</span><div class="inv-item-bonus neutral">${tpl.desc}</div>`)}
+      ${potionRowWithArt(it.potionId, `<b>${tpl.name}</b> <span class="slot-tag">x${it.qty}</span>`)}
       <button class="inv-btn" data-usepotion="${it.potionId}">Usar</button>
     </div>`;
   }).join('') : `<p class="inv-empty-msg">No tienes pociones. Búscalas en cofres del laberinto.</p>`;
@@ -7462,7 +7490,7 @@ function renderShop(){
     const qty = shopPotionQty[t.id] || 1;
     const total = price*qty;
     return `<div class="inv-item-row">
-      ${potionRowWithArt(t.id, `<b>${t.name}</b><div class="inv-item-bonus neutral">${t.desc}</div>`)}
+      ${potionRowWithArt(t.id, `<b>${t.name}</b>`)}
       <select class="auth-input shop-qty-select" data-potion-qty="${t.id}" style="max-width:80px;">
         ${[1,10,100].map(n=>`<option value="${n}" ${qty===n?'selected':''}>x${n}</option>`).join('')}
       </select>

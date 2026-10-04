@@ -270,7 +270,10 @@
   /* Categorías de la mochila en una fila horizontal con scroll propio en vez
      de una subsección por slot apilada hacia abajo — el móvil es quien más
      sufre esa lista vertical creciendo sin parar. */
-  .inv-filter-bar{display:flex; flex-wrap:nowrap; gap:6px; overflow-x:auto; padding-bottom:6px; margin-bottom:2px;}
+  .inv-filter-bar{display:flex; flex-wrap:nowrap; gap:6px; overflow-x:auto; padding:0 30px 4px 0; margin-bottom:4px;
+    scrollbar-width:none; -ms-overflow-style:none;
+    -webkit-mask-image:linear-gradient(90deg, #000 calc(100% - 30px), transparent); mask-image:linear-gradient(90deg, #000 calc(100% - 30px), transparent);}
+  .inv-filter-bar::-webkit-scrollbar{display:none;}
   .inv-filter-bar .nav-btn{flex-shrink:0;}
 
   /* Tarjetas de aliado en fila horizontal (2026-09-28, pedido explícito:
