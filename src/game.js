@@ -3971,17 +3971,28 @@ setInterval(()=>{ if(state) checkSessionStillActive(); }, 15000);
 // Ofrendas regaladas por el admin (0029): llegan a characters.gift_pulls, una
 // columna que este cliente nunca escribe al guardar — así no se pisan si el
 // jugador estaba conectado. Se cobran al entrar y cada minuto.
+// Bug reportado 2026-10-03 ("cuando se regala ofrenda y vas para invocar, no te
+// salen si no actualizas"): solo se cobraban al entrar y cada minuto, así que
+// al abrir el árbol justo después del regalo todavía no aparecían. Ahora
+// también se cobran al abrir la pantalla de Ofrenda y al volver a la pestaña.
+// Con la Ofrenda abierta solo se refresca el grupo de gratis (un renderAll
+// borraría las cartas que se estén revelando).
+let lastGiftClaimAt = 0;
+let ofrendaRefreshFree = null; // lo define renderOfrenda mientras está abierta
 async function claimGiftPulls(){
   if(!state || !state.char || !currentUser || sessionKicked) return;
+  lastGiftClaimAt = Date.now();
   const { data, error } = await supabase.rpc('claim_gift_pulls', { p_char: state.char.id });
   if(error || !data || data<=0) return; // sin la función (SQL no corrido) o sin regalos
   if(!state.char.pets) state.char.pets = {owned:{}, equipped:[], pendingFreePulls:0};
   state.char.pets.pendingFreePulls = (state.char.pets.pendingFreePulls||0) + data;
   log(`🎁 Recibiste <b>${data}</b> ofrenda(s) gratis de regalo. Reclámalas frente al árbol (total pendiente: ${state.char.pets.pendingFreePulls}).`);
   await flushSave();
-  renderAll();
+  if(ofrendaOpen && ofrendaRefreshFree && document.getElementById('of-free')){ ofrendaRefreshFree(); renderLog(); }
+  else renderAll();
 }
 setInterval(()=>{ if(state) claimGiftPulls(); }, 60000);
+document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible' && state && Date.now()-lastGiftClaimAt > 5000) claimGiftPulls(); });
 
 // ============================================================
 // AVISO DE ACTUALIZACIÓN (pedido explícito 2026-10-02). Cada deploy sube el
@@ -6171,6 +6182,8 @@ function renderOfrenda(){
       updateOfrendaCollection();
     })();
   };
+  ofrendaRefreshFree = renderFree;
+  if(Date.now() - lastGiftClaimAt > 5000) claimGiftPulls(); // regalos recién enviados
   document.getElementById('btn-pull-x1-gold').onclick = ()=>doPull('x1','gold');
   document.getElementById('btn-pull-x10-gold').onclick = ()=>doPull('x10','gold');
   document.getElementById('btn-pull-x100-gold').onclick = ()=>doPull('x100','gold');
