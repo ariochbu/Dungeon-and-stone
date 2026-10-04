@@ -5851,7 +5851,18 @@ function welcomeSceneArt(scene){
   if(scene==='ask') return `<img class="ws-hero" src="${playerSpriteFor(state.char.style, state.char.race)||''}" alt="">`;
   return '';
 }
+// Las 8 ilustraciones se precargan al abrir la bienvenida: antes, al pasar de
+// escena, se veía por un instante el arte provisional (degradado + emoji)
+// mientras cargaba la imagen (reportado 2026-10-04).
+const welcomeArtReady = new Set();
+let welcomeArtPreloaded = false;
+function preloadWelcomeArt(){
+  if(welcomeArtPreloaded) return;
+  welcomeArtPreloaded = true;
+  WELCOME_STORY.forEach((_,i)=>{ const im = new Image(); im.onload = ()=> welcomeArtReady.add(i); im.src = `src/assets/bienvenida/escena_${i+1}.jpg?v=1`; });
+}
 function renderCityWelcome(){
+  preloadWelcomeArt();
   lsSet(charKey('welcome'),'1');
   const step = Math.max(0, Math.min(WELCOME_STORY.length-1, welcomeStep));
   const cur = WELCOME_STORY[step];
@@ -5859,7 +5870,7 @@ function renderCityWelcome(){
   document.getElementById('main-panel').innerHTML = `
     <div class="city-welcome">
       <h2 class="cw-title">La Última Ciudad</h2>
-      <div class="ws-scene" style="background:${WELCOME_SCENES[cur.scene]}">
+      <div class="ws-scene ${welcomeArtReady.has(step)?'has-art':''}" style="background:${welcomeArtReady.has(step) ? '#0b0907' : WELCOME_SCENES[cur.scene]}">
         <img class="ws-illus" src="src/assets/bienvenida/escena_${step+1}.jpg?v=1" alt="" onload="this.parentElement.classList.add('has-art')" onerror="this.remove()">
         ${welcomeSceneArt(cur.scene)}
       </div>
@@ -5932,21 +5943,32 @@ window.addEventListener('resize', ()=>{
   const mobile = window.matchMedia('(max-width:640px)').matches;
   if(mobile !== cityMapMobile) renderCityMap();
 });
+// Nombres de cada década para las puertas de la entrada.
+const DECADE_GATE_NAMES = {1:'Bosque Goblin', 11:'Nido de Arañas', 21:'Tierra de Bestias', 31:'Salón del Usurpador', 41:'Isla Paraíso', 51:'El Mar'};
 function renderCityDungeonEntry(){
+  // Entrada al laberinto (rediseño 2026-10-04, pedido explícito: "algo más
+  // real y que dé miedo"): boca oscura con niebla, cada checkpoint es una
+  // puerta, y el aviso de lo que se pierde al morir va bien visible.
+  const gates = checkpointLevelsUnlocked();
   document.getElementById('main-panel').innerHTML = `
-    <div class="city-art">
-      <div class="icon">🕳️</div>
-      <h2>Entrar al laberinto</h2>
-      <p>${state.char.checkpointLevel>1
-        ? 'Elige desde qué checkpoint entrar — se libera uno nuevo cada vez que derrotas al jefe de una década.'
-        : 'Siempre se entra desde el nivel 1, piso 1.'}</p>
-      <p style="color:var(--bronze-light); font-size:0.85em; margin-top:8px;">Nivel de récord: ${describeRecord()}.</p>
-      <div class="checkpoint-grid" style="justify-content:center; margin-top:10px;">
-        ${checkpointLevelsUnlocked().map(lvl=>`<button class="checkpoint-btn ${lvl===state.char.checkpointLevel?'current':''}" data-level="${lvl}">${lvl}</button>`).join('')}
+    <div class="lb-entry">
+      <img class="lb-art" src="src/assets/escenas/laberinto.jpg?v=1" alt="" onerror="this.remove()">
+      <div class="lb-fog"></div><div class="lb-fog f2"></div>
+      <div class="lb-inner">
+        <h2>El Laberinto</h2>
+        <p class="lb-whisper">Algo respira ahí abajo.</p>
+        <p class="lb-record">Tu récord: <b>${describeRecord()}</b></p>
+        <div class="lb-gates">
+          ${gates.map(lvl=>`<button class="checkpoint-btn lb-gate ${lvl===state.char.checkpointLevel?'current':''}" data-level="${lvl}">
+            <span class="lb-gate-arch"></span><b>${lvl}</b><small>${DECADE_GATE_NAMES[lvl] || 'Nivel '+lvl}</small></button>`).join('')}
+        </div>
+        <p class="lb-hint">${gates.length>1 ? 'Elige por qué puerta bajar. Se abre una nueva cada vez que derrotas al jefe de una década.' : 'Solo hay una puerta abierta: nivel 1, piso 1.'}</p>
       </div>
     </div>
-    <div class="section-label">Antes de partir</div>
-    <p style="color:var(--text-dim); font-size:0.85em; margin-top:0;">Revisa tu inventario para equipar mejor equipo o comprobar cuántas pociones llevas. Si mueres dentro perderás el equipo suelto de tu mochila y el ${DEFEAT_GOLD_LOSS_PCT}% de tu oro; si te retiras tras vencer a un guardián, conservas todo.</p>
+    <div class="lb-warn">
+      <b>☠ Si mueres dentro</b> pierdes el equipo suelto de tu mochila y el <b>${DEFEAT_GOLD_LOSS_PCT}%</b> de tu oro. Lo que llevas equipado y lo guardado en el Hogar está a salvo.
+      <span>Si te retiras tras vencer a un guardián, conservas todo.</span>
+    </div>
   `;
   const enterDungeonAt = (startLevel)=>{
     showOverlay(
@@ -6335,22 +6357,30 @@ function renderCheckin(){
     const isClaimed = day <= cycleClaimedDay;
     const isNext = available && day===previewDay;
     const cls = isNext ? 'next' : (isClaimed ? 'claimed' : 'locked');
-    return `<div class="checkin-cell ${cls}">
-      <div class="checkin-day">Día ${day}</div>
-      <div class="checkin-reward">🎁 x${day}</div>
-      ${isClaimed?'<div class="checkin-check">✓</div>':''}
+    // Camino de 30 pasos hacia el árbol (rediseño 2026-10-04): cada día es una
+    // piedra; los hitos de cada 10 días son más grandes.
+    return `<div class="ck-step ${cls} ${day%10===0?'big':''}" title="Día ${day}: ${day} ofrenda(s) gratis">
+      <span class="ck-num">${isClaimed ? '✓' : day}</span>
+      <span class="ck-gift">🎁${day}</span>
     </div>`;
   }).join('');
+  const totalClaimed = Array.from({length:cycleClaimedDay}, (_,i)=>i+1).reduce((a,b)=>a+b, 0);
   document.getElementById('main-panel').innerHTML = `
-    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:4px;">
-      <h3 style="color:var(--bronze-light);">📅 Check-in diario</h3>
+    <div class="sc-head">
+      <h3>📅 Check-in diario</h3>
       <button class="reset-btn" id="btn-close-checkin">Cerrar</button>
     </div>
-    <p style="color:var(--text-dim); font-size:0.85em; margin-top:0;">Entra cada día para reclamar ofrendas gratis para el árbol — el día ${'N'} te da ${'N'} tiradas gratis, acumulables si no las reclamas de inmediato. Si faltas un día no pierdes tu progreso, solo se pausa. El ciclo completo se reinicia el día 1 de cada mes.</p>
-    <p style="color:var(--bronze-light); font-size:0.85em;">${available ? `¡Tienes el día <b>${previewDay}</b> disponible!` : `Ya reclamaste hoy (día ${state.char.checkin.day}/30). Vuelve mañana desde las 00:01.`}</p>
-    <button class="btn-main" id="btn-claim-checkin" ${available?'':'disabled'} style="margin-bottom:12px;">${available?`Reclamar día ${previewDay} (+${previewDay} ofrendas gratis)`:'Ya reclamado hoy'}</button>
-    <div class="checkin-grid">${gridHTML}</div>
-    <p style="color:var(--text-dim); font-size:0.78em; margin-top:10px;">Las ofrendas gratis se acumulan en 🌳 Otorgar ofrenda — ábrela y pulsa "Reclamar todas" para revelar tus Caídos del Laberinto.</p>
+    <div class="ck-today ${available?'ready':''}">
+      <div class="ck-today-txt">
+        <b>${available ? `Día ${previewDay} disponible` : `Día ${state.char.checkin.day} reclamado`}</b>
+        <span>${available ? `Hoy el árbol te regala ${previewDay} ofrenda(s).` : 'Vuelve mañana desde las 00:01.'}</span>
+      </div>
+      <button class="btn-main" id="btn-claim-checkin" ${available?'':'disabled'}>${available?`Reclamar 🎁 x${previewDay}`:'Ya reclamado hoy'}</button>
+    </div>
+    <div class="ck-prog"><i style="width:${(cycleClaimedDay/30*100).toFixed(1)}%"></i></div>
+    <div class="ck-prog-txt"><span>${cycleClaimedDay} / 30 días este mes</span><span>${totalClaimed} ofrendas reclamadas</span></div>
+    <div class="ck-path">${gridHTML}<div class="ck-tree" title="El árbol de ofrendas">🌳</div></div>
+    <p class="sc-note" style="margin-top:10px;">El día N te da N ofrendas gratis. Si faltas un día no pierdes tu progreso, solo se pausa; el camino se reinicia el día 1 de cada mes. Las ofrendas se acumulan en 🌳 Otorgar ofrenda.</p>
   `;
   document.getElementById('btn-close-checkin').onclick = ()=>{ checkinOpen=false; renderAll(); };
   const claimBtn = document.getElementById('btn-claim-checkin');
@@ -6638,28 +6668,33 @@ function renderMissions(){
     const canClaim = m.status==='completed';
     const claimed = m.status==='claimed';
     const canReroll = m.status==='active' && rerollsLeft>0;
-    return `<div class="inv-item-row">
-      <div>
-        <b style="color:${c};">Misión ${m.rank}</b> <span class="slot-tag">${MISSION_OBJECTIVE_LABEL[m.objective_type]}</span>
-        <div class="inv-item-bonus neutral">${m.progress}/${m.objective_target} · ${m.reward_gold} oro, ${m.reward_xp} xp, ${m.reward_currency} Sellos${itemText}</div>
-        <div class="bar-track" style="margin-top:6px;"><div class="bar-fill xp" style="width:${pct}%"></div></div>
-      </div>
-      <div style="display:flex; flex-direction:column; gap:6px; flex-shrink:0;">
-        <button class="inv-btn" data-claim="${m.id}" ${canClaim?'':'disabled'}>${claimed?'Reclamada':'Reclamar'}</button>
-        ${m.status==='active' ? `<button class="inv-btn" data-reroll="${m.id}" ${canReroll?'':'disabled'}>Refrescar</button>` : ''}
+    // Cada misión es una hoja clavada en el tablón (rediseño 2026-10-04).
+    return `<div class="gm-sheet ${canClaim?'done':''} ${claimed?'claimed':''}" style="--rc:${c}; --tilt:${((m.id||'').charCodeAt(0)%5-2)*0.5}deg">
+      <i class="gm-pin"></i>
+      <div class="gm-rank">${m.rank}</div>
+      <div class="gm-goal"><b>${m.objective_target}</b> ${MISSION_OBJECTIVE_LABEL[m.objective_type]}</div>
+      <div class="gm-bar"><i style="width:${pct}%"></i></div>
+      <div class="gm-prog">${m.progress} / ${m.objective_target}</div>
+      <div class="gm-reward">⛁ ${m.reward_gold} · ✦ ${m.reward_xp} xp · 🎖️ ${m.reward_currency}${itemText}</div>
+      <div class="gm-btns">
+        ${claimed ? '<span class="gm-stamp">Cobrada</span>' : `<button class="inv-btn" data-claim="${m.id}" ${canClaim?'':'disabled'}>Reclamar</button>`}
+        ${m.status==='active' ? `<button class="inv-btn gm-reroll" data-reroll="${m.id}" ${canReroll?'':'disabled'} title="Cambiar esta misión por otra">↻</button>` : ''}
       </div>
     </div>`;
   }).join('') : (state.missionsError
     ? `<p class="inv-empty-msg">No se pudo cargar el tablón: ${state.missionsError}</p><button class="inv-btn" id="btn-retry-missions">Reintentar</button>`
     : `<p class="inv-empty-msg">Cargando el tablón de misiones…</p>`);
 
+  const ready = rows.filter(m=>m.status==='completed').length;
   document.getElementById('main-panel').innerHTML = `
-    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:4px;">
-      <h3 style="color:var(--bronze-light);">Gremio — Tablón de misiones</h3>
-      <button class="reset-btn" id="btn-close-missions">Cerrar</button>
+    <div class="rk-hero gm-hero">
+      <img class="rk-hero-art" src="src/assets/escenas/gremio.jpg?v=1" alt="" onerror="this.remove()">
+      <button class="reset-btn rk-close" id="btn-close-missions">Cerrar</button>
+      <div class="rk-hero-txt"><h3>Gremio — Tablón de misiones</h3>
+        <p>🎖️ <b>${(state.char.missionCurrency||0).toLocaleString('es')}</b> Sellos · cambios de misión: <b>${rerollsLeft}/3</b> · el tablón se renueva cada 12 horas</p></div>
     </div>
-    <p style="color:var(--text-dim); font-size:0.85em; margin-top:0;">Sellos del Laberinto: <b style="color:var(--bronze-light);">${state.char.missionCurrency||0}</b>. El tablón entero se refresca cada 12 horas. Refrescos individuales disponibles: <b>${rerollsLeft}/3</b>.</p>
-    ${rowsHTML}
+    <div class="sc-talk"><b>La maestra del Gremio</b>${ready ? `“Tienes ${ready} contrato(s) cumplido(s). Ven a cobrar.”` : '“Elige una hoja del tablón. Si alguna no te convence, la cambio por otra.”'}</div>
+    ${rows.length ? `<div class="gm-board">${rowsHTML}</div>` : rowsHTML}
   `;
   document.getElementById('btn-close-missions').onclick = ()=>{ missionsOpen=false; renderAll(); };
   document.querySelectorAll('[data-claim]').forEach(btn=>{
@@ -6873,6 +6908,29 @@ function payAlliesOnExit(){
   });
 }
 
+// Puntos y asientos de la Taberna: medidos sobre taberna.jpg (d) y
+// taberna_movil.jpg (m). El equipo se dibuja con la ilustración de cada
+// aliado SENTADO (src/assets/escenas/aliados/<id>.webp, recortada de un fondo
+// magenta; decisión de ariochbu 2026-10-04 tras descartar los sprites de
+// combate: "la taberna se ve horrible"). Cada figura se apoya en el borde de
+// la mesa: las de cintura para arriba se muestran enteras, y las de cuerpo
+// entero (TABERNA_FULL_BODY) se agrandan y se cortan a la cintura para que
+// todas queden con la cabeza del mismo tamaño y la mesa les tape las piernas.
+const TABERNA_SPOTS = [
+  {key:'reclutar', label:'Reclutar',  ic:'🍺', d:[11,44], m:[50,24]},
+  {key:'mesa',     label:'Tu equipo', ic:'🪑', d:[60,84], m:[50,79]},
+];
+// [x, y] = centro horizontal y borde inferior de la figura, en % de la imagen:
+// los cuatro van en fila en el banco, detrás de la mesa grande.
+const TABERNA_SEATS = [
+  {d:[41,69], m:[15,70.5]},
+  {d:[54,69], m:[38.5,70.5]},
+  {d:[67,69], m:[61.5,70.5]},
+  {d:[80,69], m:[85,70.5]},
+];
+const TABERNA_FULL_BODY = new Set([]); // las diez ya vienen de cintura para arriba
+let tabernaPosterIdx = 0; // panfleto que se está viendo al reclutar
+let tabernaSection = null; // null = la escena; 'reclutar' | 'mesa' | 'ally:<id>'
 function renderTaberna(){
   const panel = document.getElementById('main-panel');
   if(!tavernUnlocked()){
@@ -6891,7 +6949,7 @@ function renderTaberna(){
   }
 
   const allies = state.char.allies || [];
-  const hiredHTML = allies.length ? allies.map(a=>{
+  const hiredCardHTML = (a)=>{
     const tpl = ALLY_ROSTER.find(t=>t.templateId===a.template_id) || {};
     const needed = xpNeededForLevel(a.level);
     const xpPct = a.level>=CHAR_LEVEL_CAP ? 100 : clamp((a.xp||0)/needed*100, 0, 100);
@@ -6936,7 +6994,7 @@ function renderTaberna(){
         <button class="inv-btn danger" data-dismiss="${a.id}">Despedir</button>
       </div>
     </div>`;
-  }).join('') : `<p class="inv-empty-msg">Todavía no has reclutado a nadie.</p>`;
+  };
 
   const rosterHTML = ALLY_ROSTER.map(tpl=>{
     const already = allies.some(a=>a.template_id===tpl.templateId);
@@ -6961,26 +7019,121 @@ function renderTaberna(){
     </div>`;
   }).join('');
 
-  panel.innerHTML = `
-    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:4px;">
-      <h3 style="color:var(--bronze-light);">Taberna</h3>
-      <button class="reset-btn" id="btn-close-taberna">Cerrar</button>
-    </div>
-    ${BETA_ALLY_UNLOCKS ? `<p class="renown-note">Tu fama: <b>${renownTitle(myBossesBeaten())||'Desconocido'}</b>. Cada jefe de década que derrotes te da un cupo más (máximo ${MAX_ALLIES}).${allyCap()<MAX_ALLIES?` Próximo cupo: derrota al <b>${['Ogro','la Matriarca Escarlata','Riakis','el Usurpador'][myBossesBeaten()]}</b>.`:''}</p>` : ''}
-    <p style="color:var(--text-dim); font-size:0.85em; margin-top:0;">Hasta ${allyCap()} aliados a la vez, ${allyCap()+1} contándote a ti. Pelean junto a ti automáticamente — el que tiene "frontline" ocupa tu lugar en el frente y absorbe los golpes. Cada uno cobra un salario cada vez que sales del laberinto: si no te alcanza el oro para pagarle varias veces seguidas, pierde la confianza en ti y abandona el grupo. Un aliado despedido o que deserta siempre puede volver a reclutarse más adelante, a nivel 1.</p>
-
-    <div class="section-label">Tu equipo (${allies.length}/${allyCap()})</div>
-    <div class="ally-card-row">${hiredHTML}</div>
-
-    <div class="section-label">Disponibles para reclutar</div>
-    <div class="ally-card-row">${rosterHTML}</div>
-  `;
-  document.getElementById('btn-close-taberna').onclick = ()=>{ tabernaOpen=false; renderAll(); };
+  // La Taberna es una escena — pedido explícito 2026-10-04: la tabernera te
+  // avisa que hay aliados que quieren unirse (reclutar), tu equipo está
+  // sentado a la mesa (tocar la mesa = satisfacción de todos; tocar a un
+  // aliado = "¿pasa algo?" y ahí la opción de despedir, con confirmación).
+  // Los aliados reales se dibujan con su sprite sobre las sillas vacías.
+  const famaHTML = BETA_ALLY_UNLOCKS ? `<p class="renown-note">Tu fama: <b>${renownTitle(myBossesBeaten())||'Desconocido'}</b>. Cada jefe de década que derrotes te da un cupo más (máximo ${MAX_ALLIES}).</p>` : '';
+  if(tabernaSection && tabernaSection.startsWith('ally:') && !allies.some(a=>a.id===tabernaSection.slice(5))) tabernaSection = null;
+  if(!tabernaSection){
+    const pendingGear = allies.some(a=>a.auto_gear_pending);
+    panel.innerHTML = sceneHTML({
+      id:'taberna', title:'Taberna', closeId:'btn-close-taberna',
+      img:'src/assets/escenas/taberna.jpg?v=2', imgMobile:'src/assets/escenas/taberna_movil.jpg?v=2',
+      ratio:'1376/605', ratioMobile:'768/1376', spots:TABERNA_SPOTS,
+      keeper:'Shaza la tabernera', line: allies.length < allyCap()
+        ? '“Hay aliados que quieren pertenecer a tu equipo. Acércate a la barra.”'
+        : '“Tu mesa está completa. Si quieres a alguien más, tendrás que despedir a uno.”',
+      aside:`Equipo ${allies.length}/${allyCap()} · ⛁ ${state.char.gold.toLocaleString('es')}`,
+      extra:(mobile)=> allies.slice(0, TABERNA_SEATS.length).map((a,i)=>{
+        const seat = TABERNA_SEATS[i]; const [x,y] = mobile ? seat.m : seat.d;
+        return `<button class="sc-ally ${TABERNA_FULL_BODY.has(a.template_id)?'full':''}" data-sc-ally="${a.id}" style="left:${x}%; top:${y}%;" title="${a.name}">
+          <span class="sc-ally-name">${a.name.split(' ')[0]}${a.auto_gear_pending?' ❗':''}</span>
+          <span class="sc-ally-fig"><img src="src/assets/escenas/aliados/${a.template_id}.webp?v=2" alt="" onerror="this.remove()"></span></button>`;
+      }).join('')
+    });
+    wireScene((key)=>{ tabernaSection = key; renderTaberna(); });
+    document.querySelectorAll('[data-sc-ally]').forEach(b=>{ b.onclick = ()=>{ tabernaSection = 'ally:'+b.dataset.scAlly; renderTaberna(); }; });
+    if(pendingGear) log('Un aliado tiene equipo nuevo por elegir: tócalo en la mesa de la Taberna.');
+  } else {
+    const allyOpen = tabernaSection.startsWith('ally:') ? allies.find(a=>a.id===tabernaSection.slice(5)) : null;
+    const satOf = (a)=> a.satisfaction===undefined || a.satisfaction===null ? ALLY_SATISFACTION_DEFAULT : a.satisfaction;
+    const satColor = (v)=> v>=70 ? 'var(--good)' : v>=40 ? 'var(--bronze-light)' : 'var(--blood-light)';
+    const teamHTML = allies.length ? allies.map(a=>{
+      const v = satOf(a);
+      return `<button class="tv-row" data-sc-ally="${a.id}">
+        <span class="tv-row-fig">${ALLY_TEMPLATE_SPRITES[a.template_id] ? `<img src="${ALLY_TEMPLATE_SPRITES[a.template_id]}" alt="">` : ''}</span>
+        <span class="tv-row-txt"><b>${a.name}</b><small>${a.role} · Nivel ${a.level} · cobra ${allyWage(a)} de oro</small>
+          <span class="bar-track"><span class="bar-fill" style="display:block; height:100%; width:${v}%; background:${satColor(v)};"></span></span></span>
+        <span class="tv-row-sat" style="color:${satColor(v)}">${v}%</span>
+      </button>`;
+    }).join('') : `<p class="inv-empty-msg">Todavía no has reclutado a nadie. Habla con la tabernera.</p>`;
+    // Reclutar (pedido explícito 2026-10-04): la tabernera dice "estos aliados
+    // están buscando equipo" y los muestra como panfletos tipo cartel de
+    // "se busca", de a uno, pasando con flechas (o deslizando en celular). Cada
+    // panfleto lleva el mismo detalle de siempre: rol, historia, habilidad y
+    // costo. Solo salen los que aún no están en tu equipo.
+    const seekers = ALLY_ROSTER.filter(tpl=> !allies.some(a=>a.template_id===tpl.templateId));
+    if(tabernaPosterIdx >= seekers.length) tabernaPosterIdx = 0;
+    const full = allies.length >= allyCap();
+    const posterHTML = (tpl)=>{
+      const cost = allyHireCost(tpl, state.char.level);
+      const short = state.char.gold < cost;
+      return `<div class="wp-poster">
+        <i class="wp-nail"></i>
+        <div class="wp-head">Busca equipo</div>
+        <div class="wp-photo"><img src="src/assets/aliados/${tpl.templateId}.jpg" alt="" onerror="this.replaceWith('${tpl.icon}')"><span class="wp-role">${tpl.icon} ${tpl.role}</span></div>
+        <div class="wp-name">${tpl.name}</div>
+        <p class="wp-bio">${tpl.bio}</p>
+        <div class="wp-skill"><b>${tpl.skillName}</b>${tpl.skillDesc}</div>
+        <div class="wp-meta"><span>${tpl.frontline ? 'Primera línea: recibe los golpes' : 'Retaguardia: ataca desde atrás'}</span></div>
+        <div class="wp-price"><small>Contrato</small>⛁ ${cost.toLocaleString('es')}</div>
+        <button class="btn-main" data-hire="${tpl.templateId}" ${(full || short)?'disabled':''}>${full ? 'Equipo completo' : short ? `Te faltan ${(cost-state.char.gold).toLocaleString('es')} de oro` : 'Reclutar'}</button>
+      </div>`;
+    };
+    const recruitHTML = seekers.length ? `
+      <div class="sc-talk" style="margin:0 0 10px;"><b>Shaza la tabernera</b>${full ? '“Estos buscan equipo, pero tu mesa ya está llena.”' : '“Estos aliados están buscando equipo. Mira sus panfletos.”'}</div>
+      ${famaHTML}
+      <div class="wp-carousel" id="wp-carousel">
+        <button class="wp-arrow" id="wp-prev" title="Anterior" ${seekers.length<2?'disabled':''}>‹</button>
+        ${posterHTML(seekers[tabernaPosterIdx])}
+        <button class="wp-arrow" id="wp-next" title="Siguiente" ${seekers.length<2?'disabled':''}>›</button>
+      </div>
+      <div class="wp-dots">${seekers.map((_,i)=>`<i class="${i===tabernaPosterIdx?'on':''}" data-wp-dot="${i}"></i>`).join('')}</div>
+      <p class="sc-note" style="text-align:center; margin-top:8px;">Hasta ${allyCap()} aliados a la vez. Pelean junto a ti automáticamente y cobran su salario al salir del laberinto. Un aliado despedido puede volver a reclutarse, a nivel 1.</p>`
+      : `<p class="inv-empty-msg">Nadie más busca equipo por ahora.</p>`;
+    const body = tabernaSection==='reclutar'
+      ? recruitHTML
+      : tabernaSection==='mesa'
+      ? `<p class="sc-note">Satisfacción de tu equipo. Si no puedes pagarles varias veces seguidas, pierden la confianza y se van. Toca a uno para hablarle.</p>${teamHTML}`
+      : `<div class="sc-talk" style="margin:0 0 10px;"><b>${allyOpen.name}</b>“¿Pasa algo?”</div>
+         <div class="ally-card-row tv-single">${allies.filter(a=>a===allyOpen).map(a=>hiredCardHTML(a)).join('')}</div>`;
+    const title = tabernaSection==='reclutar' ? '🍺 Reclutar' : tabernaSection==='mesa' ? '🪑 Tu equipo' : `💬 ${allyOpen.name}`;
+    panel.innerHTML = `
+      <div class="sc-head">
+        <button class="reset-btn" id="sc-back">‹ La taberna</button>
+        <h3>${title}</h3>
+        <span class="sc-aside">⛁ ${state.char.gold.toLocaleString('es')}</span>
+        <button class="reset-btn" id="btn-close-taberna">Cerrar</button>
+      </div>
+      <div class="sc-section">${body}</div>`;
+    document.getElementById('sc-back').onclick = ()=>{ tabernaSection = null; renderTaberna(); };
+    document.querySelectorAll('[data-sc-ally]').forEach(b=>{ b.onclick = ()=>{ tabernaSection = 'ally:'+b.dataset.scAlly; renderTaberna(); }; });
+    if(tabernaSection==='reclutar' && seekers.length>1){
+      const go = (d)=>{ tabernaPosterIdx = (tabernaPosterIdx + d + seekers.length) % seekers.length; renderTaberna(); };
+      document.getElementById('wp-prev').onclick = ()=> go(-1);
+      document.getElementById('wp-next').onclick = ()=> go(1);
+      document.querySelectorAll('[data-wp-dot]').forEach(dot=>{ dot.onclick = ()=>{ tabernaPosterIdx = parseInt(dot.dataset.wpDot, 10); renderTaberna(); }; });
+      // deslizar en celular
+      const car = document.getElementById('wp-carousel');
+      let x0 = null;
+      car.addEventListener('touchstart', (e)=>{ x0 = e.touches[0].clientX; }, {passive:true});
+      car.addEventListener('touchend', (e)=>{ if(x0===null) return; const dx = e.changedTouches[0].clientX - x0; x0 = null; if(Math.abs(dx) > 45) go(dx<0 ? 1 : -1); });
+    }
+  }
+  document.getElementById('btn-close-taberna').onclick = ()=>{ tabernaOpen=false; tabernaSection = null; renderAll(); };
   document.querySelectorAll('[data-hire]').forEach(btn=>{
     btn.onclick = ()=> hireAlly(btn.dataset.hire);
   });
   document.querySelectorAll('[data-dismiss]').forEach(btn=>{
-    btn.onclick = ()=> dismissAlly(btn.dataset.dismiss);
+    btn.onclick = ()=>{
+      const a = allies.find(x=>x.id===btn.dataset.dismiss);
+      if(!a) return;
+      if(!confirm(`¿Despedir a ${a.name}? Perderá su nivel: si lo vuelves a reclutar empieza en nivel 1. El equipo y las piedras que lleva vuelven contigo solo si se los quitas antes.`)) return;
+      tabernaSection = null;
+      dismissAlly(a.id);
+    };
   });
   document.querySelectorAll('[data-auto-gear-arma2]').forEach(btn=>{
     btn.onclick = ()=>{
@@ -6993,38 +7146,68 @@ function renderTaberna(){
 /* ============================================================
    RENDER: RANKING
    ============================================================ */
+// Ranking (rediseño 2026-10-04, pedido explícito: "muy mejorable, adicional
+// hacer un ranking de Caídos del Laberinto con el número de 1/100"). Dos
+// tablones: Laberinto (récord más hondo) y Caídos (colección). Los 3 primeros
+// van en podio. El de Caídos lee la vista leaderboard_caidos_top10 (migración
+// 0030); si aún no existe, lo dice en vez de quedar vacío.
+let rankingTab = 'laberinto';
 async function renderRanking(){
   const panel = document.getElementById('main-panel');
+  const myCaidos = PET_CATALOG.filter(pt=>ownedPetCount(pt.id)>0).length;
   panel.innerHTML = `
-    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:4px;">
-      <h3 style="color:var(--bronze-light);">Ranking</h3>
-      <button class="reset-btn" id="btn-close-ranking">Cerrar</button>
+    <div class="rk-hero">
+      <img class="rk-hero-art" src="src/assets/escenas/ranking.jpg?v=1" alt="" onerror="this.remove()">
+      <button class="reset-btn rk-close" id="btn-close-ranking">Cerrar</button>
+      <div class="rk-hero-txt"><h3>Salón de los Nombres</h3><p>Aquí se graban los que más hondo bajaron y los que más Caídos reunieron.</p></div>
     </div>
-    <div class="section-label" style="margin-top:6px;">Tu récord personal</div>
-    <p style="color:var(--text-dim); font-size:0.9em;">${describeRecord()}</p>
-    <div class="section-label">Top 10 global</div>
+    <div class="rk-tabs">
+      <button class="${rankingTab==='laberinto'?'on':''}" data-rk="laberinto">⚔️ Laberinto</button>
+      <button class="${rankingTab==='caidos'?'on':''}" data-rk="caidos">🌳 Caídos</button>
+    </div>
+    <div class="rk-mine">${rankingTab==='laberinto'
+      ? `Tu récord: <b>${describeRecord()}</b>`
+      : `Tu colección: <b>${myCaidos} / ${PET_CATALOG.length}</b> Caídos`}</div>
     <div id="ranking-list"><p class="inv-empty-msg">Cargando ranking…</p></div>
   `;
   document.getElementById('btn-close-ranking').onclick = ()=>{ rankingOpen=false; renderAll(); };
+  panel.querySelectorAll('[data-rk]').forEach(b=>{ b.onclick = ()=>{ rankingTab = b.dataset.rk; renderRanking(); }; });
 
-  const { data, error } = await supabase.from('leaderboard_top10').select('*');
+  const tab = rankingTab;
+  const { data, error } = await supabase.from(tab==='caidos' ? 'leaderboard_caidos_top10' : 'leaderboard_top10').select('*');
   const list = document.getElementById('ranking-list');
-  if(!list) return; // el jugador salió de la pantalla antes de que llegara la respuesta
+  if(!list || rankingTab!==tab) return; // el jugador salió o cambió de tablón antes de que llegara la respuesta
   if(error){
-    list.innerHTML = `<p class="inv-empty-msg">No se pudo cargar el ranking global.</p>`;
+    list.innerHTML = `<p class="inv-empty-msg">${tab==='caidos' ? 'El tablón de Caídos todavía no está disponible (falta correr la migración 0030).' : 'No se pudo cargar el ranking global.'}</p>`;
     return;
   }
   if(!data || !data.length){
     list.innerHTML = `<p class="inv-empty-msg">Nadie ha registrado un récord todavía. ¡Sé el primero!</p>`;
     return;
   }
-  list.innerHTML = data.map((row,i)=>{
-    const mine = row.nickname.toLowerCase() === state.char.nickname.toLowerCase();
-    return `<div class="equip-row" style="${mine?'color:var(--bronze-light);':''}">
-      <span>#${i+1} ${row.nickname}${renownBadge(decadeBossesBeaten(1, row.record_level))}${mine ? ' (tú)' : ''}</span>
-      <b>Nivel ${row.record_level} · Piso ${row.record_floor_idx}</b>
-    </div>`;
-  }).join('');
+  const score = (row)=> tab==='caidos' ? `<b>${row.caidos} / ${PET_CATALOG.length}</b><small>Caídos reunidos</small>` : `<b>Nivel ${row.record_level}</b><small>Piso ${row.record_floor_idx}</small>`;
+  const face = (row)=>{
+    const src = row.style && row.race ? playerSpriteFor(row.style, row.race) : null;
+    return src ? `<img src="${src}" alt="">` : `<em>${(row.nickname||'?').charAt(0).toUpperCase()}</em>`;
+  };
+  const isMine = (row)=> row.nickname.toLowerCase() === state.char.nickname.toLowerCase();
+  const fame = (row)=> row.record_level ? renownBadge(decadeBossesBeaten(1, row.record_level)) : '';
+  const podium = data.slice(0,3).map((row,i)=>`
+    <div class="rk-pod p${i+1} ${isMine(row)?'mine':''}">
+      <div class="rk-medal">${['🥇','🥈','🥉'][i]}</div>
+      <div class="rk-face">${face(row)}</div>
+      <div class="rk-name">${row.nickname}${isMine(row)?' (tú)':''}</div>
+      <div class="rk-fame">${fame(row)}</div>
+      <div class="rk-score">${score(row)}</div>
+    </div>`).join('');
+  const rest = data.slice(3).map((row,i)=>`
+    <div class="rk-row ${isMine(row)?'mine':''}">
+      <span class="rk-pos">${i+4}</span>
+      <span class="rk-face sm">${face(row)}</span>
+      <span class="rk-row-name">${row.nickname}${fame(row)}${isMine(row)?' (tú)':''}</span>
+      <span class="rk-row-score">${score(row)}</span>
+    </div>`).join('');
+  list.innerHTML = `<div class="rk-podium">${podium}</div>${rest}`;
 }
 
 /* ============================================================
@@ -7357,6 +7540,41 @@ function weaponShopRows(slot, rank, rankTag, dataAttr, price){
   }).join('');
 }
 
+// ============================================================
+// ESCENAS CON PUNTOS (2026-10-04) — pieza reutilizable para los lugares de la
+// ciudad: una ilustración de fondo (horizontal en escritorio, vertical en
+// celular), puntos que se tocan (coordenadas en % sobre CADA imagen: d =
+// escritorio, m = celular) y una línea del personaje que atiende. sceneHTML
+// arma el marcado y wireScene engancha los puntos.
+// ============================================================
+function sceneHTML(cfg){
+  const mobile = window.matchMedia('(max-width:640px)').matches;
+  const spots = cfg.spots.map(sp=>{
+    const [x,y] = mobile ? sp.m : sp.d;
+    return `<button class="sc-spot ${sp.locked?'locked':''}" data-sc-spot="${sp.key}" style="left:${x}%; top:${y}%;" title="${sp.label}">
+      <i></i><span>${sp.ic} ${sp.label}${sp.locked?' 🔒':''}</span></button>`;
+  }).join('');
+  return `<div class="sc-scene ${mobile?'mobile':''}" style="aspect-ratio:${mobile ? cfg.ratioMobile : cfg.ratio};">
+      <img class="sc-art" src="${mobile ? cfg.imgMobile : cfg.img}" alt="" ${cfg.imgFallback ? `onerror="this.onerror=null; this.src='${mobile ? cfg.imgFallbackMobile : cfg.imgFallback}'"` : ''}>
+      <div class="sc-top"><h3>${cfg.title}</h3>${cfg.aside ? `<span class="sc-aside">${cfg.aside}</span>` : ''}<button class="reset-btn" id="${cfg.closeId}">Cerrar</button></div>
+      ${cfg.extra ? cfg.extra(mobile) : ''}
+      ${spots}
+    </div>
+    ${cfg.line ? `<div class="sc-talk"><b>${cfg.keeper}</b>${cfg.line}</div>` : ''}`;
+}
+function wireScene(onSpot){
+  document.querySelectorAll('[data-sc-spot]').forEach(b=>{ b.onclick = ()=> onSpot(b.dataset.scSpot); });
+}
+// Puntos de la forja: posiciones medidas sobre tienda.jpg (d) y tienda_movil.jpg (m).
+const SHOP_SPOTS = [
+  {key:'armas',     label:'Armas',           ic:'⚔️', d:[16,30], m:[35,13]},
+  {key:'armaduras', label:'Armaduras',       ic:'🛡️', d:[77,27], m:[76,57]},
+  {key:'forja',     label:'Forja Legendaria', ic:'🔥', d:[50,57], m:[52,43]},
+  {key:'sellos',    label:'Vitrina de Sellos', ic:'🎖️', d:[19,72], m:[19,60]},
+  {key:'pociones',  label:'Pociones',        ic:'🧪', d:[93,52], m:[44,76]},
+  {key:'vender',    label:'Vender',          ic:'💰', d:[76,80], m:[64,89]},
+];
+let shopSection = null; // null = la escena de la forja; si no, la sección abierta
 function renderShop(){
   if(!shopWeaponRole) shopWeaponRole = state.char.style;
   const styleId = shopWeaponRole;
@@ -7526,52 +7744,58 @@ function renderShop(){
     })
   ].join('');
 
-  document.getElementById('main-panel').innerHTML = `
-    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:4px;">
-      <h3 style="color:var(--bronze-light);">Tienda</h3>
-      <button class="reset-btn" id="btn-close-shop">Cerrar</button>
-    </div>
-    <p style="color:var(--text-dim); font-size:0.85em; margin-top:0;">Oro disponible: <b>${state.char.gold}</b>. Elige el rol para el que compras — cada arma solo la puede usar tu personaje o un aliado de ese mismo rol. Cada nombre de arma tiene su propio bono y su propio efecto especial a partir de Poco Común.</p>
-    ${roleSelectorHTML}
-
-    <div class="section-label" style="margin-top:0;">Filtrar por rango</div>
+  // La Tienda es una escena (la forja) con puntos que se tocan — pedido
+  // explícito 2026-10-04: "un herrero de fondo forjando un arma y enanos
+  // atendiendo... como si se escogiera en el mapa de la ciudad". Cada punto
+  // abre SOLO su sección; arriba de la sección hay atajos al resto.
+  const goldTierSelectHTML = `
     <select id="shop-gold-tier-select" class="auth-input" style="max-width:220px; margin-bottom:8px;">
       <option value="todos" ${shopGoldTierFilter==='todos'?'selected':''}>Todos los rangos</option>
       <option value="comun" ${shopGoldTierFilter==='comun'?'selected':''}>Común</option>
       <option value="poco_comun" ${shopGoldTierFilter==='poco_comun'?'selected':''}>Poco Común</option>
       <option value="raro" ${shopGoldTierFilter==='raro'?'selected':''}>Raro</option>
-    </select>
+    </select>`;
+  const showTier = (k)=> shopGoldTierFilter==='todos' || shopGoldTierFilter===k;
+  const noWeapons = '<p class="inv-empty-msg">No hay armas disponibles para esa senda.</p>';
+  const sectionBody = {
+    armas: ()=> `${roleSelectorHTML}${goldTierSelectHTML}
+      ${showTier('comun') ? `<div class="section-label">Armas — Común</div>${weaponHTML || noWeapons}` : ''}
+      ${showTier('raro') ? `<div class="section-label">Armas — Raro</div>${weaponRaroHTML || noWeapons}` : ''}
+      ${shopGoldTierFilter==='poco_comun' ? '<p class="inv-empty-msg">No hay armas de rango Poco Común: pasan de Común a Raro.</p>' : ''}`,
+    armaduras: ()=> `${goldTierSelectHTML}
+      ${showTier('comun') ? `<div class="section-label">Equipo — Común</div>${gearHTML}` : ''}
+      ${showTier('poco_comun') ? `<div class="section-label">Equipo — Poco Común</div>${pocoComunHTML}` : ''}
+      ${showTier('raro') ? `<div class="section-label">Equipo — Raro</div>${raroHTML}` : ''}`,
+    sellos: ()=> `<p class="sc-note">Sellos del Laberinto: <b>🎖️ ${(state.char.missionCurrency||0).toLocaleString('es')}</b></p>${roleSelectorHTML}${selloHTML}`,
+    forja: ()=> `${roleSelectorHTML}${tierSHTML}`,
+    pociones: ()=> potionHTML,
+    vender: ()=> `<p class="sc-note">Te pagan el 50% de su valor.</p>${sellRows || '<p class="inv-empty-msg">No tienes nada que vender por ahora.</p>'}`
+  };
+  if(shopSection && !sectionBody[shopSection]) shopSection = null;
+  if(!shopSection){
+    document.getElementById('main-panel').innerHTML = sceneHTML({
+      id:'shop', title:'Tienda', closeId:'btn-close-shop', img:'src/assets/escenas/tienda.jpg?v=1', imgMobile:'src/assets/escenas/tienda_movil.jpg?v=1',
+      ratio:'1376/768', ratioMobile:'768/1376', spots:SHOP_SPOTS,
+      keeper:'Gerd el herrero', line:'“Armas, armaduras, pociones… Toca lo que quieras ver.”',
+      aside:`⛁ ${state.char.gold.toLocaleString('es')} · 🎖️ ${(state.char.missionCurrency||0).toLocaleString('es')}`
+    });
+    wireScene((key)=>{ shopSection = key; renderShop(); });
+  } else {
+    const spot = SHOP_SPOTS.find(sp=>sp.key===shopSection);
+    document.getElementById('main-panel').innerHTML = `
+      <div class="sc-head">
+        <button class="reset-btn" id="sc-back">‹ La forja</button>
+        <h3>${spot.ic} ${spot.label}</h3>
+        <span class="sc-aside">⛁ ${state.char.gold.toLocaleString('es')}</span>
+        <button class="reset-btn" id="btn-close-shop">Cerrar</button>
+      </div>
+      <div class="inv-filter-bar sc-tabs">${SHOP_SPOTS.map(sp=>`<button class="nav-btn ${sp.key===shopSection?'active':''}" data-sc-tab="${sp.key}">${sp.ic} ${sp.label}</button>`).join('')}</div>
+      <div class="sc-section">${sectionBody[shopSection]()}</div>`;
+    document.getElementById('sc-back').onclick = ()=>{ shopSection = null; renderShop(); };
+    document.querySelectorAll('[data-sc-tab]').forEach(t=>{ t.onclick = ()=>{ shopSection = t.dataset.scTab; renderShop(); }; });
+  }
 
-    ${(shopGoldTierFilter==='todos'||shopGoldTierFilter==='comun') ? `
-    <div class="section-label">Armas — Común</div>
-    ${weaponHTML || '<p class="inv-empty-msg">No hay armas disponibles para tu senda de combate.</p>'}
-    <div class="section-label">Equipo — Común</div>
-    ${gearHTML}` : ''}
-
-    ${(shopGoldTierFilter==='todos'||shopGoldTierFilter==='poco_comun') ? `
-    <div class="section-label">Equipo — Poco Común</div>
-    ${pocoComunHTML}` : ''}
-
-    ${(shopGoldTierFilter==='todos'||shopGoldTierFilter==='raro') ? `
-    <div class="section-label">Armas — Raro</div>
-    ${weaponRaroHTML || '<p class="inv-empty-msg">No hay armas disponibles para tu senda de combate.</p>'}
-    <div class="section-label">Equipo — Raro</div>
-    ${raroHTML}` : ''}
-
-    <div class="section-label">Tienda del Gremio (Sellos del Laberinto: ${state.char.missionCurrency||0})</div>
-    ${selloHTML}
-
-    <div class="section-label">Forja Legendaria — Tier S (piso 40+)</div>
-    ${tierSHTML}
-
-    <div class="section-label">Pociones</div>
-    ${potionHTML}
-
-    <div class="section-label">Vender objetos (50% de su valor)</div>
-    ${sellRows || '<p class="inv-empty-msg">No tienes nada que vender por ahora.</p>'}
-  `;
-
-  document.getElementById('btn-close-shop').onclick = ()=>{ shopOpen=false; renderAll(); };
+  document.getElementById('btn-close-shop').onclick = ()=>{ shopOpen=false; shopSection = null; renderAll(); };
   document.querySelectorAll('[data-buy-weapon]').forEach(btn=>{
     btn.onclick = ()=>{
       const [slot, name] = btn.dataset.buyWeapon.split('|');
@@ -7639,11 +7863,38 @@ function renderShop(){
 /* ============================================================
    RENDER: HOGAR (HOME STASH)
    ============================================================ */
+// El Hogar es una escena (tu cuarto) con tres puntos — pedido explícito
+// 2026-10-04: "un cuarto con un armario o cofre donde se guarde el inventario,
+// la armería donde se guarden las armas y una caja fuerte donde se guarde el
+// oro". Armería = armas (arma / arma 2); Armario = el resto del equipo y las
+// pociones; Caja fuerte = oro. Posiciones medidas sobre hogar.jpg (d) y
+// hogar_movil.jpg (m).
+const HOME_SPOTS = [
+  {key:'armeria', label:'Armería',      ic:'⚔️', d:[11,42], m:[36,14]},
+  {key:'armario', label:'Armario',      ic:'🧥', d:[51,40], m:[46,44]},
+  {key:'oro',     label:'Caja fuerte',  ic:'💰', d:[89,44], m:[48,83]},
+];
+let homeSection = null; // null = la escena del cuarto
+const isWeaponSlot = (it)=> it.slot==='arma' || it.slot==='arma2';
 function renderHome(){
   const stash = state.char.stash || (state.char.stash = {gold:0, items:[]});
-  const gearItems = state.char.inventory.filter(i=>i.kind==='equip');
+  if(homeSection && !HOME_SPOTS.some(sp=>sp.key===homeSection)) homeSection = null;
+  if(!homeSection){
+    document.getElementById('main-panel').innerHTML = sceneHTML({
+      id:'home', title:'Hogar', closeId:'btn-close-home', img:'src/assets/escenas/hogar.jpg?v=1', imgMobile:'src/assets/escenas/hogar_movil.jpg?v=1',
+      ratio:'1376/581', ratioMobile:'768/1376', spots:HOME_SPOTS,
+      keeper:'Tu casera', line:'“Lo que guardes aquí no se pierde aunque caigas en el laberinto.”',
+      aside:`Guardado ${stash.items.length}/${STASH_ITEM_CAP} · ⛁ ${stash.gold.toLocaleString('es')}`
+    });
+    wireScene((key)=>{ homeSection = key; renderHome(); });
+    document.getElementById('btn-close-home').onclick = ()=>{ homeOpen=false; homeSection = null; renderAll(); };
+    return;
+  }
+  // En la Armería solo se ven las armas; en el Armario, el resto del equipo.
+  const inSection = (it)=> homeSection==='armeria' ? isWeaponSlot(it) : !isWeaponSlot(it);
+  const gearItems = state.char.inventory.filter(i=>i.kind==='equip' && inSection(i));
   const potionItems = state.char.inventory.filter(i=>i.kind==='potion');
-  const stashGear = stash.items.filter(i=>i.kind==='equip');
+  const stashGear = stash.items.filter(i=>i.kind==='equip' && inSection(i));
   const stashPotions = stash.items.filter(i=>i.kind==='potion');
   const stashFull = stash.items.length >= STASH_ITEM_CAP;
   const stashRoom = Math.max(0, STASH_ITEM_CAP - stash.items.length);
@@ -7707,44 +7958,43 @@ function renderHome(){
     </div>`;
   }).join('') : `<p class="inv-empty-msg">El Hogar no guarda pociones todavía.</p>`;
 
-  document.getElementById('main-panel').innerHTML = `
-    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:4px;">
-      <h3 style="color:var(--bronze-light);">Hogar</h3>
-      <button class="reset-btn" id="btn-close-home">Cerrar</button>
-    </div>
-    <p style="color:var(--text-dim); font-size:0.85em; margin-top:0;">Guarda equipo, pociones y oro a salvo. Nada de lo guardado aquí se pierde si mueres en el laberinto. Guardar habilidades llegará en una futura actualización.</p>
-
-    <div class="section-label" style="margin-top:6px;">Oro</div>
-    <div class="equip-row"><span>Contigo</span><b>${state.char.gold}</b></div>
-    <div class="equip-row"><span>En el Hogar</span><b>${stash.gold}</b></div>
+  const spot = HOME_SPOTS.find(sp=>sp.key===homeSection);
+  const goldHTML = `
+    <div class="equip-row"><span>Contigo</span><b>${state.char.gold.toLocaleString('es')}</b></div>
+    <div class="equip-row"><span>En la caja fuerte</span><b>${stash.gold.toLocaleString('es')}</b></div>
     <div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;">
       <button class="inv-btn" id="btn-stash-gold-all" ${state.char.gold<=0?'disabled':''}>Guardar todo mi oro</button>
-      <button class="inv-btn" id="btn-retrieve-gold-all" ${stash.gold<=0?'disabled':''}>Retirar todo el oro del Hogar</button>
+      <button class="inv-btn" id="btn-retrieve-gold-all" ${stash.gold<=0?'disabled':''}>Retirar todo el oro</button>
     </div>
     <div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; align-items:center;">
       <input type="number" id="home-gold-amount" class="auth-input" placeholder="Cantidad" min="1" step="1" style="max-width:140px; margin:0;">
       <button class="inv-btn" id="btn-stash-gold-amount">Guardar cantidad</button>
       <button class="inv-btn" id="btn-retrieve-gold-amount">Retirar cantidad</button>
-    </div>
-
+    </div>`;
+  const what = homeSection==='armeria' ? 'armas' : 'equipo';
+  const itemsHTML = `
+    <p class="sc-note">El Hogar guarda hasta ${STASH_ITEM_CAP} objetos en total (<b>${stash.items.length}/${STASH_ITEM_CAP}</b>).</p>
     <div class="section-label" style="display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap;">
-      <span>Tu mochila</span>
-      <button class="inv-btn" id="btn-stash-gear-all" ${(!gearItems.length || stashFull)?'disabled':''}>Guardar todo el equipamiento</button>
+      <span>En tu mochila</span>
+      <button class="inv-btn" id="btn-stash-gear-all" ${(!gearItems.length || stashFull)?'disabled':''}>Guardar todo (${what})</button>
     </div>
-    <p style="color:var(--text-dim); font-size:0.8em; margin-top:0;">El Hogar guarda hasta ${STASH_ITEM_CAP} objetos (${stash.items.length}/${STASH_ITEM_CAP}).</p>
-    ${bagFilterHTML}
-    ${bagTierFilterHTML}
-    ${bagGearHTML}
-    ${bagPotionHTML}
+    ${bagFilterHTML}${bagTierFilterHTML}${bagGearHTML}
+    ${homeSection==='armario' ? bagPotionHTML : ''}
+    <div class="section-label">Guardado aquí</div>
+    ${stashFilterHTML}${stashTierFilterHTML}${stashGearHTML}
+    ${homeSection==='armario' ? stashPotionHTML : ''}`;
+  document.getElementById('main-panel').innerHTML = `
+    <div class="sc-head">
+      <button class="reset-btn" id="sc-back">‹ Tu cuarto</button>
+      <h3>${spot.ic} ${spot.label}</h3>
+      <button class="reset-btn" id="btn-close-home">Cerrar</button>
+    </div>
+    <div class="inv-filter-bar sc-tabs">${HOME_SPOTS.map(sp=>`<button class="nav-btn ${sp.key===homeSection?'active':''}" data-sc-tab="${sp.key}">${sp.ic} ${sp.label}</button>`).join('')}</div>
+    <div class="sc-section">${homeSection==='oro' ? goldHTML : itemsHTML}</div>`;
+  document.getElementById('sc-back').onclick = ()=>{ homeSection = null; renderHome(); };
+  document.querySelectorAll('[data-sc-tab]').forEach(t=>{ t.onclick = ()=>{ homeSection = t.dataset.scTab; renderHome(); }; });
 
-    <div class="section-label">Guardado en el Hogar</div>
-    ${stashFilterHTML}
-    ${stashTierFilterHTML}
-    ${stashGearHTML}
-    ${stashPotionHTML}
-  `;
-
-  document.getElementById('btn-close-home').onclick = ()=>{ homeOpen=false; renderAll(); };
+  document.getElementById('btn-close-home').onclick = ()=>{ homeOpen=false; homeSection = null; renderAll(); };
   const stashAllBtn = document.getElementById('btn-stash-gold-all');
   if(stashAllBtn) stashAllBtn.onclick = ()=>{
     stash.gold += state.char.gold; state.char.gold = 0;
@@ -7762,7 +8012,7 @@ function renderHome(){
   // botones de todo-o-nada de arriba.
   const goldAmountInput = document.getElementById('home-gold-amount');
   const readGoldAmount = ()=>{
-    const n = Math.floor(Number(goldAmountInput.value));
+    const n = Math.floor(Number(goldAmountInput ? goldAmountInput.value : NaN));
     if(!Number.isFinite(n) || n<=0){ log('Ingresa una cantidad de oro válida.'); return null; }
     return n;
   };
