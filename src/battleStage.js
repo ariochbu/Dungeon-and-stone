@@ -108,6 +108,47 @@ const STATUS_ICON = {
   Silencio:'🤐', 'Bastión':'🧱', 'Égida':'🔰',
 };
 let banner = null; // nombre de la acción en curso, arriba al centro
+// Explicación de un estado al pasar el ratón o tocar su ficha (2026-10-04): los
+// aliados no tienen tarjeta arriba como el jugador y el enemigo, así que la
+// ficha bajo sus barras era el único sitio donde ver qué les pasa.
+let STATUS_INFO_REF = {};   // nombre -> {buff, desc}, llega de game.js
+let chipRects = [];         // fichas dibujadas en este cuadro: {x, y, w, h, st, owner}
+let statusTip = null;       // {st, owner, x, y, until} — `until` solo si se fijó con un toque
+function chipAt(sx, sy){
+  // margen generoso: en el celular la ficha mide unos pocos milímetros
+  return chipRects.find(c=> sx >= c.x - 5 && sx <= c.x + c.w + 5 && sy >= c.y - 7 && sy <= c.y + c.h + 7) || null;
+}
+function stagePoint(evt){
+  const rect = canvas.getBoundingClientRect();
+  return [(evt.clientX - rect.left)*STAGE_W/rect.width, (evt.clientY - rect.top)*STAGE_H/rect.height];
+}
+function drawStatusTip(){
+  if(!statusTip) return;
+  if(statusTip.until && performance.now() > statusTip.until){ statusTip = null; return; }
+  const st = statusTip.st, info = STATUS_INFO_REF[st.name] || {}, buff = BUFF_STATUS_NAMES.has(st.name);
+  const fs = Math.round(11*Math.min(uiScale, 1.7)), lh = fs + 4, maxW = Math.min(STAGE_W - 16, 250*Math.min(uiScale, 1.5));
+  const title = `${STATUS_ICON[st.name] ? STATUS_ICON[st.name] + ' ' : ''}${st.name}`;
+  const meta = [st.stacks > 1 ? `x${st.stacks} cargas` : '', st.duration != null ? `${st.duration} turno${st.duration === 1 ? '' : 's'}` : ''].filter(Boolean).join(' · ');
+  ctx.save();
+  ctx.font = `${fs}px Georgia, serif`; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+  // parte la descripción en renglones que quepan
+  const words = (info.desc || 'Sin descripción.').split(' '), lines = [];
+  let cur = '';
+  words.forEach(w=>{ const t = cur ? cur + ' ' + w : w; if(ctx.measureText(t).width > maxW - 16 && cur){ lines.push(cur); cur = w; } else cur = t; });
+  if(cur) lines.push(cur);
+  const head = `${title}${meta ? '  ·  ' + meta : ''}`;
+  ctx.font = `bold ${fs}px Georgia, serif`;
+  const w = Math.min(maxW, Math.max(ctx.measureText(head).width, ...lines.map(l=>{ ctx.font = `${fs}px Georgia, serif`; return ctx.measureText(l).width; })) + 16);
+  const h = lh*(lines.length + 2) + 8;
+  let x = Math.max(6, Math.min(STAGE_W - w - 6, statusTip.x - w/2));
+  let y = statusTip.y - h - 10; if(y < 6) y = statusTip.y + 22;
+  ctx.fillStyle = 'rgba(14,11,9,0.96)'; ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = buff ? '#7ed957' : '#ff8a80'; ctx.lineWidth = 1; ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+  ctx.font = `bold ${fs}px Georgia, serif`; ctx.fillStyle = buff ? '#b9f7c4' : '#ffc4bd'; ctx.fillText(head, x + 8, y + 6);
+  ctx.font = `${fs}px Georgia, serif`; ctx.fillStyle = '#a89a84'; ctx.fillText(`${buff ? 'Beneficio' : 'Perjuicio'} sobre ${statusTip.owner}`, x + 8, y + 6 + lh);
+  ctx.fillStyle = '#e8dfcf'; lines.forEach((l, i)=> ctx.fillText(l, x + 8, y + 6 + lh*(i + 2)));
+  ctx.restore();
+}
 
 const THEME_FX = {
   forest: { tint:'rgba(140,215,120,0.16)', particle:'rgba(210,240,160,0.6)' },
@@ -230,6 +271,12 @@ function ensureCanvas(container){
     canvas.style.cursor = 'default';
     ctx = canvas.getContext('2d');
     canvas.addEventListener('click', onCanvasClick);
+    canvas.addEventListener('mousemove', (evt)=>{
+      const [sx, sy] = stagePoint(evt), c = chipAt(sx, sy);
+      if(c){ statusTip = {st: c.st, owner: c.owner, x: c.x + c.w/2, y: c.y}; canvas.style.cursor = 'help'; }
+      else { if(statusTip && !statusTip.until) statusTip = null; canvas.style.cursor = 'default'; }
+    });
+    canvas.addEventListener('mouseleave', ()=>{ if(statusTip && !statusTip.until) statusTip = null; });
     startLoop();
   }
   if(canvas.parentElement !== container){
@@ -324,6 +371,7 @@ function syncBattleStage(container, combat, playerInfo, onTargetClick){
 
   currentDecade = playerInfo.bgDecade != null ? playerInfo.bgDecade : null;
   if(playerInfo.buffNames) BUFF_STATUS_NAMES = new Set(playerInfo.buffNames);
+  if(playerInfo.statusInfo) STATUS_INFO_REF = playerInfo.statusInfo;
   const theme = playerInfo.bgTheme || 'forest';
   if(theme !== currentTheme){ currentTheme = theme; spawnBgParticles(theme); }
 
@@ -528,6 +576,13 @@ async function rangedAnim(actor, target, color){
 // --- click-to-target: reemplaza el onclick de .enemy-card.targetable ---
 
 function onCanvasClick(evt){
+  // Tocar una ficha de estado la explica unos segundos (en el celular no hay
+  // puntero que dejar encima). Si se está eligiendo objetivo, eso va primero.
+  if(!(lastCombatRef && lastCombatRef.pendingSkill)){
+    const [sx, sy] = stagePoint(evt), c = chipAt(sx, sy);
+    statusTip = c ? {st: c.st, owner: c.owner, x: c.x + c.w/2, y: c.y, until: performance.now() + 4500} : null;
+    return;
+  }
   if(!clickHandler || !lastCombatRef || !lastCombatRef.pendingSkill) return;
   const rect = canvas.getBoundingClientRect();
   const scaleX = STAGE_W/rect.width, scaleY = STAGE_H/rect.height;
@@ -685,6 +740,7 @@ function drawStatusChips(a, cx, topY){
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   shown.forEach((st, i)=>{
     const buff = BUFF_STATUS_NAMES.has(st.name), x = x0 + i*cw;
+    chipRects.push({x: x + 1, y: topY - 7, w: cw - 2, h: 14, st, owner: a.name || ''});
     ctx.fillStyle = buff ? 'rgba(32,78,48,0.94)' : 'rgba(96,30,30,0.94)';
     ctx.fillRect(x + 1, topY - 7, cw - 2, 14);
     ctx.strokeStyle = buff ? '#7ed957' : '#ff8a80'; ctx.lineWidth = 1; ctx.strokeRect(x + 1.5, topY - 6.5, cw - 3, 13);
@@ -767,6 +823,7 @@ function draw(){
 
   const order = Array.from(actors.values()).sort((a, b)=> (a.y||a.baseY) - (b.y||b.baseY));
   order.forEach(a=> drawActor(a, false, dt));
+  chipRects = [];
   order.forEach(a=> drawActor(a, true, dt));
 
   effects.projectiles.forEach(drawProjectile);
@@ -802,6 +859,7 @@ function draw(){
     ctx.restore();
     if(banner.life <= 0) banner = null;
   }
+  drawStatusTip();
 
   ctx.restore();
 }
