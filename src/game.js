@@ -4179,6 +4179,23 @@ document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState=
 window.addEventListener('focus', ()=>{ if(state) checkSessionStillActive(); });
 
 let lastSaveErrorShown = 0;
+// Aviso fijo cuando el guardado falla varias veces seguidas (2026-10-04). Los
+// fallos sueltos siguen sin mostrarse (decisión de ariochbu), pero un fallo
+// PERSISTENTE significa que todo lo que se juegue se va a perder al recargar:
+// pasó de verdad (12 niveles perdidos) porque el jugador nunca se enteró.
+let saveFailStreak = 0;
+function showSaveFailureBanner(error){
+  saveFailStreak = error ? saveFailStreak + 1 : 0;
+  let el = document.getElementById('save-fail-banner');
+  if(saveFailStreak < 3){ if(el) el.remove(); return; }
+  if(!el){
+    el = document.createElement('div');
+    el.id = 'save-fail-banner';
+    el.style.cssText = 'position:fixed; left:0; right:0; top:0; z-index:99997; background:#7a1c1c; color:#fff; padding:8px 12px; font-size:0.9em; text-align:center; border-bottom:2px solid #e0393f;';
+    document.body.appendChild(el);
+  }
+  el.textContent = `⚠ Tu progreso NO se está guardando (${error.message}). No recargues ni sigas avanzando: avisa al administrador.`;
+}
 // Causa real del "perdí la ofrenda al recargar" (2026-10-02, visto en los
 // logs de Postgres: "checkpoint_level no puede bajar" en ráfaga): si el mismo
 // personaje avanza en OTRA pestaña/dispositivo, esta sesión queda con un
@@ -4213,10 +4230,38 @@ async function flushSave(){
     ({ error } = await supabase.from('characters').update(characterToRow()).eq('id', state.char.id));
     if(!error) log('Se detectó progreso guardado desde otra pestaña o dispositivo con este personaje: se combinó con esta sesión. Evita jugar el mismo personaje en dos lugares a la vez.');
   }
+  // Mochila por encima del tope (sesiones que ya venían pasadas, o caminos que
+  // no usan addToInventory): se vende lo de menor valor hasta que quepa.
+  if(error && /inventory inválido/.test(error.message||'') && Array.isArray(state.char.inventory) && state.char.inventory.length > INVENTORY_CAP_OLD){
+    if(state.char.inventory.length <= INVENTORY_CAP) INVENTORY_CAP = INVENTORY_CAP_OLD; // la base sigue con el tope viejo
+    let sold = 0, gold = 0;
+    while(state.char.inventory.length > INVENTORY_CAP){
+      const worst = leastValuableInInventory();
+      if(!worst) break;
+      state.char.inventory = state.char.inventory.filter(i=> i!==worst);
+      const v = itemSellValue(worst); state.char.gold += v; gold += v; sold++;
+    }
+    if(sold) log(`La mochila pasaba de ${INVENTORY_CAP} objetos y la partida no se podía guardar: se vendieron solos los ${sold} de menor valor por ${gold} de oro.`);
+    ({ error } = await supabase.from('characters').update(characterToRow()).eq('id', state.char.id));
+  }
+  // Tras una racha de guardados fallidos, el personaje puede llevar más de 5
+  // niveles de ventaja sobre la base y el trigger rechaza el salto para
+  // siempre ("salto de nivel implausible"). Se sube el nivel por tramos.
+  if(error && /salto de nivel implausible/.test(error.message||'')){
+    const { data } = await supabase.from('characters').select('level').eq('id', state.char.id).single();
+    let lvl = data ? data.level : null;
+    while(lvl && state.char.level - lvl > 5){
+      lvl += 5;
+      const step = await supabase.from('characters').update({level: lvl, ...(sessionEnforced ? {last_session: SESSION_ID} : {})}).eq('id', state.char.id);
+      if(step.error) break;
+    }
+    ({ error } = await supabase.from('characters').update(characterToRow()).eq('id', state.char.id));
+  }
   if(error){
     await new Promise(r=>setTimeout(r, 1200));
     ({ error } = await supabase.from('characters').update(characterToRow()).eq('id', state.char.id));
   }
+  showSaveFailureBanner(error);
   if(error){
     console.error('No se pudo guardar la partida:', error.message);
     if(Date.now() - lastSaveErrorShown > 15000){
@@ -5606,6 +5651,7 @@ function renderInventory(){
   document.getElementById('main-panel').innerHTML = `
     <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:6px;">
       <h3 style="color:var(--bronze-light);">Personaje e inventario</h3>
+      <span class="sc-aside" title="Objetos en la mochila / capacidad. Al llenarse se vende solo el de menor valor." style="margin-left:auto; ${state.char.inventory.length >= INVENTORY_CAP*0.9 ? 'color:var(--blood-light); font-weight:700;' : ''}">🎒 ${state.char.inventory.length}/${INVENTORY_CAP}</span>
       <button class="reset-btn" id="btn-close-inv">Cerrar</button>
     </div>
     <div class="pj-layout">
@@ -5681,6 +5727,43 @@ function renderInventory(){
   });
 }
 
+// Tope de la mochila. La base rechaza el guardado ENTERO si inventory pasa de
+// 250 objetos (validate_character_update: "inventory inválido o demasiado
+// grande"), y el cliente no tenía ningún tope: bug real 2026-10-04, un
+// personaje que farmeó horas sin morir ni vender llegó a 251 y desde ahí no se
+// guardó nada más (perdió 12 niveles al recargar). Ahora, con la mochila
+// llena, se vende solo el objeto de menor valor (el que entra, si es el peor).
+// El tope sube a 500 con la migración 0033; si la base aún tiene el de 250
+// (SQL sin correr), el primer rechazo baja el tope de esta sesión a 250.
+let INVENTORY_CAP = 500;
+const INVENTORY_CAP_OLD = 250;
+// Qué tan prescindible es un objeto: primero manda el rango (nunca se vende
+// uno raro habiendo uno común), después su valor de venta.
+const STONE_TIER_ORDER = ['E','F','D','C','B','A','S','SS'];
+function inventoryKeepScore(item){
+  const rank = item.kind==='soulstone' ? STONE_TIER_ORDER.indexOf(item.tier) : Object.keys(RARITIES).indexOf(item.rarity||'comun');
+  return Math.max(0, rank)*100000 + itemSellValue(item);
+}
+function leastValuableInInventory(){
+  return state.char.inventory.filter(i=> i.kind==='equip' || i.kind==='soulstone')
+    .reduce((a, b)=> a && inventoryKeepScore(a) <= inventoryKeepScore(b) ? a : b, null);
+}
+function makeRoomInInventory(incoming){
+  if(state.char.inventory.length < INVENTORY_CAP) return true;
+  const worst = leastValuableInInventory();
+  const inValue = itemSellValue(incoming);
+  const stackable = incoming.kind==='potion' || incoming.kind==='fragmento';
+  if(!worst || (!stackable && inventoryKeepScore(incoming) <= inventoryKeepScore(worst))){
+    state.char.gold += inValue;
+    log(`No cabe nada más en la mochila (${INVENTORY_CAP} objetos): <b>${incoming.name||'el objeto'}</b> se vendió solo por ${inValue} de oro. Vende o guarda objetos en el Hogar.`);
+    return false;
+  }
+  const value = itemSellValue(worst);
+  state.char.inventory = state.char.inventory.filter(i=> i!==worst);
+  state.char.gold += value;
+  log(`No cabe nada más en la mochila (${INVENTORY_CAP} objetos): para hacer sitio se vendió <b>${worst.name}</b> por ${value} de oro. Vende o guarda objetos en el Hogar.`);
+  return true;
+}
 function addToInventory(item){
   // Objetos generados antes del retiro del equipo por senda (ej. la
   // recompensa ya guardada de una misión) se convierten al entrar.
@@ -5692,19 +5775,21 @@ function addToInventory(item){
   if(item.kind==='potion'){
     const existing = state.char.inventory.find(i=>i.kind==='potion' && i.potionId===item.potionId);
     if(existing) existing.qty += 1;
-    else state.char.inventory.push({kind:'potion', potionId:item.potionId, qty:1});
+    else if(makeRoomInInventory(item)) state.char.inventory.push({kind:'potion', potionId:item.potionId, qty:1});
   } else if(item.kind==='fragmento'){
     const existing = state.char.inventory.find(i=>i.kind==='fragmento' && i.fragId===item.fragId);
     if(existing) existing.qty += 1;
-    else state.char.inventory.push({kind:'fragmento', fragId:item.fragId, name:item.name, icon:item.icon, qty:1});
+    else if(makeRoomInInventory(item)) state.char.inventory.push({kind:'fragmento', fragId:item.fragId, name:item.name, icon:item.icon, qty:1});
   } else if(item.kind==='soulstone'){
+    if(!makeRoomInInventory(item)) return;
     state.char.itemCounter = (state.char.itemCounter||0) + 1;
     item.uid = 'it'+state.char.itemCounter;
     state.char.inventory.push(item);
   } else {
+    item.kind = 'equip';
+    if(!makeRoomInInventory(item)) return;
     state.char.itemCounter = (state.char.itemCounter||0) + 1;
     item.uid = 'it'+state.char.itemCounter;
-    item.kind = 'equip';
     state.char.inventory.push(item);
   }
 }
