@@ -4777,11 +4777,10 @@ const SET_ART = {jack:SET_SLOTS, artemisa:SET_SLOTS, soberano:SET_SLOTS, bastion
 // src/assets/equipo/arte/<set>_<slot>.jpg (el SS queda fuera). Las claves
 // "<set>_<slot>" listadas acá ya la tienen; el resto sigue con su imagen
 // vieja por rango. Importar con tools/import_equipo.py.
-const GEAR_CLEAN_ART = new Set([]);
+const GEAR_CLEAN_ART = new Set(Object.keys(SET_ART).flatMap(setId=> SET_SLOTS.map(slot=>`${setId}_${slot}`))); // las 40 piezas de los 8 conjuntos
 function gearArtPath(it){
   if(!it.setId || !(SET_ART[it.setId]||[]).includes(it.slot) || !WEAPON_ART_RARITIES.has(it.rarity)) return null;
-  if(GEAR_CLEAN_ART.has(`${it.setId}_${it.slot}`)) return `src/assets/equipo/arte/${it.setId}_${it.slot}.jpg?v=1`;
-  return `src/assets/equipo/sets/${it.setId}_${it.slot}_${it.rarity}.png`;
+  return GEAR_CLEAN_ART.has(`${it.setId}_${it.slot}`) ? `src/assets/equipo/arte/${it.setId}_${it.slot}.jpg?v=1` : null; // las imágenes viejas por rango se retiraron
 }
 // Una piedra de alma SIEMPRE trae `.tier` (letra E-SS) y NUNCA `.rarity`; el
 // equipo es al revés — es el discriminante ya usado en todo el resto del
