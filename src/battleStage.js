@@ -45,12 +45,13 @@ function decadeBgImage(decade){
   return img.complete && img.naturalWidth > 0 ? img : null;
 }
 let currentDecade = null;
+const STATIC_SIZE = 96;
 const CHIBI_SCALE = 1.25; // las tiras miden 64px de alto; en la escena se ven un poco más grandes
 // Escena más grande (antes 480x300) para que quepan hasta 6 combatientes por
 // bando en filas separadas de frente/retaguardia sin encimarse — pedido
 // explícito 2026-09-28, tras ver enemigos y aliados montados unos sobre otros.
 const STAGE_W = 640;
-const STAGE_H = 380;
+const STAGE_H = 450;
 // Cuatro filas fijas, de arriba abajo: retaguardia enemiga, frente enemigo,
 // frente aliado, retaguardia aliada. Los dos frentes quedan cara a cara en el
 // centro; cada retaguardia es UNA sola fila detrás de su frente.
@@ -59,7 +60,7 @@ const ROW_Y = { enemyBack: 76, enemyFront: 176, partyFront: 286, partyBack: 384 
 // los enemigos a la derecha, cada bando en dos columnas — retaguardia y frente —
 // con los dos frentes cara a cara en el centro (estilo Darkest Dungeon).
 const COL_X = { party: { back: 92, front: 214 }, enemy: { front: 426, back: 548 } };
-const COL_Y = { top: 190, bottom: 318 }; // rango de los pies dentro de una columna
+const COL_Y = { top: 205, bottom: 388 }; // rango de los pies dentro de una columna
 
 // --- estado de módulo: el canvas se crea UNA vez y se reinserta en cada
 // sync (renderCombat() destruye su contenedor con innerHTML= en cada
@@ -95,7 +96,17 @@ let uiScale = 1;
 // acá porque importar game.js desde battleStage.js crearía un ciclo (game.js
 // ya importa este módulo). Si se agrega un status buff nuevo allá, agregarlo
 // también aquí.
-const BUFF_STATUS_NAMES = new Set(['Furioso','Inspirado','Fortalecido']);
+let BUFF_STATUS_NAMES = new Set(['Furioso','Inspirado','Fortalecido']); // se reemplaza con playerInfo.buffNames
+// Ícono de cada estado para las fichas bajo las barras. Los nombres son los de
+// STATUS_INFO en game.js; uno sin ícono muestra sus dos primeras letras.
+const STATUS_ICON = {
+  Tambaleo:'💢', Aturdido:'💫', Furioso:'😡', Inspirado:'🎺', Sangrado:'🩸', Veneno:'☠', Marcado:'🎯', Quemadura:'🔥',
+  Ralentizado:'🐌', Bendecido:'🔻', 'Bendición':'✨', Fortalecido:'💪', Corrosion:'🧪', Debilitado:'⬇', Voluntad:'🧠',
+  'Último Bastión':'🛡', Empapado:'💧', Lluvia:'🌧', 'Cristalización':'💎', 'Forma Robada':'🎭', 'Caos Desatado':'🌪',
+  'Sacerdote de la Tormenta':'⚡', Mermado:'📉', Ruina:'🏚', Paralisis:'⛓', Ceguera:'🙈', Miedo:'😱', Confusion:'❓',
+  Silencio:'🤐', 'Bastión':'🧱', 'Égida':'🔰',
+};
+let banner = null; // nombre de la acción en curso, arriba al centro
 
 const THEME_FX = {
   forest: { tint:'rgba(140,215,120,0.16)', particle:'rgba(210,240,160,0.6)' },
@@ -243,8 +254,8 @@ function spriteFor(kind, entity, playerStyle, playerRace){
 }
 
 function roleFor(kind, entity, playerStyle){
-  if(kind==='player') return playerStyle==='tirador' || playerStyle==='mago' ? 'ranged' : 'melee';
-  if(kind==='ally') return entity.role==='arquero' || entity.role==='mago' ? 'ranged' : 'melee';
+  if(kind==='player') return ['tirador','mago','hechicero'].includes(playerStyle) ? 'ranged' : 'melee';
+  if(kind==='ally') return ['arquero','mago','sacerdote'].includes(entity.role) ? 'ranged' : 'melee';
   return entity.tpl ? (entity.tpl.role || 'melee') : 'melee';
 }
 
@@ -285,7 +296,7 @@ function layoutColumns(items, isFront, side){
     const n = idxs.length, x0 = COL_X[side][front ? 'front' : 'back'];
     idxs.forEach((i, k)=>{
       const y = n === 1 ? (COL_Y.top + COL_Y.bottom)/2 : COL_Y.top + (COL_Y.bottom - COL_Y.top) * k/(n - 1);
-      const stagger = n >= 3 ? (k % 2 ? 26 : -6) * fwd : 0;
+      const stagger = n >= 3 ? (k % 2 ? 34 : -10) * fwd : 0;
       out[i] = {x: x0 + stagger, y, gap: 110, nameMaxW: 104};
     });
   });
@@ -298,6 +309,7 @@ function syncBattleStage(container, combat, playerInfo, onTargetClick){
   lastCombatRef = combat;
 
   currentDecade = playerInfo.bgDecade != null ? playerInfo.bgDecade : null;
+  if(playerInfo.buffNames) BUFF_STATUS_NAMES = new Set(playerInfo.buffNames);
   const theme = playerInfo.bgTheme || 'forest';
   if(theme !== currentTheme){ currentTheme = theme; spawnBgParticles(theme); }
 
@@ -442,7 +454,14 @@ async function playBattleAnim(lastActor, lastAction){
   const firstTarget = actorForEffect((lastAction.effects||[])[0]) || actor;
 
   shake = Math.max(shake, dmgs.length ? 3 : 0);
-  if(actor.anim && actor.alive !== false) actor.anim.play('attack');
+  const hasEffect = dmgs.length || heals.length;
+  if(lastAction.label){
+    // Con efecto (golpe, cura): cartel arriba con el nombre de la habilidad.
+    // Sin efecto (esquiva, bloqueo, turno perdido, beneficio): texto sobre quien actúa.
+    if(hasEffect) banner = {text: lastAction.label, life: 1, side: actor.side};
+    else effects.floats.push({x: actor.baseX, y: actor.baseY - 92, text: lastAction.label, color: '#ffe9a8', life: 1.3});
+  }
+  if(actor.anim && actor.alive !== false && hasEffect) actor.anim.play('attack');
 
   if(actor.role==='ranged'){
     await rangedAnim(actor, firstTarget, heals.length ? '#7ed957' : '#ffd58a');
@@ -553,13 +572,18 @@ function drawActor(a, hud, dt){
   else if(a.flash>0) ctx.filter = 'brightness(1.8) saturate(0.3) sepia(1) hue-rotate(-50deg) saturate(4)';
   else if(dupTint) ctx.filter = 'hue-rotate(210deg) saturate(1.2)';
 
-  const sz = SIZE*(a.scale||1)*(a.sizeMul||1);
+  // Sprite fijo (monstruos sin tira chibi): a un tamaño parejo con los chibi.
+  const sz = STATIC_SIZE*(a.scale||1)*(a.sizeMul||1);
   const w = sz, h = sz*(a.squashY||1);
   // sombra en el suelo
   ctx.save(); ctx.filter = 'none'; ctx.fillStyle = 'rgba(0,0,0,0.32)';
   ctx.beginPath(); ctx.ellipse(cx, cy + 1, 17*(a.sizeMul||1), 5, 0, 0, Math.PI*2); ctx.fill(); ctx.restore();
   if(a.anim){
-    if(a.alive === false){ ctx.globalAlpha = 0.6; }
+    if(a.alive === false){
+      const st = a.anim.sheet.states.death, done = a.anim.state === 'death' && a.anim.frameIndex() >= st.frames - 1;
+      a._deadFade = done ? Math.max(0.28, (a._deadFade == null ? 0.9 : a._deadFade) - dt*0.8) : 0.9;
+      ctx.globalAlpha = a._deadFade;
+    } else a._deadFade = null;
     // las tiras miran a la derecha: el bando enemigo se dibuja espejado
     a.anim.draw(ctx, cx, cy, CHIBI_SCALE*(a.sizeMul||1)*(a.scale||1), a.side === 'enemy');
   } else if(a.sprite){
@@ -597,7 +621,8 @@ function drawActor(a, hud, dt){
 // Nombre, barras, estados y marco de objetivo: en una pasada aparte, después
 // de todos los cuerpos, para que el de la fila de abajo no los tape.
 function drawActorHud(a, cx, cy){
-  if(a.targetable){
+  // el aro de objetivo solo aparece mientras se está eligiendo a quién atacar
+  if(a.targetable && lastCombatRef && lastCombatRef.pendingSkill){
     ctx.save();
     ctx.strokeStyle = `rgba(255,215,110,${0.6 + 0.35*Math.sin(Date.now()/140)})`; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.ellipse(cx, cy + 1, 28*(a.sizeMul||1), 8, 0, 0, Math.PI*2); ctx.stroke();
@@ -611,7 +636,7 @@ function drawActorHud(a, cx, cy){
   ctx.font = `${Math.round(12*uiScale)}px monospace`; ctx.textAlign='center'; ctx.fillStyle='#e8dfcf';
   // el nombre va sobre la cabeza: bajo los pies se montaba sobre el cuerpo
   ctx.strokeStyle = 'rgba(0,0,0,0.85)'; ctx.lineWidth = 3;
-  const nameY = cy - (a.anim ? 64*CHIBI_SCALE : SIZE*1.35)*(a.sizeMul||1) - 5;
+  const nameY = cy - (a.anim ? 64*CHIBI_SCALE : STATIC_SIZE*0.92)*(a.sizeMul||1) - 5;
   ctx.strokeText(fitText(a.name||'', a.nameMaxW), cx, nameY); ctx.fillText(fitText(a.name||'', a.nameMaxW), cx, nameY);
   ctx.restore();
   drawBar(cx-22, by, 44, 5, (a.hp||0)/(a.maxHP||1), (a.hp/a.maxHP)<0.3 ? '#b24444' : '#8c2f2f');
@@ -637,23 +662,29 @@ function drawActorHud(a, cx, cy){
 function drawStatusChips(a, cx, topY){
   const list = a.statuses || [];
   if(!list.length) return;
-  const shown = list.slice(0,3);
+  // Fila horizontal de fichas (antes una columna de texto que, con el
+  // combate en columnas, tapaba al personaje de abajo). Hasta 5 + "+N".
+  const shown = list.slice(0, 5), cw = 22, n = shown.length + (list.length > shown.length ? 1 : 0);
+  const x0 = cx - (n*cw)/2;
   ctx.save();
-  ctx.font = `bold ${Math.round(11*uiScale)}px monospace`;
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   shown.forEach((st, i)=>{
-    const buff = BUFF_STATUS_NAMES.has(st.name);
-    const label = st.name.slice(0,5) + (st.duration!=null ? String(st.duration) : '');
-    const w = Math.max(30, ctx.measureText(label).width + 8);
-    const y = topY + i*14;
-    ctx.fillStyle = buff ? 'rgba(60,120,70,0.92)' : 'rgba(120,50,50,0.92)';
-    ctx.fillRect(cx-w/2, y-6, w, 12);
-    ctx.fillStyle = buff ? '#d7ffe0' : '#ffdede';
-    ctx.fillText(label, cx, y+1);
+    const buff = BUFF_STATUS_NAMES.has(st.name), x = x0 + i*cw;
+    ctx.fillStyle = buff ? 'rgba(32,78,48,0.94)' : 'rgba(96,30,30,0.94)';
+    ctx.fillRect(x + 1, topY - 7, cw - 2, 14);
+    ctx.strokeStyle = buff ? '#7ed957' : '#ff8a80'; ctx.lineWidth = 1; ctx.strokeRect(x + 1.5, topY - 6.5, cw - 3, 13);
+    const icon = STATUS_ICON[st.name];
+    ctx.fillStyle = '#fff';
+    if(icon){ ctx.font = `${Math.round(10*uiScale)}px sans-serif`; ctx.fillText(icon, x + 7, topY + 1); }
+    else { ctx.font = `bold ${Math.round(8*uiScale)}px monospace`; ctx.fillText(st.name.slice(0, 2), x + 7, topY + 1); }
+    // número: cargas (x2, x3) si se acumula; si no, turnos que le quedan
+    const num = st.stacks > 1 ? 'x' + st.stacks : (st.duration != null ? String(st.duration) : '');
+    ctx.font = `bold ${Math.round(8*uiScale)}px monospace`; ctx.fillStyle = buff ? '#d7ffe0' : '#ffdede';
+    ctx.fillText(num, x + 16, topY + 1);
   });
   if(list.length > shown.length){
-    ctx.fillStyle = '#d9b76b';
-    ctx.fillText('+'+(list.length-shown.length), cx, topY + shown.length*14 + 1);
+    ctx.font = `bold ${Math.round(9*uiScale)}px monospace`; ctx.fillStyle = '#d9b76b';
+    ctx.fillText('+' + (list.length - shown.length), x0 + shown.length*cw + cw/2, topY + 1);
   }
   ctx.restore();
 }
@@ -741,6 +772,19 @@ function draw(){
   effects.floats = effects.floats.filter(f=>f.life>0);
 
   actors.forEach(a=>{ if(a.flash>0) a.flash -= 0.06; });
+
+  if(banner){
+    banner.life -= dt/1.3;
+    const al = Math.max(0, Math.min(1, banner.life*4));
+    ctx.save(); ctx.globalAlpha = al;
+    ctx.font = `bold ${Math.round(15*uiScale)}px Georgia, serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const bw = ctx.measureText(banner.text).width + 30, bh = Math.round(24*uiScale), bx = canvas.width/2;
+    ctx.fillStyle = banner.side === 'party' ? 'rgba(28,52,36,0.92)' : 'rgba(84,24,24,0.92)'; ctx.fillRect(bx - bw/2, 14, bw, bh);
+    ctx.strokeStyle = '#c9a25d'; ctx.lineWidth = 1; ctx.strokeRect(bx - bw/2 + 0.5, 14.5, bw - 1, bh - 1);
+    ctx.fillStyle = '#ffe9a8'; ctx.fillText(banner.text, bx, 14 + bh/2 + 1);
+    ctx.restore();
+    if(banner.life <= 0) banner = null;
+  }
 
   ctx.restore();
 }

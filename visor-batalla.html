@@ -37,6 +37,13 @@
     <button data-f="30" class="on">Piso 30 · Riakis</button>
     <button data-f="39">Piso 39 · Usurpador Fragmentado</button>
     <button data-f="40">Piso 40 · Usurpador Sin Nombre</button>
+    <button data-f="5v6">5 contra 6 (goblins)</button>
+    <button data-f="15">Piso 15 · Arañas</button>
+    <button data-f="25">Piso 25 · Bestias</button>
+    <button data-f="45">Piso 45 · Isla</button>
+    <button data-f="50">Piso 50 · Custodio</button>
+    <button data-f="55">Piso 55 · Mar</button>
+    <button data-f="60">Piso 60 · Storm Gush</button>
     <button data-f="n">Pisos 31-40 · Normales</button>
     <button data-f="e">Pisos 31-40 · Élites</button>
     <button data-f="g">Guardianes 31-38</button>
@@ -45,6 +52,7 @@
     <label>Raza <select id="race"><option>barbaro</option><option>enano</option><option>hada</option><option selected>humano</option><option>draconido</option><option>bestia</option></select></label>
     <label>Clase <select id="cls"><option value="pesada">Guerrero</option><option value="paladin" selected>Paladín</option><option value="tirador">Arquero</option><option value="doblefilo">Asesino</option><option value="mago">Mago</option><option value="hechicero">Hechicero</option></select></label>
     <label>Aliados <input id="allies" type="checkbox" checked></label>
+    <label>Estados de prueba <input id="sts" type="checkbox"></label>
     <label id="hpwrap">Vida del jefe <input id="hp" type="range" min="1" max="100" value="100"> <span id="hpv">100%</span></label>
     <button id="atk">⚔ Golpe de prueba</button>
   </div>
@@ -58,12 +66,22 @@
   </div>
 </div>
 <script type="module">
-import { syncBattleStage, playBattleAnim } from './src/battleStage.js';
+import { syncBattleStage, playBattleAnim } from './src/battleStage.js?v=90';
 import { ENEMY_SPRITES, enemySpriteFor } from './src/battleSprites.js';
 
 const E = (id, name, o={}) => ({ tpl:Object.assign({id, name, frontline:true}, o), name, icon:'👤', hp:1000, maxHP:1000, statuses:[] });
 const ALLY_IDS = [['aldric','Aldric','guerrero','frente'],['delyth','Delyth','sacerdote','retaguardia'],['neira','Neira','arquero','retaguardia'],['fennwick','Fennwick','mago','retaguardia']];
+const D = {forest:0, cave:2, cult:3, sea:5};
+const TEST_STATUSES = ['Veneno','Sangrado','Quemadura','Aturdido','Marcado','Debilitado','Furioso','Ralentizado','Miedo','Paralisis'];
+const BUFFS = ['Furioso','Inspirado','Bendición','Fortalecido','Voluntad','Último Bastión','Lluvia','Cristalización','Forma Robada','Caos Desatado','Sacerdote de la Tormenta','Bastión','Égida'];
 const FLOORS = {
+  '5v6': { theme:'forest', decade:0, allies5:true, enemies:()=>[E('goblin_guerrero','Goblin guerrero'),E('hobgoblin','Hobgoblin'),E('goblin_saqueador','Goblin saqueador'),E('goblin_arquero','Goblin arquero',{frontline:false}),E('goblin_chaman','Chamán goblin',{frontline:false}),E('goblin_arquero','Goblin arquero',{frontline:false})] },
+  '15': { theme:'forest', decade:1, enemies:()=>[E('viuda_alfa','Viuda alfa'),E('tarantula_cazadora','Tarántula cazadora'),E('tarantula_tejedora','Tarántula tejedora',{frontline:false}),E('saltadora_alfa','Saltadora alfa',{elite:true,frontline:false})] },
+  '25': { theme:'cave', decade:2, enemies:()=>[E('oso_cuevas','Oso de las cuevas'),E('lobo_quimera','Lobo quimera'),E('lince_sombrio','Lince sombrío',{frontline:false}),E('rey_manada','Rey de la manada',{elite:true})] },
+  '45': { theme:'sea', decade:4, enemies:()=>[E('mercenario_desertor','Mercenario desertor'),E('cazarrecompensas','Cazarrecompensas'),E('medico_campana','Médico de campaña',{frontline:false}),E('capitan_mercenario','Capitán mercenario',{elite:true})] },
+  '50': { theme:'sea', decade:4, enemies:()=>[E('custodio_isla','Custodio de la isla',{boss:true}),E('asesino_isla','Asesino de la isla'),E('asesino_elite_isla','Asesino de élite',{elite:true,frontline:false})] },
+  '55': { theme:'sea', decade:5, enemies:()=>[E('triton_guerrero','Tritón guerrero'),E('cangrejo_gigante','Cangrejo gigante'),E('triton_hechicero','Tritón hechicero',{frontline:false}),E('naga_arquero','Naga arquero',{frontline:false}),E('sirena_corrupta','Sirena corrupta',{frontline:false})] },
+  '60': { theme:'sea', decade:5, enemies:()=>[E('storm_gush','Storm Gush',{boss:true}),E('heraldo_tormenta','Heraldo de la tormenta'),E('sacerdotisa_mareas','Sacerdotisa de las mareas',{frontline:false})] },
   '10': { theme:'forest', enemies:()=>[E('ogro','Ogro',{boss:true}), E('goblin_guerrero','Goblin guerrero'), E('goblin_arquero','Goblin arquero',{frontline:false}), E('goblin_chaman','Chamán goblin',{frontline:false})] },
   '20': { theme:'forest', enemies:()=>[E('matriarca_escarlata','Matriarca escarlata',{boss:true}), E('tarantula_cazadora','Cría de araña'), E('tarantula_cazadora','Cría de araña')] },
   '30': { theme:'cave',  boss:'riakis', enemies:()=>[E('riakis','Señor del Caos Riakis',{boss:true})] },
@@ -78,7 +96,12 @@ function build(){
   const f = FLOORS[floor];
   combat = { enemies: f.enemies(), allies: [], playerStatuses:[], pendingTargetFilter:null };
   if(document.getElementById('allies').checked){
-    combat.allies = ALLY_IDS.map(([id,name,role,pos],i)=>({ id:'a'+i, templateId:id, name, role, pos, hp:500, maxHP:600, mp:40, maxMP:60, spirit:30, maxSpirit:40, statuses:[] }));
+    combat.allies = ALLY_IDS.concat(f.allies5 ? [] : []).map(([id,name,role,pos],i)=>({ id:'a'+i, templateId:id, name, role, pos, hp:500, maxHP:600, mp:40, maxMP:60, spirit:30, maxSpirit:40, statuses:[] }));
+  }
+  if(document.getElementById('sts').checked){
+    const give = (u, k)=>{ u.statuses = [0,1,2,3].slice(0, 1 + k % 4).map(j=>({name: TEST_STATUSES[(k*3 + j) % TEST_STATUSES.length], duration: 1 + (k + j) % 3, stacks: j === 0 && k % 2 ? 3 : undefined})); };
+    combat.enemies.forEach(give); combat.allies.forEach((a, i)=> give(a, i + 2));
+    combat.playerStatuses = [{name:'Furioso', duration:3},{name:'Veneno', duration:2, stacks:2}];
   }
   document.getElementById('hpwrap').style.display = (floor==='40') ? 'flex' : 'none';
   render();
@@ -91,7 +114,8 @@ function render(){
   const race = document.getElementById('race').value, cls = document.getElementById('cls').value;
   syncBattleStage(document.getElementById('battle-stage-mount'), combat, {
     name:'Tú', icon:'🧝', style:cls, race, hp:800, maxHP:1000, mp:60, maxMP:100, spirit:40, maxSpirit:60,
-    statuses:[], shield:0, pos: ['pesada','paladin'].includes(cls) ? 'frente' : 'retaguardia', bgTheme:f.theme,
+    statuses: combat.playerStatuses, shield:0, pos: ['pesada','paladin'].includes(cls) ? 'frente' : 'retaguardia', bgTheme:f.theme,
+    bgDecade: f.decade != null ? f.decade : D[f.theme], buffNames: BUFFS,
   }, { isAllyHostile:()=>false, onTarget:()=>{} });
   const ph = floor==='40' ? (pct>=75?'Fase 1 · Limo negro':pct>=50?'Fase 2 · Mimetismo':pct>=25?'Fase 3 · Autorreplicación':'Fase 4 · Cristalización') : '';
   document.getElementById('phase').textContent = ph;
@@ -102,7 +126,7 @@ document.querySelectorAll('#floors button').forEach(b=> b.onclick = ()=>{
   document.querySelectorAll('#floors button').forEach(x=>x.classList.toggle('on', x===b));
   floor = b.dataset.f; document.getElementById('hp').value = 100; build();
 });
-['race','cls','allies'].forEach(id=> document.getElementById(id).onchange = build);
+['race','cls','allies','sts'].forEach(id=> document.getElementById(id).onchange = build);
 document.getElementById('hp').oninput = render;
 document.getElementById('atk').onclick = ()=>{
   playBattleAnim({kind:'player'}, {label:'Golpe de prueba', effects:[{targetKind:'enemy', key:0, amount:Math.round(300+Math.random()*200), kind:'dmg'}]});

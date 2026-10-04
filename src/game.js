@@ -2,7 +2,7 @@
 
 import { supabase } from './supabaseClient.js';
 import * as auth from './auth.js';
-import { syncBattleStage, playBattleAnim } from './battleStage.js?v=87';
+import { syncBattleStage, playBattleAnim } from './battleStage.js?v=90';
 import { CLASS_SPRITES, ENEMY_SPRITES, playerSpriteFor, enemySpriteFor, ALLY_TEMPLATE_SPRITES } from './battleSprites.js?v=83';
 
 /* ============================================================
@@ -13019,6 +13019,7 @@ function renderCombat(){
     spirit: state.char.curSpi, maxSpirit: d.maxSpi, statuses: combat.playerStatuses||[],
     shield: combat.playerShield||0,
     pos: combat.playerPos, bgTheme: DECADE_BG_THEME[decadeIndexForLevel(state.dungeon.level)], bgDecade: decadeIndexForLevel(state.dungeon.level),
+    buffNames: Object.keys(STATUS_INFO).filter(k=> STATUS_INFO[k].buff),
   };
   syncBattleStage(document.getElementById('battle-stage-mount'), combat, playerInfo, {
     isAllyHostile,

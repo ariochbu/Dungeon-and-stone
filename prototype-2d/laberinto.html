@@ -9,7 +9,7 @@
   main{ max-width:620px; margin:0 auto; padding:12px; }
   h1{ font-size:1.15em; color:#c9a25d; margin:0 0 4px; }
   p{ color:#a89a84; font-size:0.88em; margin:4px 0 10px; line-height:1.4; }
-  canvas{ width:100%; height:auto; display:block; border:1px solid #3a332c; border-radius:6px; image-rendering:pixelated; background:#0d0b10; cursor:pointer; touch-action:manipulation; }
+  canvas{ touch-action:none; width:100%; height:auto; display:block; border:1px solid #3a332c; border-radius:6px; image-rendering:pixelated; background:#0d0b10; cursor:pointer; touch-action:manipulation; }
   .row{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:10px 0; }
   button, input, select{ background:#241e18; color:#e8dcc6; border:1px solid #3a332c; border-radius:4px; padding:7px 12px; font:inherit; font-size:0.9em; }
   button{ cursor:pointer; } button:hover{ border-color:#c9a25d; }
@@ -24,12 +24,13 @@
 <body>
 <main>
   <h1>Piloto del laberinto por salas</h1>
-  <p>Página de pruebas, aparte del juego. Usa las mismas reglas del laberinto actual (pisos, sendas, tipos de sala); solo cambia cómo se ve. Toca una sala iluminada para avanzar.</p>
+  <p>Página de pruebas, aparte del juego. Usa las mismas reglas del laberinto actual (pisos, sendas, tipos de sala); solo cambia cómo se ve. Toca una sala iluminada para avanzar; arrastra para mirar el resto del laberinto.</p>
   <canvas id="stage" width="368" height="464"></canvas>
   <div id="msg"><span id="msg-text"></span><span id="msg-btn"></span></div>
   <div class="row">
     <label>Nivel del laberinto <input type="number" id="level" value="7" min="1" max="60"></label>
     <button id="regen">Nuevo laberinto</button>
+    <button id="recenter">Centrar en mi personaje</button>
     <label>Personaje <select id="who"></select></label>
     <label>Sentido <select id="orient"><option value="h">Horizontal</option><option value="v">Vertical</option></select></label>
     <label>Aspecto <select id="look"><option value="fondo">Fondo con recuadros</option><option value="muros">Salas con muros</option></select></label>
@@ -182,6 +183,7 @@ function paintWorld(grid, W, H){
 // ============================================================
 function newDungeon(){
   dg = generateDungeon(Math.max(1, Math.min(60, parseInt($('level').value, 10) || 1)));
+  manualCam = null;
   if(horiz()){ canvas.width = 480; canvas.height = 384; } else { canvas.width = 368; canvas.height = 464; }
   world = buildWorld(dg);
   dressRooms();
@@ -199,6 +201,7 @@ function goTo(f, n){
   if(busy || pendingNode || !isNodeReachable(dg, f, n)) return;
   const a = world.roomAt(dg.atFloor, dg.atNode), b = world.roomAt(f, n), hy = world.halls[dg.atFloor];
   const P = (tx, ty)=> ({x:(tx+0.5)*T, y:(ty+0.5)*T});
+  manualCam = null; // al avanzar, la cámara vuelve a seguir al personaje
   hero.path = world.horiz ? [P(a.cx, a.cy), P(hy, a.cy), P(hy, b.cy), P(b.cx - 1, b.cy + 1)]
                           : [P(a.cx, a.cy+1), P(a.cx, hy), P(b.cx, hy), P(b.cx, b.cy+1)];
   busy = true;
@@ -223,7 +226,28 @@ function arrive(node){
   else if(node.type === 'descanso' && !node.done){ node.done = true; say('🔥 Descansas junto a la hoguera: vida, MP y espíritu al máximo.'); }
   else say('Elige la siguiente sala.');
 }
+// Mirar el laberinto: se arrastra con el dedo o el ratón. La vista queda
+// donde se suelta (dentro de los límites del laberinto) hasta que el
+// personaje avanza o se pulsa "Centrar".
+let manualCam = null, drag = null, dragged = false;
+function clampCam(x, y){
+  const ww = world.W*T, wh = world.H*T, vw = canvas.width, vh = canvas.height;
+  return [ww <= vw ? ww/2 : Math.max(vw/2, Math.min(ww - vw/2, x)), wh <= vh ? wh/2 : Math.max(vh/2, Math.min(wh - vh/2, y))];
+}
+canvas.addEventListener('pointerdown', (e)=>{ drag = {x:e.clientX, y:e.clientY, cx:cam.x, cy:cam.y}; dragged = false; canvas.setPointerCapture(e.pointerId); });
+canvas.addEventListener('pointermove', (e)=>{
+  if(!drag) return;
+  const r = canvas.getBoundingClientRect(), k = canvas.width / r.width;
+  const dx = (e.clientX - drag.x)*k, dy = (e.clientY - drag.y)*k;
+  if(!dragged && Math.hypot(dx, dy) < 6) return;   // todavía es un toque, no un arrastre
+  dragged = true;
+  const [x, y] = clampCam(drag.cx - dx, drag.cy - dy);
+  manualCam = {x, y}; cam.x = x; cam.y = y;
+});
+['pointerup', 'pointercancel'].forEach(ev=> canvas.addEventListener(ev, ()=>{ drag = null; }));
+$('recenter').onclick = ()=>{ manualCam = null; };
 canvas.addEventListener('click', (e)=>{
+  if(dragged){ dragged = false; return; }             // soltar tras arrastrar no cuenta como toque
   const r = canvas.getBoundingClientRect();
   const wx = (e.clientX - r.left) * canvas.width / r.width + cam.x - canvas.width/2;
   const wy = (e.clientY - r.top) * canvas.height / r.height + cam.y - canvas.height/2;
@@ -502,7 +526,8 @@ function frame(now){
   const ahead = world.horiz ? [70, 0] : [0, -50]; // mira un poco hacia donde se avanza
   const tx = ww <= vw ? ww/2 : Math.max(vw/2, Math.min(ww - vw/2, hero.x + ahead[0]));
   const ty = wh <= vh ? wh/2 : Math.max(vh/2, Math.min(wh - vh/2, hero.y + ahead[1]));
-  cam.x += (tx - cam.x)*Math.min(1, dt*6); cam.y += (ty - cam.y)*Math.min(1, dt*6);
+  if(manualCam){ [cam.x, cam.y] = clampCam(manualCam.x, manualCam.y); }
+  else { cam.x += (tx - cam.x)*Math.min(1, dt*6); cam.y += (ty - cam.y)*Math.min(1, dt*6); }
 
   ctx.imageSmoothingEnabled = false;
   const fondo = $('look').value === 'fondo';
