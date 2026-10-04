@@ -59,7 +59,7 @@ const ROW_Y = { enemyBack: 76, enemyFront: 176, partyFront: 286, partyBack: 384 
 // Combate HORIZONTAL (2026-10-04, pedido explícito): el grupo a la izquierda y
 // los enemigos a la derecha, cada bando en dos columnas — retaguardia y frente —
 // con los dos frentes cara a cara en el centro (estilo Darkest Dungeon).
-const COL_X = { party: { back: 92, front: 214 }, enemy: { front: 426, back: 548 } };
+const COL_X = { party: { back: 104, front: 236 }, enemy: { front: 404, back: 536 } };
 const COL_Y = { top: 205, bottom: 388 }; // rango de los pies dentro de una columna
 
 // --- estado de módulo: el canvas se crea UNA vez y se reinserta en cada
@@ -295,6 +295,15 @@ function layoutColumns(items, isFront, side){
     items.forEach((it, i)=>{ if(isFront(it) === front) idxs.push(i); });
     const n = idxs.length, x0 = COL_X[side][front ? 'front' : 'back'];
     idxs.forEach((i, k)=>{
+      // Hasta 3 por columna van apilados; con 4 o más (grupos de 5-6 enemigos,
+      // o todo el equipo en la misma fila) la columna se parte en dos hileras
+      // intercaladas, la segunda hacia afuera, para que no se encimen.
+      if(n > 3){
+        const rows = Math.ceil(n/2), sub = k % 2, r = Math.floor(k/2);
+        const y = rows === 1 ? (COL_Y.top + COL_Y.bottom)/2 : COL_Y.top + (COL_Y.bottom - COL_Y.top) * (r + sub*0.5)/(rows - 0.5);
+        out[i] = {x: x0 + (sub ? -58*fwd : 10*fwd), y, gap: 80, nameMaxW: 70};
+        return;
+      }
       const y = n === 1 ? (COL_Y.top + COL_Y.bottom)/2 : COL_Y.top + (COL_Y.bottom - COL_Y.top) * k/(n - 1);
       const stagger = n >= 3 ? (k % 2 ? 34 : -10) * fwd : 0;
       out[i] = {x: x0 + stagger, y, gap: 110, nameMaxW: 104};
@@ -458,7 +467,8 @@ async function playBattleAnim(lastActor, lastAction){
   if(lastAction.label){
     // Con efecto (golpe, cura): cartel arriba con el nombre de la habilidad.
     // Sin efecto (esquiva, bloqueo, turno perdido, beneficio): texto sobre quien actúa.
-    if(hasEffect) banner = {text: lastAction.label, life: 1, side: actor.side};
+    // (el golpe básico no lleva cartel: saldría en casi todos los turnos)
+    if(hasEffect){ if(!/^(Ataque|Ataque básico)$/i.test(lastAction.label)) banner = {text: lastAction.label, life: 1, side: actor.side}; }
     else effects.floats.push({x: actor.baseX, y: actor.baseY - 92, text: lastAction.label, color: '#ffe9a8', life: 1.3});
   }
   if(actor.anim && actor.alive !== false && hasEffect) actor.anim.play('attack');

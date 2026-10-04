@@ -2,7 +2,7 @@
 
 import { supabase } from './supabaseClient.js';
 import * as auth from './auth.js';
-import { syncBattleStage, playBattleAnim } from './battleStage.js?v=90';
+import { syncBattleStage, playBattleAnim } from './battleStage.js?v=91';
 import { mountLabyrinth } from './labyrinthMap.js?v=1';
 import { CLASS_SPRITES, ENEMY_SPRITES, playerSpriteFor, enemySpriteFor, ALLY_TEMPLATE_SPRITES } from './battleSprites.js?v=83';
 
@@ -7225,7 +7225,7 @@ function showAllyRecruitReveal(tpl){
       </div>
     </div>`;
   document.body.appendChild(div);
-  document.getElementById('ov-close').onclick = ()=> div.remove();
+  div.querySelector('#ov-close').onclick = ()=> div.remove();
 }
 // Pedido explícito 2026-09-27: despedir a un aliado (o que deserte por
 // impago) ya no lo veta para siempre — siempre se puede volver a reclutar
@@ -12621,8 +12621,8 @@ function showOverlay(title, text, onClose){
   div.className = 'overlay-msg';
   div.innerHTML = `<div class="overlay-card"><h2>${title}</h2><p>${text}</p><button class="btn-main" id="ov-close">Continuar</button></div>`;
   document.body.appendChild(div);
-  document.getElementById('ov-close').onclick = ()=>{
-    document.body.removeChild(div);
+  div.querySelector('#ov-close').onclick = ()=>{
+    div.remove();
     onClose();
   };
 }
@@ -12635,7 +12635,7 @@ function showChoiceOverlay(title, text, buttons){
   document.body.appendChild(div);
   buttons.forEach((b,i)=>{
     div.querySelector(`[data-ov-btn="${i}"]`).onclick = ()=>{
-      document.body.removeChild(div);
+      div.remove();
       b.onClick();
     };
   });
@@ -12700,7 +12700,7 @@ function renderTutorialStep(){
 }
 function closeTutorial(){
   const div = document.getElementById('tutorial-overlay');
-  if(div) document.body.removeChild(div);
+  if(div) div.remove();
   try{ localStorage.setItem('dsTutorialSeen','1'); }catch(e){}
 }
 
