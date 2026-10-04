@@ -4891,6 +4891,21 @@ function itemArtTileHTML(it, px, noZoom){
 // Envuelve el tile de ícono + el bloque de texto existente (nombre/pill/
 // descripción) en una fila flex — el texto no cambia una letra, solo se le
 // suma el ícono al lado.
+// Fila compacta para las listas de objetos PROPIOS (mochila, equipado, piedras,
+// vender, Hogar) — pedido explícito 2026-10-03: "ya no es necesario poner las
+// estadísticas... dejamos solo el nombre", porque ahora salen en la carta al
+// pasar el cursor (o mantener presionado). Toda la zona de ícono + nombre
+// abre la carta; el botón de la fila no. La tienda (objetos por comprar)
+// sigue mostrando las estadísticas escritas.
+function itemNameOnlyHTML(it){
+  const stone = isSoulStoneLike(it);
+  const color = stone ? (SOUL_TIER_COLORS[it.tier]||'var(--text)') : RARITIES[it.rarity||'comun'].color;
+  const glow = !stone && ['rango_a','legendario','ss'].includes(it.rarity) ? ` text-shadow:0 0 8px ${color}99;` : '';
+  return `<b style="color:${color};${glow}">${it.name}</b>`; // el nombre de las piedras ya incluye su rango: "(E)", "(S)"
+}
+function itemRowCompact(it, noteHTML){
+  return `<div class="item-row-zoom" data-item-zoom="${registerItemZoom(it)}" style="display:flex; align-items:center; gap:10px; min-width:0; flex:1;">${itemArtTileHTML(it, undefined, true)}<div style="min-width:0; flex:1;">${itemNameOnlyHTML(it)}${noteHTML||''}</div></div>`;
+}
 function itemRowWithArt(it, textHTML, px){
   return `<div style="display:flex; align-items:center; gap:10px; min-width:0; flex:1;">${itemArtTileHTML(it, px)}<div style="min-width:0; flex:1;">${textHTML}</div></div>`;
 }
@@ -5076,7 +5091,7 @@ function renderInventory(){
     return `<div class="inv-slot">
       <div class="inv-slot-label">${label}</div>
       <div class="inv-item-row" style="margin-bottom:0; ${rarityRowStyle(it)}">
-        ${itemRowWithArt(it, `${itemNameHTML(it)}<div class="inv-item-bonus">${itemBonusText(it)}</div>`)}
+        ${itemRowCompact(it)}
         <button class="inv-btn danger" data-unequip="${slot}">Quitar</button>
       </div>
     </div>`;
@@ -5126,10 +5141,10 @@ function renderInventory(){
     const rows = items.map(it=>{
       const minLvl = gearEquipMinLevel(it.rarity);
       const levelBlocked = minLvl>0 && targetLevel<minLvl;
-      const levelNote = minLvl>0 ? `<div class="inv-item-bonus" style="color:${levelBlocked?'var(--blood-light)':'var(--text-dim)'};">Nivel requerido: ${minLvl}</div>` : '';
+      const levelNote = levelBlocked ? `<div class="inv-item-bonus" style="color:var(--blood-light);">Nivel requerido: ${minLvl}</div>` : '';
       return `
       <div class="inv-item-row" style="${rarityRowStyle(it)}">
-        ${itemRowWithArt(it, `${itemNameHTML(it)}<div class="inv-item-bonus">${itemBonusText(it)}</div>${levelNote}`)}
+        ${itemRowCompact(it, levelNote)}
         <button class="inv-btn" data-equip="${it.uid}" ${levelBlocked?'disabled':''}>Equipar en ${targetName}</button>
       </div>
     `;
@@ -5174,7 +5189,7 @@ function renderInventory(){
     return `<div class="inv-slot">
       <div class="inv-slot-label">Espacio de alma ${idx+1}</div>
       <div class="inv-item-row" style="margin-bottom:0;">
-        ${itemRowWithArt(stone, `<b style="color:${c};">${stone.name}</b> <span class="slot-tag" style="border-color:${c}; color:${c};">${stone.tier}</span><div class="inv-item-bonus">${stone.desc}</div>`)}
+        ${itemRowCompact(stone)}
         <button class="inv-btn danger" ${unsocketAttr}>Retirar</button>
       </div>
     </div>`;
@@ -5199,9 +5214,9 @@ function renderInventory(){
     const blocked = (sameFamily ? soulTierIdx(it.tier) < soulTierIdx(sameFamily.tier) : noRoom) || levelBlocked;
     const btnLabel = sameFamily ? 'Reemplazar' : 'Engarzar';
     const socketAttr = isAllyTargetForStones ? `data-socket-ally="${it.uid}|${targetRow.id}"` : `data-socket="${it.uid}"`;
-    const levelNote = minLvl>0 ? `<div class="inv-item-bonus" style="color:${levelBlocked?'var(--blood-light)':'var(--text-dim)'};">Nivel requerido: ${minLvl}</div>` : '';
+    const levelNote = levelBlocked ? `<div class="inv-item-bonus" style="color:var(--blood-light);">Nivel requerido: ${minLvl}</div>` : '';
     return `<div class="inv-item-row">
-      ${itemRowWithArt(it, `<b style="color:${c};">${it.name}</b> <span class="slot-tag" style="border-color:${c}; color:${c};">${it.tier}</span><div class="inv-item-bonus">${it.desc}</div>${levelNote}`)}
+      ${itemRowCompact(it, levelNote)}
       <button class="inv-btn" ${socketAttr} ${blocked?'disabled':''}>${btnLabel} en ${targetName}</button>
     </div>`;
   }).join('') : (stoneItems.length ? `<p class="inv-empty-msg">No hay piedras con ese filtro.</p>` : `<p class="inv-empty-msg">No tienes piedras de alma. Las dejan caer los guardianes de nivel 4 en adelante.</p>`);
@@ -7301,7 +7316,7 @@ function weaponShopRows(slot, rank, rankTag, dataAttr, price){
     const preview = makeWeaponItem(slot, shopWeaponRole, rank, name);
     if(!preview) return '';
     return `<div class="inv-item-row" style="${rarityRowStyle(preview)}">
-      ${itemRowWithArt(preview, `${itemNameHTML(preview)}<div class="inv-item-bonus">${itemBonusText(preview)}</div>`)}
+      ${itemRowCompact(preview)}
       <button class="inv-btn" data-${dataAttr}="${slot}|${name}" ${state.char.gold<price?'disabled':''}>Comprar (${price} oro)</button>
     </div>`;
   }).join('');
@@ -7330,7 +7345,7 @@ function renderShop(){
     const preview = makeGearItem(slot, styleId, rank);
     if(!preview) return '';
     return `<div class="inv-item-row" style="${rarityRowStyle(preview)}">
-      ${itemRowWithArt(preview, `${itemNameHTML(preview)}<div class="inv-item-bonus">${itemBonusText(preview)}</div>`)}
+      ${itemRowCompact(preview)}
       <button class="inv-btn" data-${dataAttr}="${slot}" ${state.char.gold<price?'disabled':''}>Comprar (${price} oro)</button>
     </div>`;
   };
@@ -7353,7 +7368,7 @@ function renderShop(){
       const preview = makeWeaponItem('arma', shopWeaponRole, rarity, name);
       if(!preview) return '';
       return `<div class="inv-item-row" style="${rarityRowStyle(preview)}">
-        ${itemRowWithArt(preview, `${itemNameHTML(preview)}<div class="inv-item-bonus">${itemBonusText(preview)}</div>`)}
+        ${itemRowCompact(preview)}
         <button class="inv-btn" data-buy-sello="arma|${rarity}|${name}" ${disabled?'disabled':''}>Comprar (${price} Sellos)</button>
       </div>`;
     }).join('') : '';
@@ -7361,7 +7376,7 @@ function renderShop(){
       const preview = makeGearItem(slot, shopWeaponRole, rarity);
       if(!preview) return '';
       return `<div class="inv-item-row" style="${rarityRowStyle(preview)}">
-        ${itemRowWithArt(preview, `${itemNameHTML(preview)}<div class="inv-item-bonus">${itemBonusText(preview)}</div>`)}
+        ${itemRowCompact(preview)}
         <button class="inv-btn" data-buy-sello="${slot}|${rarity}" ${disabled?'disabled':''}>Comprar (${price} Sellos)</button>
       </div>`;
     }).join('');
@@ -7369,7 +7384,7 @@ function renderShop(){
       const preview = makeSetItem(shopSetFilter, slot, rarity);
       if(!preview) return '';
       return `<div class="inv-item-row" style="${rarityRowStyle(preview)}">
-        ${itemRowWithArt(preview, `${itemNameHTML(preview)}<div class="inv-item-bonus">${itemBonusText(preview)}</div>`)}
+        ${itemRowCompact(preview)}
         <button class="inv-btn" data-buy-sello-set="${shopSetFilter}|${slot}|${rarity}" ${disabled?'disabled':''}>Comprar (${price} Sellos)</button>
       </div>`;
     }).join('');
@@ -7424,7 +7439,7 @@ function renderShop(){
       if(!preview) return '';
       const disabled = !hasTierSMaterials();
       return `<div class="inv-item-row" style="${rarityRowStyle(preview)}">
-        ${itemRowWithArt(preview, `${itemNameHTML(preview)}<div class="inv-item-bonus">${itemBonusText(preview)}</div>`)}
+        ${itemRowCompact(preview)}
         <button class="inv-btn" data-buy-tiers-weapon="${slot}|${name}" ${disabled?'disabled':''}>Forjar</button>
       </div>`;
     }).join('');
@@ -7434,7 +7449,7 @@ function renderShop(){
     if(!tpl) return '';
     const disabled = !hasTierSMaterials();
     return `<div class="inv-item-row">
-      ${itemRowWithArt(tpl, `<b style="color:${SOUL_TIER_COLORS.S};">${tpl.name}</b> <span class="slot-tag" style="border-color:${SOUL_TIER_COLORS.S}; color:${SOUL_TIER_COLORS.S};">S</span><div class="inv-item-bonus">${tpl.desc}</div>`)}
+      ${itemRowCompact(tpl)}
       <button class="inv-btn" data-buy-tiers-stone="${famId}" ${disabled?'disabled':''}>Forjar</button>
     </div>`;
   }).join('');
@@ -7460,7 +7475,7 @@ function renderShop(){
   const sellStones = state.char.inventory.filter(i=>i.kind==='soulstone');
   const sellRows = [
     ...sellGear.map(it=>`<div class="inv-item-row" style="${rarityRowStyle(it)}">
-      ${itemRowWithArt(it, `${itemNameHTML(it)} <span class="slot-tag">${slotLabel(it.slot)}</span><div class="inv-item-bonus">${itemBonusText(it)}</div>`)}
+      ${itemRowCompact(it)}
       <button class="inv-btn" data-sell="${it.uid}">Vender (${itemSellValue(it)} oro)</button>
     </div>`),
     ...sellPotions.map(it=>`<div class="inv-item-row">
@@ -7618,7 +7633,7 @@ function renderHome(){
   const bagGearFiltered = gearItems.filter(it=> (homeBagGearFilter==='todos'||it.slot===homeBagGearFilter) && (homeBagGearTierFilter==='todos'||(it.rarity||'comun')===homeBagGearTierFilter));
   const bagGearHTML = gearItems.length ? (bagGearFiltered.length ? bagGearFiltered.map(it=>`
     <div class="inv-item-row" style="${rarityRowStyle(it)}">
-      ${itemRowWithArt(it, `${itemNameHTML(it)} <span class="slot-tag">${slotLabel(it.slot)}</span><div class="inv-item-bonus">${itemBonusText(it)}</div>`)}
+      ${itemRowCompact(it)}
       <button class="inv-btn" data-stash-gear="${it.uid}" ${stashFull?'disabled':''}>Guardar en Hogar</button>
     </div>`).join('') : `<p class="inv-empty-msg">No hay equipo con ese filtro.</p>`) : `<p class="inv-empty-msg">No llevas equipo suelto contigo.</p>`;
 
@@ -7645,7 +7660,7 @@ function renderHome(){
   const stashGearFiltered = stashGear.filter(it=> (homeStashGearFilter==='todos'||it.slot===homeStashGearFilter) && (homeStashGearTierFilter==='todos'||(it.rarity||'comun')===homeStashGearTierFilter));
   const stashGearHTML = stashGear.length ? (stashGearFiltered.length ? stashGearFiltered.map(it=>`
     <div class="inv-item-row" style="${rarityRowStyle(it)}">
-      ${itemRowWithArt(it, `${itemNameHTML(it)} <span class="slot-tag">${slotLabel(it.slot)}</span><div class="inv-item-bonus">${itemBonusText(it)}</div>`)}
+      ${itemRowCompact(it)}
       <button class="inv-btn" data-retrieve-gear="${it.uid}">Retirar</button>
     </div>`).join('') : `<p class="inv-empty-msg">No hay equipo con ese filtro.</p>`) : `<p class="inv-empty-msg">El Hogar no guarda equipo todavía.</p>`;
 

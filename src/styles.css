@@ -1313,3 +1313,6 @@ details.admin-acc > summary > span{ flex:1; }
 .item-card .pet-card-bonuses + .item-card-sub, .item-card .pet-card-unique + .item-card-sub{ margin:8px 0 0; }
 .item-card-setline{ display:block; margin-top:4px; }
 .item-card-setline i{ font-style:normal; color:var(--rc); }
+/* Filas compactas de objetos: toda la zona ícono + nombre abre la carta */
+.item-row-zoom{ cursor:help; }
+.item-row-zoom b{ overflow-wrap:anywhere; }
