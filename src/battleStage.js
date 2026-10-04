@@ -40,7 +40,7 @@ const bgImgs = {};
 function decadeBgImage(decade){
   if(decade == null) return null;
   const key = `${decade*10 + 1}-${decade*10 + 10}`;
-  if(!(key in bgImgs)){ bgImgs[key] = new Image(); bgImgs[key].src = `src/assets/fondos/${key}.jpg?v=1`; }
+  if(!(key in bgImgs)){ bgImgs[key] = new Image(); bgImgs[key].src = `src/assets/fondos/${key}.jpg?v=2`; }
   const img = bgImgs[key];
   return img.complete && img.naturalWidth > 0 ? img : null;
 }
@@ -52,6 +52,7 @@ const CHIBI_SCALE = 1.25; // las tiras miden 64px de alto; en la escena se ven u
 // explícito 2026-09-28, tras ver enemigos y aliados montados unos sobre otros.
 const STAGE_W = 640;
 const STAGE_H = 450;
+const RES = 2;
 // Cuatro filas fijas, de arriba abajo: retaguardia enemiga, frente enemigo,
 // frente aliado, retaguardia aliada. Los dos frentes quedan cara a cara en el
 // centro; cada retaguardia es UNA sola fila detrás de su frente.
@@ -120,7 +121,7 @@ function spawnBgParticles(theme){
   bgParticles = [];
   for(let i=0;i<14;i++){
     bgParticles.push({
-      x: Math.random()*canvas.width, y: Math.random()*canvas.height,
+      x: Math.random()*STAGE_W, y: Math.random()*STAGE_H,
       r: 1+Math.random()*1.8, speed: 0.12+Math.random()*0.18,
       phase: Math.random()*Math.PI*2, color: fx.particle,
     });
@@ -130,7 +131,7 @@ function drawBgParticles(){
   ctx.save();
   bgParticles.forEach(p=>{
     p.y -= p.speed; p.phase += 0.02;
-    if(p.y < -4){ p.y = canvas.height+4; p.x = Math.random()*canvas.width; }
+    if(p.y < -4){ p.y = STAGE_H+4; p.x = Math.random()*STAGE_W; }
     ctx.globalAlpha = 0.7; ctx.fillStyle = p.color;
     ctx.beginPath(); ctx.arc(p.x+Math.sin(p.phase)*6, p.y, p.r, 0, Math.PI*2); ctx.fill();
   });
@@ -138,7 +139,7 @@ function drawBgParticles(){
 }
 
 function drawBackground(theme){
-  const w = canvas.width, h = canvas.height;
+  const w = STAGE_W, h = STAGE_H;
   const skyH = h; // toda la escena es "cielo/ambiente" temático, sin franja de piso separada
   if(theme==='cave'){
     const g = ctx.createLinearGradient(0,0,0,h);
@@ -213,9 +214,13 @@ function ensureCanvas(container){
     // y el HUD de HP/MP/Espíritu en HTML (ver renderCombat en game.js)
     // sobraba espacio abajo que antes ocupaban las tarjetas viejas — se usa
     // ese espacio para agrandar la escena en vez de dejarlo vacío.
-    canvas.width = STAGE_W; canvas.height = STAGE_H;
+    // Resolución interna al doble: la escena se estira para aprovechar pantallas
+    // anchas y así el texto y los sprites no se ven borrosos.
+    canvas.width = STAGE_W*RES; canvas.height = STAGE_H*RES;
     canvas.style.width = '100%';
-    canvas.style.maxWidth = '640px';
+    // Tan ancha como deje el panel, sin que el menú de combate se salga de la pantalla.
+    canvas.style.maxWidth = `min(1100px, calc((100vh - 300px) * ${STAGE_W} / ${STAGE_H}))`;
+    canvas.style.minWidth = 'min(100%, 420px)';
     canvas.style.height = 'auto';
     canvas.style.display = 'block';
     canvas.style.margin = '0 auto';
@@ -525,7 +530,7 @@ async function rangedAnim(actor, target, color){
 function onCanvasClick(evt){
   if(!clickHandler || !lastCombatRef || !lastCombatRef.pendingSkill) return;
   const rect = canvas.getBoundingClientRect();
-  const scaleX = canvas.width/rect.width, scaleY = canvas.height/rect.height;
+  const scaleX = STAGE_W/rect.width, scaleY = STAGE_H/rect.height;
   const cx = (evt.clientX-rect.left)*scaleX;
   const cy = (evt.clientY-rect.top)*scaleY;
   for(const a of actors.values()){
@@ -643,7 +648,7 @@ function drawActorHud(a, cx, cy){
   // barras
   let by = cy+7;
   ctx.save();
-  ctx.font = `${Math.round(12*uiScale)}px monospace`; ctx.textAlign='center'; ctx.fillStyle='#e8dfcf';
+  ctx.font = `${Math.round(12*Math.min(uiScale, 1.45))}px monospace`; ctx.textAlign='center'; ctx.fillStyle='#e8dfcf';
   // el nombre va sobre la cabeza: bajo los pies se montaba sobre el cuerpo
   ctx.strokeStyle = 'rgba(0,0,0,0.85)'; ctx.lineWidth = 3;
   const nameY = cy - (a.anim ? 64*CHIBI_SCALE : STATIC_SIZE*0.92)*(a.sizeMul||1) - 5;
@@ -735,18 +740,20 @@ function drawProjectile(p){
 function draw(){
   if(!ctx) return;
   const rect = canvas.getBoundingClientRect();
-  uiScale = rect.width>0 ? canvas.width/rect.width : 1;
+  uiScale = rect.width>0 ? Math.max(1, STAGE_W/rect.width) : 1;
   ctx.save();
+  ctx.scale(RES, RES);
+  ctx.imageSmoothingEnabled = true;
   if(shake>0){ ctx.translate((Math.random()*2-1)*shake, (Math.random()*2-1)*shake); shake = Math.max(0, shake-0.9); }
-  ctx.clearRect(-10,-10,canvas.width+20,canvas.height+20);
+  ctx.clearRect(-10,-10,STAGE_W+20,STAGE_H+20);
   const now = performance.now(), dt = Math.min(0.05, (now - (draw._last || now))/1000); draw._last = now;
   const bg = decadeBgImage(currentDecade);
   if(bg){
     // "cover" anclado abajo: el suelo de la ilustración queda bajo los pies
-    const k = Math.max(canvas.width/bg.naturalWidth, canvas.height/bg.naturalHeight);
+    const k = Math.max(STAGE_W/bg.naturalWidth, STAGE_H/bg.naturalHeight);
     const bw = bg.naturalWidth*k, bh = bg.naturalHeight*k;
-    ctx.drawImage(bg, (canvas.width - bw)/2, canvas.height - bh, bw, bh);
-    ctx.fillStyle = 'rgba(8,6,10,0.2)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(bg, (STAGE_W - bw)/2, STAGE_H - bh, bw, bh);
+    ctx.fillStyle = 'rgba(8,6,10,0.2)'; ctx.fillRect(0, 0, STAGE_W, STAGE_H);
   } else drawBackground(currentTheme || 'forest');
   drawBgParticles();
 
@@ -788,7 +795,7 @@ function draw(){
     const al = Math.max(0, Math.min(1, banner.life*4));
     ctx.save(); ctx.globalAlpha = al;
     ctx.font = `bold ${Math.round(15*uiScale)}px Georgia, serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    const bw = ctx.measureText(banner.text).width + 30, bh = Math.round(24*uiScale), bx = canvas.width/2;
+    const bw = ctx.measureText(banner.text).width + 30, bh = Math.round(24*uiScale), bx = STAGE_W/2;
     ctx.fillStyle = banner.side === 'party' ? 'rgba(28,52,36,0.92)' : 'rgba(84,24,24,0.92)'; ctx.fillRect(bx - bw/2, 14, bw, bh);
     ctx.strokeStyle = '#c9a25d'; ctx.lineWidth = 1; ctx.strokeRect(bx - bw/2 + 0.5, 14.5, bw - 1, bh - 1);
     ctx.fillStyle = '#ffe9a8'; ctx.fillText(banner.text, bx, 14 + bh/2 + 1);

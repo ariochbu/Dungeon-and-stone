@@ -62,7 +62,7 @@ function ensureCanvas(container){
   if(!canvas){
     canvas = document.createElement('canvas');
     canvas.width = VIEW_W; canvas.height = VIEW_H;
-    canvas.style.cssText = 'width:100%; max-width:760px; height:auto; display:block; margin:0 auto; border:1px solid var(--border); border-radius:6px; image-rendering:pixelated; background:#0d0b10; cursor:pointer; touch-action:none;';
+    canvas.style.cssText = 'width:100%; max-width:min(1100px, calc((100vh - 200px) * 480 / 384)); height:auto; display:block; margin:0 auto; border:1px solid var(--border); border-radius:6px; image-rendering:pixelated; background:#0d0b10; cursor:pointer; touch-action:none;';
     ctx = canvas.getContext('2d');
     // Arrastrar para mirar el laberinto (con límites); un toque corto elige sala.
     canvas.addEventListener('pointerdown', (e)=>{ drag = {x:e.clientX, y:e.clientY, cx:cam.x, cy:cam.y}; dragged = false; try{ canvas.setPointerCapture(e.pointerId); }catch(err){} });
@@ -122,7 +122,7 @@ function roundRect(x, y, w, h, r){
 }
 function drawBackdrop(){
   const d = Math.min(5, Math.floor(((opts.level || 1) - 1)/10));
-  const bg = img(`src/assets/fondos/${d*10 + 1}-${d*10 + 10}.jpg?v=1`);
+  const bg = img(`src/assets/fondos/${d*10 + 1}-${d*10 + 10}.jpg?v=2`);
   if(bg){
     const k = Math.max(VIEW_W/bg.naturalWidth, VIEW_H/bg.naturalHeight)*1.15, w = bg.naturalWidth*k, h = bg.naturalHeight*k;
     const px = (cam.x/(world.W*T) - 0.5)*(w - VIEW_W), py = (cam.y/(world.H*T) - 0.5)*(h - VIEW_H);

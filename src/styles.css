@@ -1532,6 +1532,8 @@ details.admin-acc > summary > span{ flex:1; }
 body.city-mode:has(#screen-game.active) header.top{ display:none; }
 /* En el laberinto y en combate también: sus botones viven en el panel izquierdo (2026-10-04) */
 body.dungeon-mode:has(#screen-game.active) header.top{ display:none; }
+/* Dentro del laberinto la página se ensancha: la escena usa el espacio que antes quedaba vacío a la derecha */
+body.dungeon-mode:has(#screen-game.active) .app{ max-width:1560px; }
 .dn-hero{ padding:12px 14px 10px; border-bottom:1px solid var(--border); background:linear-gradient(180deg,#261e16,var(--panel)); }
 .dn-who{ display:flex; gap:11px; align-items:center; margin-bottom:10px; }
 .dn-who .sn-ava{ width:70px; height:70px; box-shadow:0 0 0 1px #000, 0 0 14px rgba(201,162,93,0.25); }
@@ -1644,3 +1646,50 @@ body.city-mode:has(#screen-game.active) #log-panel{ display:none; }
 .pj-bag.near .pj-bag-top span{ color:var(--blood-light); }
 .pj-bag.near .pj-bag-fill{ background:linear-gradient(180deg, #e0575c, #a82c31); }
 .pj-bag p{ margin:8px 0 0; font-size:0.85em; color:#ffb4ae; line-height:1.3; }
+
+/* ---------- Celular, dentro del laberinto y en combate (2026-10-04) ----------
+   El panel del personaje y las tarjetas de vida ocupaban toda la pantalla y la
+   escena quedaba fuera de vista. Acá todo se compacta para que la escena y el
+   menú de combate entren sin desplazarse. */
+@media (max-width:840px){
+  body.dungeon-mode .sheet.side-nav-mode .sn-brand{ display:none; }
+  .dn-hero{ padding:8px 10px 6px; display:grid; grid-template-columns:1fr auto; column-gap:8px; align-items:center; }
+  .dn-who{ margin-bottom:0; gap:8px; grid-column:1; }
+  .dn-who .sn-ava{ width:40px; height:40px; }
+  .dn-who .sn-name{ font-size:0.98em; }
+  .dn-who .sn-sub{ font-size:0.78em; }
+  .dn-chips{ margin-top:0; grid-column:2; grid-row:1; flex-direction:column; align-items:flex-end; gap:3px; }
+  .dn-chips span{ font-size:0.72em; padding:2px 8px; }
+  .dn-hero .bar-row{ grid-column:1 / -1; margin:5px 0 0; }
+  .dn-hero .bar-label{ display:none; }
+  .dn-hero .bar-track{ height:6px; }
+  /* en combate las barras ya están en la tarjeta de combate: no se repiten */
+  .sheet.in-combat .dn-hero .bar-row{ display:none; }
+  body.dungeon-mode .sheet.side-nav-mode .sn-nav{ padding:6px 10px 8px; }
+  body.dungeon-mode .layout{ gap:8px; }
+  body.dungeon-mode #main-panel{ padding:10px; }
+  /* tarjetas de vida: las dos en una fila, sin retrato */
+  body.dungeon-mode .phud-wrap{ flex-wrap:nowrap; gap:6px; margin-bottom:6px; }
+  body.dungeon-mode .phud{ flex:1 1 0; min-width:0; padding:6px 7px; gap:0; }
+  body.dungeon-mode .phud-portrait{ display:none; }
+  body.dungeon-mode .phud-name{ font-size:0.72em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  body.dungeon-mode .pos-hint{ display:none; }
+  /* menú de combate: se mantiene en dos columnas */
+  body.dungeon-mode .battle-menu{ padding:8px; margin-top:6px; }
+  body.dungeon-mode .battle-menu-grid{ grid-template-columns:1fr 1fr; gap:6px; }
+  body.dungeon-mode .menu-btn{ padding:10px 6px; }
+  .overlay-card.ficha-card{ padding:10px; }
+}
+
+/* ---------- Pantallas anchas, en combate (2026-10-04) ----------
+   El espacio de la derecha quedaba vacío: la escena crece y el menú de combate
+   pasa a una columna a su derecha, así todo entra sin desplazarse. */
+@media (min-width:1280px){
+  body.dungeon-mode #main-panel:has(#battle-stage-mount){ display:grid; grid-template-columns:minmax(0,1fr) 300px; column-gap:14px; align-items:start; }
+  body.dungeon-mode #main-panel:has(#battle-stage-mount) > *{ grid-column:1 / -1; }
+  body.dungeon-mode #main-panel:has(#battle-stage-mount) > #battle-stage-mount{ grid-column:1; }
+  body.dungeon-mode #main-panel:has(#battle-stage-mount) > #battle-menu{ grid-column:2; margin-top:0; flex-direction:column; }
+  body.dungeon-mode #main-panel:has(#battle-stage-mount) .battle-menu-grid,
+  body.dungeon-mode #main-panel:has(#battle-stage-mount) .submenu-list{ grid-template-columns:1fr; }
+  body.dungeon-mode #main-panel:has(#battle-stage-mount) .menu-btn{ padding:13px 10px; font-size:0.95em; }
+}

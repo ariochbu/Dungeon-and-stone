@@ -2,8 +2,8 @@
 
 import { supabase } from './supabaseClient.js';
 import * as auth from './auth.js';
-import { syncBattleStage, playBattleAnim } from './battleStage.js?v=91';
-import { mountLabyrinth } from './labyrinthMap.js?v=1';
+import { syncBattleStage, playBattleAnim } from './battleStage.js?v=94';
+import { mountLabyrinth } from './labyrinthMap.js?v=2';
 import { CLASS_SPRITES, ENEMY_SPRITES, playerSpriteFor, enemySpriteFor, ALLY_TEMPLATE_SPRITES } from './battleSprites.js?v=83';
 
 /* ============================================================
@@ -4713,6 +4713,7 @@ function renderDungeonNav(){
   const hpLabel = shieldAmt > 0 ? `${state.char.curHP} (${shieldAmt}) / ${d.maxHP}` : `${state.char.curHP} / ${d.maxHP}`;
   const low = (state.char.curHP/d.maxHP) <= 0.3 ? ' low' : '';
   const inCombat = !!(combat && combat.active);
+  el.classList.toggle('in-combat', inCombat);
   const muted = /🔇/.test((document.getElementById('btn-music-toggle')||{}).textContent||'');
   const bar = (label, text, cls, w, extra = '')=> `<div class="bar-row"><div class="bar-label"><span>${label}</span><span>${text}</span></div>
       <div class="bar-track"><div class="bar-fill ${cls}" style="width:${w}%"></div>${extra}</div></div>`;
