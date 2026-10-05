@@ -9105,9 +9105,16 @@ const BETA_ENEMY_SCALE = {
 // Calibrado con el simulador de balance (simLevels) contra la misma referencia
 // que los jefes: rango A + piedras A + Caídos épicos + 4 aliados.
 const DECADE_ENEMY_TUNING = {
-  // 51-59 (2026-10-04): antes la referencia limpiaba cada nivel el 100% de las
-  // veces. Con estos valores, cerca del 90% por nivel (guardián ~90%).
-  5: {regular:{hp:1.6, atk:2.2}, elite:{hp:1.5, atk:2.0}, guardian:{hp:1.35, atk:1.55}},
+  // Perfiles elegidos por ariochbu el 2026-10-04, medidos como "% de veces que
+  // la referencia completa un nivel entero":
+  //   1-20  actual (sin ajuste)
+  //   21-29 moderado (~90%): antes ~100%. Referencia: rango B + piedras B + Caídos únicos.
+  //   31-39 moderado (~90%): antes ~100%. Misma referencia.
+  //   41-49 duro: SIN ajuste — ya promediaba ~78% (82 / 89 / 63), que es el perfil duro.
+  //   51-59 duro (~75%): antes 100%. Referencia: rango A + piedras A + Caídos épicos.
+  2: {regular:{hp:1.3, atk:1.5}, elite:{hp:1.2, atk:1.4}, guardian:{hp:1.1,  atk:1.15}},
+  3: {regular:{hp:1.4, atk:1.8}, elite:{hp:1.3, atk:1.6}, guardian:{hp:1.2,  atk:1.3}},
+  5: {regular:{hp:1.8, atk:2.6}, elite:{hp:1.7, atk:2.4}, guardian:{hp:1.5,  atk:1.75}},
 };
 function makeEnemy(tpl, floorIdx, level){
   const lvlMult = levelMult(level||1);
