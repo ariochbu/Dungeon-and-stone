@@ -294,6 +294,24 @@ const STORY_SCENES = {
     '«Lloré mil años para mantenerla cerrada», dice la última ola. La puerta cruje. Una grieta la recorre de lado a lado y algo, al otro lado, respira por primera vez. El sello está roto. Lo rompiste tú.',
   ]},
 };
+// Crónicas (ciudad): las escenas ya desbloqueadas se pueden volver a ver;
+// las que faltan aparecen selladas, sin título, para no adelantar la historia.
+function renderCronicas(){
+  const beaten = myBossesBeaten();
+  const levels = Object.keys(STORY_SCENES).map(Number).sort((a, b)=> a - b);
+  document.getElementById('main-panel').innerHTML = `
+    <div class="cronicas">
+      <h2 class="cw-title">Crónicas del laberinto</h2>
+      <p class="cr-note">Lo que el Cronista ha contado hasta ahora. Cada jefe de década que derrotes revela un capítulo.</p>
+      <div class="cron-grid">${levels.map((lv, i)=>{
+        const open = beaten >= lv/10;
+        return open
+          ? `<button class="cron-card" data-cron="${lv}"><div class="cron-img" style="background-image:url('src/assets/historia/${lv}_1.jpg?v=1'), url('src/assets/fondos/${lv-9}-${lv}.jpg')"></div><div class="cron-txt"><small>Capítulo ${i+1} · Piso ${lv}</small><b>${STORY_SCENES[lv].title}</b></div></button>`
+          : `<div class="cron-card locked"><div class="cron-img"><span>🔒</span></div><div class="cron-txt"><small>Capítulo ${i+1}</small><b>Derrota al jefe del piso ${lv}</b></div></div>`;
+      }).join('')}</div>
+    </div>`;
+  document.querySelectorAll('[data-cron]').forEach(b=> b.onclick = ()=> showStoryScenes(+b.dataset.cron, ()=>{}));
+}
 function showStoryScenes(level, onDone){
   const story = STORY_SCENES[level];
   if(!story){ onDone(); return; }
@@ -6327,6 +6345,7 @@ function renderSideNav(){
     </div>
     <div class="sn-sec"><h5>Progreso</h5>
       ${item('ranking','🏆','Ranking')}
+      ${item('cronicas','📖','Crónicas')}
       ${state.char.role==='admin' ? item('admin','🛠️','Panel admin') : ''}
     </div>
     <div class="sn-sec"><h5>Cuenta</h5>
@@ -6393,6 +6412,7 @@ function renderCity(){
   if(cityView==='welcome') return renderCityWelcome();
   if(cityView==='laberinto') return renderCityDungeonEntry();
   if(cityView==='ficha') return renderFicha();
+  if(cityView==='cronicas') return renderCronicas();
   return renderCityMap();
 }
 // Bienvenida narrada (2026-10-02, pedido explícito): un cronista cuenta el
