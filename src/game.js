@@ -249,7 +249,87 @@ function myBossesBeaten(){
 }
 // Anota un jefe de década vencido (ver handleVictory).
 function noteDecadeBossBeaten(clearedLevel){
+  // primera vez que cae este jefe: toca su escena de historia (ver STORY_SCENES)
+  if((state.char.bossesBeaten||0) < Math.floor(clearedLevel/10)) pendingStoryLevel = clearedLevel;
   state.char.bossesBeaten = Math.max(state.char.bossesBeaten||0, Math.floor(clearedLevel/10));
+}
+// ============================================================
+// HISTORIA DEL LABERINTO (pedido explícito 2026-10-05). El laberinto es una
+// prisión construida capa sobre capa para encerrar algo en el fondo; cada
+// jefe de década es un cerrojo y, al caer, el Cronista cuenta un pedazo.
+// Se muestra la PRIMERA vez que el personaje vence a ese jefe, antes del
+// cartel de "continuar o retirarse".
+// Arte: src/assets/historia/<piso>_<n>.jpg (n desde 1, 16:9 o más ancho);
+// mientras no exista se ve el fondo de la década.
+// Arco completo acordado: 61-70 La Grieta (caos), 71-80 Bosque muerto (jefe:
+// un liche), 81-90 Abismo en llamas (los demonios son los carceleros; al
+// Carcelero se le puede perdonar), 91-100 La Celda (el Primer Retornado; el
+// espíritu del Usurpador habla antes del jefe y entra como sexto aliado que
+// muere de un golpe).
+// ============================================================
+let pendingStoryLevel = 0;
+const STORY_SCENES = {
+  10: {title:'El guardián de la entrada', pages:[
+    'El Ogro cae de rodillas. No ruge: mira hacia la boca del laberinto, como quien acaba de fallar una guardia. En su garrote hay muescas talladas, una por cada día que pasó aquí. Son demasiadas para la vida de un ogro.',
+    'Bajo su cuerpo, la piedra guarda una inscripción medio borrada: «Que nadie baje». Los goblins nunca vigilaron un tesoro. Vivían de lo que subía.',
+  ]},
+  20: {title:'Lo que tapaba la telaraña', pages:[
+    'La Matriarca escarlata se pliega sobre sí misma y la colmena entera calla. Al arder, las telarañas dejan ver los muros: están cubiertos de sellos, cientos de ellos, tallados por manos que no eran de araña.',
+    'Las arañas no construyeron este nido. Tejieron encima de algo que ya estaba cerrado. Y algunos sellos están rotos… desde dentro.',
+  ]},
+  30: {title:'El primero en oírla', pages:[
+    'Riakis ríe mientras se deshace. «¿Señor del Caos? Yo solo me asomé a una grieta… y la grieta me miró.» Las bestias dejan de aullar; por un momento parecen animales corrientes.',
+    '«Yo no abrí la puerta», susurra. «Solo fui el primero en oírla. Abajo hay alguien que quiere salir… y tú le estás quitando los cerrojos, uno por uno.»',
+  ]},
+  40: {title:'El que bajó antes que tú', pages:[
+    'Las copias se desvanecen una a una hasta que queda un solo hombre, con una armadura de aventurero tan gastada como la tuya. Busca su nombre en la memoria y no lo encuentra.',
+    '«Yo también bajé a conquistarlo. Llegué más hondo que nadie… y volví a empezar. Y otra vez. Cada vuelta me quitó algo.» Te mira por primera vez. «No bajes buscando gloria. Baja sabiendo qué hay.» Su cuerpo se disuelve, pero su voz no se va del todo.',
+  ]},
+  50: {title:'El cielo pintado', pages:[
+    'El Custodio clava su arma en la arena y el cielo de la isla se resquebraja como pintura vieja. Detrás del azul no hay sol: hay roca. El paraíso era un techo pintado.',
+    '«Lo hicimos hermoso para que nadie quisiera seguir», dice sin rencor. «No te guardábamos el camino a ti. Te guardábamos de él.» Señala hacia abajo, donde ya se oye el mar.',
+  ]},
+  60: {title:'El foso', pages:[
+    'Tetrasea, el Señor de las Lágrimas, se hunde y el mar se retira con él. No era un océano: era un foso. En el fondo seco hay una puerta redonda de piedra, del tamaño de una ciudad.',
+    '«Lloré mil años para mantenerla cerrada», dice la última ola. La puerta cruje. Una grieta la recorre de lado a lado y algo, al otro lado, respira por primera vez. El sello está roto. Lo rompiste tú.',
+  ]},
+};
+function showStoryScenes(level, onDone){
+  const story = STORY_SCENES[level];
+  if(!story){ onDone(); return; }
+  const div = document.createElement('div');
+  div.className = 'overlay-msg story-ov';
+  document.body.appendChild(div);
+  const fallback = `src/assets/fondos/${level-9}-${level}.jpg`;
+  let step = 0;
+  const draw = ()=>{
+    const last = step === story.pages.length-1;
+    div.innerHTML = `<div class="story-card">
+      <h2 class="cw-title">${story.title}</h2>
+      <div class="ws-scene has-art" style="background:#0b0907 url('${fallback}') center/cover">
+        <img class="ws-illus" src="src/assets/historia/${level}_${step+1}.jpg?v=1" alt="" onerror="this.remove()">
+      </div>
+      <div class="ws-dialog">
+        <div class="ws-narrator"><div class="ws-portrait"><img src="src/assets/bienvenida/cronista.jpg?v=1" alt="" onerror="this.replaceWith('📜')"></div><b>El Cronista</b></div>
+        <p class="ws-text">${story.pages[step]}</p>
+        <div class="ws-foot">
+          <div class="ws-dots">${story.pages.map((_,i)=>`<i class="${i===step?'on':(i<step?'done':'')}"></i>`).join('')}</div>
+          <div class="ws-btns">
+            ${step>0 ? '<button class="reset-btn" data-st="prev">‹ Atrás</button>' : ''}
+            ${last ? '' : '<button class="reset-btn" data-st="skip">Saltar</button>'}
+            <button class="btn-main" data-st="next">${last ? 'Continuar' : 'Continuar ›'}</button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+    const finish = ()=>{ div.remove(); onDone(); };
+    div.querySelectorAll('[data-st]').forEach(b=> b.onclick = ()=>{
+      const k = b.dataset.st;
+      if(k==='skip' || (k==='next' && last)) return finish();
+      step += k==='prev' ? -1 : 1; draw();
+    });
+  };
+  draw();
 }
 // Jefes que cuentan para títulos: sin la migración 0032 (bosses_beaten y el
 // check ampliado de title_choice) solo existen los cuatro primeros — elegir
@@ -12645,6 +12725,7 @@ async function simRun(cfg){
 }
 if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
   window.__sim = simRun; window.__simLevel = simLevels;
+  window.__historia = (level)=> showStoryScenes(level, ()=>{});
   window.__creation = (step, st, r)=>{ crStep = step || 2; if(st) selStyle = st; if(r) selRace = r; showScreen('screen-create'); renderCreation(); };
   window.__simTuneBeta = (level, hp, atk)=>{ BETA_DECADE_BOSS_TUNING[level] = {hp, atk}; return BETA_DECADE_BOSS_TUNING[level]; };
   window.__simScaleBeta = (dec, kind, hp, atk)=>{ BETA_ENEMY_SCALE[dec] = Object.assign(BETA_ENEMY_SCALE[dec] && !BETA_ENEMY_SCALE[dec].hp ? BETA_ENEMY_SCALE[dec] : {}, {[kind]: {hp, atk}}); return BETA_ENEMY_SCALE; };
@@ -12913,7 +12994,9 @@ function handleVictory(){
       playLoginAudio();
       renderAll(); save();
     }});
-    showChoiceOverlay('Guardián derrotado', bodyText, buttons);
+    const storyLevel = pendingStoryLevel; pendingStoryLevel = 0;
+    if(storyLevel && STORY_SCENES[storyLevel]) showStoryScenes(storyLevel, ()=> showChoiceOverlay('Guardián derrotado', bodyText, buttons));
+    else showChoiceOverlay('Guardián derrotado', bodyText, buttons);
     // flushSave() inmediato, no el save() debounced de siempre (bug real
     // reportado 2026-09-27, "SHOSHIROHOSHINA venció al guardián del piso 40
     // pero nunca se le desbloqueó el checkpoint 41, y su nivel volvió a

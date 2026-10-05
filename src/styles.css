@@ -1696,3 +1696,9 @@ body.city-mode:has(#screen-game.active) #log-panel{ display:none; }
   body.dungeon-mode #main-panel:has(#battle-stage-mount) .submenu-list{ grid-template-columns:1fr; }
   body.dungeon-mode #main-panel:has(#battle-stage-mount) .menu-btn{ padding:13px 10px; font-size:0.95em; }
 }
+
+/* Escenas de historia al vencer a un jefe de década (2026-10-05) */
+.overlay-msg.story-ov{ z-index:60; padding:12px; overflow-y:auto; align-items:flex-start; }
+.story-card{ width:100%; max-width:880px; margin:auto; }
+.story-card .cw-title{ text-align:center; color:var(--bronze-light); margin:0; }
+.story-card .ws-scene{ background-size:cover !important; }
