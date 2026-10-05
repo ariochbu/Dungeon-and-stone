@@ -1135,6 +1135,9 @@ details.admin-acc > summary > span{ flex:1; }
 .ws-hero{ width:auto; height:250px; object-fit:contain; image-rendering:auto; }
 .phud-portrait img{ image-rendering:auto; object-fit:cover; object-position:50% 10%; }
 @media (max-width:840px){ .cr-sprite{ height:260px; } }
+/* versión chibi animada en la creación de personaje (2026-10-05) */
+canvas.cr-sprite.cr-chibi{ height:300px; image-rendering:pixelated; }
+@media (max-width:840px){ canvas.cr-sprite.cr-chibi{ height:220px; } }
 
 /* Mapa ilustrado de la ciudad (2026-10-02) — reemplaza al dibujado con CSS */
 .city-map{ height:auto !important; aspect-ratio:3/2; background-size:cover !important; background-position:center !important; background-color:#181819 !important; }

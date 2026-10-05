@@ -2978,7 +2978,9 @@ const AUTO_GEAR_TIER_LABEL = {raro:'Raro', rango_b:'Único', rango_a:'Épico', l
 // Conjunto que recibe cada Sacerdote en sus hitos (pedido explícito
 // 2026-10-05): ya no Voluntad Inquebrantable sino el que calza con su kit,
 // igual que el Arma 1 — Seraphina (escudos) Bastión Sagrado, el resto
-// (curanderos) Gracia Celestial.
+// (curanderos) Gracia Celestial. Solo para las recompensas que se entreguen
+// desde ahora: lo ya entregado como Voluntad no se convierte (las cuentas se
+// van a resetear).
 const SACERDOTE_AUTO_SET = {seraphina:'bastion'};
 function sacerdoteAutoSet(row){ return SACERDOTE_AUTO_SET[row && row.template_id] || 'gracia'; }
 function makeAutoGearItem(slot, rarity, row){
@@ -7274,22 +7276,6 @@ async function refreshAlliesState(){
       log(`<b>${row.name}</b> devuelve <b>${removed.name}</b> a la mochila: las armas de Mago ya solo las puede usar un Mago.`);
       await saveAllyEquip(row);
       save();
-    }
-    // Retroactivo (2026-10-05): las piezas de hito que se entregaron como
-    // Voluntad Inquebrantable pasan al conjunto del Sacerdote (mismo slot y rango).
-    let swapped = 0;
-    SET_SLOTS.forEach(slot=>{
-      const it = row.equip && row.equip[slot];
-      if(!it || !it.autoGear || it.setId!=='voluntad' || sacerdoteAutoSet(row)==='voluntad') return;
-      const conv = makeSetItem(sacerdoteAutoSet(row), slot, it.rarity);
-      if(!conv) return;
-      if(it.uid!==undefined) conv.uid = it.uid;
-      conv.autoGear = true;
-      row.equip[slot] = conv; swapped++;
-    });
-    if(swapped){
-      log(`El equipo de hito de <b>${row.name}</b> pasa a ser del conjunto <b>${SET_CATALOG[sacerdoteAutoSet(row)].name}</b>.`);
-      await saveAllyEquip(row);
     }
     const cur = tierOrder.indexOf(row.auto_gear_tier || 'none');
     let want = 0;
@@ -12659,6 +12645,7 @@ async function simRun(cfg){
 }
 if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
   window.__sim = simRun; window.__simLevel = simLevels;
+  window.__creation = (step, st, r)=>{ crStep = step || 2; if(st) selStyle = st; if(r) selRace = r; showScreen('screen-create'); renderCreation(); };
   window.__simTuneBeta = (level, hp, atk)=>{ BETA_DECADE_BOSS_TUNING[level] = {hp, atk}; return BETA_DECADE_BOSS_TUNING[level]; };
   window.__simScaleBeta = (dec, kind, hp, atk)=>{ BETA_ENEMY_SCALE[dec] = Object.assign(BETA_ENEMY_SCALE[dec] && !BETA_ENEMY_SCALE[dec].hp ? BETA_ENEMY_SCALE[dec] : {}, {[kind]: {hp, atk}}); return BETA_ENEMY_SCALE; };
   window.__simCurveBeta = (styleId, idx, hp, dmg)=>{ CLASS_CURVE_BETA[styleId].hp[idx] = hp; CLASS_CURVE_BETA[styleId].dmg[idx] = dmg; return CLASS_CURVE_BETA[styleId]; };
@@ -13390,6 +13377,39 @@ let selRace = 'barbaro', selStyle = 'pesada', crStep = 1, crName = '';
 const CR_STAT_NAMES = {fis:'Físico', esp:'Espíritu', hab:'Habilidad', agi:'Agilidad', vig:'Vigor'};
 const CR_RES_NAMES = {fisico:'Físico', fuego:'Fuego', hielo:'Hielo', veneno:'Veneno', aturdimiento:'Aturdimiento'};
 const CR_REAR_STYLES = new Set(['tirador','mago','hechicero','doblefilo']);
+// Creación de personaje (pedido explícito 2026-10-05): se muestra la versión
+// chibi animada, la misma que se ve en combate (src/assets/chibi/<senda>_<raza>.png),
+// en vez de la ilustración. Reposo en bucle y un ataque cada pocos segundos.
+// Si esa combinación no tiene tira chibi se queda la ilustración.
+let creationChibiIndex = null;
+async function mountCreationChibi(hero, styleId, raceId){
+  const key = styleId + '_' + raceId, img0 = hero.querySelector('.cr-sprite');
+  try{
+    if(!creationChibiIndex) creationChibiIndex = await fetch('src/assets/chibi/index.json?v=2').then(r=> r.json());
+    const meta = creationChibiIndex[key];
+    if(!meta || !img0 || !img0.isConnected) return;
+    const sheet = new Image();
+    await new Promise((res, rej)=>{ sheet.onload = res; sheet.onerror = rej; sheet.src = `src/assets/chibi/${key}.png?v=2`; });
+    if(!img0.isConnected) return;
+    const cv = document.createElement('canvas');
+    cv.className = 'cr-sprite cr-chibi';
+    cv.width = meta.cw; cv.height = meta.ch;
+    img0.replaceWith(cv);
+    const ctx = cv.getContext('2d');
+    const idleN = meta.frames[0], atkN = meta.frames[1], cycle = 3.4, atkDur = atkN/12;
+    const t0 = performance.now();
+    const tick = ()=>{
+      if(!cv.isConnected) return;
+      const t = ((performance.now() - t0)/1000) % cycle, atkAt = cycle - atkDur;
+      const row = t >= atkAt ? 1 : 0;
+      const frame = row ? Math.min(atkN - 1, Math.floor((t - atkAt)*12)) : Math.floor(t*6) % idleN;
+      ctx.clearRect(0, 0, cv.width, cv.height);
+      ctx.drawImage(sheet, frame*meta.cw, row*meta.ch, meta.cw, meta.ch, 0, 0, meta.cw, meta.ch);
+      requestAnimationFrame(tick);
+    };
+    tick();
+  }catch(e){ /* sin tira chibi: queda la ilustración */ }
+}
 function renderCreation(){
   const stepper = document.getElementById('cr-stepper');
   stepper.innerHTML = ['Raza','Clase','Nombre'].map((t,i)=>`<span class="${i+1===crStep?'on':(i+1<crStep?'done':'')}">${i+1} · ${t}</span>`).join('');
@@ -13415,6 +13435,7 @@ function renderCreation(){
     const st = STYLES[selStyle], r = RACES[selRace];
     const pos = CR_REAR_STYLES.has(st.id) ? 'Retaguardia' : 'Frente';
     hero.innerHTML = `<img class="cr-class-bg" src="src/assets/clases/${st.id}.png" alt=""><img class="cr-sprite" src="${playerSpriteFor(st.id, r.id)||''}" alt="${st.name}">`;
+    mountCreationChibi(hero, st.id, r.id);
     info.innerHTML = `<h2>${st.icon} ${st.name} <small>${r.name}</small></h2>
       <div class="cr-sub">Atributo principal: ${CR_STAT_NAMES[st.scaleStat]||st.scaleStat} · Posición: ${pos}</div>
       <p class="cr-desc">“${st.desc}”</p>
@@ -13427,6 +13448,7 @@ function renderCreation(){
     em.innerHTML = '';
     const st = STYLES[selStyle], r = RACES[selRace];
     hero.innerHTML = `<img class="cr-sprite" src="${playerSpriteFor(st.id, r.id)||''}" alt="">`;
+    mountCreationChibi(hero, st.id, r.id);
     info.innerHTML = `<h2 id="cr-name-title">${crName || 'Sin nombre'}</h2>
       <div class="cr-sub">${r.name} · ${st.name}</div>
       <p style="color:var(--text-dim); font-size:0.88em; margin:6px 0 0;">Es el nombre que verán los demás jugadores en el ranking. Único en todo el juego, y no se puede cambiar después.</p>
