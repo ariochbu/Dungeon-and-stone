@@ -2975,8 +2975,14 @@ const AUTO_GEAR_TIER_LABEL = {raro:'Raro', rango_b:'Único', rango_a:'Épico', l
 // senda), pero ahora que SÍ está restringido por senda, dejar que
 // makeSelloShopItem() caiga a state.char.style por defecto le pondría al
 // aliado equipo con el nombre/stat de la senda del JUGADOR, no la suya.
-function makeAutoGearItem(slot, rarity){
-  const item = makeGearItem(slot, 'sacerdote', rarity);
+// Conjunto que recibe cada Sacerdote en sus hitos (pedido explícito
+// 2026-10-05): ya no Voluntad Inquebrantable sino el que calza con su kit,
+// igual que el Arma 1 — Seraphina (escudos) Bastión Sagrado, el resto
+// (curanderos) Gracia Celestial.
+const SACERDOTE_AUTO_SET = {seraphina:'bastion'};
+function sacerdoteAutoSet(row){ return SACERDOTE_AUTO_SET[row && row.template_id] || 'gracia'; }
+function makeAutoGearItem(slot, rarity, row){
+  const item = makeSetItem(sacerdoteAutoSet(row), slot, rarity) || makeGearItem(slot, 'sacerdote', rarity);
   if(item) item.autoGear = true; // exento del requisito de nivel SOLO en un aliado Sacerdote
   return item;
 }
@@ -2988,6 +2994,7 @@ async function saveAllyAutoGear(row){
     auto_gear_arma2_name: row.auto_gear_arma2_name||null
   }).eq('id', row.id);
   if(error) console.error('No se pudo guardar el equipo automático del aliado:', error.message);
+  return !error;
 }
 // Arma 1 del Sacerdote en los hitos (pedido explícito 2026-10-02): cada
 // Sacerdote recibe la que calza con su kit — Seraphina (escudos) la Vara de
@@ -3010,10 +3017,15 @@ function grantSacerdoteArma1(row, tier){
 }
 async function grantAllyAutoGear(row, tier){
   if(!row.equip) row.equip = {};
+  // Si la base rechaza el guardado, se deshace todo (2026-10-05). Antes el
+  // equipo nuevo quedaba solo en pantalla y el viejo se copiaba a la mochila:
+  // así perdió SoshiroHoshina el set Tier S de su Sacerdote tras Storm Gush
+  // (la restricción de auto_gear_tier no aceptaba 'legendario' hasta la 0035).
+  const undo = {equip: JSON.stringify(row.equip), tier: row.auto_gear_tier, pending: row.auto_gear_pending, inv: state.char.inventory.length};
   grantSacerdoteArma1(row, tier);
   ['armadura','casco','botas','guantes','amuleto'].forEach(slot=>{
     const prior = row.equip[slot];
-    row.equip[slot] = makeAutoGearItem(slot, tier);
+    row.equip[slot] = makeAutoGearItem(slot, tier, row);
     if(prior) state.char.inventory.push(ensureItemUid(prior));
   });
   if(row.auto_gear_arma2_name){
@@ -3025,8 +3037,13 @@ async function grantAllyAutoGear(row, tier){
     row.auto_gear_pending = true;
   }
   row.auto_gear_tier = tier;
+  if(!(await saveAllyAutoGear(row))){
+    row.equip = JSON.parse(undo.equip); row.auto_gear_tier = undo.tier; row.auto_gear_pending = undo.pending;
+    state.char.inventory.length = undo.inv;
+    log(`No se pudo guardar el equipo ${AUTO_GEAR_TIER_LABEL[tier]} de <b>${row.name}</b>; se volverá a intentar la próxima vez que entres.`);
+    return false;
+  }
   log(`<b>${row.name}</b> desbloquea su equipo ${AUTO_GEAR_TIER_LABEL[tier]}${row.auto_gear_pending ? ' — elige su arma2 en la Taberna' : ''}.`);
-  await saveAllyAutoGear(row);
   save();
   if(invOpen) renderInventory();
 }
@@ -7258,10 +7275,29 @@ async function refreshAlliesState(){
       await saveAllyEquip(row);
       save();
     }
+    // Retroactivo (2026-10-05): las piezas de hito que se entregaron como
+    // Voluntad Inquebrantable pasan al conjunto del Sacerdote (mismo slot y rango).
+    let swapped = 0;
+    SET_SLOTS.forEach(slot=>{
+      const it = row.equip && row.equip[slot];
+      if(!it || !it.autoGear || it.setId!=='voluntad' || sacerdoteAutoSet(row)==='voluntad') return;
+      const conv = makeSetItem(sacerdoteAutoSet(row), slot, it.rarity);
+      if(!conv) return;
+      if(it.uid!==undefined) conv.uid = it.uid;
+      conv.autoGear = true;
+      row.equip[slot] = conv; swapped++;
+    });
+    if(swapped){
+      log(`El equipo de hito de <b>${row.name}</b> pasa a ser del conjunto <b>${SET_CATALOG[sacerdoteAutoSet(row)].name}</b>.`);
+      await saveAllyEquip(row);
+    }
     const cur = tierOrder.indexOf(row.auto_gear_tier || 'none');
     let want = 0;
     if(row.level>=AUTO_GEAR_LEVEL.rango_b) want = 2; else if(row.level>=AUTO_GEAR_LEVEL.raro) want = 1;
     if((state.char.checkpointLevel||1) > 30) want = Math.max(want, 3);
+    // Storm Gush vencido (6 jefes de década): set Tier S. También repone el
+    // de quienes lo ganaron antes de la migración 0035 y lo perdieron al recargar.
+    if((state.char.bossesBeaten||0) >= 6 || (state.char.checkpointLevel||1) > 60) want = 4;
     if(want > cur) await grantAllyAutoGear(row, tierOrder[want]);
     // Retroactivo (2026-10-02): Sacerdotes que ya pasaron hitos antes de que
     // el Arma 1 formara parte de la recompensa.
