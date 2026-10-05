@@ -174,6 +174,10 @@ const MAX_ALLIES = 4;
 // ============================================================
 let BETA_ALLY_UNLOCKS = false;
 const BETA_ACCOUNTS_FROM = Date.parse('2026-10-05T04:00:00Z');
+// El BALANCE de los pisos 1-40 (jefes, enemigos y curva de sendas calibrados
+// para 0/1/2/3 aliados) es el mismo para TODAS las cuentas (aclaración de
+// ariochbu, 2026-10-04); solo los cupos de aliados dependen de la cuenta.
+let BETA_BALANCE = true;
 const RENOWN_TITLES = ['', 'Aventurero', 'Renombrado', 'Héroe', 'Leyenda',
   'El que sobrevivió a la tormenta', 'Inmune al caos', 'Retornado del laberinto', 'El primer retornado'];
 // Títulos altos (pedido explícito 2026-10-04): pisos 60, 80 y 100. Jefes de
@@ -3864,7 +3868,7 @@ const CLASS_CURVE_BETA = {
   hechicero: {hp:[1.00,1.25,1.37,1.23,1.21,0.85,0.95], dmg:[1.00,1.10,1.16,0.85,1.11,0.92,0.97]},
 };
 function classCurve(kind){
-  const c = (BETA_ALLY_UNLOCKS ? CLASS_CURVE_BETA : CLASS_CURVE)[state.char.style];
+  const c = (BETA_BALANCE ? CLASS_CURVE_BETA : CLASS_CURVE)[state.char.style];
   if(!c) return 1;
   const v = c[kind], L = CLASS_CURVE_LEVELS, lvl = state.char.level||1;
   if(lvl <= L[0]) return v[0];
@@ -9156,7 +9160,7 @@ function makeEnemy(tpl, floorIdx, level){
       atk = Math.round(26 * tpl.atk * lvlMult);
     }
     // Jefe de década: ajuste propio de vida/ataque (ver DECADE_BOSS_TUNING).
-    const tune = (BETA_ALLY_UNLOCKS && BETA_DECADE_BOSS_TUNING[level]) || DECADE_BOSS_TUNING[level];
+    const tune = (BETA_BALANCE && BETA_DECADE_BOSS_TUNING[level]) || DECADE_BOSS_TUNING[level];
     if(tune && level % 10 === 0 && DECADE_BESTIARY[decadeIndexForLevel(level)].decadeBoss === tpl){
       hp = Math.round(hp * tune.hp);
       atk = Math.round(atk * tune.atk);
@@ -9181,7 +9185,7 @@ function makeEnemy(tpl, floorIdx, level){
     hp = Math.round(rnd(55,65) * tpl.hp * floorMult * regularHPMult(level||1));
     atk = Math.round(9 * tpl.atk * floorMult * monsterAtkMult(level||1));
   }
-  if(BETA_ALLY_UNLOCKS){
+  if(BETA_BALANCE){
     const dIdx = decadeIndexForLevel(level||1);
     const isDecadeBoss = (level||1) % 10 === 0 && DECADE_BESTIARY[dIdx].decadeBoss === tpl;
     const scAll = !isDecadeBoss && BETA_ENEMY_SCALE[dIdx];
@@ -9195,7 +9199,7 @@ function makeEnemy(tpl, floorIdx, level){
     const dIdx = decadeIndexForLevel(level||1);
     const isDecadeBoss = (level||1) % 10 === 0 && DECADE_BESTIARY[dIdx].decadeBoss === tpl;
     // En la beta las décadas 0-3 se juegan con menos aliados y tienen su propia escala (BETA_ENEMY_SCALE).
-    const t = !isDecadeBoss && !(BETA_ALLY_UNLOCKS && dIdx <= 3) && DECADE_ENEMY_TUNING[dIdx] && DECADE_ENEMY_TUNING[dIdx][tpl.boss ? 'guardian' : tpl.elite ? 'elite' : 'regular'];
+    const t = !isDecadeBoss && !(BETA_BALANCE && dIdx <= 3) && DECADE_ENEMY_TUNING[dIdx] && DECADE_ENEMY_TUNING[dIdx][tpl.boss ? 'guardian' : tpl.elite ? 'elite' : 'regular'];
     if(t){ hp = Math.max(1, Math.round(hp*t.hp)); atk = Math.max(1, Math.round(atk*t.atk)); }
   }
   const res = Object.assign({}, tpl.res);
@@ -12595,8 +12599,8 @@ async function simLevelOnce(cfg){
   return {cleared:true, diedAt:null, tally};
 }
 async function simLevels(cfg){
-  const saved = {state, combat, beta: BETA_ALLY_UNLOCKS};
-  simMode = true; BETA_ALLY_UNLOCKS = !!cfg.beta;
+  const saved = {state, combat, beta: BETA_BALANCE};
+  simMode = true; BETA_BALANCE = cfg.beta !== false;
   try{
     const n = cfg.n || 20; let cleared = 0; const died = {combate:0, elite:0, jefe:0}, fights = {combate:[0,0], elite:[0,0], jefe:[0,0]};
     for(let i = 0; i < n; i++){
@@ -12606,16 +12610,16 @@ async function simLevels(cfg){
     }
     const pct = (a)=> a[0] ? Math.round(a[1]/a[0]*100) : null;
     return {style: cfg.style, dungeonLevel: cfg.dungeonLevel, n, clear: Math.round(cleared/n*100), muereEn: died, ganaCombate: pct(fights.combate), ganaElite: pct(fights.elite), ganaGuardian: pct(fights.jefe)};
-  } finally { simMode = false; BETA_ALLY_UNLOCKS = saved.beta; state = saved.state; combat = saved.combat; }
+  } finally { simMode = false; BETA_BALANCE = saved.beta; state = saved.state; combat = saved.combat; }
 }
 async function simRun(cfg){
-  const saved = {state, combat, beta: BETA_ALLY_UNLOCKS};
-  simMode = true; BETA_ALLY_UNLOCKS = !!cfg.beta;
+  const saved = {state, combat, beta: BETA_BALANCE};
+  simMode = true; BETA_BALANCE = cfg.beta !== false;
   try{
     const n = cfg.n || 50; let wins = 0, turns = 0, last = null;
     for(let i = 0; i < n; i++){ last = await simOneFight(cfg); if(last.win) wins++; turns += last.turns; }
     return {style: cfg.style, level: cfg.level, dungeonLevel: cfg.dungeonLevel, n, winRate: Math.round(wins/n*100), avgTurns: +(turns/n).toFixed(1), playerHP: last.hp, boss: last.boss};
-  } finally { simMode = false; BETA_ALLY_UNLOCKS = saved.beta; state = saved.state; combat = saved.combat; }
+  } finally { simMode = false; BETA_BALANCE = saved.beta; state = saved.state; combat = saved.combat; }
 }
 if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
   window.__sim = simRun; window.__simLevel = simLevels;
