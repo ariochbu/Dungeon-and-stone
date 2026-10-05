@@ -166,8 +166,14 @@ const MAX_ALLIES = 4;
 // Mientras BETA_ALLY_UNLOCKS sea false (alfa) los títulos se muestran igual,
 // pero la Taberna y los cupos funcionan como siempre (nivel 10, 4 aliados).
 // Al lanzar la beta: poner true (y el límite equivalente en hire_ally).
+//
+// 2026-10-04 (pedido explícito): el sistema se enciende SOLO para las cuentas
+// creadas desde BETA_ACCOUNTS_FROM; las cuentas anteriores siguen como en la
+// alfa. Se decide al iniciar sesión (onAuthed) con profiles.created_at, y
+// hire_ally aplica la misma fecha en el servidor (migración 0034).
 // ============================================================
 let BETA_ALLY_UNLOCKS = false;
+const BETA_ACCOUNTS_FROM = Date.parse('2026-10-05T04:00:00Z');
 const RENOWN_TITLES = ['', 'Aventurero', 'Renombrado', 'Héroe', 'Leyenda',
   'El que sobrevivió a la tormenta', 'Inmune al caos', 'Retornado del laberinto', 'El primer retornado'];
 // Títulos altos (pedido explícito 2026-10-04): pisos 60, 80 y 100. Jefes de
@@ -4319,7 +4325,7 @@ async function deleteCharacterById(characterId){
 }
 
 async function fetchProfile(userId){
-  const { data, error } = await supabase.from('profiles').select('id, username, username_set, is_banned').eq('id', userId).maybeSingle();
+  const { data, error } = await supabase.from('profiles').select('id, username, username_set, is_banned, created_at').eq('id', userId).maybeSingle();
   if(error){ console.error('No se pudo cargar el perfil:', error.message); return null; }
   return data;
 }
@@ -13885,7 +13891,7 @@ function resetHeaderForLoggedOut(){
 function showAuthScreen(message){
   state = null; combat = null;
   invOpen = false; homeOpen = false; shopOpen = false; rankingOpen = false; adminOpen = false;
-  currentUser = null; currentProfile = null;
+  currentUser = null; currentProfile = null; BETA_ALLY_UNLOCKS = false;
   resetHeaderForLoggedOut();
   stopBossAudio();
   stopDungeonAudio();
@@ -13922,6 +13928,7 @@ async function onAuthed(user){
     await auth.signOut();
     return;
   }
+  BETA_ALLY_UNLOCKS = !!profile.created_at && Date.parse(profile.created_at) >= BETA_ACCOUNTS_FROM;
   if(profile.is_banned){
     await auth.signOut();
     showAuthScreen('Tu cuenta está suspendida.');
