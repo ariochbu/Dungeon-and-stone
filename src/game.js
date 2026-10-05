@@ -3844,12 +3844,18 @@ const CLASS_CURVE = {
 // menos aliados (0-3), así que las clases frágiles necesitan otro ajuste;
 // niveles 50 y 60 (4 aliados) quedan iguales que en CLASS_CURVE.
 const CLASS_CURVE_BETA = {
-  pesada:    {hp:[1.00,0.55,0.98,0.75,0.61,0.55,0.49], dmg:[1.00,0.67,0.99,0.86,0.61,0.74,0.70]},
-  tirador:   {hp:[1.00,0.82,0.69,0.77,1.21,1.10,1.24], dmg:[1.00,0.90,0.83,0.88,1.10,1.05,1.11]},
-  doblefilo: {hp:[1.00,1.22,0.85,1.26,1.03,0.93,0.90], dmg:[1.00,1.11,0.90,1.12,0.92,0.96,0.95]},
-  mago:      {hp:[1.00,0.93,0.77,0.83,0.94,0.95,1.60], dmg:[1.00,0.97,0.93,0.89,0.94,0.93,1.14]},
-  paladin:   {hp:[1.00,0.58,0.77,1.26,1.02,0.88,0.81], dmg:[1.00,0.76,0.88,1.12,1.00,0.94,0.90]},
-  hechicero: {hp:[1.00,1.25,1.14,0.88,1.01,0.85,0.95], dmg:[1.00,1.10,1.06,0.72,1.01,0.92,0.97]},
+  // Recalibrada 2026-10-04 con el simulador (pedido de ariochbu): Ogro sin
+  // aliados y equipo raro/piedras C; Matriarca 1 aliado, Riakis 2 y Usurpador 3
+  // con rango B/piedras B. Cada senda queda cerca del 65% contra su jefe.
+  // El mago gana a Matriarca y Riakis casi siempre aunque se le baje la curva
+  // (a distancia y con un tanque delante); no se le recortó más para no
+  // hundirlo en los pisos normales.
+  pesada:    {hp:[1.00,0.43,0.58,0.56,0.61,0.55,0.49], dmg:[1.00,0.59,0.76,0.74,0.61,0.74,0.70]},
+  tirador:   {hp:[1.00,1.15,0.83,0.92,1.69,1.10,1.24], dmg:[1.00,1.06,0.91,0.96,1.30,1.05,1.11]},
+  doblefilo: {hp:[1.00,1.22,1.27,1.57,1.34,0.93,0.90], dmg:[1.00,1.11,1.10,1.25,1.05,0.96,0.95]},
+  mago:      {hp:[1.00,0.93,0.70,0.75,0.70,0.95,1.60], dmg:[1.00,0.97,0.85,0.85,0.81,0.93,1.14]},
+  paladin:   {hp:[1.00,0.58,0.67,0.75,0.64,0.88,0.81], dmg:[1.00,0.76,0.82,0.86,0.79,0.94,0.90]},
+  hechicero: {hp:[1.00,1.25,1.37,1.23,1.21,0.85,0.95], dmg:[1.00,1.10,1.16,0.85,1.11,0.92,0.97]},
 };
 function classCurve(kind){
   const c = (BETA_ALLY_UNLOCKS ? CLASS_CURVE_BETA : CLASS_CURVE)[state.char.style];
@@ -9024,8 +9030,11 @@ function generateEquipOfRarity(rarity, floorIdx){
   if(slot==='arma') return makeWeaponItem('arma', styleId, rarity);
   // Conjuntos (2026-10-02, "drop como los anteriores equipamientos"): una
   // parte del equipo general que cae es una pieza de conjunto al azar.
-  if(chance(SET_DROP_SHARE)) return makeSetItem(pick(SET_IDS), slot, rarity);
-  return makeGearItem(slot, styleId, rarity);
+  // Bug de reparto (2026-10-04, reportado por ariochbu): solo el 40% del equipo
+  // general sorteaba conjunto y el otro 60% era SIEMPRE Voluntad Inquebrantable
+  // (makeGearItem), así que Voluntad salía el 65% de las veces y cada uno de
+  // los otros siete el 5%. Ahora los ocho conjuntos tienen la misma probabilidad.
+  return makeSetItem(pick(SET_IDS), slot, rarity);
 }
 const SET_DROP_SHARE = 0.4;
 // Tira contra la tabla plana de equipo para el nivel de personaje dado — usada
@@ -9090,16 +9099,22 @@ const DECADE_BOSS_TUNING = {
 // que la dificultad sea equivalente a la de la alfa con 4 aliados.
 // Calibrado con simulaciones (mismo método que DECADE_BOSS_TUNING).
 const BETA_DECADE_BOSS_TUNING = {
-  10: {hp:0.18, atk:0.42},  // Ogro en solitario
-  20: {hp:0.82, atk:0.91},  // Matriarca con 1 aliado
-  30: {hp:1.11, atk:1.05},  // Riakis con 2 aliados
-  40: {hp:1.21, atk:1.10},  // Usurpador con 3 aliados
+  // 2026-10-04: medido con la referencia de cada tramo (ver CLASS_CURVE_BETA);
+  // media de las seis sendas entre paréntesis.
+  10: {hp:0.24, atk:0.50},  // Ogro en solitario, equipo raro (68%)
+  20: {hp:0.89, atk:0.96},  // Matriarca con 1 aliado, rango B (76%; 71% sin contar al mago)
+  30: {hp:1.05, atk:1.00},  // Riakis con 2 aliados, rango B (69%)
+  40: {hp:0.87, atk:0.82},  // Usurpador con 3 aliados, rango B (65%)
 };
 // Enemigos que NO son jefe de década, por índice de década (1 = pisos 11-19...).
 // Medido: con 2-3 aliados los combates normales/élite/guardián rinden igual
 // que con 4; solo los guardianes de la década 1 (1 aliado) necesitaban ajuste.
+// 2026-10-04: por tipo. Pisos despejados enteros con la referencia del tramo:
+// 5-9 ≈ 85-99%, 15-19 ≈ 97-100%, 25-29 ≈ 86%, 35-39 ≈ 86-89%.
 const BETA_ENEMY_SCALE = {
-  1: {hp:0.85, atk:0.90},
+  0: {guardian:{hp:0.60, atk:0.70}},   // en solitario el guardián del 8-9 era un muro (14% de pisos despejados)
+  1: {regular:{hp:1.08, atk:1.16}, elite:{hp:1.08, atk:1.16}, guardian:{hp:1.08, atk:1.16}},
+  3: {regular:{hp:1.30, atk:1.50}, elite:{hp:1.30, atk:1.50}, guardian:{hp:1.20, atk:1.35}},
 };
 // Normales, élites y guardianes por década (índice 4 = pisos 41-50, 5 = 51-60).
 // Calibrado con el simulador de balance (simLevels) contra la misma referencia
@@ -9163,7 +9178,9 @@ function makeEnemy(tpl, floorIdx, level){
   if(BETA_ALLY_UNLOCKS){
     const dIdx = decadeIndexForLevel(level||1);
     const isDecadeBoss = (level||1) % 10 === 0 && DECADE_BESTIARY[dIdx].decadeBoss === tpl;
-    const sc = !isDecadeBoss && BETA_ENEMY_SCALE[dIdx];
+    const scAll = !isDecadeBoss && BETA_ENEMY_SCALE[dIdx];
+    // por tipo (regular/elite/guardian) o un único {hp, atk} para todos
+    const sc = scAll && (scAll[tpl.boss ? 'guardian' : tpl.elite ? 'elite' : 'regular'] || (scAll.hp ? scAll : null));
     if(sc){ hp = Math.max(1, Math.round(hp*sc.hp)); atk = Math.max(1, Math.round(atk*sc.atk)); }
   }
   // Ajuste por década de los enemigos que NO son jefe de década (ver
@@ -9171,7 +9188,8 @@ function makeEnemy(tpl, floorIdx, level){
   {
     const dIdx = decadeIndexForLevel(level||1);
     const isDecadeBoss = (level||1) % 10 === 0 && DECADE_BESTIARY[dIdx].decadeBoss === tpl;
-    const t = !isDecadeBoss && DECADE_ENEMY_TUNING[dIdx] && DECADE_ENEMY_TUNING[dIdx][tpl.boss ? 'guardian' : tpl.elite ? 'elite' : 'regular'];
+    // En la beta las décadas 0-3 se juegan con menos aliados y tienen su propia escala (BETA_ENEMY_SCALE).
+    const t = !isDecadeBoss && !(BETA_ALLY_UNLOCKS && dIdx <= 3) && DECADE_ENEMY_TUNING[dIdx] && DECADE_ENEMY_TUNING[dIdx][tpl.boss ? 'guardian' : tpl.elite ? 'elite' : 'regular'];
     if(t){ hp = Math.max(1, Math.round(hp*t.hp)); atk = Math.max(1, Math.round(atk*t.atk)); }
   }
   const res = Object.assign({}, tpl.res);
@@ -12571,8 +12589,8 @@ async function simLevelOnce(cfg){
   return {cleared:true, diedAt:null, tally};
 }
 async function simLevels(cfg){
-  const saved = {state, combat};
-  simMode = true;
+  const saved = {state, combat, beta: BETA_ALLY_UNLOCKS};
+  simMode = true; BETA_ALLY_UNLOCKS = !!cfg.beta;
   try{
     const n = cfg.n || 20; let cleared = 0; const died = {combate:0, elite:0, jefe:0}, fights = {combate:[0,0], elite:[0,0], jefe:[0,0]};
     for(let i = 0; i < n; i++){
@@ -12582,19 +12600,22 @@ async function simLevels(cfg){
     }
     const pct = (a)=> a[0] ? Math.round(a[1]/a[0]*100) : null;
     return {style: cfg.style, dungeonLevel: cfg.dungeonLevel, n, clear: Math.round(cleared/n*100), muereEn: died, ganaCombate: pct(fights.combate), ganaElite: pct(fights.elite), ganaGuardian: pct(fights.jefe)};
-  } finally { simMode = false; state = saved.state; combat = saved.combat; }
+  } finally { simMode = false; BETA_ALLY_UNLOCKS = saved.beta; state = saved.state; combat = saved.combat; }
 }
 async function simRun(cfg){
-  const saved = {state, combat};
-  simMode = true;
+  const saved = {state, combat, beta: BETA_ALLY_UNLOCKS};
+  simMode = true; BETA_ALLY_UNLOCKS = !!cfg.beta;
   try{
     const n = cfg.n || 50; let wins = 0, turns = 0, last = null;
     for(let i = 0; i < n; i++){ last = await simOneFight(cfg); if(last.win) wins++; turns += last.turns; }
     return {style: cfg.style, level: cfg.level, dungeonLevel: cfg.dungeonLevel, n, winRate: Math.round(wins/n*100), avgTurns: +(turns/n).toFixed(1), playerHP: last.hp, boss: last.boss};
-  } finally { simMode = false; state = saved.state; combat = saved.combat; }
+  } finally { simMode = false; BETA_ALLY_UNLOCKS = saved.beta; state = saved.state; combat = saved.combat; }
 }
 if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
   window.__sim = simRun; window.__simLevel = simLevels;
+  window.__simTuneBeta = (level, hp, atk)=>{ BETA_DECADE_BOSS_TUNING[level] = {hp, atk}; return BETA_DECADE_BOSS_TUNING[level]; };
+  window.__simScaleBeta = (dec, kind, hp, atk)=>{ BETA_ENEMY_SCALE[dec] = Object.assign(BETA_ENEMY_SCALE[dec] && !BETA_ENEMY_SCALE[dec].hp ? BETA_ENEMY_SCALE[dec] : {}, {[kind]: {hp, atk}}); return BETA_ENEMY_SCALE; };
+  window.__simCurveBeta = (styleId, idx, hp, dmg)=>{ CLASS_CURVE_BETA[styleId].hp[idx] = hp; CLASS_CURVE_BETA[styleId].dmg[idx] = dmg; return CLASS_CURVE_BETA[styleId]; };
   // multiplicadores temporales de vida/ataque para mobs que no son jefe de década, por década (índice 4 = 41-50, 5 = 51-60)
   window.__simScale = (dec, kind, hp, atk)=>{ DECADE_ENEMY_TUNING[dec] = Object.assign(DECADE_ENEMY_TUNING[dec] || {}, {[kind]: {hp, atk}}); return DECADE_ENEMY_TUNING; };
   // ajuste temporal de un jefe de década para probar valores sin editar el archivo
