@@ -3569,6 +3569,7 @@ function unsocketAllyStone(allyId, slotIdx){
    STATE
    ============================================================ */
 
+let simMode = false, simOutcome = null; // simulador de balance (solo localhost, ver simRun)
 let state = null;
 let combat = null; // transient combat state, rebuilt each fight
 let invOpen = false; // whether the inventory/equipment panel is showing
@@ -3621,6 +3622,7 @@ function pickWeighted(list){
 }
 
 function log(msg){
+  if(simMode) return;
   state.log.push(msg);
   if(state.log.length > 60) state.log.shift();
   renderLog();
@@ -4223,6 +4225,7 @@ async function mergeServerProgress(){
 }
 // Devuelve true solo si la partida quedó guardada en la base.
 async function flushSave(){
+  if(simMode) return false;
   if(!state || !currentUser || sessionKicked) return false;
   pendingSave = false;
   let { error } = await supabase.from('characters').update(characterToRow()).eq('id', state.char.id);
@@ -4274,6 +4277,7 @@ async function flushSave(){
 }
 
 async function save(){
+  if(simMode) return;
   saveLocalLog();
   if(!state || !currentUser || sessionKicked) return;
   pendingSave = true;
@@ -4580,6 +4584,7 @@ function showScreen(id){
 }
 
 function renderAll(){
+  if(simMode) return;
   // Ver el comentario en wirePetZoomEvents: cualquier navegación real
   // (renderAll es el punto común de todas — combate por turno usa
   // renderCombat() directo y no pasa por acá, así que esto no interfiere
@@ -9076,8 +9081,8 @@ const DECADE_BOSS_TUNING = {
   20: {hp:1.68, atk:1.28},
   30: {hp:1.49, atk:1.20},
   40: {hp:1.32, atk:1.16},
-  50: {hp:1.42, atk:1.57},
-  60: {hp:1.64, atk:1.27},
+  50: {hp:1.42, atk:1.45},  // 2026-10-04: Custodio ~61% con la referencia nueva (rango A + piedras A + Caídos épicos)
+  60: {hp:1.85, atk:2.05},  // 2026-10-04: Storm Gush ~50% con esa referencia (antes 94%: se había calibrado sin Caídos)
 };
 // BETA (con BETA_ALLY_UNLOCKS): en las décadas 0-3 el jugador lleva menos
 // aliados (0 hasta el Ogro, 1 hasta la Matriarca, 2 hasta Riakis, 3 hasta
@@ -11038,6 +11043,7 @@ const ANIM_TIMEOUT_MS = 1500;
 function withAnimTimeout(promise){ return Promise.race([promise, sleep(ANIM_TIMEOUT_MS)]); }
 const COMBAT_SPEED_DELAY_MS = {1: 650, 2: 0};
 function getCombatSpeed(){
+  if(simMode) return 2;
   try{
     const v = parseInt(localStorage.getItem('dsCombatSpeed'), 10);
     return (v===1 || v===2) ? v : 1;
@@ -12401,11 +12407,107 @@ function syncAllyHPToDungeon(){
   });
 }
 
+// ============================================================
+// SIMULADOR DE BALANCE (solo en localhost). Arma un personaje de referencia y
+// pelea de verdad contra un encuentro, con el motor real de combate y sin
+// tocar la base ni la pantalla. Sirve para calibrar DECADE_BOSS_TUNING.
+//   await __sim({style:'tirador', level:60, dungeonLevel:60, n:100})
+// Referencia (pedido de ariochbu, 2026-10-04): equipo rango A del conjunto afín
+// a la senda, piedras de alma A en todos los espacios, Caídos épicos en todas
+// las ranuras, 3 pociones de vida mayor y 4 aliados del mismo nivel con equipo
+// rango A.
+// ============================================================
+const SIM_SET = {pesada:'guardian', paladin:'bastion', tirador:'artemisa', doblefilo:'jack', mago:'soberano', hechicero:'eclipse'};
+const SIM_ALLIES = [['aldric','guerrero','pesada'], ['delyth','sacerdote',null], ['neira','arquero','tirador'], ['fennwick','mago','mago']];
+function simBuildState(cfg){
+  const level = cfg.level, rank = cfg.gear || 'rango_a';
+  const equip = {arma:null, arma2:null, armadura:null, amuleto:null, casco:null, botas:null, guantes:null};
+  if(rank !== 'none'){
+    SET_SLOTS.forEach(slot=>{ equip[slot] = makeSetItem(SIM_SET[cfg.style], slot, rank); });
+    equip.arma = makeWeaponItem('arma', cfg.style, rank); equip.arma2 = makeWeaponItem('arma2', cfg.style, rank);
+  }
+  const stonePool = Object.values(SOUL_STONES).filter(t=> t.tier === (cfg.stoneTier || 'A'));
+  const families = [...new Set(stonePool.map(t=> t.family))].sort(()=> Math.random() - 0.5);
+  const soulSlots = cfg.stoneTier === 'none' ? [] : families.slice(0, maxSoulSlots(level)).map(f=> makeSoulStoneItem(stonePool.find(t=> t.family === f)));
+  const petPool = PET_CATALOG.filter(t=> t.rarity === (cfg.petRarity || 'epico')).sort(()=> Math.random() - 0.5);
+  const allies = SIM_ALLIES.slice(0, cfg.allies == null ? 4 : cfg.allies).map(([id, role, wstyle], i)=>{
+    const tpl = ALLY_ROSTER.find(t=> t.templateId === id);
+    const eq = {};
+    if(rank !== 'none'){
+      SET_SLOTS.forEach(slot=>{ eq[slot] = makeSetItem('voluntad', slot, rank); });
+      if(wstyle){ eq.arma = makeWeaponItem('arma', wstyle, rank); eq.arma2 = makeWeaponItem('arma2', wstyle, rank); }
+    }
+    return {id:'sim' + i, template_id:id, name:tpl.name, role, level, xp:0, equip:eq, soul_slots:[], satisfaction:100};
+  });
+  const st = {char:{
+    id:'sim', slotNumber:1, nickname:'Sim', role:'player', race: cfg.race || 'humano', style: cfg.style,
+    level, xp:0, gold:0, missionCurrency:0, curHP:1, curSta:1, curSpi:1,
+    equip, inventory:[{kind:'potion', potionId:'vida_mayor', qty: cfg.potions == null ? 3 : cfg.potions}], itemCounter:0,
+    maxLevelUnlocked: cfg.dungeonLevel, checkpointLevel: cfg.dungeonLevel, record:{level:cfg.dungeonLevel, floorIdx:0},
+    stash:{gold:0, items:[]}, soulSlots, pityGear:0, pityStone:0,
+    pets:{owned:{}, equipped:[], pendingFreePulls:0}, checkin:{day:0, lastClaimDate:null}, allies,
+    titleChoice:0, titleColumn:true, bossesBeaten:0, bossesColumn:true,
+  }, dungeon:{level: cfg.dungeonLevel, floors:[[{type: cfg.node || 'jefe', done:false}]], atFloor:0, atNode:0, visited:{}, allyHP:{}, allyMP:{}, allySpirit:{}}, log:[]};
+  return {st, petPool};
+}
+async function simOneFight(cfg){
+  const {st, petPool} = simBuildState(cfg);
+  state = st;
+  if(cfg.petRarity !== 'none') petPool.slice(0, maxPetSlots()).forEach(t=>{ state.char.pets.owned[t.id] = 1; state.char.pets.equipped.push(t.id); });
+  ensureSoulSlots();
+  const d0 = derived();
+  state.char.curHP = d0.maxHP; state.char.curSta = d0.maxSta; state.char.curSpi = d0.maxSpi;
+  simOutcome = null; combat = null;
+  const node = state.dungeon.floors[0][0], f = numFloorsForLevel(cfg.dungeonLevel) - 1;
+  startCombat(buildEncounterGroup(node.type, f, cfg.dungeonLevel), node);
+  const skillIds = style().skills.concat(state.char.level >= LEVEL_60_MILESTONE ? [ULTIMATE_BY_STYLE[state.char.style]] : []);
+  let guard = 0;
+  while(combat && !combat.over && !simOutcome && guard++ < 400){
+    const tc = combat.turnCount, d = derived();
+    const potion = state.char.inventory.find(i=> i.kind === 'potion' && i.potionId === 'vida_mayor' && i.qty > 0);
+    if(potion && state.char.curHP / d.maxHP < 0.35){ await usePotionInCombat('vida_mayor'); }
+    else {
+      // la habilidad de daño más fuerte que se pueda pagar y usar desde donde está
+      const ok = (id)=>{
+        const sk = SKILLS[id]; if(!sk || !sk.mult) return false;
+        if(sk.ultimate && ((ULTIMATE_MAX_USES - (state.dungeon.ultimateUses||0)) <= 0 || (state.dungeon.ultimateCooldown||0) > 0)) return false;
+        if(sk.cost && (sk.cost.tipo === 'estamina' ? state.char.curSta : state.char.curSpi) < effectiveSkillCost(id, sk)) return false;
+        if(sk.requiresPos && combat.playerPos !== sk.requiresPos && !sk.penaltyIfFrente) return false;
+        return true;
+      };
+      const best = skillIds.filter(ok).sort((a, b)=> (SKILLS[b].mult||0) - (SKILLS[a].mult||0))[0] || 'ataque_basico';
+      const idx = resolvedTargetMode(SKILLS[best]) === 'any' ? autoPickEnemyIndex() : null;
+      await playerUseSkill(best, idx);
+      // si por lo que sea no consumió el turno, ataque básico para no quedar en bucle
+      if(combat && !combat.over && !simOutcome && combat.turnCount === tc) await playerUseSkill('ataque_basico', resolvedTargetMode(SKILLS.ataque_basico) === 'any' ? autoPickEnemyIndex() : null);
+      if(combat && !combat.over && !simOutcome && combat.turnCount === tc){ combat.turnCount++; await endPlayerTurn(); }
+    }
+    checkCombatEnd();
+  }
+  return {win: simOutcome === 'win', turns: combat ? combat.turnCount : 0, hp: d0.maxHP, boss: combat && combat.enemies[0] ? {name: combat.enemies[0].name, maxHP: combat.enemies[0].maxHP, atk: combat.enemies[0].atk} : null};
+}
+async function simRun(cfg){
+  const saved = {state, combat};
+  simMode = true;
+  try{
+    const n = cfg.n || 50; let wins = 0, turns = 0, last = null;
+    for(let i = 0; i < n; i++){ last = await simOneFight(cfg); if(last.win) wins++; turns += last.turns; }
+    return {style: cfg.style, level: cfg.level, dungeonLevel: cfg.dungeonLevel, n, winRate: Math.round(wins/n*100), avgTurns: +(turns/n).toFixed(1), playerHP: last.hp, boss: last.boss};
+  } finally { simMode = false; state = saved.state; combat = saved.combat; }
+}
+if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
+  window.__sim = simRun;
+  // ajuste temporal de un jefe de década para probar valores sin editar el archivo
+  window.__simTune = (level, hp, atk)=>{ DECADE_BOSS_TUNING[level] = {hp, atk}; return DECADE_BOSS_TUNING[level]; };
+  // ídem para la curva de una senda en un punto de nivel (índice 5 = nivel 50, 6 = nivel 60)
+  window.__simCurve = (styleId, idx, hp, dmg)=>{ CLASS_CURVE[styleId].hp[idx] = hp; CLASS_CURVE[styleId].dmg[idx] = dmg; return CLASS_CURVE[styleId]; };
+}
 function checkCombatEnd(){
   if(!combat || combat.over) return;
   if(state.char.curHP<=0){
     combat.over = true;
     syncAllyHPToDungeon();
+    if(simMode){ simOutcome = 'loss'; return; }
     log('Caes al suelo. La oscuridad del laberinto te envuelve...');
     handleDefeat();
     return;
@@ -12413,6 +12515,7 @@ function checkCombatEnd(){
   processEnemyDeaths();
   if(livingEnemies().length===0){
     combat.over = true;
+    if(simMode){ simOutcome = 'win'; return; }
     syncAllyHPToDungeon();
     handleVictory();
   }
@@ -12867,6 +12970,7 @@ function useSkillFromMenu(sid){
 }
 
 function renderCombat(){
+  if(simMode) return;
   // Tras una derrota el laberinto ya se cerró (handleDefeat) pero el combate
   // sigue en pantalla hasta pulsar "Continuar": no hay nada que redibujar.
   if(!state || !state.dungeon || !combat) return;
