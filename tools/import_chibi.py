@@ -50,8 +50,8 @@ SENDA_POR_ARCHIVO = {
 # Aliados de la Taberna (Assets/Aliados/chibi): id corto -> templateId del aliado.
 # Salen como aliado_<templateId>.png en la misma carpeta e índice.
 ALIADO_POR_ARCHIVO = {
-    'b6v5xj': 'aldric', '9p1x6z': 'brann', 'jmp9l5': 'neira', 'nbaykx': 'lyra', 'elrxyo': 'fennwick',
-    'gzta75': 'eira', 'ndli9n': 'delyth', '28eevs': 'seraphina', 'x0x2c5': 'vex', 'ok5fxk': 'kael',
+    'qyvu4r': 'aldric', '9p1x6z': 'brann', 'n49u2c': 'neira', 'nbaykx': 'lyra', 'elrxyo': 'fennwick',
+    'gzta75': 'eira', 'fgeg6g': 'delyth', '28eevs': 'seraphina', 'x0x2c5': 'vex', 'ok5fxk': 'kael',
 }
 
 

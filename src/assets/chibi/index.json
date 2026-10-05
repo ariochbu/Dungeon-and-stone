@@ -1,9 +1,9 @@
 {
  "aliado_aldric": {
-  "ch": 67,
-  "cw": 78,
+  "ch": 70,
+  "cw": 96,
   "frames": [
-   3,
+   4,
    6,
    2,
    5
@@ -20,10 +20,10 @@
   ]
  },
  "aliado_delyth": {
-  "ch": 66,
-  "cw": 86,
+  "ch": 69,
+  "cw": 60,
   "frames": [
-   5,
+   4,
    6,
    2,
    5
@@ -70,13 +70,13 @@
   ]
  },
  "aliado_neira": {
-  "ch": 69,
-  "cw": 70,
+  "ch": 68,
+  "cw": 68,
   "frames": [
    5,
    6,
-   2,
-   5
+   3,
+   6
   ]
  },
  "aliado_seraphina": {
