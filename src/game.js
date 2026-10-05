@@ -9101,6 +9101,14 @@ const BETA_DECADE_BOSS_TUNING = {
 const BETA_ENEMY_SCALE = {
   1: {hp:0.85, atk:0.90},
 };
+// Normales, élites y guardianes por década (índice 4 = pisos 41-50, 5 = 51-60).
+// Calibrado con el simulador de balance (simLevels) contra la misma referencia
+// que los jefes: rango A + piedras A + Caídos épicos + 4 aliados.
+const DECADE_ENEMY_TUNING = {
+  // 51-59 (2026-10-04): antes la referencia limpiaba cada nivel el 100% de las
+  // veces. Con estos valores, cerca del 90% por nivel (guardián ~90%).
+  5: {regular:{hp:1.6, atk:2.2}, elite:{hp:1.5, atk:2.0}, guardian:{hp:1.35, atk:1.55}},
+};
 function makeEnemy(tpl, floorIdx, level){
   const lvlMult = levelMult(level||1);
   const floorMult = 1 + floorIdx * floorDifficultyStep(level||1);
@@ -9150,6 +9158,14 @@ function makeEnemy(tpl, floorIdx, level){
     const isDecadeBoss = (level||1) % 10 === 0 && DECADE_BESTIARY[dIdx].decadeBoss === tpl;
     const sc = !isDecadeBoss && BETA_ENEMY_SCALE[dIdx];
     if(sc){ hp = Math.max(1, Math.round(hp*sc.hp)); atk = Math.max(1, Math.round(atk*sc.atk)); }
+  }
+  // Ajuste por década de los enemigos que NO son jefe de década (ver
+  // DECADE_ENEMY_TUNING): normales, élites y guardianes, cada uno por separado.
+  {
+    const dIdx = decadeIndexForLevel(level||1);
+    const isDecadeBoss = (level||1) % 10 === 0 && DECADE_BESTIARY[dIdx].decadeBoss === tpl;
+    const t = !isDecadeBoss && DECADE_ENEMY_TUNING[dIdx] && DECADE_ENEMY_TUNING[dIdx][tpl.boss ? 'guardian' : tpl.elite ? 'elite' : 'regular'];
+    if(t){ hp = Math.max(1, Math.round(hp*t.hp)); atk = Math.max(1, Math.round(atk*t.atk)); }
   }
   const res = Object.assign({}, tpl.res);
   if(tpl.boss && level===1) res.fisico = 5; // defensa física reducida solo para el guardián de nivel 1
@@ -12486,6 +12502,81 @@ async function simOneFight(cfg){
   }
   return {win: simOutcome === 'win', turns: combat ? combat.turnCount : 0, hp: d0.maxHP, boss: combat && combat.enemies[0] ? {name: combat.enemies[0].name, maxHP: combat.enemies[0].maxHP, atk: combat.enemies[0].atk} : null};
 }
+// Juega un combate ya iniciado hasta que termina (misma política que simOneFight).
+async function simFightLoop(){
+  const skillIds = style().skills.concat(state.char.level >= LEVEL_60_MILESTONE ? [ULTIMATE_BY_STYLE[state.char.style]] : []);
+  let guard = 0;
+  simOutcome = null;
+  while(combat && !combat.over && !simOutcome && guard++ < 400){
+    const tc = combat.turnCount, d = derived();
+    const potion = state.char.inventory.find(i=> i.kind === 'potion' && i.potionId === 'vida_mayor' && i.qty > 0);
+    if(potion && state.char.curHP / d.maxHP < 0.35){ await usePotionInCombat('vida_mayor'); }
+    else {
+      const ok = (id)=>{
+        const sk = SKILLS[id]; if(!sk || !sk.mult) return false;
+        if(sk.ultimate && ((ULTIMATE_MAX_USES - (state.dungeon.ultimateUses||0)) <= 0 || (state.dungeon.ultimateCooldown||0) > 0)) return false;
+        if(sk.cost && (sk.cost.tipo === 'estamina' ? state.char.curSta : state.char.curSpi) < effectiveSkillCost(id, sk)) return false;
+        if(sk.requiresPos && combat.playerPos !== sk.requiresPos && !sk.penaltyIfFrente) return false;
+        return true;
+      };
+      const best = skillIds.filter(ok).sort((a, b)=> (SKILLS[b].mult||0) - (SKILLS[a].mult||0))[0] || 'ataque_basico';
+      await playerUseSkill(best, resolvedTargetMode(SKILLS[best]) === 'any' ? autoPickEnemyIndex() : null);
+      if(combat && !combat.over && !simOutcome && combat.turnCount === tc) await playerUseSkill('ataque_basico', resolvedTargetMode(SKILLS.ataque_basico) === 'any' ? autoPickEnemyIndex() : null);
+      if(combat && !combat.over && !simOutcome && combat.turnCount === tc){ combat.turnCount++; await endPlayerTurn(); }
+    }
+    checkCombatEnd();
+  }
+  return simOutcome === 'win';
+}
+// Recorre UN nivel entero del laberinto (todas sus salas hasta el guardián),
+// arrastrando vida, MP, pociones y bajas de aliados de sala en sala, como en
+// el juego. Ruta: descanso si va herido, si no evita la élite cuando puede.
+async function simLevelOnce(cfg){
+  const {st, petPool} = simBuildState(cfg);
+  state = st;
+  if(cfg.petRarity !== 'none') petPool.slice(0, maxPetSlots()).forEach(t=>{ state.char.pets.owned[t.id] = 1; state.char.pets.equipped.push(t.id); });
+  ensureSoulSlots();
+  const d0 = derived();
+  state.char.curHP = d0.maxHP; state.char.curSta = d0.maxSta; state.char.curSpi = d0.maxSpi;
+  const dg = Object.assign(generateDungeon(cfg.dungeonLevel), {allyHP:{}, allyMP:{}, allySpirit:{}});
+  state.dungeon = dg; combat = null;
+  const tally = {combate:[0,0], elite:[0,0], jefe:[0,0]};
+  for(let f = 1; f < dg.floors.length; f++){
+    const options = dg.floors[f].map((node, n)=> ({node, n})).filter(o=> isNodeReachable(dg, f, o.n));
+    const hurt = state.char.curHP / derived().maxHP < 0.6;
+    const rank = (t)=> t === 'descanso' ? (hurt ? 0 : 2) : t === 'tesoro' ? 1 : t === 'combate' ? 3 : t === 'elite' ? 4 : 5;
+    const pick = options.sort((a, b)=> rank(a.node.type) - rank(b.node.type))[0];
+    dg.atFloor = f; dg.atNode = pick.n; dg.visited[f + '-' + pick.n] = true;
+    const type = pick.node.type;
+    if(type === 'descanso'){
+      const d = derived();
+      state.char.curHP = d.maxHP; state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi;
+      dg.allyHP = {}; dg.allyMP = {}; dg.allySpirit = {};
+      continue;
+    }
+    if(type === 'tesoro') continue;
+    startCombat(buildEncounterGroup(type, f, cfg.dungeonLevel), pick.node);
+    const won = await simFightLoop();
+    tally[type][0]++; if(won) tally[type][1]++;
+    if(!won) return {cleared:false, diedAt:type, tally};
+    syncAllyHPToDungeon(); pick.node.done = true; combat = null;
+  }
+  return {cleared:true, diedAt:null, tally};
+}
+async function simLevels(cfg){
+  const saved = {state, combat};
+  simMode = true;
+  try{
+    const n = cfg.n || 20; let cleared = 0; const died = {combate:0, elite:0, jefe:0}, fights = {combate:[0,0], elite:[0,0], jefe:[0,0]};
+    for(let i = 0; i < n; i++){
+      const r = await simLevelOnce(cfg);
+      if(r.cleared) cleared++; else died[r.diedAt]++;
+      Object.keys(fights).forEach(k=>{ fights[k][0] += r.tally[k][0]; fights[k][1] += r.tally[k][1]; });
+    }
+    const pct = (a)=> a[0] ? Math.round(a[1]/a[0]*100) : null;
+    return {style: cfg.style, dungeonLevel: cfg.dungeonLevel, n, clear: Math.round(cleared/n*100), muereEn: died, ganaCombate: pct(fights.combate), ganaElite: pct(fights.elite), ganaGuardian: pct(fights.jefe)};
+  } finally { simMode = false; state = saved.state; combat = saved.combat; }
+}
 async function simRun(cfg){
   const saved = {state, combat};
   simMode = true;
@@ -12496,7 +12587,9 @@ async function simRun(cfg){
   } finally { simMode = false; state = saved.state; combat = saved.combat; }
 }
 if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
-  window.__sim = simRun;
+  window.__sim = simRun; window.__simLevel = simLevels;
+  // multiplicadores temporales de vida/ataque para mobs que no son jefe de década, por década (índice 4 = 41-50, 5 = 51-60)
+  window.__simScale = (dec, kind, hp, atk)=>{ DECADE_ENEMY_TUNING[dec] = Object.assign(DECADE_ENEMY_TUNING[dec] || {}, {[kind]: {hp, atk}}); return DECADE_ENEMY_TUNING; };
   // ajuste temporal de un jefe de década para probar valores sin editar el archivo
   window.__simTune = (level, hp, atk)=>{ DECADE_BOSS_TUNING[level] = {hp, atk}; return DECADE_BOSS_TUNING[level]; };
   // ídem para la curva de una senda en un punto de nivel (índice 5 = nivel 50, 6 = nivel 60)
