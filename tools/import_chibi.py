@@ -1,83 +1,153 @@
-"""Importa las láminas chibi de los jugadores (Assets/Jugador/<raza> chibi/*.jfif)
-a tiras listas para prototype-2d/spriteAnim.js.
+"""Importa las láminas chibi (jugadores, aliados y monstruos) a las tiras que
+usa el combate (src/spriteAnim.js) y saca los retratos sueltos.
 
-Las láminas llegan sin nombre, en JPG, con el "fondo transparente" pintado como
-cuadritos grises y con los cuadros en posiciones no del todo parejas. Este script:
-  1. borra el fondo de cuadritos (o blanco);
-  2. detecta las 4 filas (reposo, ataque, golpe, muerte) y cada cuadro dentro de ellas;
-  3. reduce todo con un mismo factor (reposo = BODY_H px de alto) y arma una
-     tira de celdas iguales, con los pies apoyados abajo;
-  4. escribe prototype-2d/assets/sprites/chibi/<senda>_<raza>.png y un
-     index.json con el tamaño de celda y los cuadros por fila de cada tira.
+Las láminas llegan con fondo croma (verde/magenta) o de cuadritos y con los
+cuadros en posiciones no del todo parejas. Este script:
+  1. borra el fondo;
+  2. decide si el archivo es una LÁMINA (4 filas: reposo, ataque, golpe,
+     muerte) o un RETRATO (una sola figura grande);
+  3. lámina: detecta cada cuadro, reduce todo con un mismo factor (reposo =
+     BODY_H px de alto) y arma una tira de celdas iguales, con los pies abajo.
+     Va a src/assets/chibi/<nombre>.png + index.json (cw, ch, bh, frames);
+  4. retrato: recortado, a src/assets/enemigos/<id>.png (monstruos) o
+     src/assets/jugador/<senda>_<raza>.png (jugadores).
 
-Qué senda es cada archivo se indica en SENDA_POR_ARCHIVO (se identificó a ojo).
+Quién es cada archivo sale de su nombre (tablas *_POR_NOMBRE) o, si llegó sin
+nombre, de su id corto (tablas *_POR_ARCHIVO, identificados a ojo). Si dos
+archivos dan la misma tira gana el más nuevo.
 
 Uso, desde la raíz del repo:
-  python tools/import_chibi.py            importa todo lo mapeado
-  python tools/import_chibi.py --scan DIR  hojas de contacto para identificar archivos
+  python tools/import_chibi.py                 importa todo lo mapeado
+  python tools/import_chibi.py enemigo_,aliado_   solo las tiras con ese prefijo
+  python tools/import_chibi.py --review DIR    hojas de contacto de lo importado
+                                               (para ver hacia dónde mira cada una)
 """
 import glob
 import json
+import multiprocessing
 import os
 import sys
+import unicodedata
 
 import numpy as np
 from PIL import Image, ImageDraw
 
 SRC = 'Assets/Jugador'
-OUT = 'prototype-2d/assets/sprites/chibi'
-BODY_H = 64  # alto del personaje en reposo, en píxeles de la tira final
+OUT = 'src/assets/chibi'
+OUT_ENEMIGOS = 'src/assets/enemigos'
+OUT_JUGADOR = 'src/assets/jugador'
+BODY_H = 128  # alto del personaje en reposo, en píxeles de la tira (el juego la dibuja a 64·escala)
 RAZAS = {'barbaro': 'barbaro', 'enano': 'enano', 'hada': 'hada', 'humano': 'humano',
          'dragonico': 'draconido', 'hombre bestia': 'bestia'}
 
-# id corto del archivo (lo que va entre "Image_" y ".jfif", primeros 6) -> senda
+# Jugadores: la senda sale del nombre del archivo (la raza, de la carpeta).
+SENDA_POR_PALABRA = (('paladi', 'paladin'), ('hechi', 'hechicero'), ('mag', 'mago'), ('asesin', 'doblefilo'),
+                     ('arquer', 'tirador'), ('guerrer', 'pesada'))
+# Nombres que no dicen su senda o la dicen mal (vistos a ojo).
+SENDA_POR_NOMBRE = {
+    ('barbaro', 'guerrero hechicero'): 'hechicero', ('barbaro', 'guerrero paladin'): 'paladin',
+    ('humano', 'h humano'): 'tirador', ('draconido', 'draconico hechicero pj'): 'paladin',
+}
+# Láminas viejas sin nombre: id corto (entre "Image_" y ".jfif", primeros 6) -> senda
 SENDA_POR_ARCHIVO = {
-    # bárbaro
-    '5v2h31': 'tirador', 'pg93z7': 'doblefilo', '6w1860': 'pesada', '4kuwti': 'hechicero', '4qktnh': 'mago', '7mn3y3': 'paladin',
-    # enano
     'cvyli1': 'tirador', '3asiav': 'doblefilo', 'idolla': 'pesada', '85xmyk': 'hechicero', '4rycqh': 'mago', 'givjb8': 'paladin',
-    # hada
-    'od8aq1': 'tirador', '3ai9fe': 'doblefilo', 'ys3ca0': 'pesada', 'j0tt8g': 'hechicero', 'l03qt5': 'mago', 'kdqemi': 'paladin',
-    # humano
-    'fk85rx': 'tirador', 'q9jzbo': 'doblefilo', 'cfxk3a': 'pesada', 'sn2gon': 'hechicero', '1dukzp': 'mago', 'v79ahv': 'paladin',
-    # dracónido
-    'algtb6': 'tirador', 'it1uvg': 'doblefilo', 'u9boy8': 'pesada', 'owl8wx': 'hechicero', 'rp2nzm': 'mago', 'rml7gg': 'paladin',
-    # hombre bestia
     'fc0uuu': 'tirador', '4p4nz2': 'doblefilo', 'x9998d': 'pesada', '1oc8r9': 'hechicero', 'ge74j9': 'mago', 'adn2nm': 'paladin',
 }
 
-
-# Aliados de la Taberna (Assets/Aliados/chibi): id corto -> templateId del aliado.
-# Salen como aliado_<templateId>.png en la misma carpeta e índice.
+# Aliados de la Taberna (Assets/Aliados/chibi) -> templateId. Salen como aliado_<templateId>.
+ALIADO_POR_NOMBRE = {
+    'hoja de sprites de arquera pixel art': 'lyra', 'sprite de animacion de arquera elfica': 'neira',
+    'hoja de sprites de caballero pixelado': 'aldric', 'hoja de sprites pixel art del paladin enano': 'brann',
+    'hoja de sprites del mago de fuego retro': 'fennwick', 'hoja de sprites de maga de hielo chibi': 'eira',
+    'hoja de sprites de sacerdotisa luminosa': 'delyth', 'sacerdote': 'seraphina',
+    'sprite sheet del ninja sombrio': 'kael', 'hojas sombrias en verde neon': 'vex',
+}
 ALIADO_POR_ARCHIVO = {
     'qyvu4r': 'aldric', '9p1x6z': 'brann', 'n49u2c': 'neira', 'nbaykx': 'lyra', 'elrxyo': 'fennwick',
     'gzta75': 'eira', 'fgeg6g': 'delyth', '28eevs': 'seraphina', 'x0x2c5': 'vex', 'ok5fxk': 'kael',
 }
 
-
-# Monstruos (Assets/Sprites mobs/<década>/chibi): id corto -> id del enemigo en el
-# juego. Salen como enemigo_<id>.png. Se guardan mirando a la derecha, igual que
-# los jugadores; el combate los dibuja espejados.
+# Monstruos (Assets/Sprites mobs/<década>/chibi) -> id del enemigo en el juego.
+# El nombre se compara sin tildes, en minúsculas y sin el " mob"/" full" final.
+ENEMIGO_POR_NOMBRE = {
+    'gilgoblin': 'gilgoblin', 'hobgoblin': 'hobgoblin',
+    'arana de caparazon': 'arana_caparazon', 'devoradora de nido': 'devoradora_nido', 'matriarca telarana': 'matriarca_telaranha',
+    'gran tejedora': 'gran_tejedora', 'matriarca abisal': 'matriarca_abisal', 'matriarca escarlata': 'matriarca_escarlata',
+    'reina devoradora': 'reina_devoradora', 'reina telarana': 'reina_telaranha', 'saltadora alfaa': 'saltadora_alfa',
+    'tarantula cazadora': 'tarantula_cazadora', 'tarantula saltarina': 'tarantula_saltarina', 'tarantula tejedora': 'tarantula_tejedora',
+    'viuda alfa': 'viuda_alfa', 'viuda carmesi': 'viuda_carmesi', 'viuda venenosa': 'viuda_venenosa',
+    'duelista veterano': 'duelista_veterano', 'asesino de elite': 'asesino_elite_isla', 'asesino de la isla': 'asesino_isla',
+    'capitan mercenario': 'capitan_mercenario', 'cazador veterano': 'cazador_veterano', 'cazarecompensas': 'cazarrecompensas',
+    'custodio': 'custodio_isla', 'explorador rival': 'explorador_rival', 'medico': 'medico_campana',
+    'mercenario desertor': 'mercenario_desertor', 'superviviente curtido': 'superviviente_curtido',
+    'superviviente despiadado': 'superviviente_despiadado',
+    'arquero naga': 'naga_arquero', 'cangrejo gigante': 'cangrejo_gigante', 'capitan triton': 'campeon_triton',
+    'naga capitan': 'naga_capitan', 'guardia de las profundidades': 'guardia_profundidades', 'garvel': 'garvel',
+    'gran cangrejo': 'gran_cangrejo_abisal', 'naga maestro': 'naga_maestro', 'sirena corrupta': 'sirena_corrupta',
+    'stom gush': 'storm_gush', 'stom gush fase final': 'storm_gush_final', 'centinela de coral': 'centinela_coral_g',
+    'guardian del abismo': 'guardian_abismo', 'heraldo de la tormenta': 'heraldo_tormenta', 'heraldo de la tormental': 'heraldo_tormenta',
+    'leviatan abisal': 'leviatan_abisal', 'sacerdotisa de las mareas': 'sacerdotisa_mareas', 'serpiente de palpus': 'serpiente_palpus',
+    'sirena matriarcal': 'sirena_matriarca', 'triton guerrero': 'triton_guerrero', 'triton hechicero': 'triton_hechicero',
+}
+# Sin nombre (identificados a ojo, comparando con el sprite que ya tenía cada uno).
 ENEMIGO_POR_ARCHIVO = {
-    'yonxu8': 'goblin_arquero',
-    '334dlc': 'goblin_chaman', 'yq54c8': 'gilgoblin', 'b6y16r': 'goblin_guerrero', 'm2qzhq': 'goblin_saqueador',
-    'ui1u5a': 'hobgoblin', 'uvd593': 'jefe_goblin', 's675p0': 'ogro',
-    # arañas (11-20). Las tres con nombre las nombró ariochbu; el resto es
-    # una asignación a ojo PENDIENTE de confirmar.
-    'matriarca telaraa movs': 'matriarca_telaranha', 'reina telaraa movs': 'reina_telaranha',
-    'matriarca escarlata movs': 'matriarca_escarlata',
-    's1pg1p': 'viuda_venenosa', 'e7q49e': 'saltadora_alfa', 'kgvz2u': 'gran_tejedora', 'hiork1': 'devoradora_nido',
-    'mjiind': 'viuda_carmesi', 'l0jjj7': 'tarantula_saltarina', 'v5fdpo': 'reina_devoradora', 'dl9lck': 'tarantula_cazadora',
-    '91khx0': 'arana_caparazon', 'kqjvt5': 'tarantula_tejedora', 'j1ss8y': 'viuda_alfa',
+    # goblins (1-10)
+    'yonxu8': 'goblin_arquero', '334dlc': 'goblin_chaman', 'b6y16r': 'goblin_guerrero', 'm2qzhq': 'goblin_saqueador',
+    'uvd593': 'jefe_goblin', 's675p0': 'ogro',
+    # bestias (21-30): retrato y lámina de cada una
+    'kq8uj5': 'loba_acantilado', 'nex96z': 'loba_acantilado', 'xg5fh0': 'buitre_corrupto', 'ju2q53': 'buitre_corrupto',
+    'j46277': 'lince_sombrio', 'i0kxcu': 'lince_sombrio', '5v1y8m': 'alfa_manada', 'xwoy0a': 'alfa_manada',
+    'y2v8hr': 'oso_cuevas', 'ot0vbu': 'oso_cuevas', 'ysiwaz': 'gran_lobo_hoja', 'gskcnw': 'gran_lobo_hoja',
+    'noq8ca': 'oso_roca_lunar', 'lunb8k': 'oso_roca_lunar', 'hjxpc1': 'halcon_guerra', '9ggikd': 'halcon_guerra',
+    'a7ncve': 'tigre_sable', 'tu42kr': 'tigre_sable', '15xgu7': 'jabali_hierro', 'livhe8': 'jabali_hierro',
+    'lg4w7z': 'lobo_quimera', 'bp4dkq': 'lobo_quimera', '2l0vsx': 'oso_acorazado', '1l1jty': 'oso_acorazado',
+    'yrp2ag': 'bestia_carmesi', 'q78b5m': 'bestia_carmesi', 'dnbu7m': 'rey_manada', 'rt47to': 'rey_manada',
+    'p18wz1': 'riakis', 'j4y0k0': 'riakis',
+    # impostores (31-40)
+    'lz8eev': 'doble_corrupto', '6an4rq': 'doble_corrupto', '2cvtz1': 'doble_perfecto', 'vteg3c': 'doble_perfecto',
+    'i9s44x': 'espejo_viviente', '66sie7': 'espejo_viviente', '3hwv1c': 'farsante_menor', 'iby4em': 'farsante_menor',
+    '9psqyo': 'impostor_mayor', 'a5v8tk': 'impostor_mayor', 'i5w7ci': 'reflejo_perfecto_g', 'skk6ro': 'reflejo_perfecto_g',
+    'a8xiyk': 'mascara_viviente_g', 'wfetbk': 'mascara_viviente_g', '45l6r8': 'espejo_sombras', '7sbp2f': 'espejo_sombras',
+    'mi2p07': 'doble_traicionero', 'cbcg3g': 'doble_traicionero', 'jn7igb': 'imitador_formacion', 'fvwtde': 'imitador_formacion',
+    'ikozkq': 'falso_companero', 'octp9m': 'falso_companero', 'k78soy': 'maestro_reflejo', 's8prk5': 'maestro_reflejo',
+    'ntxgtz': 'maestro_rostros', 'ety243': 'maestro_rostros', 'cesh9a': 'usurpador_fragmentado', 'f1fn0f': 'usurpador_fragmentado',
+    'ongaij': 'usurpador', 'u528fs': 'usurpador', 'srkgtu': 'usurpador_f2', '5o6gpk': 'usurpador_f2',
+    'xjanzy': 'usurpador_f3', '7ce365': 'usurpador_f3', 'he3ndg': 'usurpador_f4', 'oyxkq2': 'usurpador_f4',
+    '3tswl7': 'sombra_mimetica', '40h3wl': 'sombra_mimetica',
 }
 
-
-# Láminas que el generador dibujó mirando a la IZQUIERDA: cada cuadro se
-# espeja al importar, para que todas las tiras queden mirando a la derecha.
-MIRA_IZQUIERDA = {'enemigo_goblin_chaman', 'enemigo_goblin_guerrero', 'enemigo_jefe_goblin', 'enemigo_ogro'} | {
-    'enemigo_' + n for n in ('tarantula_cazadora', 'tarantula_saltarina', 'tarantula_tejedora', 'viuda_alfa', 'viuda_carmesi',
-                             'viuda_venenosa', 'arana_caparazon', 'saltadora_alfa', 'gran_tejedora', 'matriarca_telaranha',
-                             'reina_telaranha', 'reina_devoradora')}
+# Todas las tiras se guardan mirando a la DERECHA (el combate espeja al bando
+# enemigo). Acá van las que el generador dibujó mirando a la IZQUIERDA: se
+# espejan al importar. Revisar con --review cada vez que llegue arte nuevo.
+# (lista revisada a ojo el 2026-10-07 con las láminas nuevas de las décadas 1-60)
+MIRA_IZQUIERDA = {'enemigo_' + n for n in (
+    'alfa_manada', 'arana_caparazon', 'bestia_carmesi', 'buitre_corrupto', 'campeon_triton', 'cangrejo_gigante',
+    'centinela_coral_g', 'devoradora_nido', 'doble_perfecto', 'duelista_veterano', 'garvel', 'goblin_chaman',
+    'goblin_guerrero', 'gran_cangrejo_abisal', 'gran_lobo_hoja', 'gran_tejedora', 'guardia_profundidades',
+    'guardian_abismo', 'halcon_guerra', 'heraldo_tormenta', 'jabali_hierro', 'jefe_goblin', 'leviatan_abisal',
+    'loba_acantilado', 'lobo_quimera', 'maestro_reflejo', 'matriarca_abisal', 'matriarca_escarlata',
+    'matriarca_telaranha', 'naga_arquero', 'naga_capitan', 'naga_maestro', 'ogro', 'oso_acorazado', 'oso_cuevas',
+    'oso_roca_lunar', 'reina_devoradora', 'reina_telaranha', 'rey_manada', 'riakis', 'sacerdotisa_mareas',
+    'serpiente_palpus', 'sirena_corrupta', 'storm_gush', 'storm_gush_final', 'tarantula_cazadora',
+    'tarantula_saltarina', 'tarantula_tejedora', 'tigre_sable', 'triton_guerrero', 'triton_hechicero', 'usurpador_f2',
+    'usurpador_f3', 'usurpador_f4', 'viuda_alfa', 'viuda_carmesi', 'viuda_venenosa',
+)} | {
+    # jugadores y aliados: se mira hacia dónde lanzan el ataque
+    'doblefilo_barbaro', 'paladin_barbaro', 'tirador_barbaro', 'hechicero_bestia', 'paladin_bestia', 'pesada_bestia',
+    'tirador_bestia', 'doblefilo_draconido', 'paladin_draconido', 'doblefilo_enano', 'paladin_enano', 'pesada_enano',
+    'tirador_enano', 'doblefilo_hada', 'paladin_hada', 'pesada_hada', 'tirador_hada', 'paladin_humano',
+    'tirador_humano', 'aliado_aldric', 'aliado_delyth', 'aliado_eira', 'aliado_fennwick', 'aliado_kael',
+    'aliado_lyra', 'aliado_neira', 'aliado_vex',
+}
+# Retratos de monstruos: quedan mirando a la IZQUIERDA (hacia el grupo). Acá
+# los que llegaron mirando a la derecha.
+RETRATO_MIRA_DERECHA = {
+    'asesino_elite_isla', 'capitan_mercenario', 'cazador_veterano', 'cazarrecompensas', 'doble_corrupto',
+    'doble_traicionero', 'espejo_sombras', 'farsante_menor', 'falso_companero', 'gilgoblin', 'goblin_arquero',
+    'goblin_chaman', 'goblin_guerrero', 'hobgoblin', 'imitador_formacion', 'impostor_mayor', 'lince_sombrio',
+    'maestro_rostros', 'medico_campana', 'mercenario_desertor', 'reflejo_perfecto_g', 'sirena_matriarca',
+    'superviviente_despiadado', 'usurpador_fragmentado',
+}
 
 
 # Sprites de viaje para el laberinto (Assets/Jugador/caminar): uno por raza,
@@ -85,7 +155,7 @@ MIRA_IZQUIERDA = {'enemigo_goblin_chaman', 'enemigo_goblin_guerrero', 'enemigo_j
 # índice. Se reconocen por el id corto o porque el nombre del archivo trae la raza.
 CAMINAR_POR_ARCHIVO = {'ze5y2w': 'barbaro', 'fuuwe0': 'draconido', 'feeff9': 'enano', 'a61nez': 'hada', '2kpos3': 'bestia', 'gu0bu3': 'humano'}
 # Íconos sueltos de las salas (Assets/Laberinto): id corto -> nombre. Salen en
-# prototype-2d/assets/sprites/iconos/<nombre>.png, recortados y a 40px de alto.
+# src/assets/chibi/iconos/<nombre>.png, recortados y a 40px de alto.
 ICONO_POR_ARCHIVO = {'maq23y': 'cofre', '8ba8a5': 'cofre_abierto', 'haqagx': 'hoguera'}
 
 
@@ -96,6 +166,35 @@ def walk_race(path):
     for key, raza in sorted(RAZAS.items(), key=lambda kv: -len(kv[0])):
         if key in sid:
             return raza
+    return None
+
+
+def norm_name(path):
+    """Nombre del archivo sin extensión, sin tildes, en minúsculas."""
+    base = os.path.splitext(os.path.basename(path))[0]
+    base = unicodedata.normalize('NFKD', base).encode('ascii', 'ignore').decode().lower()
+    return ' '.join(base.split())
+
+
+def enemy_id(path):
+    if 'Image_' in os.path.basename(path):
+        return ENEMIGO_POR_ARCHIVO.get(short_id(path))
+    n = norm_name(path)
+    for suf in (' mob', ' full'):
+        if n.endswith(suf):
+            n = n[:-len(suf)]
+    return ENEMIGO_POR_NOMBRE.get(n)
+
+
+def player_senda(path, raza):
+    if 'Image_' in os.path.basename(path):
+        return SENDA_POR_ARCHIVO.get(short_id(path))
+    n = norm_name(path)
+    if (raza, n) in SENDA_POR_NOMBRE:
+        return SENDA_POR_NOMBRE[(raza, n)]
+    for word, senda in SENDA_POR_PALABRA:
+        if word in n:
+            return senda
     return None
 
 
@@ -132,20 +231,43 @@ def remove_background(im, lines=True):
             chroma, key = True, np.median(sel, axis=0)
     if chroma:
         cand = np.abs(rgb - key[None, None, :]).sum(axis=2) < 100
-    # Líneas de cuadrícula (grises más oscuros que el fondo): tramos rectos y
-    # largos, que ningún personaje tiene. Se tratan como fondo.
-    dark = ((mx < 150) if chroma else ((mx - mn) < 30)) & ~cand  # sobre croma la línea negra sale teñida por el JPG
-    # Sobre croma las líneas cruzan la lámina entera; se exige un tramo largo para
-    # no confundirlas con un personaje de ropa oscura (que ocupa una sola celda).
-    frac = 0.7 if chroma else 0.25
-    if not lines:
-        frac = 9  # íconos sueltos: no hay cuadrícula que quitar
-    for arr, lim in ((dark, frac * w), (dark.T, frac * h)):
-        target = cand if arr is dark else cand.T
-        for i in range(arr.shape[0]):
-            for a, b in runs(arr[i], 1):
-                if b - a >= lim:
-                    target[i, a:b] = True
+    # Líneas de cuadrícula y franjas de suelo: tramos rectos y largos que
+    # ningún personaje tiene. Se tratan como fondo. En un retrato (una sola
+    # figura grande) no hay nada de eso y sí hay tramos largos legítimos.
+    if lines and big_figure(~cand):
+        lines = False
+    if chroma:
+        # Sobre croma, todo lo que no es fondo y cruza la lámina casi entera
+        # (línea clara u oscura, o un suelo de ladrillo bajo los pies). Se borra
+        # el tramo y un par de píxeles a cada lado, que quedan teñidos.
+        solid = ~cand
+        for arr, lim, target in ((solid, 0.75 * w, cand), (solid.T, 0.75 * h, cand.T)):
+            hit = np.zeros(arr.shape, dtype=bool)
+            for i in np.nonzero(arr.sum(axis=1) >= lim)[0]:
+                for x0, x1 in runs(arr[i], 3):
+                    if x1 - x0 >= lim:
+                        hit[max(0, i - 2):i + 3, x0:x1] = True
+            if lines:
+                target |= hit
+        # Suelo de ladrillo que solo abarca una parte de la fila: tramo largo y casi todo gris.
+        lowsat_t = (mx - mn) < 40
+        hit = np.zeros(solid.shape, dtype=bool)
+        for i in np.nonzero(solid.sum(axis=1) >= 0.25 * w)[0]:
+            for x0, x1 in runs(solid[i], 3):
+                # (gris y parejo: un lobo gris también es "gris", pero con luces y sombras)
+                if x1 - x0 >= 0.25 * w and lowsat_t[i, x0:x1].mean() > 0.85 and mx[i, x0:x1].std() < 20:
+                    hit[max(0, i - 2):i + 3, x0:x1] = True
+        if lines:
+            cand |= hit
+    else:
+        dark = ((mx - mn) < 30) & ~cand
+        frac = 0.25 if lines else 9  # íconos sueltos: no hay cuadrícula que quitar
+        for arr, lim in ((dark, frac * w), (dark.T, frac * h)):
+            target = cand if arr is dark else cand.T
+            for i in range(arr.shape[0]):
+                for x0, x1 in runs(arr[i], 1):
+                    if x1 - x0 >= lim:
+                        target[i, x0:x1] = True
     mask = Image.fromarray((cand * 255).astype(np.uint8)).copy()  # .copy(): fromarray deja la imagen de solo lectura
     # 1) todo lo que toca el borde es fondo
     px = mask.load()
@@ -206,6 +328,14 @@ def remove_background(im, lines=True):
     return a
 
 
+def big_figure(solid):
+    """True si el dibujo llena más de media imagen de alto de un tirón: es un
+    retrato. En una lámina, entre fila y fila casi no hay nada."""
+    h, w = solid.shape
+    dense = solid.sum(axis=1) > 0.15 * w
+    return any(b - a > 0.5 * h for a, b in runs(dense, 5))
+
+
 def runs(flags, min_gap):
     """Tramos [ini, fin) de True en un vector, uniendo huecos menores a min_gap."""
     out, start, gap = [], None, 0
@@ -224,8 +354,8 @@ def runs(flags, min_gap):
     return out
 
 
-def find_frames(alpha, relaxed=False, nrows=4):
-    """Lista de 4 filas; cada fila es una lista de cajas (x0, y0, x1, y1)."""
+def find_frames_walk(alpha, relaxed=False, nrows=4):
+    """Láminas de caminar (2 filas). Lista de filas; cada fila es una lista de cajas (x0, y0, x1, y1)."""
     h, w = alpha.shape
     bands = runs(alpha.sum(axis=1) > 2, 5)
     if bands:
@@ -287,6 +417,77 @@ def find_frames(alpha, relaxed=False, nrows=4):
     return rows
 
 
+def row_bands(alpha):
+    """Franjas horizontales con dibujo. El umbral ignora restos de líneas de cuadrícula."""
+    w = alpha.shape[1]
+    bands = runs(alpha.sum(axis=1) > max(2, 0.012 * w), 5)
+    if bands:
+        med = np.median([b - a for a, b in bands])
+        bands = [(a, b) for a, b in bands if (b - a) >= 0.35 * med]
+    return bands
+
+
+def find_frames(alpha, relaxed=False, nrows=4):
+    """Lista de 4 filas; cada fila es una lista de cajas (x0, y0, x1, y1).
+
+    Las láminas vienen en una cuadrícula de 6 columnas (reposo 4, ataque 6,
+    golpe 2, muerte 4-5), pero a menudo un cuadro toca al de al lado (una cola,
+    un tridente, un tajo). El paso de la cuadrícula dice en cuántos cuadros
+    partir cada bloque pegado."""
+    if nrows != 4:
+        return find_frames_walk(alpha, relaxed, nrows)
+    h, w = alpha.shape
+    bands = row_bands(alpha)
+    if len(bands) != nrows:  # filas pegadas o sobrantes: se parte en partes iguales
+        bands = [(round(i * h / nrows), round((i + 1) * h / nrows)) for i in range(nrows)]
+
+    def box(a, b, x0, x1):
+        sub = alpha[a:b, x0:x1]
+        ys = np.nonzero(sub.sum(axis=1) > 1)[0]
+        xs = np.nonzero(sub.sum(axis=0) > 1)[0]
+        if not ys.size or not xs.size:
+            return None
+        return (x0 + int(xs[0]), a + int(ys[0]), x0 + int(xs[-1]) + 1, a + int(ys[-1]) + 1, int(sub.sum()))
+
+    raw = []
+    for a, b in bands:
+        segs = runs(alpha[a:b].sum(axis=0) > 3, 4)
+        raw.append([bx for bx in (box(a, b, x0, x1) for x0, x1 in segs) if bx])
+    # Paso de la cuadrícula: distancia entre cuadros sueltos vecinos; si no hay, ancho/6.
+    p0 = w / 6
+    gaps = []
+    for boxes in raw:
+        single = [bx for bx in boxes if (bx[2] - bx[0]) < 1.3 * p0 and (bx[3] - bx[1]) > 0.3 * (bands[0][1] - bands[0][0])]
+        cs = [(bx[0] + bx[2]) / 2 for bx in single]
+        gaps += [d for d in np.diff(cs) if 0.6 * p0 <= d <= 1.4 * p0]
+    pitch = float(np.median(gaps)) if len(gaps) >= 3 else p0
+    rows = []
+    for (a, b), boxes in zip(bands, raw):
+        out = []
+        for bx in boxes:
+            width = bx[2] - bx[0]
+            n = int(round(width / pitch))
+            if width > 1.45 * pitch and n >= 2:
+                # Bloque de varios cuadros pegados: se corta por los valles de la
+                # silueta, cerca de donde la cuadrícula dice que cambia de celda.
+                proj = alpha[a:b, bx[0]:bx[2]].sum(axis=0)
+                cuts = [0]
+                for k in range(1, n):
+                    c = int(k * width / n); r = int(pitch * 0.3)
+                    lo, hi = max(cuts[-1] + 1, c - r), min(width - 1, c + r)
+                    cuts.append(lo + int(np.argmin(proj[lo:hi])) if hi > lo else c)
+                cuts.append(width)
+                out.extend(q for q in (box(a, b, bx[0] + cuts[i], bx[0] + cuts[i + 1]) for i in range(n)) if q)
+            else:
+                out.append(bx)
+        rows.append(out)
+    if not rows[0]:
+        return [[] for _ in bands]
+    # Restos sueltos (chispa, flecha, daga caída): mucho más chicos que el cuerpo en reposo.
+    ref_area = float(np.median([bx[4] for bx in rows[0]]))
+    return [[bx[:4] for bx in line if bx[4] >= 0.25 * ref_area] for line in rows]
+
+
 def build_strip(im, alpha, rows, flip=False, walk=False):
     rgba = np.dstack([np.asarray(im.convert('RGB')), (alpha * 255).astype(np.uint8)])
     src = Image.fromarray(rgba, 'RGBA')
@@ -317,7 +518,7 @@ def build_strip(im, alpha, rows, flip=False, walk=False):
         for c, f in enumerate(line):
             x = round(cw / 2 - body_w / 2) if (r == 1 and not walk) else (cw - f.width) // 2
             sheet.paste(f, (c * cw + x, r * ch + ch - 1 - f.height), f)
-    meta = {'cw': cw, 'ch': ch, 'frames': [len(line) for line in frames]}
+    meta = {'cw': cw, 'ch': ch, 'bh': BODY_H, 'frames': [len(line) for line in frames]}
     if walk:
         meta['walk'] = True
     return sheet, meta
@@ -329,64 +530,145 @@ def race_folders():
         yield d, RAZAS[key]
 
 
-def scan(dest):
-    """Hojas de contacto con el id de cada archivo, para identificar sendas a ojo."""
-    os.makedirs(dest, exist_ok=True)
-    for d, raza in race_folders():
-        files = sorted(glob.glob(d + '/*'), key=os.path.getmtime)
-        tw, th = 400, 400
-        sheet = Image.new('RGB', (tw * 4, th * ((len(files) + 3) // 4)), (30, 30, 30))
-        draw = ImageDraw.Draw(sheet)
-        for i, f in enumerate(files):
-            im = Image.open(f).convert('RGB')
-            im.thumbnail((tw - 8, th - 28))
-            x, y = (i % 4) * tw, (i // 4) * th
-            sheet.paste(im, (x + 4, y + 24))
-            draw.text((x + 6, y + 4), short_id(f), fill=(255, 220, 90))
-        sheet.save(os.path.join(dest, f'chibi_{raza}.jpg'), quality=88)
-    print('ok', dest)
+def is_portrait(alpha):
+    """Una sola figura grande (retrato) en vez de una lámina de 4 filas."""
+    return big_figure(alpha)
 
 
-def main():
-    if len(sys.argv) > 2 and sys.argv[1] == '--scan':
-        return scan(sys.argv[2])
-    os.makedirs(OUT, exist_ok=True)
-    index = {}
+def save_small(im, path):
+    """PNG con paleta (256 colores, alfa incluido): un tercio del peso."""
+    im.quantize(256, method=Image.Quantize.FASTOCTREE, dither=Image.Dither.NONE).save(path, optimize=True)
+
+
+def cut_portrait(im, alpha, max_side, flip=False):
+    rgba = np.dstack([np.asarray(im.convert('RGB')), (alpha * 255).astype(np.uint8)])
+    pic = Image.fromarray(rgba, 'RGBA')
+    # solo la figura principal: se descartan motas sueltas lejos del cuerpo
+    ys, xs = np.nonzero(alpha)
+    pic = pic.crop((int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1))
+    if flip:
+        pic = pic.transpose(Image.FLIP_LEFT_RIGHT)
+    k = max_side / max(pic.size)
+    if k < 1:
+        pic = pic.resize((max(1, round(pic.width * k)), max(1, round(pic.height * k))), Image.LANCZOS)
+        pic.putalpha(pic.getchannel('A').point(lambda v: 255 if v >= 128 else 0))
+    return pic
+
+
+def collect_jobs():
+    """(archivo, nombre de tira, tipo) de todo lo que está mapeado."""
     jobs = []
     for d, raza in race_folders():
         for f in sorted(glob.glob(d + '/*')):
-            senda = SENDA_POR_ARCHIVO.get(short_id(f))
+            senda = player_senda(f, raza)
             if senda:
-                jobs.append((f, f'{senda}_{raza}'))
+                jobs.append((f, f'{senda}_{raza}', 'jugador'))
     for f in sorted(glob.glob('Assets/Aliados/chibi/*')):
-        if short_id(f) in ALIADO_POR_ARCHIVO:
-            jobs.append((f, 'aliado_' + ALIADO_POR_ARCHIVO[short_id(f)]))
-    for f in sorted(glob.glob('Assets/Sprites mobs/*/chibi/*')):
-        if short_id(f) in ENEMIGO_POR_ARCHIVO:
-            jobs.append((f, 'enemigo_' + ENEMIGO_POR_ARCHIVO[short_id(f)]))
+        tid = ALIADO_POR_ARCHIVO.get(short_id(f)) if 'Image_' in os.path.basename(f) else ALIADO_POR_NOMBRE.get(norm_name(f))
+        if tid:
+            jobs.append((f, 'aliado_' + tid, 'aliado'))
+    for f in sorted(glob.glob('Assets/Sprites mobs/*/*/*')):
+        if os.path.basename(os.path.dirname(f)).lower() == 'chibi' and enemy_id(f):
+            jobs.append((f, 'enemigo_' + enemy_id(f), 'enemigo'))
     for f in sorted(glob.glob('Assets/Jugador/caminar/*')):
         if walk_race(f):
-            jobs.append((f, 'caminar_' + walk_race(f)))
-    only = sys.argv[1] if len(sys.argv) > 1 else ''   # prefijo opcional: solo esas tiras
-    if only and os.path.exists(os.path.join(OUT, 'index.json')):
+            jobs.append((f, 'caminar_' + walk_race(f), 'caminar'))
+    return jobs
+
+
+def review(dest):
+    """Hojas de contacto: primer cuadro de reposo y uno de ataque de cada tira,
+    y cada retrato de monstruo. Las tiras deben mirar a la DERECHA; los
+    retratos de monstruos, a la IZQUIERDA."""
+    os.makedirs(dest, exist_ok=True)
+    index = json.load(open(os.path.join(OUT, 'index.json'), encoding='utf-8'))
+    groups = {}
+    for name in sorted(index):
+        groups.setdefault(name.split('_')[0] if name.startswith(('enemigo', 'aliado', 'caminar')) else 'jugador', []).append(name)
+    tw, th, cols = 213, 190, 6
+    for g, names in groups.items():
+        for page in range(0, len(names), 36):
+            part = names[page:page + 36]
+            sheet = Image.new('RGB', (tw * cols, th * ((len(part) + cols - 1) // cols)), (58, 58, 78))
+            draw = ImageDraw.Draw(sheet)
+            for i, name in enumerate(part):
+                meta, im = index[name], Image.open(os.path.join(OUT, name + '.png')).convert('RGBA')
+                x, y = (i % cols) * tw, (i // cols) * th
+                cell = im.crop((0, 0, meta['cw'], meta['ch']))
+                cell = cell.crop(cell.getbbox())
+                k = min((tw - 6) / cell.width, (th - 20) / cell.height)
+                cell = cell.resize((max(1, int(cell.width * k)), max(1, int(cell.height * k))), Image.LANCZOS)
+                sheet.paste(cell, (x + (tw - cell.width) // 2, y + th - cell.height - 2), cell)
+                draw.text((x + 3, y + 2), name.replace('enemigo_', '').replace('aliado_', ''), fill=(255, 230, 90))
+            sheet.save(os.path.join(dest, f'tiras_{g}_{page // 36}.png'))
+    ids = sorted({j[1][8:] for j in collect_jobs() if j[2] == 'enemigo'})
+    ids = [i for i in ids if os.path.exists(os.path.join(OUT_ENEMIGOS, i + '.png'))]
+    tw = 160
+    for page in range(0, len(ids), 48):
+        part = ids[page:page + 48]
+        sheet = Image.new('RGB', (tw * 8, (tw + 14) * ((len(part) + 7) // 8)), (58, 58, 78))
+        draw = ImageDraw.Draw(sheet)
+        for i, eid in enumerate(part):
+            im = Image.open(os.path.join(OUT_ENEMIGOS, eid + '.png')).convert('RGBA')
+            im.thumbnail((tw - 4, tw - 4))
+            x, y = (i % 8) * tw, (i // 8) * (tw + 14)
+            sheet.paste(im, (x + 2, y + 14), im)
+            draw.text((x + 3, y + 1), eid, fill=(255, 230, 90))
+        sheet.save(os.path.join(dest, f'retratos_{page // 48}.png'))
+    print('ok', dest)
+
+
+def process(job):
+    """Un archivo -> ('tira'|'retrato', nombre, archivo, imagen, meta)."""
+    f, name, kind = job
+    im = Image.open(f)
+    alpha = remove_background(im)
+    walk = kind == 'caminar'
+    if not walk and is_portrait(alpha):
+        if kind == 'enemigo':
+            pic = cut_portrait(im, alpha, 320, flip=name[8:] in RETRATO_MIRA_DERECHA)
+            side = max(pic.size)
+            canvas = Image.new('RGBA', (side, side), (0, 0, 0, 0))   # cuadrado, pies abajo (así lo dibuja el combate)
+            canvas.paste(pic, ((side - pic.width) // 2, side - pic.height))
+            return 'retrato', name, f, canvas, None
+        return 'retrato', name, f, cut_portrait(im, alpha, 520), None
+    rows = find_frames(alpha, relaxed=kind == 'enemigo', nrows=2 if walk else 4)
+    if any(not line for line in rows):
+        return None, name, f, None, None
+    sheet, meta = build_strip(im, alpha, rows, name in MIRA_IZQUIERDA, walk)
+    return 'tira', name, f, sheet, meta
+
+
+def main():
+    if len(sys.argv) > 2 and sys.argv[1] == '--review':
+        return review(sys.argv[2])
+    os.makedirs(OUT, exist_ok=True)
+    index = {}
+    if os.path.exists(os.path.join(OUT, 'index.json')):
         index = json.load(open(os.path.join(OUT, 'index.json'), encoding='utf-8'))
-    for f, name in jobs:
-        if not any(name.startswith(o) for o in only.split(',')):
-            continue
-        if True:
-            im = Image.open(f)
-            alpha = remove_background(im)
-            walk = name.startswith('caminar_')
-            rows = find_frames(alpha, relaxed=name.startswith('enemigo_'), nrows=2 if walk else 4)
-            if any(not line for line in rows):
-                print('!! sin cuadros en alguna fila:', f)
+    only = sys.argv[1] if len(sys.argv) > 1 else ''   # prefijos opcionales: solo esas tiras
+    jobs = [j for j in collect_jobs() if any(j[1].startswith(o) for o in only.split(','))]
+    jobs.sort(key=lambda j: -os.path.getmtime(j[0]))  # si dos archivos dan lo mismo, gana el más nuevo
+    done = set()
+    with multiprocessing.Pool(min(4, max(1, (os.cpu_count() or 2) - 1))) as pool:
+        for what, name, f, pic, meta in pool.imap(process, jobs):
+            if what is None or (what, name) in done:
+                if what is None:
+                    print('!! sin cuadros en alguna fila:', f)
                 continue
-            sheet, meta = build_strip(im, alpha, rows, name in MIRA_IZQUIERDA, walk)
-            sheet.save(os.path.join(OUT, name + '.png'))
-            index[name] = meta
-            print(name, meta)
+            done.add((what, name))
+            if what == 'tira':
+                save_small(pic, os.path.join(OUT, name + '.png'))
+                index[name] = meta
+                print(name, meta, '<-', os.path.basename(f))
+            elif name.startswith('enemigo_'):
+                save_small(pic, os.path.join(OUT_ENEMIGOS, name[8:] + '.png'))
+                print('retrato', name, '<-', os.path.basename(f))
+            elif not name.startswith('aliado_'):
+                save_small(pic, os.path.join(OUT_JUGADOR, name + '.png'))
+                print('retrato', name, '<-', os.path.basename(f))
     if not only or only == 'iconos':
-        dest = os.path.join(os.path.dirname(OUT), 'iconos')
+        dest = os.path.join(OUT, 'iconos')
         os.makedirs(dest, exist_ok=True)
         for f in sorted(glob.glob('Assets/Laberinto/*')):
             name = ICONO_POR_ARCHIVO.get(short_id(f))

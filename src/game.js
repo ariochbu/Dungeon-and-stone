@@ -2,9 +2,9 @@
 
 import { supabase } from './supabaseClient.js';
 import * as auth from './auth.js';
-import { syncBattleStage, playBattleAnim } from './battleStage.js?v=95';
-import { mountLabyrinth } from './labyrinthMap.js?v=2';
-import { CLASS_SPRITES, ENEMY_SPRITES, playerSpriteFor, enemySpriteFor, ALLY_TEMPLATE_SPRITES } from './battleSprites.js?v=83';
+import { syncBattleStage, playBattleAnim } from './battleStage.js?v=96';
+import { mountLabyrinth } from './labyrinthMap.js?v=3';
+import { CLASS_SPRITES, ENEMY_SPRITES, playerSpriteFor, enemySpriteFor, ALLY_TEMPLATE_SPRITES } from './battleSprites.js?v=84';
 
 /* ============================================================
    DATA
@@ -306,7 +306,7 @@ function renderCronicas(){
       <div class="cron-grid">${levels.map((lv, i)=>{
         const open = beaten >= lv/10;
         return open
-          ? `<button class="cron-card" data-cron="${lv}"><div class="cron-img" style="background-image:url('src/assets/historia/${lv}_1.jpg?v=1'), url('src/assets/fondos/${lv-9}-${lv}.jpg')"></div><div class="cron-txt"><small>Capítulo ${i+1} · Piso ${lv}</small><b>${STORY_SCENES[lv].title}</b></div></button>`
+          ? `<button class="cron-card" data-cron="${lv}"><div class="cron-img" style="background-image:url('src/assets/historia/${lv}_1.jpg?v=2'), url('src/assets/fondos/${lv-9}-${lv}.jpg')"></div><div class="cron-txt"><small>Capítulo ${i+1} · Piso ${lv}</small><b>${STORY_SCENES[lv].title}</b></div></button>`
           : `<div class="cron-card locked"><div class="cron-img"><span>🔒</span></div><div class="cron-txt"><small>Capítulo ${i+1}</small><b>Derrota al jefe del piso ${lv}</b></div></div>`;
       }).join('')}</div>
     </div>`;
@@ -325,7 +325,7 @@ function showStoryScenes(level, onDone){
     div.innerHTML = `<div class="story-card">
       <h2 class="cw-title">${story.title}</h2>
       <div class="ws-scene has-art" style="background:#0b0907 url('${fallback}') center/cover">
-        <img class="ws-illus" src="src/assets/historia/${level}_${step+1}.jpg?v=1" alt="" onerror="this.remove()">
+        <img class="ws-illus" src="src/assets/historia/${level}_${step+1}.jpg?v=2" alt="" onerror="this.remove()">
       </div>
       <div class="ws-dialog">
         <div class="ws-narrator"><div class="ws-portrait"><img src="src/assets/bienvenida/cronista.jpg?v=1" alt="" onerror="this.replaceWith('📜')"></div><b>El Cronista</b></div>
@@ -686,7 +686,7 @@ const DECADE_BESTIARY = [
     decadeBoss: {id:'ogro', name:'Ogro', icon:'👺', role:'melee', hp:4.2, atk:1.9, res:{fisico:25,fuego:0,hielo:0,veneno:10,aturdimiento:35}, boss:true, frontline:true,
       phases:[{below:0.6, msg:'ruge y entra en <b>Furia</b> (fase 2).'},{below:0.3, msg:'arranca una roca del suelo: <b>golpes devastadores</b> (fase 3).'}],
       abilities:{
-        furia_ogro:{label:'Furia del Ogro', utility:'self_buff', oncePerCombat:true, condition:(ctx)=>ctx.selfHpPct<0.6, selfBuff:{name:'Furia del Ogro', duration:99, dmgMult:1.15}},
+        furia_ogro:{label:'Furia del Ogro', utility:'self_buff', oncePerCombat:true, instant:true, condition:(ctx)=>ctx.selfHpPct<0.6, selfBuff:{name:'Furia del Ogro', duration:99, dmgMult:1.15}},
         lanzar_roca:{label:'Lanzar Roca', mult:1.5, cooldown:3, condition:(ctx)=>ctx.selfHpPct<0.3, applies:{name:'Paralisis', chance:0.30, duration:1}},
         aplastar_o:{label:'Aplastar', mult:1.35, cooldown:3},
         debilitar_o:{label:'Golpe Debilitante', mult:0.7, cooldown:4, applies:{name:'Debilitado', chance:0.6, duration:2}},
@@ -855,7 +855,7 @@ const DECADE_BESTIARY = [
     decadeBoss: {id:'matriarca_escarlata', name:'Matriarca escarlata', icon:'🕷️', hp:4.2, atk:1.5, res:{fisico:20,fuego:-15,hielo:10,veneno:45,aturdimiento:10}, boss:true, frontline:true,
       phases:[{below:0.6, msg:'chilla y su <b>nido</b> despierta: veneno y crías (fase 2).'},{below:0.3, msg:'entra en <b>frenesí</b>: golpes brutales (fase 3).'}],
       abilities:{
-        frenesi_matriarca:{label:'Frenesí', utility:'self_buff', oncePerCombat:true, condition:(ctx)=>ctx.selfHpPct<0.3, selfBuff:{name:'Frenesí', duration:99, dmgMult:1.20}},
+        frenesi_matriarca:{label:'Frenesí', utility:'self_buff', oncePerCombat:true, instant:true, condition:(ctx)=>ctx.selfHpPct<0.3, selfBuff:{name:'Frenesí', duration:99, dmgMult:1.20}},
         crias_nido:{label:'Llamado del Nido', utility:'summon', cooldown:5, condition:(ctx)=>ctx.selfHpPct<0.6, summon:{tpl:CRIA_ARANA_TPL, count:2, maxAlive:2, hpPct:0.04, atkPct:0.30}},
         mordida_final:{label:'Mordida', mult:1.00},
         paralisis_matriarca:{label:'Parálisis', mult:0.90, applies:{name:'Paralisis', chance:0.30, duration:1}, cooldown:3},
@@ -1009,7 +1009,7 @@ const DECADE_BESTIARY = [
     decadeBoss: {id:'riakis', name:'Señor del Caos Riakis', icon:'👁️', hp:5.0, atk:1.6, res:{fisico:55,fuego:-25,hielo:-25,veneno:40,aturdimiento:30}, boss:true, frontline:true,
       phases:[{below:0.75, msg:'abre una <b>Puerta del Caos</b>: acumula Orbes de poder (fase 2).'},{below:0.5, msg:'agrieta el suelo: la <b>corrupción</b> se extiende (fase 3).'},{below:0.25, msg:'desata el <b>Caos</b>: más rápido y feroz (fase 4).'}],
       abilities:{
-        caos_desatado:{label:'Caos Desatado', utility:'self_buff', oncePerCombat:true, condition:(ctx)=>ctx.selfHpPct<0.25, selfBuff:{name:'Caos Desatado', duration:99, dmgMult:1.20, evasionDelta:10}},
+        caos_desatado:{label:'Caos Desatado', utility:'self_buff', oncePerCombat:true, instant:true, condition:(ctx)=>ctx.selfHpPct<0.25, selfBuff:{name:'Caos Desatado', duration:99, dmgMult:1.20, evasionDelta:10}},
         grieta_mal:{label:'Grieta del Mal', mult:1.30, cooldown:3, condition:(ctx)=>ctx.selfHpPct<0.5, applies:Object.assign({chance:1}, CORROSION_STATUS)},
         puerta_caos:{label:'Puerta del Caos', utility:'buff_allies', cooldown:4, condition:(ctx)=>ctx.selfHpPct<0.75, buffAllies:{name:'Fortalecido', duration:99, stacks:2, maxStacks:6}},
         presa_r:{label:'Presa', mult:0.70, cooldown:4, condition:(ctx)=>ctx.selfHpPct<0.75 && ctx.targetStatusCount('Marcado')===0, applies:{name:'Marcado', incomingDmgMult:1.25, chance:1, duration:3}},
@@ -1269,7 +1269,7 @@ const DECADE_BESTIARY = [
     decadeBoss: {id:'custodio_isla', name:'Custodio de la Isla', icon:'🏝️', hp:3.2, atk:1.2, res:{fisico:15,fuego:10,hielo:10,veneno:10,aturdimiento:15}, boss:true, frontline:true,
       phases:[{below:0.7, msg:'la isla despierta: llama a sus <b>criaturas</b> (fase 2).'},{below:0.4, msg:'se cubre de <b>coral</b>: se endurece y se regenera (fase 3).'},{below:0.15, msg:'desata la <b>Furia de la Marea</b> (fase 4).'}],
       abilities:{
-        furia_marea:{label:'Furia de la Marea', utility:'self_buff', oncePerCombat:true, condition:(ctx)=>ctx.selfHpPct<0.15, selfBuff:{name:'Furia de la Marea', duration:99, dmgMult:1.25}},
+        furia_marea:{label:'Furia de la Marea', utility:'self_buff', oncePerCombat:true, instant:true, condition:(ctx)=>ctx.selfHpPct<0.15, selfBuff:{name:'Furia de la Marea', duration:99, dmgMult:1.25}},
         coraza_coral:{label:'Coraza de Coral', utility:'self_buff', oncePerCombat:true, condition:(ctx)=>ctx.selfHpPct<0.4, selfBuff:{name:'Coraza de Coral', duration:99, regenPct:0.02, incomingDmgReduction:0.15}},
         invocar_cangrejos:{label:'Invocación', utility:'summon', cooldown:7, condition:(ctx)=>ctx.selfHpPct<0.7, summon:{tpl:CANGREJO_ISLA_TPL, count:2, maxAlive:2, hpPct:0.05, atkPct:0.30}},
         impacto_area:{label:'Impacto en Área', utility:'aoe', mult:0.55, cooldown:3, applies:Object.assign({chance:1}, CORROSION_STATUS)},
@@ -6440,7 +6440,7 @@ const WELCOME_SCENES = {
 };
 let welcomeStep = 0;
 function welcomeSceneArt(scene){
-  const hd = id => `src/assets/enemigos/${id}.png?v=4`;
+  const hd = id => `src/assets/enemigos/${id}.png?v=5`;
   if(scene==='portal') return `<div class="ws-portal"></div>`;
   if(scene==='barrier') return `<div class="ws-dome"></div><div class="ws-city">🏰</div>`;
   if(scene==='cursed') return `<div class="ws-fog"></div><div class="ws-city dead">🏚️🏚️🏚️</div>`;
@@ -10160,8 +10160,8 @@ const STATUS_INFO = {
   Aturdido:     {buff:false, desc:'Pierde su próximo turno por completo.'},
   Furioso:      {buff:true,  desc:'+30% daño físico y -20% daño recibido, a cambio de -10% evasión.'},
   Inspirado:    {buff:true,  desc:'+daño gracias al Grito de guerra de tu compañero.'},
-  Sangrado:     {buff:false, desc:'Sufre daño por turno. Se acumula hasta x3.'},
-  Veneno:       {buff:false, desc:'Sufre daño de veneno por turno. Se acumula hasta x3.'},
+  Sangrado:     {buff:false, desc:'Sufre daño cada turno según el Físico de quien lo causó. Se acumula hasta x3.'},
+  Veneno:       {buff:false, desc:'Sufre daño de veneno cada turno según la Habilidad de quien lo causó. Se acumula hasta x3.'},
   Marcado:      {buff:false, desc:'Recibe +20% de todo el daño mientras dura.'},
   Quemadura:    {buff:false, desc:'Sufre daño de fuego por turno.'},
   Ralentizado:  {buff:false, desc:'-20% evasión y actúa después que el resto.'},
@@ -10186,14 +10186,44 @@ const STATUS_INFO = {
   Confusion:    {buff:false, desc:'Probabilidad de golpear al azar — puede alcanzar a un aliado o a sí mismo.'},
   Silencio:     {buff:false, desc:'Su próximo turno solo puede usar ataques básicos, sin habilidades especiales.'},
   'Bastión':    {buff:true,  desc:'-20% de daño recibido (Muralla Viviente de Brann el Bastión).'},
-  'Égida':      {buff:true,  desc:'-10% de daño recibido mientras dure (Égida Sagrada de Seraphina).'}
+  'Égida':      {buff:true,  desc:'-10% de daño recibido mientras dure (Égida Sagrada de Seraphina).'},
+  'Frenesí':    {buff:true,  desc:'Matriarca escarlata: +20% de daño hasta el final del combate.'},
+  'Furia del Ogro': {buff:true, desc:'Ogro: +15% de daño hasta el final del combate.'}
 };
+// Muchos enemigos se ponen bonificaciones propias con nombre único (Furia de
+// Colmena, Coraza de Coral, Furia de la Marea…) que no tienen ficha arriba.
+// Antes salían en rojo, como si fueran un perjuicio, y con "Sin descripción":
+// parecía que no hacían nada (reporte 2026-10-07: el Frenesí de la Matriarca).
+// Acá se les arma la ficha a partir de lo que el estado hace de verdad, y
+// queda guardada en STATUS_INFO para el resto del combate.
+function statusEffectText(st){
+  const parts = [], pct = v=> Math.round(Math.abs(v)*100);
+  if(st.dmgMult && st.dmgMult !== 1) parts.push(`${st.dmgMult > 1 ? '+' : '-'}${pct(st.dmgMult - 1)}% de daño`);
+  if(st.incomingDmgReduction) parts.push(st.incomingDmgReduction >= 1 ? 'inmune al daño' : `-${pct(st.incomingDmgReduction)}% de daño recibido`);
+  if(st.regenPct) parts.push(`recupera ${+(st.regenPct*100).toFixed(1)}% de su vida cada turno`);
+  if(st.evasionDelta) parts.push(`${st.evasionDelta > 0 ? '+' : ''}${st.evasionDelta}% de evasión`);
+  if(st.resBonus) parts.push(`${st.resBonus > 0 ? '+' : ''}${st.resBonus}% de resistencias`);
+  return parts.join(', ');
+}
+function statusInfoFor(st){
+  if(!st) return null;
+  if(STATUS_INFO[st.name]) return STATUS_INFO[st.name];
+  const text = statusEffectText(st);
+  if(!text) return null;
+  const good = (st.dmgMult||1) > 1 || st.incomingDmgReduction > 0 || st.regenPct > 0 || st.evasionDelta > 0 || st.resBonus > 0;
+  const bad = (st.dmgMult||1) < 1 || st.evasionDelta < 0 || st.resBonus < 0;
+  STATUS_INFO[st.name] = {buff: good && !bad, desc: text.charAt(0).toUpperCase() + text.slice(1) + '.'};
+  return STATUS_INFO[st.name];
+}
+// Los estados "para todo el combate" se guardan con duración 99 y van bajando
+// (97, 96…): se muestran como ∞.
+const STATUS_PERMANENT_TURNS = 50;
 function statusChipHTML(st){
-  const info = STATUS_INFO[st.name];
+  const info = statusInfoFor(st);
   const cls = 'status-chip ' + (info && info.buff ? 'buff' : 'debuff');
   const desc = (info ? info.desc : '').replace(/"/g,'&quot;');
   const stacksTxt = st.stacks ? (' x'+st.stacks) : '';
-  return `<span class="${cls}" title="${desc}" data-status-desc="${desc}">${st.name}${stacksTxt} (${st.duration})</span>`;
+  return `<span class="${cls}" title="${desc}" data-status-desc="${desc}">${st.name}${stacksTxt} (${st.duration >= STATUS_PERMANENT_TURNS ? '∞' : st.duration})</span>`;
 }
 function renderStatusChips(list){
   return (list||[]).map(statusChipHTML).join('');
@@ -11667,6 +11697,9 @@ function applyAllySpecials(ally, target, dmgDealt, isSkill){
   });
 }
 
+// Daño por turno y por carga de los estados que tu grupo pone a un enemigo,
+// como fracción del daño base (antes 0.08 y 0.06).
+const DOT_ENEMY = { Sangrado: 0.18, Veneno: 0.13 };
 function tickStatuses(list, ownerName, target){
   // target = the enemy object being ticked, or null/undefined for the player.
   // Applies damage-over-time and reports whether the owner is stunned this turn.
@@ -11674,20 +11707,25 @@ function tickStatuses(list, ownerName, target){
   // end of processEnemyTurns (previously this also decremented AND a second
   // block decremented again, so every status lost 2 turns of duration per cycle).
   let skip = false;
+  // Sangrado y Veneno puestos por tu grupo sobre un ENEMIGO pegan casi el
+  // doble desde 2026-10-07 (pedido explícito: estaban muy por debajo del
+  // resto; con 3 cargas apenas igualaban una Quemadura). Los que sufren tú y
+  // tus aliados no cambian: los jefes están calibrados con esos números.
+  const onEnemy = !!(target && combat.enemies.includes(target));
   list.forEach(st=>{
     if(st.name==='Sangrado'){
       // Pedido explícito 2026-10-01: Sangrado escala con Físico (no con el
       // stat de escalado de la senda) — así una herida sangrante pesa igual
       // sin importar quién la tenga, en vez de seguir el daño mágico de un
       // Mago/Hechicero.
-      const dmg = Math.max(1, Math.round(baseDamageFromStat(derived().fis)*0.08*(st.stacks||1)));
+      const dmg = Math.max(1, Math.round(baseDamageFromStat(derived().fis)*(onEnemy ? DOT_ENEMY.Sangrado : 0.08)*(st.stacks||1)));
       if(target){ target.hp = Math.max(0, target.hp-dmg); log(`${ownerName} sangra por ${dmg}.`); }
       else { dealDamageToPlayer(dmg); log(`Sangras por ${dmg}.`); }
     }
     if(st.name==='Veneno'){
       // Pedido explícito 2026-10-01: Veneno escala con Habilidad, mismo
       // criterio que Sangrado/Físico de arriba.
-      const dmg = Math.max(1, Math.round(baseDamageFromStat(derived().hab)*0.06*(st.stacks||1)));
+      const dmg = Math.max(1, Math.round(baseDamageFromStat(derived().hab)*(onEnemy ? DOT_ENEMY.Veneno : 0.06)*(st.stacks||1)));
       if(target){ target.hp = Math.max(0, target.hp-dmg); log(`${ownerName} sufre el veneno por ${dmg}.`); }
       else { dealDamageToPlayer(dmg); log(`El veneno te quita ${dmg} de vida.`); }
     }
@@ -11852,6 +11890,19 @@ function enemyAct(enemy){
   // muy evasivo impedía que los jefes activaran sus fases).
   let utilityMove = false;
   if(enemy.tpl && enemy.tpl.abilities){
+    // Furias de fase (instant:true — Frenesí de la Matriarca, Furia del Ogro,
+    // Caos Desatado, Furia de la Marea): se activan al cumplirse su condición
+    // SIN gastar el turno. Antes el jefe "entraba en frenesí" y ese turno no
+    // hacía nada más: desde fuera parecía que el estado no servía (2026-10-07).
+    if(!enemy.usedOnce) enemy.usedOnce = new Set();
+    const rageCtx = newStyleCtx(enemy, target);
+    Object.entries(enemy.tpl.abilities).forEach(([id, ab])=>{
+      if(!ab.instant || ab.utility!=='self_buff' || enemy.usedOnce.has(id) || (ab.condition && !ab.condition(rageCtx))) return;
+      enemy.usedOnce.add(id);
+      const ex = hasStatus(enemy.statuses, ab.selfBuff.name);
+      if(ex) Object.assign(ex, ab.selfBuff); else enemy.statuses.push(Object.assign({}, ab.selfBuff));
+      log(`<b>${enemy.name}</b> entra en <b>${ab.label}</b>: ${statusEffectText(ab.selfBuff)} ${ab.selfBuff.duration >= STATUS_PERMANENT_TURNS ? 'hasta el final del combate' : `durante ${ab.selfBuff.duration} turnos`}.`);
+    });
     enemy.pendingAbilityId = pickNewStyleAbilityId(enemy, newStyleCtx(enemy, target));
     const ab = enemy.tpl.abilities[enemy.pendingAbilityId];
     utilityMove = !!(ab && ab.utility);
@@ -12319,7 +12370,8 @@ function resolveNewStyleEnemyMove(enemy, target, enemyCrit){
     const existing = hasStatus(enemy.statuses, tpl.hpThresholdBuff.buff.name);
     if(existing) Object.assign(existing, tpl.hpThresholdBuff.buff);
     else enemy.statuses.push(Object.assign({}, tpl.hpThresholdBuff.buff));
-    log(`${enemy.name} reacciona al quedar herido: ${tpl.hpThresholdBuff.buff.name}.`);
+    const thText = statusEffectText(tpl.hpThresholdBuff.buff);
+    log(`${enemy.name} reacciona al quedar herido: ${tpl.hpThresholdBuff.buff.name}${thText ? ` (${thText})` : ''}.`);
   }
 
   const ctx = newStyleCtx(enemy, target);
@@ -12380,7 +12432,8 @@ function resolveNewStyleEnemyMove(enemy, target, enemyCrit){
     const existing = hasStatus(enemy.statuses, buff.name);
     if(existing) Object.assign(existing, buff);
     else enemy.statuses.push(Object.assign({}, buff));
-    log(`${enemy.name} usa ${ability.label}.`);
+    const buffText = statusEffectText(buff);
+    log(`${enemy.name} usa ${ability.label}${buffText ? `: ${buffText} ${buff.duration >= STATUS_PERMANENT_TURNS ? 'hasta el final del combate' : `durante ${buff.duration} turnos`}` : ''}.`);
     applyDebuffTarget();
     combat.lastAction = {label:ability.label, effects:[]};
     return;
@@ -12746,6 +12799,7 @@ async function simRun(cfg){
 if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
   window.__sim = simRun; window.__simLevel = simLevels;
   window.__historia = (level)=> showStoryScenes(level, ()=>{});
+  window.__simDot = DOT_ENEMY; // para comparar el daño por turno de Sangrado/Veneno en las simulaciones
   window.__creation = (step, st, r)=>{ crStep = step || 2; if(st) selStyle = st; if(r) selRace = r; showScreen('screen-create'); renderCreation(); };
   window.__simTuneBeta = (level, hp, atk)=>{ BETA_DECADE_BOSS_TUNING[level] = {hp, atk}; return BETA_DECADE_BOSS_TUNING[level]; };
   window.__simScaleBeta = (dec, kind, hp, atk)=>{ BETA_ENEMY_SCALE[dec] = Object.assign(BETA_ENEMY_SCALE[dec] && !BETA_ENEMY_SCALE[dec].hp ? BETA_ENEMY_SCALE[dec] : {}, {[kind]: {hp, atk}}); return BETA_ENEMY_SCALE; };
@@ -13449,6 +13503,9 @@ function renderCombat(){
     };
   });
 
+  // fichas automáticas para los estados sin descripción propia (ver statusInfoFor)
+  [combat.playerStatuses, ...(combat.allies||[]).map(a=> a.statuses), ...(combat.enemies||[]).map(e=> e.statuses)]
+    .forEach(list=> (list||[]).forEach(statusInfoFor));
   const playerInfo = {
     name: state.char.nickname || s.name, icon: race().icon, style: state.char.style, race: state.char.race,
     hp: state.char.curHP, maxHP: d.maxHP, mp: state.char.curSta, maxMP: d.maxSta,
@@ -13488,11 +13545,11 @@ let creationChibiIndex = null;
 async function mountCreationChibi(hero, styleId, raceId){
   const key = styleId + '_' + raceId, img0 = hero.querySelector('.cr-sprite');
   try{
-    if(!creationChibiIndex) creationChibiIndex = await fetch('src/assets/chibi/index.json?v=2').then(r=> r.json());
+    if(!creationChibiIndex) creationChibiIndex = await fetch('src/assets/chibi/index.json?v=3').then(r=> r.json());
     const meta = creationChibiIndex[key];
     if(!meta || !img0 || !img0.isConnected) return;
     const sheet = new Image();
-    await new Promise((res, rej)=>{ sheet.onload = res; sheet.onerror = rej; sheet.src = `src/assets/chibi/${key}.png?v=2`; });
+    await new Promise((res, rej)=>{ sheet.onload = res; sheet.onerror = rej; sheet.src = `src/assets/chibi/${key}.png?v=3`; });
     if(!img0.isConnected) return;
     const cv = document.createElement('canvas');
     cv.className = 'cr-sprite cr-chibi';

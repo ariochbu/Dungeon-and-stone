@@ -13,9 +13,9 @@
 // combat.enemies/combat.allies/combat.lastActor/combat.lastAction y dibuja.
 // No aplica daño, no decide turnos, no cambia HP.
 
-import { CLASS_SPRITES, ALLY_SPRITES, ENEMY_SPRITES, playerSpriteFor, RACE_SIZE, ALLY_TEMPLATE_SPRITES, enemySpriteFor } from './battleSprites.js?v=83';
+import { CLASS_SPRITES, ALLY_SPRITES, ENEMY_SPRITES, playerSpriteFor, RACE_SIZE, ALLY_TEMPLATE_SPRITES, enemySpriteFor, enemyChibiKey } from './battleSprites.js?v=84';
 
-import { SpriteAnim, sheetFromMeta } from './spriteAnim.js?v=1';
+import { SpriteAnim, sheetFromMeta } from './spriteAnim.js?v=2';
 
 const TILE = 16;
 const SCALE = 3;
@@ -26,12 +26,12 @@ const SIZE = TILE * SCALE; // 48px por actor a escala base (sprites fijos sin ve
 // tamaño de celda y los cuadros de cada una. Quien no tenga tira (monstruos de
 // décadas aún sin arte chibi) sigue con su sprite fijo de siempre.
 let CHIBI = {};
-fetch('src/assets/chibi/index.json?v=2').then(r=> r.json()).then(j=>{ CHIBI = j; }).catch(()=>{});
+fetch('src/assets/chibi/index.json?v=3').then(r=> r.json()).then(j=>{ CHIBI = j; }).catch(()=>{});
 const chibiImgs = {}; // key -> Image (cargando o lista)
 function chibiAnimFor(key){
   const meta = CHIBI[key];
   if(!meta) return null;
-  if(!chibiImgs[key]){ chibiImgs[key] = new Image(); chibiImgs[key].src = `src/assets/chibi/${key}.png?v=2`; }
+  if(!chibiImgs[key]){ chibiImgs[key] = new Image(); chibiImgs[key].src = `src/assets/chibi/${key}.png?v=3`; }
   const img = chibiImgs[key];
   return img.complete && img.naturalWidth > 0 ? new SpriteAnim(img, sheetFromMeta(meta)) : null;
 }
@@ -46,7 +46,7 @@ function decadeBgImage(decade){
 }
 let currentDecade = null;
 const STATIC_SIZE = 96;
-const CHIBI_SCALE = 1.25; // las tiras miden 64px de alto; en la escena se ven un poco más grandes
+const CHIBI_SCALE = 1.25; // respecto a un cuerpo de 64px (spriteAnim iguala las tiras de más resolución)
 // Escena más grande (antes 480x300) para que quepan hasta 6 combatientes por
 // bando en filas separadas de frente/retaguardia sin encimarse — pedido
 // explícito 2026-09-28, tras ver enemigos y aliados montados unos sobre otros.
@@ -107,6 +107,9 @@ const STATUS_ICON = {
   'Sacerdote de la Tormenta':'⚡', Mermado:'📉', Ruina:'🏚', Paralisis:'⛓', Ceguera:'🙈', Miedo:'😱', Confusion:'❓',
   Silencio:'🤐', 'Bastión':'🧱', 'Égida':'🔰',
 };
+// Los estados "para todo el combate" se guardan con duración 99 y van bajando
+// (97, 96…): se muestran como ∞ en vez de un número que no dice nada.
+const PERMANENT_TURNS = 50;
 let banner = null; // nombre de la acción en curso, arriba al centro
 // Explicación de un estado al pasar el ratón o tocar su ficha (2026-10-04): los
 // aliados no tienen tarjeta arriba como el jugador y el enemigo, así que la
@@ -128,7 +131,7 @@ function drawStatusTip(){
   const st = statusTip.st, info = STATUS_INFO_REF[st.name] || {}, buff = BUFF_STATUS_NAMES.has(st.name);
   const fs = Math.round(11*Math.min(uiScale, 1.7)), lh = fs + 4, maxW = Math.min(STAGE_W - 16, 250*Math.min(uiScale, 1.5));
   const title = `${STATUS_ICON[st.name] ? STATUS_ICON[st.name] + ' ' : ''}${st.name}`;
-  const meta = [st.stacks > 1 ? `x${st.stacks} cargas` : '', st.duration != null ? `${st.duration} turno${st.duration === 1 ? '' : 's'}` : ''].filter(Boolean).join(' · ');
+  const meta = [st.stacks > 1 ? `x${st.stacks} cargas` : '', st.duration != null ? (st.duration >= PERMANENT_TURNS ? 'hasta el final del combate' : `${st.duration} turno${st.duration === 1 ? '' : 's'}`) : ''].filter(Boolean).join(' · ');
   ctx.save();
   ctx.font = `${fs}px Georgia, serif`; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
   // parte la descripción en renglones que quepan
@@ -428,19 +431,31 @@ function syncBattleStage(container, combat, playerInfo, onTargetClick){
 
   // enemigos: los de línea frontal (tanques/melee, tpl.frontline) se dibujan
   // más cerca del grupo del jugador; los de soporte/distancia quedan atrás.
-  const enemyPos = layoutColumns(combat.enemies||[], e=> !!(e.tpl && e.tpl.frontline), 'enemy');
+  // Las invocaciones muertas (crías de la Matriarca, copias del Usurpador,
+  // cangrejos del Custodio…) no ocupan lugar: su cuerpo se desvanece donde
+  // cayó. Antes se quedaban en el reparto y se iban apilando al fondo cada
+  // vez que el jefe volvía a invocar.
+  const allEnemies = combat.enemies||[];
+  const gone = allEnemies.map(e=> !!(e.summoned && e.hp<=0));
+  const standingPos = layoutColumns(allEnemies.filter((e, i)=> !gone[i]), e=> !!(e.tpl && e.tpl.frontline), 'enemy');
+  const enemyPos = []; { let n = 0; allEnemies.forEach((e, i)=>{ enemyPos[i] = gone[i] ? null : standingPos[n++]; }); }
   // Si ya no queda ningún enemigo de línea frontal vivo, la retaguardia
   // queda desbloqueada para elegir objetivo (ver playerFrontTargetIndices en
   // game.js) — el resaltado visual debe reflejar exactamente lo mismo.
   const anyFrontAlive = (combat.enemies||[]).some(e=>e.hp>0 && e.tpl && e.tpl.frontline);
   (combat.enemies||[]).forEach((en, i)=>{
     const k = keyFor('enemy', en, i);
-    seen.add(k);
     let a = actors.get(k);
+    if(gone[i]){
+      // ya cayó: se queda donde estaba hasta desvanecerse (si nunca se llegó a dibujar, no aparece)
+      if(a){ seen.add(k); Object.assign(a, {hp:0, alive:false, vanish:true, targetable:false, statuses:[]}); }
+      return;
+    }
+    seen.add(k);
     if(!a){ a = makeActor(k); actors.set(k, a); }
     a.baseX = enemyPos[i].x; a.baseY = enemyPos[i].y; a.x = a.baseX; a.y = a.baseY;
     Object.assign(a, {
-      kind:'enemy', refIdx:i, name: en.name, icon: en.icon, nameMaxW: enemyPos[i].nameMaxW, sprite: spriteFor('enemy', en), chibiKey: 'enemigo_' + (en.tpl && en.tpl.id), sizeMul: en.tpl && en.tpl.boss ? 1.3 : (en.tpl && en.tpl.elite ? 1.12 : (en.tpl && en.tpl.decoy ? 0.9 : 1)),
+      vanish:false, kind:'enemy', refIdx:i, name: en.name, icon: en.icon, nameMaxW: enemyPos[i].nameMaxW, sprite: spriteFor('enemy', en), chibiKey: enemyChibiKey(en), sizeMul: en.tpl && en.tpl.boss ? 1.3 : (en.tpl && en.tpl.elite ? 1.12 : (en.tpl && en.tpl.decoy ? 0.9 : (en.summoned ? 0.8 : 1))),
       role: roleFor('enemy', en), hp: en.hp, maxHP: en.maxHP, alive: en.hp>0, showResources:false,
       statuses: en.statuses||[],
       // Con pendingTargetFilter==='front' (2026-09-25: elegir a cuál de 2+
@@ -628,6 +643,12 @@ function drawActor(a, hud, dt){
   // Tira chibi: se crea cuando su imagen termina de cargar y se rehace si el
   // actor de este puesto cambió (otro monstruo en el mismo índice).
   if(a._chibiKey !== a.chibiKey){ a.anim = null; a._chibiKey = a.chibiKey; }
+  if(a.vanish){
+    // invocación muerta: termina de caer y se desvanece del todo
+    a._vanish = a._vanish == null ? 1.6 : a._vanish - dt;
+    if(a._vanish <= 0) return;
+  } else a._vanish = null;
+  const vanishK = a.vanish ? Math.min(1, a._vanish/0.8) : 1;
   if(!a.anim && a.chibiKey) a.anim = chibiAnimFor(a.chibiKey);
   if(a.anim){
     if(a.alive === false && a.anim.state !== 'death') a.anim.play('death');
@@ -636,7 +657,7 @@ function drawActor(a, hud, dt){
   }
 
   ctx.save();
-  ctx.globalAlpha = a.alive===false ? 0.3 : (a.opacity!=null?a.opacity:1);
+  ctx.globalAlpha = (a.alive===false ? 0.3 : (a.opacity!=null?a.opacity:1)) * vanishK;
   const dupTint = a.kind==='ally' && a.sprite && a.sprite===playerSpriteRef;
   if(a.alive===false) ctx.filter = 'grayscale(1)';
   else if(a.flash>0) ctx.filter = 'brightness(1.8) saturate(0.3) sepia(1) hue-rotate(-50deg) saturate(4)';
@@ -646,13 +667,13 @@ function drawActor(a, hud, dt){
   const sz = STATIC_SIZE*(a.scale||1)*(a.sizeMul||1);
   const w = sz, h = sz*(a.squashY||1);
   // sombra en el suelo
-  ctx.save(); ctx.filter = 'none'; ctx.fillStyle = 'rgba(0,0,0,0.32)';
+  ctx.save(); ctx.filter = 'none'; ctx.globalAlpha = vanishK; ctx.fillStyle = 'rgba(0,0,0,0.32)';
   ctx.beginPath(); ctx.ellipse(cx, cy + 1, 17*(a.sizeMul||1), 5, 0, 0, Math.PI*2); ctx.fill(); ctx.restore();
   if(a.anim){
     if(a.alive === false){
       const st = a.anim.sheet.states.death, done = a.anim.state === 'death' && a.anim.frameIndex() >= st.frames - 1;
       a._deadFade = done ? Math.max(0.28, (a._deadFade == null ? 0.9 : a._deadFade) - dt*0.8) : 0.9;
-      ctx.globalAlpha = a._deadFade;
+      ctx.globalAlpha = a._deadFade * vanishK;
     } else a._deadFade = null;
     // las tiras miran a la derecha: el bando enemigo se dibuja espejado
     a.anim.draw(ctx, cx, cy, CHIBI_SCALE*(a.sizeMul||1)*(a.scale||1), a.side === 'enemy');
@@ -749,7 +770,7 @@ function drawStatusChips(a, cx, topY){
     if(icon){ ctx.font = `${Math.round(10*uiScale)}px sans-serif`; ctx.fillText(icon, x + 7, topY + 1); }
     else { ctx.font = `bold ${Math.round(8*uiScale)}px monospace`; ctx.fillText(st.name.slice(0, 2), x + 7, topY + 1); }
     // número: cargas (x2, x3) si se acumula; si no, turnos que le quedan
-    const num = st.stacks > 1 ? 'x' + st.stacks : (st.duration != null ? String(st.duration) : '');
+    const num = st.stacks > 1 ? 'x' + st.stacks : (st.duration != null ? (st.duration >= PERMANENT_TURNS ? '∞' : String(st.duration)) : '');
     ctx.font = `bold ${Math.round(8*uiScale)}px monospace`; ctx.fillStyle = buff ? '#d7ffe0' : '#ffdede';
     ctx.fillText(num, x + 16, topY + 1);
   });

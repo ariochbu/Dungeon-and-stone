@@ -47,7 +47,7 @@ export const RACE_SIZE = { barbaro:1.12, bestia:1.06, enano:0.92 };
 const HD_PLAYER_STYLES = ['pesada','tirador','doblefilo','mago','paladin','hechicero'];
 const HD_PLAYER_RACES = ['barbaro','enano','hada','humano','draconido','bestia'];
 export function playerSpriteFor(style, race){
-  if(HD_PLAYER_STYLES.includes(style) && HD_PLAYER_RACES.includes(race)) return `src/assets/jugador/${style}_${race}.png?v=1`;
+  if(HD_PLAYER_STYLES.includes(style) && HD_PLAYER_RACES.includes(race)) return `src/assets/jugador/${style}_${race}.png?v=2`;
   return (RACE_SPRITES[style] && RACE_SPRITES[style][race]) || CLASS_SPRITES[style] || null;
 }
 
@@ -161,7 +161,7 @@ const HD_ENEMY_IDS = [
   'storm_gush', 'storm_gush_final', 'superviviente_curtido', 'superviviente_despiadado', 'tarantula_cazadora', 'tarantula_saltarina', 'tarantula_tejedora',
   'tigre_carmesi', 'tigre_sable', 'triton_guerrero', 'triton_hechicero', 'usurpador', 'usurpador_f2',
   'usurpador_f3', 'usurpador_f4', 'usurpador_fragmentado', 'viuda_alfa', 'viuda_carmesi', 'viuda_venenosa'];
-HD_ENEMY_IDS.forEach(id=>{ ENEMY_SPRITES[id] = `src/assets/enemigos/${id}.png?v=12`; });
+HD_ENEMY_IDS.forEach(id=>{ ENEMY_SPRITES[id] = `src/assets/enemigos/${id}.png?v=13`; });
 // Invocaciones de las fases de jefe (2026-10-02): reusan sprites existentes.
 ENEMY_SPRITES.cria_arana = ENEMY_SPRITES.tarantula_cazadora;
 ENEMY_SPRITES.cangrejo_isla = ENEMY_SPRITES.cangrejo_gigante;
@@ -171,22 +171,34 @@ ENEMY_SPRITES.cangrejo_isla = ENEMY_SPRITES.cangrejo_gigante;
 export const ALLY_TEMPLATE_SPRITES = {};
 ['aldric','brann','neira','lyra','fennwick','eira','delyth','seraphina','vex','kael'].forEach(id=>{ ALLY_TEMPLATE_SPRITES[id] = `src/assets/aliados/sprites/${id}.png?v=1`; });
 
-// Sprite de enemigo según su estado (2026-10-02): el Usurpador Sin Nombre
-// cambia de forma con sus fases — limo negro → mimetismo (75%) →
-// autorreplicación (50%) → cristalización (25%). El resto, por id.
-export function enemySpriteFor(en){
+// Forma visible de un enemigo según su estado (2026-10-02): el Usurpador Sin
+// Nombre cambia con sus fases — limo negro → mimetismo (75%) →
+// autorreplicación (50%) → cristalización (25%) — y Tetrasea tiene su fase
+// final. El resto, su propio id. Lo usan el sprite fijo y la tira chibi.
+function enemyFormId(en){
   const id = en && en.tpl && en.tpl.id;
+  const pct = en && en.maxHP ? en.hp/en.maxHP : 1;
+  const has = n => ((en && en.statuses)||[]).some(s=>s.name===n);
   if(id==='usurpador'){
-    const pct = en.maxHP ? en.hp/en.maxHP : 1;
-    const has = n => (en.statuses||[]).some(s=>s.name===n);
-    if(has('Cristalización') || pct < 0.25) return ENEMY_SPRITES.usurpador_f4;
-    if(pct < 0.5) return ENEMY_SPRITES.usurpador_f3;
-    if(pct < 0.75 || has('Forma Robada')) return ENEMY_SPRITES.usurpador_f2;
+    if(has('Cristalización') || pct < 0.25) return 'usurpador_f4';
+    if(pct < 0.5) return 'usurpador_f3';
+    if(pct < 0.75 || has('Forma Robada')) return 'usurpador_f2';
   }
   // Tetrasea: su fase final (Sacerdote de la Tormenta, bajo 10% de vida).
-  if(id==='storm_gush'){
-    const pct = en.maxHP ? en.hp/en.maxHP : 1;
-    if(pct < 0.1 || (en.statuses||[]).some(s=>s.name==='Sacerdote de la Tormenta')) return ENEMY_SPRITES.storm_gush_final;
-  }
-  return ENEMY_SPRITES[id] || null;
+  if(id==='storm_gush' && (pct < 0.1 || has('Sacerdote de la Tormenta'))) return 'storm_gush_final';
+  return id;
+}
+export function enemySpriteFor(en){
+  return ENEMY_SPRITES[enemyFormId(en)] || null;
+}
+// Tira chibi de un enemigo (src/assets/chibi/enemigo_<id>.png). Las
+// invocaciones y los señuelos no tienen lámina propia: usan la de la criatura
+// a la que se parecen, igual que ya hacían con el sprite fijo.
+const CHIBI_ALIAS = {
+  cria_arana:'tarantula_cazadora', cangrejo_isla:'cangrejo_gigante', garvel_pequeno:'garvel', copia_usurpador:'usurpador_f3',
+  senuelo_clon:'sombra_mimetica', senuelo_replica:'espejo_viviente', senuelo_duplicado:'doble_perfecto',
+};
+export function enemyChibiKey(en){
+  const id = enemyFormId(en);
+  return id ? 'enemigo_' + (CHIBI_ALIAS[id] || id) : null;
 }

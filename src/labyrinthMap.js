@@ -8,7 +8,7 @@
 // game.js: qué salas son alcanzables (opts.isReachable) y qué pasa al entrar
 // (opts.onEnter → enterNode). No cambia state.dungeon.
 
-import { SpriteAnim, sheetFromMeta } from './spriteAnim.js?v=1';
+import { SpriteAnim, sheetFromMeta } from './spriteAnim.js?v=2';
 
 const T = 16;                    // unidad de la cuadrícula
 const ROOM_W = 7, ROOM_H = 5;    // tamaño de una sala, en unidades
@@ -22,7 +22,7 @@ const BADGE = {
 };
 
 let CHIBI = {};
-fetch('src/assets/chibi/index.json?v=2').then(r=> r.json()).then(j=>{ CHIBI = j; }).catch(()=>{});
+fetch('src/assets/chibi/index.json?v=3').then(r=> r.json()).then(j=>{ CHIBI = j; }).catch(()=>{});
 const imgs = {};
 function img(src){
   if(!imgs[src]){ imgs[src] = new Image(); imgs[src].src = src; }
@@ -30,7 +30,7 @@ function img(src){
   return i.complete && i.naturalWidth > 0 ? i : null;
 }
 function chibiAnim(key){
-  const meta = CHIBI[key], image = meta && img(`src/assets/chibi/${key}.png?v=2`);
+  const meta = CHIBI[key], image = meta && img(`src/assets/chibi/${key}.png?v=3`);
   return image ? new SpriteAnim(image, sheetFromMeta(meta)) : null;
 }
 

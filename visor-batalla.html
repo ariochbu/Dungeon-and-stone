@@ -66,7 +66,7 @@
   </div>
 </div>
 <script type="module">
-import { syncBattleStage, playBattleAnim } from './src/battleStage.js?v=95';
+import { syncBattleStage, playBattleAnim } from './src/battleStage.js?v=96';
 import { ENEMY_SPRITES, enemySpriteFor } from './src/battleSprites.js';
 
 const E = (id, name, o={}) => ({ tpl:Object.assign({id, name, frontline:true}, o), name, icon:'👤', hp:1000, maxHP:1000, statuses:[] });
@@ -83,7 +83,7 @@ const FLOORS = {
   '55': { theme:'sea', decade:5, enemies:()=>[E('triton_guerrero','Tritón guerrero'),E('cangrejo_gigante','Cangrejo gigante'),E('triton_hechicero','Tritón hechicero',{frontline:false}),E('naga_arquero','Naga arquero',{frontline:false}),E('sirena_corrupta','Sirena corrupta',{frontline:false})] },
   '60': { theme:'sea', decade:5, enemies:()=>[E('storm_gush','Storm Gush',{boss:true}),E('heraldo_tormenta','Heraldo de la tormenta'),E('sacerdotisa_mareas','Sacerdotisa de las mareas',{frontline:false})] },
   '10': { theme:'forest', enemies:()=>[E('ogro','Ogro',{boss:true}), E('goblin_guerrero','Goblin guerrero'), E('goblin_arquero','Goblin arquero',{frontline:false}), E('goblin_chaman','Chamán goblin',{frontline:false})] },
-  '20': { theme:'forest', enemies:()=>[E('matriarca_escarlata','Matriarca escarlata',{boss:true}), E('tarantula_cazadora','Cría de araña'), E('tarantula_cazadora','Cría de araña')] },
+  '20': { theme:'forest', enemies:()=>[E('matriarca_escarlata','Matriarca escarlata',{boss:true}), Object.assign(E('cria_arana','Cría de araña'),{summoned:true}), Object.assign(E('cria_arana','Cría de araña'),{summoned:true})] },
   '30': { theme:'cave',  boss:'riakis', enemies:()=>[E('riakis','Señor del Caos Riakis',{boss:true})] },
   '39': { theme:'cult',  boss:'usurpador_fragmentado', enemies:()=>[E('usurpador_fragmentado','Usurpador Fragmentado',{boss:true}), E('senuelo_duplicado','Duplicado',{decoy:true}), E('senuelo_duplicado','Duplicado',{decoy:true})] },
   '40': { theme:'cult',  boss:'usurpador', enemies:()=>[E('usurpador','El Usurpador Sin Nombre',{boss:true}), E('copia_usurpador','Copia del Usurpador'), E('copia_usurpador','Copia del Usurpador')] },
@@ -132,6 +132,8 @@ document.getElementById('atk').onclick = ()=>{
   playBattleAnim({kind:'player'}, {label:'Golpe de prueba', effects:[{targetKind:'enemy', key:0, amount:Math.round(300+Math.random()*200), kind:'dmg'}]});
 };
 build();
+// para probar desde la consola: __visor.combat.enemies[1].hp = 0; __visor.render()
+window.__visor = { get combat(){ return combat; }, render };
 </script>
 </body>
 </html>

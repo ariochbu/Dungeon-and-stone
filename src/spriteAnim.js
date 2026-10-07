@@ -1,6 +1,5 @@
-// Reproductor de tiras de sprites (piloto 2026-10-04). Vive en prototype-2d:
-// el juego real NO lo importa todavía. Está pensado para enchufarse después a
-// src/battleStage.js (drawActor), que hoy dibuja una imagen fija por actor.
+// Reproductor de tiras de sprites: lo usan el combate (battleStage.js) y el
+// laberinto (labyrinthMap.js).
 //
 // Formato de la tira (ver tools/import_spritesheet.py): celdas iguales, una fila por estado.
 //   fila 0 reposo · fila 1 ataque · fila 2 golpe recibido · fila 3 muerte
@@ -18,16 +17,21 @@ export const DEFAULT_SHEET = {
 };
 
 // Hoja de animación a partir de una entrada de assets/sprites/chibi/index.json
-// ({cw, ch, frames:[reposo, ataque, golpe, muerte]}, ver tools/import_chibi.py).
+// ({cw, ch, bh, frames:[reposo, ataque, golpe, muerte]}, ver tools/import_chibi.py).
+// bh = alto del cuerpo en reposo dentro de la tira. Las primeras medían 64; las
+// de 2026-10-07 vienen a 128 para verse nítidas. `k` las lleva a la misma
+// medida en pantalla, así quien dibuja no necesita saber cuál le tocó.
+export const CHIBI_BODY = 64;
 export function sheetFromMeta(meta){
+  const k = CHIBI_BODY / (meta.bh || CHIBI_BODY);
   // Sprite de viaje del laberinto: fila 0 quieto, fila 1 caminando (en bucle).
-  if(meta.walk) return { cw: meta.cw, ch: meta.ch, states: {
+  if(meta.walk) return { cw: meta.cw, ch: meta.ch, k, states: {
     idle: { row: 0, frames: meta.frames[0], fps: 6, loop: true },
     walk: { row: 1, frames: meta.frames[1], fps: 10, loop: true },
   } };
   const sheet = structuredClone(DEFAULT_SHEET);
   delete sheet.cell;
-  sheet.cw = meta.cw; sheet.ch = meta.ch;
+  sheet.cw = meta.cw; sheet.ch = meta.ch; sheet.k = k;
   ['idle','attack','hurt','death'].forEach((k, i)=>{ sheet.states[k].frames = meta.frames[i]; });
   return sheet;
 }
@@ -64,15 +68,19 @@ export class SpriteAnim {
     const i = Math.floor(this.t * st.fps);
     return st.loop ? i % st.frames : Math.min(st.frames - 1, i);
   }
-  // Dibuja con los pies en (x, y). scale debe ser ENTERO para que el pixel
-  // art quede nítido; el suavizado se apaga acá mismo.
+  // Dibuja con los pies en (x, y). `scale` es respecto a un cuerpo de 64px.
+  // Las tiras de 64 se agrandan sin suavizado (pixel art nítido); las de más
+  // resolución se achican, y ahí el suavizado es lo que las deja limpias.
   draw(ctx, x, y, scale = 3, flip = false){
+    const k = this.sheet.k || 1;
+    scale *= k;
     const { states } = this.sheet;
     // Celda cuadrada (cell) o rectangular (cw x ch), según la tira.
     const cw = this.sheet.cw || this.sheet.cell, ch = this.sheet.ch || this.sheet.cell;
     const st = states[this.state];
     ctx.save();
-    ctx.imageSmoothingEnabled = false;
+    ctx.imageSmoothingEnabled = k < 1;
+    if(k < 1) ctx.imageSmoothingQuality = 'high';
     ctx.translate(Math.round(x), Math.round(y));
     if(flip) ctx.scale(-1, 1);
     ctx.drawImage(this.img, this.frameIndex() * cw, st.row * ch, cw, ch, -cw * scale / 2, -ch * scale, cw * scale, ch * scale);
