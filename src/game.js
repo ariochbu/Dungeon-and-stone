@@ -2,9 +2,9 @@
 
 import { supabase } from './supabaseClient.js';
 import * as auth from './auth.js';
-import { syncBattleStage, playBattleAnim } from './battleStage.js?v=96';
+import { syncBattleStage, playBattleAnim } from './battleStage.js?v=97';
 import { mountLabyrinth } from './labyrinthMap.js?v=3';
-import { CLASS_SPRITES, ENEMY_SPRITES, playerSpriteFor, enemySpriteFor, ALLY_TEMPLATE_SPRITES } from './battleSprites.js?v=84';
+import { CLASS_SPRITES, ENEMY_SPRITES, playerSpriteFor, enemySpriteFor, ALLY_TEMPLATE_SPRITES } from './battleSprites.js?v=85';
 
 /* ============================================================
    DATA
@@ -294,23 +294,110 @@ const STORY_SCENES = {
     '«Lloré mil años para mantenerla cerrada», dice la última ola. La puerta cruje. Una grieta la recorre de lado a lado y algo, al otro lado, respira por primera vez. El sello está roto. Lo rompiste tú.',
   ]},
 };
-// Crónicas (ciudad): las escenas ya desbloqueadas se pueden volver a ver;
-// las que faltan aparecen selladas, sin título, para no adelantar la historia.
+// Crónicas (ciudad): tres apartados. Historia — las escenas ya desbloqueadas
+// se pueden volver a ver; las que faltan aparecen selladas, sin título, para
+// no adelantar nada. Bestiario y Música se sumaron el 2026-10-07.
+let cronTab = 'historia';
 function renderCronicas(){
-  const beaten = myBossesBeaten();
-  const levels = Object.keys(STORY_SCENES).map(Number).sort((a, b)=> a - b);
+  const tabs = [['historia','📜 Historia'],['bestiario','🐾 Bestiario'],['musica','🎼 Música']];
+  const body = cronTab==='bestiario' ? bestiaryHTML() : cronTab==='musica' ? soundtrackHTML() : storyListHTML();
   document.getElementById('main-panel').innerHTML = `
     <div class="cronicas">
       <h2 class="cw-title">Crónicas del laberinto</h2>
-      <p class="cr-note">Lo que el Cronista ha contado hasta ahora. Cada jefe de década que derrotes revela un capítulo.</p>
-      <div class="cron-grid">${levels.map((lv, i)=>{
-        const open = beaten >= lv/10;
-        return open
-          ? `<button class="cron-card" data-cron="${lv}"><div class="cron-img" style="background-image:url('src/assets/historia/${lv}_1.jpg?v=2'), url('src/assets/fondos/${lv-9}-${lv}.jpg')"></div><div class="cron-txt"><small>Capítulo ${i+1} · Piso ${lv}</small><b>${STORY_SCENES[lv].title}</b></div></button>`
-          : `<div class="cron-card locked"><div class="cron-img"><span>🔒</span></div><div class="cron-txt"><small>Capítulo ${i+1}</small><b>Derrota al jefe del piso ${lv}</b></div></div>`;
-      }).join('')}</div>
+      <div class="cron-tabs">${tabs.map(([k, l])=>`<button class="${cronTab===k?'on':''}" data-crontab="${k}">${l}</button>`).join('')}</div>
+      ${body}
     </div>`;
+  document.querySelectorAll('[data-crontab]').forEach(b=> b.onclick = ()=>{ cronTab = b.dataset.crontab; renderCronicas(); });
   document.querySelectorAll('[data-cron]').forEach(b=> b.onclick = ()=> showStoryScenes(+b.dataset.cron, ()=>{}));
+}
+function storyListHTML(){
+  const beaten = myBossesBeaten();
+  const levels = Object.keys(STORY_SCENES).map(Number).sort((a, b)=> a - b);
+  return `<p class="cr-note">Lo que el Cronista ha contado hasta ahora. Cada jefe de década que derrotes revela un capítulo.</p>
+    <div class="cron-grid">${levels.map((lv, i)=>{
+      const open = beaten >= lv/10;
+      return open
+        ? `<button class="cron-card" data-cron="${lv}"><div class="cron-img" style="background-image:url('src/assets/historia/${lv}_1.jpg?v=2'), url('src/assets/fondos/${lv-9}-${lv}.jpg')"></div><div class="cron-txt"><small>Capítulo ${i+1} · Piso ${lv}</small><b>${STORY_SCENES[lv].title}</b></div></button>`
+        : `<div class="cron-card locked"><div class="cron-img"><span>🔒</span></div><div class="cron-txt"><small>Capítulo ${i+1}</small><b>Derrota al jefe del piso ${lv}</b></div></div>`;
+    }).join('')}</div>`;
+}
+
+// ---------- Bestiario (pedido explícito 2026-10-07) ----------
+// Cada criatura se revela al derrotarla. Lo ya visto se guarda en
+// characters.bestiary (migración 0036); mientras esa columna no exista, en
+// este navegador. Las décadas cuyo jefe ya cayó se dan por vistas enteras:
+// antes de existir el bestiario no se anotaba a quién se vencía.
+function loadLocalBestiary(charId){
+  try{ return JSON.parse(localStorage.getItem('ds_bestiary_' + charId) || '[]'); }catch(e){ return []; }
+}
+function recordBestiaryKills(enemies){
+  if(simMode || !state.char) return;
+  const seen = new Set(state.char.bestiary || []);
+  const before = seen.size;
+  (enemies||[]).forEach(e=>{ if(e && e.tpl && e.tpl.id && !e.summoned && !e.tpl.decoy) seen.add(e.tpl.id); });
+  if(seen.size === before) return;
+  state.char.bestiary = Array.from(seen);
+  if(!state.char.bestiaryColumn){ try{ localStorage.setItem('ds_bestiary_' + state.char.id, JSON.stringify(state.char.bestiary)); }catch(e){} }
+}
+function bestiaryGroups(decade){
+  const uniq = (list)=>{ const ids = new Set(); return (list||[]).filter(t=> t && t.id && !ids.has(t.id) && ids.add(t.id)); };
+  const byFloor = decade.guardianByFloor ? Object.entries(decade.guardianByFloor).sort((a, b)=> a[0] - b[0]).map(([f, t])=> Object.assign({}, t, {_floor: +f})) : [];
+  return [
+    {key:'regular', label:'Criaturas', icon:'🐾', list: uniq(decade.regular)},
+    {key:'elite', label:'Élites', icon:'⚔️', list: uniq(decade.elite)},
+    {key:'guardian', label:'Guardianes', icon:'🛡️', list: uniq(byFloor.concat(decade.guardians||[]))},
+    {key:'boss', label:'Jefe de década', icon:'👑', list: uniq([decade.decadeBoss])},
+  ].filter(g=> g.list.length);
+}
+const RES_WORDS = {fisico:'físico', fuego:'fuego', hielo:'hielo', veneno:'veneno', aturdimiento:'aturdimiento'};
+function bestiaryHTML(){
+  const seen = new Set(state.char.bestiary || []), beaten = myBossesBeaten();
+  let total = 0, found = 0;
+  const decadesHTML = DECADE_BESTIARY.map((decade, di)=>{
+    const groups = bestiaryGroups(decade);
+    if(!groups.length) return '';
+    const first = di*10 + 1, cleared = beaten > di;
+    let dTotal = 0, dFound = 0;
+    const groupsHTML = groups.map(g=>{
+      const cards = g.list.map(t=>{
+        const open = cleared || seen.has(t.id);
+        dTotal++; if(open) dFound++;
+        const src = ENEMY_SPRITES[t.id] || '';
+        const floorTag = g.key==='guardian' && t._floor ? `Piso ${first - 1 + t._floor}` : g.key==='boss' ? `Piso ${first + 9}` : '';
+        if(!open) return `<div class="best-card locked"><div class="best-art">${src ? `<img src="${src}" alt="" loading="lazy">` : '<span>?</span>'}</div><b>???</b><small>${floorTag || 'Sin descubrir'}</small></div>`;
+        const res = t.res || {};
+        const weak = Object.keys(res).filter(k=> res[k] < 0).map(k=> RES_WORDS[k] || k);
+        const strong = Object.keys(res).filter(k=> res[k] >= 20).map(k=> RES_WORDS[k] || k);
+        return `<div class="best-card"><div class="best-art">${src ? `<img src="${src}" alt="" loading="lazy">` : `<span>${t.icon||'👾'}</span>`}</div>
+          <b>${t.name}</b><small>${floorTag}</small>
+          ${weak.length ? `<span class="best-res weak">Débil a ${weak.join(', ')}</span>` : ''}
+          ${strong.length ? `<span class="best-res strong">Resiste ${strong.join(', ')}</span>` : ''}</div>`;
+      }).join('');
+      return `<div class="best-group best-${g.key}"><div class="best-group-head"><span>${g.icon} ${g.label}</span><i></i></div><div class="best-grid">${cards}</div></div>`;
+    }).join('');
+    total += dTotal; found += dFound;
+    return `<section class="best-decade">
+      <header style="background-image:linear-gradient(180deg, rgba(14,11,9,0.2), rgba(30,26,22,0.95)), url('src/assets/fondos/${first}-${first+9}.jpg')"><div><small>Pisos ${first}–${first+9}</small><h3>${DECADE_GATE_NAMES[first] || 'Década ' + (di+1)}</h3></div><span class="best-count ${dFound===dTotal?'full':''}">${dFound}/${dTotal}</span></header>
+      ${groupsHTML}</section>`;
+  }).join('');
+  return `<p class="cr-note">Cada criatura se revela cuando la derrotas. Llevas <b>${found}</b> de <b>${total}</b>.</p>${decadesHTML}`;
+}
+
+// ---------- Música (pedido explícito 2026-10-07): qué suena en cada lugar ----------
+const SOUNDTRACK = [
+  {place:'Inicio y ciudad', title:'Passacaglia (clavecín)', from:'G. F. Händel — Suite n.º 7 en sol menor, HWV 432'},
+  {place:'Pisos 1–10 · Bosque Goblin', title:'Tema de batalla (Suite sinfónica)', from:'Dragon Quest V — Koichi Sugiyama'},
+  {place:'Pisos 11–20 · Nido de Arañas', title:'Forgotten Challenge', from:'Kingdom Hearts Re:Chain of Memories — Yoko Shimomura'},
+  {place:'Pisos 21–30 · Tierra de Bestias', title:'最後の闘い (La batalla final) — arreglo', from:'Final Fantasy IV — Nobuo Uematsu'},
+  {place:'Pisos 31–40 · Salón del Usurpador', title:'Forgotten Challenge (versión GBA)', from:'Kingdom Hearts: Chain of Memories — Yoko Shimomura'},
+  {place:'Pisos 41–50 · Isla Paraíso', title:'Pirate\'s Gigue', from:'Kingdom Hearts — Yoko Shimomura'},
+  {place:'Pisos 51–60 · El Mar', title:'戦士と共に (Junto a los guerreros) — Polka', from:''},
+  {place:'Jefes de década', title:'A Violent Encounter', from:'Shadow of the Colossus — Kow Otani'},
+];
+function soundtrackHTML(){
+  return `<p class="cr-note">Lo que suena en cada rincón del laberinto.</p>
+    <div class="ost-list">${SOUNDTRACK.map(t=>`<div class="ost-row"><span class="ost-note">♪</span><div><small>${t.place}</small><b>${t.title}</b>${t.from ? `<em>${t.from}</em>` : ''}</div></div>`).join('')}</div>
+    <p class="ost-thanks">Toda la música pertenece a sus compositores y a quienes tienen sus derechos. Gracias a cada uno de ellos: sin estas piezas el laberinto no sonaría igual.</p>`;
 }
 function showStoryScenes(level, onDone){
   const story = STORY_SCENES[level];
@@ -917,14 +1004,6 @@ const DECADE_BESTIARY = [
           aullido_dominio:{label:'Aullido de Dominio', utility:'buff_allies', cooldown:5, buffAllies:{name:'Fortalecido', duration:2, stacks:5}},
         },
         aiPriority:['aullido_dominio','desgarro_alfa','frenesi_manada','mordida_alfa']},
-      {id:'tigre_carmesi', name:'Tigre Carmesí', icon:'🐅', hp:1.75, atk:1.32, res:{fisico:10,fuego:0,hielo:0,veneno:5,aturdimiento:5}, elite:true, frontline:true,
-        abilities:{
-          garra_carmesi:{label:'Garra Carmesí', mult:1.05, applies:{name:'Sangrado', chance:0.20, duration:2, stack:true, maxStack:3}},
-          presa_sanguinaria:{label:'Presa Sanguinaria', mult:0.95, applies:{name:'Sangrado', chance:0.35, duration:3, stack:true, maxStack:3}, cooldown:3},
-          salto_mortal_tigre:{label:'Salto Mortal', mult:1.35, cooldown:4, condition:(ctx)=>ctx.targetHpPct<0.5, bonusVsLowHp:{below:0.5, mult:1.20}},
-        },
-        bonusVsOwnStatus:{name:'Sangrado', minStacks:1, mult:1.15},
-        aiPriority:['presa_sanguinaria','salto_mortal_tigre','garra_carmesi']},
     ],
     guardians: [],
     // Guardián único y determinista por piso (21 a 29) — mismo patrón que
@@ -3750,11 +3829,50 @@ function pickWeighted(list){
 
 function log(msg){
   if(simMode) return;
+  petFlashFromLog(msg);
   state.log.push(msg);
   if(state.log.length > 60) state.log.shift();
   renderLog();
   cityNotice(msg);
   save();
+}
+// Caídos del Laberinto en combate (pedido explícito 2026-10-07): cada vez que
+// uno hace algo — su habilidad única o un efecto que salta al golpear — su
+// carta entra un momento sobre la escena con lo que hizo. Fuera de la ofrenda
+// y del inventario no se los volvía a ver. Todos esos efectos ya escriben en
+// la Crónica una línea que empieza con el nombre del Caído en negrita, así
+// que se engancha ahí en vez de tocar cada efecto por separado.
+const petFlashQueue = [];
+let petFlashBusy = false;
+const petFlashLast = {};
+function petFlashFromLog(msg){
+  if(!combat || typeof msg !== 'string') return;
+  const m = /^<b>([^<]+)<\/b>\s*(.*)$/.exec(msg);
+  if(!m) return;
+  const pet = equippedPets().find(p=> p.name === m[1]);
+  if(!pet) return;
+  const now = Date.now();
+  if(now - (petFlashLast[pet.id]||0) < 2500 || petFlashQueue.length >= 3) return; // el mismo Caído no se repite golpe a golpe
+  petFlashLast[pet.id] = now;
+  let text = m[2].replace(/<[^>]+>/g, '').replace(/^se activa\s*(\(([^)]*)\))?:?\s*/i, (all, g, name)=> name ? name + ': ' : '').trim();
+  text = text.charAt(0).toUpperCase() + text.slice(1);
+  petFlashQueue.push({pet, text});
+  if(!petFlashBusy) nextPetFlash();
+}
+function nextPetFlash(){
+  const item = petFlashQueue.shift();
+  const mount = document.getElementById('battle-stage-mount');
+  if(!item || !mount || !combat){ petFlashBusy = false; petFlashQueue.length = 0; return; }
+  petFlashBusy = true;
+  const r = PET_RARITIES[item.pet.rarity] || {color:'#d9b76b', name:''};
+  const rect = mount.getBoundingClientRect();
+  const el = document.createElement('div');
+  el.className = 'pet-flash';
+  el.style.cssText = `--rc:${r.color}; left:${Math.round(rect.left + 10)}px; top:${Math.round(Math.max(8, rect.top + 10))}px; max-width:${Math.round(Math.max(220, rect.width - 20))}px;`;
+  el.innerHTML = `<div class="pet-flash-art"><img src="${petArtPath(item.pet.id)}" alt=""></div>
+    <div class="pet-flash-txt"><small>Caído del Laberinto</small><b>${item.pet.name}</b><span>${item.text}</span></div>`;
+  document.body.appendChild(el);
+  setTimeout(()=>{ el.remove(); nextPetFlash(); }, 2100);
 }
 // La Crónica ya no se ve en la ciudad (decisión de ariochbu 2026-10-04: solo
 // queda en el laberinto, como relato de los turnos). El registro se sigue
@@ -4083,6 +4201,7 @@ function characterToRow(){
     dungeon: state.dungeon,
     ...(state.char.titleColumn ? {title_choice: state.char.titleChoice===undefined ? null : state.char.titleChoice} : {}),
     ...(state.char.bossesColumn ? {bosses_beaten: myBossesBeaten()} : {}),
+    ...(state.char.bestiaryColumn ? {bestiary: state.char.bestiary || []} : {}),
     ...(sessionEnforced ? {last_session: SESSION_ID} : {})
   };
 }
@@ -4181,7 +4300,8 @@ function rowToState(row){
       pityGear: row.pity_gear || 0,
       pityStone: row.pity_stone || 0,
       pets: row.pets || {owned:{}, equipped:[]},
-      checkin: row.checkin || {day:0, lastClaimDate:null}
+      checkin: row.checkin || {day:0, lastClaimDate:null},
+      bestiary: row.bestiary !== undefined ? (row.bestiary || []) : loadLocalBestiary(row.id), bestiaryColumn: row.bestiary !== undefined
     },
     dungeon: row.dungeon || null,
     log: loadLocalLog(row.id)
@@ -5575,7 +5695,7 @@ function renderPetSectionHTML(){
           <div class="pet-slot-thumb" data-pet-zoom="${petId}" style="box-shadow:0 0 0 2px ${r.color}bb;"><img src="${petArtPath(petId)}" alt="${tpl.name}"></div>
           <div style="min-width:0; flex:1;"><b style="color:${r.color};">${tpl.name}</b> <span class="slot-tag" style="border-color:${r.color}; color:${r.color};">${r.name}</span> <span style="color:var(--text-dim); font-size:0.85em;">(${ownedPetCount(petId)})</span></div>
         </div>
-        <button class="inv-btn danger" data-pet-unequip="${petId}">Quitar</button>
+        <button class="inv-btn danger" data-pet-unequip="${petId}">Desequipar</button>
       </div>
     </div>`;
   }).join('');
@@ -5587,11 +5707,11 @@ function renderPetSectionHTML(){
     if(!ownedAll.length) return '';
     const r = PET_RARITIES[rarity];
     const tiles = bag.map(p=>`
-      <div class="pet-mini-tile" data-pet-zoom="${p.id}" data-pet-equip-bag="${p.id}" title="${p.name} — clic para equipar" style="box-shadow:0 0 0 2px ${r.color}88 inset;">
+      <div class="pet-bag-cell"><div class="pet-mini-tile" data-pet-zoom="${p.id}" data-pet-equip-bag="${p.id}" title="${p.name} — clic para equipar" style="box-shadow:0 0 0 2px ${r.color}88 inset;">
         <img src="${petArtPath(p.id)}" alt="${p.name}" loading="lazy">
         <span class="pet-equip-hint">+</span>
         <span class="pet-count-badge">(${ownedPetCount(p.id)})</span>
-      </div>`).join('');
+      </div><button class="inv-btn pet-equip-btn" data-pet-equip-bag="${p.id}" ${eqIds.length >= slots ? 'disabled title="No quedan espacios: desequipa uno primero"' : ''}>Equipar</button></div>`).join('');
     if(!bag.length) return ''; // todos los de este rango ya están equipados
     return `<div class="pet-rarity-row">
       <div class="pet-rarity-label" style="color:${r.color};">${r.name} <span style="opacity:0.7;">(${ownedAll.length}/${all.length})</span></div>
@@ -5603,7 +5723,7 @@ function renderPetSectionHTML(){
   return `
     <div class="section-label inv-section-label">🌳 Caídos del Laberinto <span style="font-weight:normal; color:var(--text-dim); font-size:0.8em;">(${eqIds.length}/${slots} equipados · ${ownedTotal}/${PET_CATALOG.length} en colección)</span></div>
     ${slotsHTML}
-    ${ownedTotal>eqIds.length ? `<div class="section-label" style="margin-top:10px; font-size:0.85em;">En la mochila (clic para equipar)</div>${bagGroupsHTML}` : ''}
+    ${ownedTotal>eqIds.length ? `<div class="section-label" style="margin-top:10px; font-size:0.85em;">En la mochila</div>${bagGroupsHTML}` : ''}
     ${ownedTotal===0 ? `<p class="inv-empty-msg">Aún no tienes ninguno. Consigue el primero en 🌳 Otorgar ofrenda, en la ciudad.</p>` : ''}
   `;
 }
@@ -5871,12 +5991,19 @@ function renderInventory(){
     ${soulSlotsSource.length ? `<div class="pj-stones-row"><span>Piedras de alma</span>${stoneTiles}</div>` : ''}
     <div class="pj-attrs">${attrsHTML}</div>
     ${bagMeterHTML}`; // el "Detalle del equipo" se quitó (2026-10-04): cada ranura ya muestra su carta
+  // Lo que lleva puesto, con su botón de Desequipar (2026-10-07, pedido
+  // explícito: tocar la ranura del retrato ya lo quitaba, pero nada lo decía).
+  const wornSlots = EQUIP_SLOTS.filter(slot=> targetEquip[slot]);
+  const wornHTML = wornSlots.length ? `<div class="worn-box"><div class="section-label inv-section-label">Equipado en ${targetRow ? targetRow.name : 'tu personaje'}</div>
+    ${wornSlots.map(slot=>{ const it = targetEquip[slot], r = RARITIES[it.rarity||'comun'];
+      return `<div class="worn-row" style="--rc:${r.color}">${itemArtTileHTML(it, 38)}<div><b style="color:${r.color}">${it.name}</b><small>${slotLabel(slot)} · ${r.name}</small></div><button class="inv-btn danger" data-unequip="${slot}">Desequipar</button></div>`;
+    }).join('')}</div>` : '';
   const tabs = [['mochila','🎒 Mochila'],['pociones','🧪 Pociones'],['piedras','💎 Piedras']].concat(targetRow ? [] : [['caidos','🐾 Caídos']]);
   if(!tabs.some(t=>t[0]===invTab)) invTab = 'mochila';
   const tabBody = invTab==='pociones' ? potionHTML
     : invTab==='piedras' ? `${soulSlotsHTML}${stoneTierFilterHTML}${stoneBagHTML}${fragmentSection}`
     : invTab==='caidos' ? renderPetSectionHTML()
-    : `${gearFilterHTML}${gearSelectsHTML}${gearHTML}`;
+    : `${wornHTML}${gearFilterHTML}${gearSelectsHTML}${gearHTML}`;
   document.getElementById('main-panel').innerHTML = `
     <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:6px;">
       <h3 style="color:var(--bronze-light);">Personaje e inventario</h3>
@@ -6440,7 +6567,7 @@ const WELCOME_SCENES = {
 };
 let welcomeStep = 0;
 function welcomeSceneArt(scene){
-  const hd = id => `src/assets/enemigos/${id}.png?v=5`;
+  const hd = id => `src/assets/enemigos/${id}.png?v=6`;
   if(scene==='portal') return `<div class="ws-portal"></div>`;
   if(scene==='barrier') return `<div class="ws-dome"></div><div class="ws-city">🏰</div>`;
   if(scene==='cursed') return `<div class="ws-fog"></div><div class="ws-city dead">🏚️🏚️🏚️</div>`;
@@ -12799,6 +12926,19 @@ async function simRun(cfg){
 if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
   window.__sim = simRun; window.__simLevel = simLevels;
   window.__historia = (level)=> showStoryScenes(level, ()=>{});
+  // Vista de prueba sin iniciar sesión: arma un personaje de mentira (no guarda
+  // nada: save() falla sin sesión) y abre una pantalla. __vista('cronicas','bestiario'),
+  // __vista('inv','caidos'), __vista('flash').
+  window.__vista = (view, tab)=>{
+    const {st, petPool} = simBuildState({style:'pesada', level:30, dungeonLevel:22});
+    state = st; state.log = state.log || [];
+    petPool.slice(0, 6).forEach((t, i)=>{ state.char.pets.owned[t.id] = 1; if(i < 2) state.char.pets.equipped.push(t.id); });
+    state.char.bossesBeaten = 1; state.char.bestiary = ['tarantula_cazadora','viuda_alfa','reina_telaranha','loba_acantilado','alfa_manada'];
+    showScreen('screen-game');
+    if(view === 'cronicas'){ cronTab = tab || 'historia'; renderCronicas(); }
+    else if(view === 'inv'){ invOpen = true; invTab = tab || 'mochila'; renderInventory(); }
+    else if(view === 'flash'){ combat = combat || {}; document.getElementById('main-panel').innerHTML = '<div id="battle-stage-mount" style="height:300px;background:#222"></div>'; const pt = equippedPets()[0]; petFlashFromLog(`<b>${pt.name}</b> se activa (Prueba): recuperas 120 de vida.`); }
+  };
   window.__simDot = DOT_ENEMY; // para comparar el daño por turno de Sangrado/Veneno en las simulaciones
   window.__creation = (step, st, r)=>{ crStep = step || 2; if(st) selStyle = st; if(r) selRace = r; showScreen('screen-create'); renderCreation(); };
   window.__simTuneBeta = (level, hp, atk)=>{ BETA_DECADE_BOSS_TUNING[level] = {hp, atk}; return BETA_DECADE_BOSS_TUNING[level]; };
@@ -12889,6 +13029,7 @@ function handleVictory(){
   // que tú, no una fracción — así todos evolucionan al mismo ritmo que el equipo.
   advanceAllyXp(xpGain);
 
+  recordBestiaryKills(combat.enemies);
   advanceMissionsFor('win_battles', 1);
   if(isElite) advanceMissionsFor('kill_elites', 1);
   if(isBoss) advanceMissionsFor('defeat_guardian', 1);
@@ -13545,11 +13686,11 @@ let creationChibiIndex = null;
 async function mountCreationChibi(hero, styleId, raceId){
   const key = styleId + '_' + raceId, img0 = hero.querySelector('.cr-sprite');
   try{
-    if(!creationChibiIndex) creationChibiIndex = await fetch('src/assets/chibi/index.json?v=3').then(r=> r.json());
+    if(!creationChibiIndex) creationChibiIndex = await fetch('src/assets/chibi/index.json?v=4').then(r=> r.json());
     const meta = creationChibiIndex[key];
     if(!meta || !img0 || !img0.isConnected) return;
     const sheet = new Image();
-    await new Promise((res, rej)=>{ sheet.onload = res; sheet.onerror = rej; sheet.src = `src/assets/chibi/${key}.png?v=3`; });
+    await new Promise((res, rej)=>{ sheet.onload = res; sheet.onerror = rej; sheet.src = `src/assets/chibi/${key}.png?v=4`; });
     if(!img0.isConnected) return;
     const cv = document.createElement('canvas');
     cv.className = 'cr-sprite cr-chibi';

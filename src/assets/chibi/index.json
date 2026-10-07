@@ -962,8 +962,9 @@
   ]
  },
  "enemigo_saltadora_alfa": {
-  "ch": 76,
-  "cw": 108,
+  "bh": 128,
+  "ch": 138,
+  "cw": 206,
   "frames": [
    4,
    6,

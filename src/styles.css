@@ -1713,3 +1713,65 @@ button.cron-card:hover{ transform:translateY(-2px); border-color:var(--bronze); 
 .cron-txt b{ font-family:'Cinzel'; color:var(--bronze-light); font-weight:600; }
 .cron-card.locked{ cursor:default; opacity:0.6; }
 .cron-card.locked .cron-txt b{ color:var(--text-dim); font-family:inherit; font-weight:400; font-size:0.9em; }
+
+/* ---------- Crónicas: pestañas, bestiario y música (2026-10-07) ---------- */
+.cron-tabs{ display:flex; justify-content:center; gap:8px; margin:10px 0 4px; flex-wrap:wrap; }
+.cron-tabs button{ background:transparent; border:1px solid var(--border); color:var(--text-dim); padding:7px 16px; border-radius:20px; font:inherit; cursor:pointer; transition:all .15s; }
+.cron-tabs button:hover{ border-color:var(--bronze); color:var(--text); }
+.cron-tabs button.on{ background:linear-gradient(180deg, rgba(217,183,107,0.22), rgba(217,183,107,0.06)); border-color:var(--bronze-light); color:var(--bronze-light); }
+.best-decade{ position:relative; border:1px solid var(--border); border-radius:8px; margin:0 0 18px; padding:0 14px 14px; background:var(--panel); overflow:hidden; }
+.best-decade > header{ position:relative; display:flex; align-items:flex-end; justify-content:space-between; gap:10px; margin:0 -14px 12px; padding:34px 16px 12px;
+  background:#14110f center 35%/cover no-repeat; border-bottom:1px solid var(--bronze); }
+.best-decade h3{ font-family:'Cinzel'; color:var(--bronze-light); font-size:1.35em; margin:0; text-shadow:0 2px 6px #000; }
+.best-decade header small{ color:var(--text); opacity:0.85; letter-spacing:0.12em; text-transform:uppercase; font-size:0.72em; text-shadow:0 1px 4px #000; }
+.best-count{ font-family:'Cinzel'; color:var(--text); background:rgba(0,0,0,0.55); border:1px solid var(--border); border-radius:14px; padding:2px 12px; font-size:0.9em; }
+.best-count.full{ color:var(--bronze-light); border-color:var(--bronze-light); }
+.best-group{ margin-top:12px; --gc:#8f8676; }
+.best-group.best-elite{ --gc:#b98be0; }
+.best-group.best-guardian{ --gc:#6fa8d6; }
+.best-group.best-boss{ --gc:#e0605a; }
+.best-group-head{ display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+.best-group-head span{ font-family:'Cinzel'; font-size:0.86em; letter-spacing:0.1em; text-transform:uppercase; color:var(--gc); white-space:nowrap; }
+.best-group-head i{ flex:1; height:1px; background:linear-gradient(90deg, var(--gc), transparent); opacity:0.7; }
+.best-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(118px, 1fr)); gap:10px; }
+.best-card{ display:flex; flex-direction:column; align-items:center; text-align:center; gap:2px; padding:8px 6px 9px; border-radius:6px;
+  background:linear-gradient(180deg, rgba(255,255,255,0.035), rgba(0,0,0,0.25)); border:1px solid var(--border); border-top:2px solid var(--gc); }
+.best-art{ width:92px; height:92px; display:flex; align-items:flex-end; justify-content:center; font-size:2.4em; }
+.best-art img{ max-width:100%; max-height:100%; object-fit:contain; filter:drop-shadow(0 4px 6px rgba(0,0,0,0.7)); }
+.best-card b{ font-size:0.86em; color:var(--text); line-height:1.15; }
+.best-card small{ color:var(--text-dim); font-size:0.72em; min-height:1em; }
+.best-res{ font-size:0.68em; line-height:1.2; }
+.best-res.weak{ color:#e39a6a; }
+.best-res.strong{ color:#8fb4d9; }
+.best-card.locked{ border-top-color:var(--border); opacity:0.75; }
+.best-card.locked .best-art img{ filter:brightness(0) drop-shadow(0 0 1px rgba(255,255,255,0.25)); opacity:0.8; }
+.best-card.locked b{ color:var(--text-dim); letter-spacing:0.2em; }
+.best-boss .best-grid{ grid-template-columns:minmax(150px, 220px); justify-content:center; }
+.best-boss .best-art{ width:130px; height:130px; }
+.best-boss .best-card{ box-shadow:0 0 18px rgba(224,96,90,0.18) inset; }
+.ost-list{ max-width:640px; margin:0 auto; display:flex; flex-direction:column; gap:8px; }
+.ost-row{ display:flex; align-items:center; gap:14px; padding:10px 14px; background:var(--panel); border:1px solid var(--border); border-left:3px solid var(--bronze); border-radius:6px; }
+.ost-note{ font-size:1.5em; color:var(--bronze-light); }
+.ost-row small{ display:block; color:var(--text-dim); font-size:0.75em; letter-spacing:0.06em; text-transform:uppercase; }
+.ost-row b{ display:block; font-family:'Cinzel'; color:var(--bronze-light); font-weight:600; }
+.ost-row em{ display:block; color:var(--text); opacity:0.85; font-size:0.88em; }
+.ost-thanks{ max-width:640px; margin:16px auto 0; text-align:center; color:var(--text-dim); font-style:italic; font-size:0.92em; }
+/* ---------- Caído que se activa en combate ---------- */
+.pet-flash{ position:fixed; z-index:60; display:flex; align-items:center; gap:10px; padding:6px 14px 6px 6px; pointer-events:none;
+  background:linear-gradient(90deg, rgba(14,11,9,0.95), rgba(14,11,9,0.82)); border:1px solid var(--rc); border-radius:8px;
+  box-shadow:0 0 18px -2px var(--rc), 0 6px 18px rgba(0,0,0,0.6); animation:petFlash 2.1s ease both; }
+.pet-flash-art{ width:54px; height:72px; border-radius:5px; overflow:hidden; flex-shrink:0; box-shadow:0 0 0 2px var(--rc); animation:petFlashArt 2.1s ease both; }
+.pet-flash-art img{ width:100%; height:100%; object-fit:cover; object-position:top center; }
+.pet-flash-txt{ min-width:0; }
+.pet-flash-txt small{ display:block; color:var(--rc); font-size:0.66em; letter-spacing:0.14em; text-transform:uppercase; }
+.pet-flash-txt b{ display:block; font-family:'Cinzel'; color:#fff; font-size:0.98em; }
+.pet-flash-txt span{ display:block; color:var(--text); font-size:0.82em; line-height:1.2; }
+@keyframes petFlash{ 0%{ opacity:0; transform:translateX(-40px) scale(0.92); } 12%{ opacity:1; transform:translateX(0) scale(1.03); } 18%{ transform:scale(1); } 82%{ opacity:1; transform:translateX(0); } 100%{ opacity:0; transform:translateX(24px); } }
+@keyframes petFlashArt{ 0%, 100%{ filter:brightness(1); } 14%{ filter:brightness(2.1) saturate(1.3); } 30%{ filter:brightness(1.15); } }
+/* ---------- Inventario: equipado / desequipar ---------- */
+.worn-box{ margin-bottom:10px; }
+.worn-row{ display:flex; align-items:center; gap:10px; padding:5px 8px; margin-bottom:4px; background:rgba(0,0,0,0.2); border:1px solid var(--border); border-left:3px solid var(--rc); border-radius:5px; }
+.worn-row > div:nth-child(2){ flex:1; min-width:0; }
+.worn-row small{ display:block; color:var(--text-dim); font-size:0.78em; }
+.pet-bag-cell{ display:flex; flex-direction:column; align-items:center; gap:3px; }
+.pet-equip-btn{ font-size:0.72em; padding:2px 6px; width:100%; }

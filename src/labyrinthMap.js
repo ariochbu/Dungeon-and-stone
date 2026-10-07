@@ -22,7 +22,7 @@ const BADGE = {
 };
 
 let CHIBI = {};
-fetch('src/assets/chibi/index.json?v=3').then(r=> r.json()).then(j=>{ CHIBI = j; }).catch(()=>{});
+fetch('src/assets/chibi/index.json?v=4').then(r=> r.json()).then(j=>{ CHIBI = j; }).catch(()=>{});
 const imgs = {};
 function img(src){
   if(!imgs[src]){ imgs[src] = new Image(); imgs[src].src = src; }
@@ -30,7 +30,7 @@ function img(src){
   return i.complete && i.naturalWidth > 0 ? i : null;
 }
 function chibiAnim(key){
-  const meta = CHIBI[key], image = meta && img(`src/assets/chibi/${key}.png?v=3`);
+  const meta = CHIBI[key], image = meta && img(`src/assets/chibi/${key}.png?v=4`);
   return image ? new SpriteAnim(image, sheetFromMeta(meta)) : null;
 }
 

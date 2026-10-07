@@ -76,6 +76,12 @@ ENEMIGO_POR_NOMBRE = {
     'reina devoradora': 'reina_devoradora', 'reina telarana': 'reina_telaranha', 'saltadora alfaa': 'saltadora_alfa',
     'tarantula cazadora': 'tarantula_cazadora', 'tarantula saltarina': 'tarantula_saltarina', 'tarantula tejedora': 'tarantula_tejedora',
     'viuda alfa': 'viuda_alfa', 'viuda carmesi': 'viuda_carmesi', 'viuda venenosa': 'viuda_venenosa',
+    'saltadora alfa': 'saltadora_alfa',
+    'lobo del acantilado': 'loba_acantilado', 'oso de las cuevas': 'oso_cuevas', 'buitre corrupto': 'buitre_corrupto',
+    'lince sombrio': 'lince_sombrio', 'alfa de la manada': 'alfa_manada', 'gran lobo de hoja': 'gran_lobo_hoja',
+    'oso roca lunar': 'oso_roca_lunar', 'halcon de guerra': 'halcon_guerra', 'tigre sable': 'tigre_sable',
+    'jabali hierro': 'jabali_hierro', 'lobo quimera': 'lobo_quimera', 'oso acorazado': 'oso_acorazado',
+    'bestia carmesi': 'bestia_carmesi', 'rey de la manada': 'rey_manada', 'riakis': 'riakis',
     'duelista veterano': 'duelista_veterano', 'asesino de elite': 'asesino_elite_isla', 'asesino de la isla': 'asesino_isla',
     'capitan mercenario': 'capitan_mercenario', 'cazador veterano': 'cazador_veterano', 'cazarecompensas': 'cazarrecompensas',
     'custodio': 'custodio_isla', 'explorador rival': 'explorador_rival', 'medico': 'medico_campana',
@@ -94,15 +100,6 @@ ENEMIGO_POR_ARCHIVO = {
     # goblins (1-10)
     'yonxu8': 'goblin_arquero', '334dlc': 'goblin_chaman', 'b6y16r': 'goblin_guerrero', 'm2qzhq': 'goblin_saqueador',
     'uvd593': 'jefe_goblin', 's675p0': 'ogro',
-    # bestias (21-30): retrato y lámina de cada una
-    'kq8uj5': 'loba_acantilado', 'nex96z': 'loba_acantilado', 'xg5fh0': 'buitre_corrupto', 'ju2q53': 'buitre_corrupto',
-    'j46277': 'lince_sombrio', 'i0kxcu': 'lince_sombrio', '5v1y8m': 'alfa_manada', 'xwoy0a': 'alfa_manada',
-    'y2v8hr': 'oso_cuevas', 'ot0vbu': 'oso_cuevas', 'ysiwaz': 'gran_lobo_hoja', 'gskcnw': 'gran_lobo_hoja',
-    'noq8ca': 'oso_roca_lunar', 'lunb8k': 'oso_roca_lunar', 'hjxpc1': 'halcon_guerra', '9ggikd': 'halcon_guerra',
-    'a7ncve': 'tigre_sable', 'tu42kr': 'tigre_sable', '15xgu7': 'jabali_hierro', 'livhe8': 'jabali_hierro',
-    'lg4w7z': 'lobo_quimera', 'bp4dkq': 'lobo_quimera', '2l0vsx': 'oso_acorazado', '1l1jty': 'oso_acorazado',
-    'yrp2ag': 'bestia_carmesi', 'q78b5m': 'bestia_carmesi', 'dnbu7m': 'rey_manada', 'rt47to': 'rey_manada',
-    'p18wz1': 'riakis', 'j4y0k0': 'riakis',
     # impostores (31-40)
     'lz8eev': 'doble_corrupto', '6an4rq': 'doble_corrupto', '2cvtz1': 'doble_perfecto', 'vteg3c': 'doble_perfecto',
     'i9s44x': 'espejo_viviente', '66sie7': 'espejo_viviente', '3hwv1c': 'farsante_menor', 'iby4em': 'farsante_menor',
@@ -121,7 +118,7 @@ ENEMIGO_POR_ARCHIVO = {
 # espejan al importar. Revisar con --review cada vez que llegue arte nuevo.
 # (lista revisada a ojo el 2026-10-07 con las láminas nuevas de las décadas 1-60)
 MIRA_IZQUIERDA = {'enemigo_' + n for n in (
-    'alfa_manada', 'arana_caparazon', 'bestia_carmesi', 'buitre_corrupto', 'campeon_triton', 'cangrejo_gigante',
+    'saltadora_alfa', 'alfa_manada', 'arana_caparazon', 'bestia_carmesi', 'buitre_corrupto', 'campeon_triton', 'cangrejo_gigante',
     'centinela_coral_g', 'devoradora_nido', 'doble_perfecto', 'duelista_veterano', 'garvel', 'goblin_chaman',
     'goblin_guerrero', 'gran_cangrejo_abisal', 'gran_lobo_hoja', 'gran_tejedora', 'guardia_profundidades',
     'guardian_abismo', 'halcon_guerra', 'heraldo_tormenta', 'jabali_hierro', 'jefe_goblin', 'leviatan_abisal',
