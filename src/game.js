@@ -4202,6 +4202,7 @@ function characterToRow(){
     ...(state.char.titleColumn ? {title_choice: state.char.titleChoice===undefined ? null : state.char.titleChoice} : {}),
     ...(state.char.bossesColumn ? {bosses_beaten: myBossesBeaten()} : {}),
     ...(state.char.bestiaryColumn ? {bestiary: state.char.bestiary || []} : {}),
+    ...(state.char.recordTurnsColumn ? {record_turns: state.char.recordTurns || null, record_turns_level: state.char.recordTurnsLevel || null} : {}),
     ...(sessionEnforced ? {last_session: SESSION_ID} : {})
   };
 }
@@ -4301,7 +4302,8 @@ function rowToState(row){
       pityStone: row.pity_stone || 0,
       pets: row.pets || {owned:{}, equipped:[]},
       checkin: row.checkin || {day:0, lastClaimDate:null},
-      bestiary: row.bestiary !== undefined ? (row.bestiary || []) : loadLocalBestiary(row.id), bestiaryColumn: row.bestiary !== undefined
+      bestiary: row.bestiary !== undefined ? (row.bestiary || []) : loadLocalBestiary(row.id), bestiaryColumn: row.bestiary !== undefined,
+      recordTurns: row.record_turns || null, recordTurnsLevel: row.record_turns_level || null, recordTurnsColumn: row.record_turns !== undefined
     },
     dungeon: row.dungeon || null,
     log: loadLocalLog(row.id)
@@ -7927,7 +7929,7 @@ async function renderRanking(){
     list.innerHTML = `<p class="inv-empty-msg">Nadie ha registrado un récord todavía. ¡Sé el primero!</p>`;
     return;
   }
-  const score = (row)=> tab==='caidos' ? `<b>${row.caidos} / ${PET_CATALOG.length}</b><small>Caídos reunidos</small>` : `<b>Nivel ${row.record_level}</b><small>Piso ${row.record_floor_idx}</small>`;
+  const score = (row)=> tab==='caidos' ? `<b>${row.caidos} / ${PET_CATALOG.length}</b><small>Caídos reunidos</small>` : `<b>Nivel ${row.record_level}</b><small>Piso ${row.record_floor_idx}${row.record_turns ? ` · guardián en ${row.record_turns} turno${row.record_turns===1?'':'s'}` : ''}</small>`;
   const face = (row)=>{
     const src = row.style && row.race ? playerSpriteFor(row.style, row.race) : null;
     return src ? `<img src="${src}" alt="">` : `<em>${(row.nickname||'?').charAt(0).toUpperCase()}</em>`;
@@ -13052,6 +13054,13 @@ function handleVictory(){
   // además de editar el HP del jefe también falsee este número se escapa
   // igual - esto agarra al que solo tocó el HP y no pensó en el contador.
   if(isBoss){
+    // Desempate del ranking (pedido explícito 2026-10-07): entre dos personajes
+    // en el mismo nivel va primero quien venció a su último guardián en menos
+    // turnos. Se guarda el mejor intento contra el guardián más profundo.
+    const turnsUsed = (combat.turnCount || 0) + 1;
+    if(level > (state.char.recordTurnsLevel||0) || (level === state.char.recordTurnsLevel && turnsUsed < (state.char.recordTurns||Infinity))){
+      state.char.recordTurnsLevel = level; state.char.recordTurns = turnsUsed;
+    }
     const turnsThisFight = combat.turnCount || 0;
     const guardianTooDeepToRush = !isDecadeFinal && level >= 11;
     if(turnsThisFight <= 4 && (isDecadeFinal || guardianTooDeepToRush)){
