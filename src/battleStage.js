@@ -101,7 +101,7 @@ let BUFF_STATUS_NAMES = new Set(['Furioso','Inspirado','Fortalecido']); // se re
 // Ícono de cada estado para las fichas bajo las barras. Los nombres son los de
 // STATUS_INFO en game.js; uno sin ícono muestra sus dos primeras letras.
 const STATUS_ICON = {
-  Tambaleo:'💢', Aturdido:'💫', Furioso:'😡', Inspirado:'🎺', Sangrado:'🩸', Veneno:'☠', Marcado:'🎯', Quemadura:'🔥',
+  Tambaleo:'💢', Quebranto:'🕯️', Aturdido:'💫', Furioso:'😡', Inspirado:'🎺', Sangrado:'🩸', Veneno:'☠', Marcado:'🎯', Quemadura:'🔥',
   Ralentizado:'🐌', Bendecido:'🔻', 'Bendición':'✨', Fortalecido:'💪', Corrosion:'🧪', Debilitado:'⬇', Voluntad:'🧠',
   'Último Bastión':'🛡', Empapado:'💧', Lluvia:'🌧', 'Cristalización':'💎', 'Forma Robada':'🎭', 'Caos Desatado':'🌪',
   'Sacerdote de la Tormenta':'⚡', Mermado:'📉', Ruina:'🏚', Paralisis:'⛓', Ceguera:'🙈', Miedo:'😱', Confusion:'❓',

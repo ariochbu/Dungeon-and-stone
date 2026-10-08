@@ -122,7 +122,7 @@ const STYLES = {
   hechicero: {
     id:'hechicero', name:'Hechicero', icon:'🌀', scaleStat:'hab',
     desc:'Maldiciones y control. Envenena, aterra, confunde — y remata lo que ya no puede defenderse.',
-    skills:['toque_venenoso','grito_de_panico','mirada_de_locura']
+    skills:['toque_venenoso','grito_de_panico','drenaje_de_esencia']
   }
 };
 
@@ -523,7 +523,7 @@ const LEVEL30_SKILL_BONUS = {
   lluvia_flechas:   {bonusVsMarked: 0.35},                    // era 0.25 (sin subir el daño en área)
   bola_fuego:       {applyChance: 1.0},                       // era 0.8
   lanza_hielo:      {duration: 3},                            // era 2
-  toque_venenoso:   {maxStack: 4}                             // era 3
+  toque_venenoso:   {maxStack: 5}                             // era 3 (4 hasta el rediseño del Hechicero, 2026-10-08)
 };
 function skillBonus(skillId, field, base){
   if(!state || !state.char || state.char.level < LEVEL_30_MILESTONE) return base;
@@ -663,10 +663,24 @@ const SKILLS = {
     applies:{name:'Veneno', chance:0.85, duration:3, stack:true, maxStack:3},
     desc: ()=> `Daño de veneno. Apila Veneno (hasta x${skillBonus('toque_venenoso','maxStack',3)}) durante 3 turnos.`, targetMode:'any'
   },
+  // Rediseño del Hechicero (2026-10-08): Grito de Pánico y Mirada de Locura se
+  // funden en una sola habilidad que aplica Miedo o Confusión al azar (ver
+  // appliesAlt en playerUseSkill). Conserva el id grito_de_panico para no
+  // romper mejoras de nivel 30, descuentos de control ni armas que lo nombran.
   grito_de_panico: {
-    id:'grito_de_panico', name:'Grito de Pánico', cost:{tipo:'estamina', valor:20}, dmgType:'arcano', mult:0.5,
+    id:'grito_de_panico', name:'Grito de Locura', cost:{tipo:'estamina', valor:20}, dmgType:'arcano', mult:0.5,
     applies:{name:'Miedo', chance:0.6, duration:2, procChance:0.4},
-    desc: ()=> `Daño arcano menor. ${Math.round(skillBonus('grito_de_panico','applyChance',0.6)*100)}% de aplicar Miedo — cada turno que dure, 40% de que el objetivo pierda su turno.`,
+    appliesAlt:{name:'Confusion', chance:0.6, duration:2, procChance:0.35},
+    desc: ()=> `Daño arcano menor. ${Math.round(skillBonus('grito_de_panico','applyChance',0.6)*100)}% de aplicar, al azar, Miedo (40% de perder el turno) o Confusión (35% de golpear a otro enemigo, o a sí mismo si está solo) durante 2 turnos.`,
+    targetMode:'any'
+  },
+  // Tercera habilidad nueva: daño moderado que te cura y deja al enemigo
+  // Quebrantado (menos resistencias físicas, mágicas y mentales) 3 turnos.
+  drenaje_de_esencia: {
+    id:'drenaje_de_esencia', name:'Drenaje de Esencia', cost:{tipo:'estamina', valor:18}, dmgType:'arcano', mult:0.65,
+    selfHealPctOfDmg:0.30,
+    applies:{name:'Quebranto', chance:1, duration:3, resPenalty:15, mentalPenalty:0.5},
+    desc:'Daño arcano moderado. Te cura el 30% de lo infligido y deja al objetivo Quebrantado 3 turnos: -15 a todas sus resistencias y la mitad de su resistencia a estados.',
     targetMode:'any'
   },
   mirada_de_locura: {
@@ -706,9 +720,9 @@ const SKILLS = {
     desc:'Ultimate del Paladín. Golpea a todos los enemigos y te cura el 25% de todo lo infligido.'
   },
   grito_del_abismo: {
-    id:'grito_del_abismo', name:'Grito del Abismo', cost:null, dmgType:'arcano', mult:1.2, ultimate:true,
-    targetMode:'any', applies:{name:'Paralisis', chance:1, duration:2},
-    desc:'Ultimate del Hechicero. Daño arcano fuerte a un objetivo y lo Paraliza por completo durante 2 turnos — garantizado, no depende de probabilidad.'
+    id:'grito_del_abismo', name:'Grito del Abismo', cost:null, dmgType:'arcano', mult:0.6, ultimate:true,
+    targetMode:'all', applies:{name:'Paralisis', chance:1, duration:2},
+    desc:'Ultimate del Hechicero. Daño arcano moderado a TODOS los enemigos y los Paraliza 2 turnos (sin evasión y +25% de daño recibido) — garantizado, no depende de probabilidad.'
   }
 };
 
@@ -10417,7 +10431,8 @@ function effectiveEnemyRes(enemy, resKey){
     const mal = stoneSpecials('maleficio_res').sort((a,b)=>b.perStatus-a.perStatus)[0];
     if(mal) maleficio = mal.perStatus * Math.min(3, negativeStatusCount(enemy));
   }
-  return base - (blessed ? 20 : 0) - (ruina ? (ruina.resPenalty||0) : 0) - maleficio;
+  const quebranto = hasStatus(enemy.statuses, 'Quebranto');
+  return base - (blessed ? 20 : 0) - (ruina ? (ruina.resPenalty||0) : 0) - (quebranto ? (quebranto.resPenalty||0) : 0) - maleficio;
 }
 // Mermado (armas de Paladín/Hechicero/Sacerdote, 2026-10-02): el enemigo pega
 // un X% más flojo. Es un estado aparte de Debilitado (fijo -15%) para que no
@@ -10915,7 +10930,8 @@ function applyStatus(target, statusDef, isPlayer){
       // probabilidad (tope 95%). Antes un jefe (resistencia mental 50%) dejaba
       // el Miedo del Hechicero en ~40%.
       const edge = state.char && CLASS_STATUS_EDGE.styles.includes(state.char.style) && CLASS_STATUS_EDGE.statuses.includes(statusDef.name);
-      const resist = isMental ? (target.mentalResist||0) : (target.statusResist||0);
+      const qb = hasStatus(target.statuses||[], 'Quebranto');
+      const resist = (isMental ? (target.mentalResist||0) : (target.statusResist||0)) * (qb ? 1 - (qb.mentalPenalty||0) : 1);
       effChance *= 1 - resist*(edge ? CLASS_STATUS_EDGE.resistFactor : 1);
       if(edge) effChance = Math.min(0.95, effChance + CLASS_STATUS_EDGE.flat);
     }
@@ -10990,9 +11006,10 @@ const STATUS_INFO = {
   Mermado:      {buff:false, desc:'Su daño cae un poco mientras dura (armas de Paladín, Hechicero o Sacerdote).'},
   Ruina:        {buff:false, desc:'Pierde puntos en todas sus resistencias mientras dura (Vara de la Ruina).'},
   Paralisis:    {buff:false, desc:'Evasión a 0: no puede esquivar nada, ni defendiéndose.'},
+  Quebranto:    {buff:false, desc:'-15 a todas sus resistencias y la mitad de su resistencia a estados (Drenaje de Esencia del Hechicero).'},
   Ceguera:      {buff:false, desc:'Probabilidad de que sus golpes fallen por completo.'},
   Miedo:        {buff:false, desc:'Probabilidad de perder el turno por pánico.'},
-  Confusion:    {buff:false, desc:'Probabilidad de golpear al azar — puede alcanzar a un aliado o a sí mismo.'},
+  Confusion:    {buff:false, desc:'Probabilidad de golpear al azar: a un compañero de su propio bando, o a sí mismo si no tiene a nadie.'},
   Silencio:     {buff:false, desc:'Su próximo turno solo puede usar ataques básicos, sin habilidades especiales.'},
   'Bastión':    {buff:true,  desc:'-20% de daño recibido (Muralla Viviente de Brann el Bastión).'},
   'Égida':      {buff:true,  desc:'-10% de daño recibido mientras dure (Égida Sagrada de Seraphina).'},
@@ -11810,7 +11827,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
         maxStack: skillBonus('corte_rapido','maxStack', skill.applies.maxStack),
         duration: skillBonus('corte_rapido','duration', skill.applies.duration)
       });
-      else if(skillId==='grito_de_panico') applyDef = Object.assign({}, skill.applies, {chance: skillBonus('grito_de_panico','applyChance', skill.applies.chance)});
+      else if(skillId==='grito_de_panico') applyDef = Object.assign({}, (skill.appliesAlt && chance(0.5)) ? skill.appliesAlt : skill.applies, {chance: skillBonus('grito_de_panico','applyChance', skill.applies.chance)});
       else if(skillId==='mirada_de_locura') applyDef = Object.assign({}, skill.applies, {chance: skillBonus('mirada_de_locura','applyChance', skill.applies.chance)});
       else if(skillId==='bola_fuego') applyDef = Object.assign({}, skill.applies, {chance: skillBonus('bola_fuego','applyChance', skill.applies.chance)});
       else if(skillId==='lanza_hielo') applyDef = Object.assign({}, skill.applies, {duration: skillBonus('lanza_hielo','duration', skill.applies.duration)});
@@ -12686,8 +12703,14 @@ function enemyAct(enemy){
   }
   const enemyConfusion = hasStatus(enemy.statuses,'Confusion');
   if(enemyConfusion && chance(enemyConfusion.procChance||0.35)){
-    log(`${enemy.name} ataca a ciegas por la Confusión y no golpea nada.`);
-    combat.lastAction = {label:'Confusión (falla)', effects:[]};
+    // 2026-10-08 (pedido explícito): el golpe ya no se pierde — va contra otro
+    // enemigo al azar o, si está solo, contra sí mismo. Golpe básico físico.
+    const others = combat.enemies.filter(e=> e !== enemy && e.hp > 0);
+    const victim = others.length ? pick(others) : enemy;
+    const dmg = Math.max(1, Math.round(enemy.atk * (1 - effectiveEnemyRes(victim, 'fisico')/100)));
+    victim.hp = Math.max(0, victim.hp - dmg);
+    log(victim === enemy ? `${enemy.name}, confundido, se golpea a sí mismo: ${dmg} de daño.` : `${enemy.name}, confundido, golpea a ${victim.name}: ${dmg} de daño.`);
+    combat.lastAction = {label:'Confusión', effects:[{targetKind:'enemy', key: combat.enemies.indexOf(victim), amount: dmg, kind:'dmg'}]};
     return;
   }
 
@@ -13664,6 +13687,7 @@ if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
   window.__classDmg = CLASS_DMG_REDESIGN;
   window.__alter = (on)=>{ if(on !== undefined) SIM_NO_ALTERATIONS = !on; return !SIM_NO_ALTERATIONS; };
   window.__rearLast = (on)=>{ if(on !== undefined) SIM_REAR_LAST = !!on; return SIM_REAR_LAST; };
+  window.__skills = SKILLS; // para forzar al simulador a usar una habilidad concreta al probarla
   window.__combat = ()=> combat; // inspección del combate en curso (simulaciones que no terminan)
   window.__simDot = DOT_ENEMY;
   window.__bestiary = DECADE_BESTIARY; // para probar ajustes de un enemigo en las simulaciones sin tocar el código // para comparar el daño por turno de Sangrado/Veneno en las simulaciones
