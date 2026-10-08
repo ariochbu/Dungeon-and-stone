@@ -13607,7 +13607,9 @@ function simTargetIndex(){
   if(state.char.style !== 'hechicero') return autoPickEnemyIndex();
   const living = livingEnemies();
   if(!living.length) return -1;
-  return combat.enemies.indexOf(living.reduce((a, b)=> b.maxHP > a.maxHP ? b : a));
+  // contra un jefe, al jefe; contra un grupo normal, al más débil (menos enemigos pegando y el Veneno se contagia al morir)
+  const boss = living.find(e=> e.tpl && e.tpl.boss && !e.summoned);
+  return boss ? combat.enemies.indexOf(boss) : autoPickEnemyIndex();
 }
 function simPickSkill(usable){
   const byDmg = ()=> usable.slice().sort((a, b)=> (SKILLS[b].mult||0) - (SKILLS[a].mult||0))[0] || 'ataque_basico';
