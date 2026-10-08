@@ -508,7 +508,7 @@ const LEVEL30_SKILL_BONUS = {
   machacar:         {comboBonusMult: 2.1},                  // era 1.8
   grito_guerra:     {healPct: 0.10, allyDmgMult: 1.10},      // nuevo: cura 10% y +10% daño a aliados 2 turnos
   corte_rapido:     {maxStack: 4, duration: 4},              // maxStack era 3, duration era 3
-  golpe_gracia:     {perStackMult: 0.25},                    // era 0.25
+  golpe_gracia:     {perStackMult: 0.22},                    // era 0.25
   marca_cazador:    {duration: 4},                           // era 3
   explosion_arcana: {bonusMult: 0.75, penaltyIfNone: 0.20},  // era 0.60 / 0.30
   golpe_consagrado: {healPct: 0.22},                          // era 0.15
@@ -518,7 +518,7 @@ const LEVEL30_SKILL_BONUS = {
   mirada_de_locura: {applyChance: 0.8},                       // era 0.6
   // 2026-10-02 (pedido explícito): las 6 habilidades que no tenían mejora de
   // nivel 30, aunque el tutorial lo promete para las 3 de cada senda.
-  danza_cuchillas:  {perStackMult: 0.15},                     // era 0.15
+  danza_cuchillas:  {perStackMult: 0.13},                     // era 0.15
   disparo_certero:  {ignoreResist: 0.65},                     // era 0.50
   lluvia_flechas:   {bonusVsMarked: 0.35},                    // era 0.25 (sin subir el daño en área)
   bola_fuego:       {applyChance: 1.0},                       // era 0.8
@@ -586,15 +586,15 @@ const SKILLS = {
   },
   danza_cuchillas: {
     id:'danza_cuchillas', name:'Danza de cuchillas', cost:{tipo:'estamina', valor:22}, dmgType:'fisico', mult:0.5, hits:2,
-    scalesWithStack:{name:'Sangrado', perStackMult:0.15},
+    scalesWithStack:{name:'Sangrado', perStackMult:0.13},
     // Rebote (pedido de ariochbu, 2026-10-08): UN enemigo más recibe la mitad del daño hecho al objetivo — uno del frente; si no queda nadie ahí, uno de retaguardia.
     splashPct:0.5,
-    desc: ()=> `Golpea dos veces. +${Math.round(skillBonus('danza_cuchillas','perStackMult',0.15)*100)}% de daño por cada carga de Sangrado en el objetivo. Las cuchillas rebotan en un enemigo más (del frente; si no queda ninguno, de la retaguardia), que recibe el 50% de ese daño.`, targetMode:'front'
+    desc: ()=> `Golpea dos veces. +${Math.round(skillBonus('danza_cuchillas','perStackMult',0.13)*100)}% de daño por cada carga de Sangrado en el objetivo. Las cuchillas rebotan en un enemigo más (del frente; si no queda ninguno, de la retaguardia), que recibe el 50% de ese daño.`, targetMode:'front'
   },
   golpe_gracia: {
     id:'golpe_gracia', name:'Golpe de gracia', cost:{tipo:'estamina', valor:18}, dmgType:'fisico', mult:0.9,
-    consumesStackBonus:{name:'Sangrado', perStackMult:0.25},
-    desc: ()=> `Consume el Sangrado del objetivo: +${Math.round(skillBonus('golpe_gracia','perStackMult',0.25)*100)}% daño por carga consumida.`,
+    consumesStackBonus:{name:'Sangrado', perStackMult:0.22},
+    desc: ()=> `Consume el Sangrado del objetivo: +${Math.round(skillBonus('golpe_gracia','perStackMult',0.22)*100)}% daño por carga consumida.`,
     targetMode:'front'
   },
 
@@ -12569,7 +12569,7 @@ function applyAllySpecials(ally, target, dmgDealt, isSkill){
 
 // Daño por turno y por carga de los estados que tu grupo pone a un enemigo,
 // como fracción del daño base (antes 0.08 y 0.06).
-const DOT_ENEMY = { Sangrado: 0.13, Veneno: 0.13, Quemadura: 0.10 }; // Quemadura por carga desde 2026-10-08 (antes 22% fijo, sin apilar)
+const DOT_ENEMY = { Sangrado: 0.12, Veneno: 0.13, Quemadura: 0.12 }; // Quemadura por carga desde 2026-10-08 (antes 22% fijo, sin apilar)
 function tickStatuses(list, ownerName, target){
   // target = the enemy object being ticked, or null/undefined for the player.
   // Applies damage-over-time and reports whether the owner is stunned this turn.
@@ -12596,7 +12596,23 @@ function tickStatuses(list, ownerName, target){
       // Pedido explícito 2026-10-01: Veneno escala con Habilidad, mismo
       // criterio que Sangrado/Físico de arriba.
       const dmg = Math.max(1, Math.round(baseDamageFromStat(derived().hab)*(onEnemy ? DOT_ENEMY.Veneno : 0.06)*(st.stacks||1)));
-      if(target){ target.hp = Math.max(0, target.hp-dmg); log(`${ownerName} sufre el veneno por ${dmg}.`); }
+      if(target){
+        target.hp = Math.max(0, target.hp-dmg); log(`${ownerName} sufre el veneno por ${dmg}.`);
+        // Contagio (pedido de ariochbu, 2026-10-08): si el Veneno de un Hechicero
+        // mata a un enemigo, pasa con todas sus cargas al de al lado — uno de su
+        // misma línea; si no queda nadie ahí, uno de la otra.
+        if(onEnemy && target.hp===0 && state.char.style==='hechicero'){
+          const alive = combat.enemies.filter(e=> e!==target && e.hp>0);
+          const sameLine = alive.filter(e=> !!(e.tpl && e.tpl.frontline) === !!(target.tpl && target.tpl.frontline));
+          const heir = sameLine.length ? pick(sameLine) : (alive.length ? pick(alive) : null);
+          if(heir){
+            const ex = hasStatus(heir.statuses, 'Veneno');
+            if(ex){ ex.stacks = Math.max(ex.stacks||1, st.stacks||1); ex.duration = Math.max(ex.duration||0, 3); }
+            else heir.statuses.push({name:'Veneno', duration:3, stack:true, stacks: st.stacks||1, maxStack: st.maxStack||3});
+            log(`El veneno salta de ${ownerName} a <b>${heir.name}</b> con ${st.stacks||1} carga(s).`);
+          }
+        }
+      }
       else { dealDamageToPlayer(dmg); log(`El veneno te quita ${dmg} de vida.`); }
     }
     if(st.name==='Quemadura'){
@@ -13591,10 +13607,19 @@ function simBuildState(cfg){
 //   2. Drenaje de Esencia si el objetivo no está Quebrantado, o si va por debajo de media vida.
 //   3. Grito de Locura si el objetivo no tiene ni Miedo ni Confusión.
 //   4. Toque Venenoso el resto del tiempo.
+// Objetivo del simulador para habilidades de objetivo libre. El Hechicero va
+// al enemigo más grande (su Veneno necesita apilarse en uno solo; persiguiendo
+// siempre al más débil se pasaba el combate contra las invocaciones del jefe).
+function simTargetIndex(){
+  if(state.char.style !== 'hechicero') return autoPickEnemyIndex();
+  const living = livingEnemies();
+  if(!living.length) return -1;
+  return combat.enemies.indexOf(living.reduce((a, b)=> b.maxHP > a.maxHP ? b : a));
+}
 function simPickSkill(usable){
   const byDmg = ()=> usable.slice().sort((a, b)=> (SKILLS[b].mult||0) - (SKILLS[a].mult||0))[0] || 'ataque_basico';
   const can = (id)=> usable.includes(id);
-  const target = combat.enemies[autoPickEnemyIndex()];
+  const target = combat.enemies[simTargetIndex()];
   // Asesino (2026-10-08): por multiplicador elegía siempre Golpe de gracia y
   // nunca apilaba Sangrado. Rotación: apilar con Corte rápido, mantener con
   // Danza de cuchillas, refrescar antes de que caiga; Vals de sangre para
@@ -13617,6 +13642,9 @@ function simPickSkill(usable){
   const has = (n)=> !!hasStatus(target.statuses, n);
   const hpPct = state.char.curHP / (derived().maxHP || 1);
   if(can('grito_del_abismo') && livingEnemies().length >= 2) return 'grito_del_abismo';
+  // primero el Veneno al tope (es su daño), después el resto
+  const vn = hasStatus(target.statuses, 'Veneno');
+  if(can('toque_venenoso') && (!vn || (vn.stacks||1) < skillBonus('toque_venenoso','maxStack',3) || (vn.duration||0) <= 1)) return 'toque_venenoso';
   if(can('drenaje_de_esencia') && (!has('Quebranto') || hpPct < 0.5)) return 'drenaje_de_esencia';
   if(can('grito_de_panico') && !has('Miedo') && !has('Confusion')) return 'grito_de_panico';
   if(can('toque_venenoso')) return 'toque_venenoso';
@@ -13648,7 +13676,7 @@ async function simOneFight(cfg){
         return true;
       };
       const best = simPickSkill(skillIds.filter(ok));
-      const idx = resolvedTargetMode(SKILLS[best]) === 'any' ? autoPickEnemyIndex() : null;
+      const idx = resolvedTargetMode(SKILLS[best]) === 'any' ? simTargetIndex() : null;
       await playerUseSkill(best, idx);
       // si por lo que sea no consumió el turno, ataque básico para no quedar en bucle
       if(combat && !combat.over && !simOutcome && combat.turnCount === tc) await playerUseSkill('ataque_basico', resolvedTargetMode(SKILLS.ataque_basico) === 'any' ? autoPickEnemyIndex() : null);
