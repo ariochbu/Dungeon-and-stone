@@ -3240,6 +3240,7 @@ const SHOP_POTION_PRICES = {vida_menor:12, vida_mayor:30, estamina:12, espiritu:
 
 function dealDamageToPlayer(amount){
   if(amount<=0) return;
+  if(combat && combat.attackKind && lawImmune(combat.playerStatuses, combat.attackKind)){ log('La Ley del Caos anula el golpe: no recibes daño.'); return; }
   let shieldBroke = false;
   if(combat && combat.playerShield>0){
     const absorbed = Math.min(combat.playerShield, amount);
@@ -4519,14 +4520,16 @@ function baseDamageFromStat(statVal){
 // linealmente entre medio), calibrados con simulaciones contra los jefes de
 // década (ver DECADE_BOSS_TUNING) para que todas las clases rindan parecido
 // en cada tramo del laberinto.
-const CLASS_CURVE_LEVELS = [1,10,20,30,40,50,60]; // nivel 1 = neutro (sin ajuste)
+const CLASS_CURVE_LEVELS = [1,10,20,30,40,50,60,70,80]; // nivel 1 = neutro (sin ajuste)
 const CLASS_CURVE = {
-  pesada:    {hp:[1.00,0.85,0.77,0.69,0.62,0.55,0.49], dmg:[1.00,0.92,0.88,0.83,0.79,0.74,0.70]},
-  tirador:   {hp:[1.00,0.69,0.77,0.87,0.98,1.10,1.24], dmg:[1.00,0.83,0.88,0.93,0.99,1.05,1.11]},
-  doblefilo: {hp:[1.00,1.06,1.02,0.99,0.96,0.93,0.90], dmg:[1.00,1.03,1.01,0.99,0.98,0.96,0.95]},
-  mago:      {hp:[1.00,1.02,1.40,1.10,1.00,0.95,1.60], dmg:[1.00,1.01,1.25,1.03,0.97,0.93,1.14]}, // refuerzo vs Matriarca (20) y Storm Gush (60): sin resistencia física, caía ante paralisis/golpes en área
-  paladin:   {hp:[1.00,1.19,1.10,1.02,0.95,0.88,0.81], dmg:[1.00,1.09,1.05,1.01,0.97,0.94,0.90]},
-  hechicero: {hp:[1.00,0.55,0.60,0.67,0.76,0.85,0.95], dmg:[1.00,0.73,0.77,0.82,0.87,0.92,0.97]},
+  pesada:    {hp:[1.00,0.85,0.77,0.69,0.62,0.55,0.49,0.49,0.49], dmg:[1.00,0.92,0.88,0.83,0.79,0.74,0.70,0.70,0.70]},
+  tirador:   {hp:[1.00,0.69,0.77,0.87,0.98,1.10,1.24,1.24,1.24], dmg:[1.00,0.83,0.88,0.93,0.99,1.05,1.11,1.11,1.11]},
+  doblefilo: {hp:[1.00,1.06,1.02,0.99,0.96,0.93,0.90,0.90,0.90], dmg:[1.00,1.03,1.01,0.99,0.98,0.96,0.95,0.95,0.95]},
+  mago:      {hp:[1.00,1.02,1.40,1.10,1.00,0.95,1.60,1.60,1.60], dmg:[1.00,1.01,1.25,1.03,0.97,0.93,1.14,1.14,1.14]}, // refuerzo vs Matriarca (20) y Storm Gush (60): sin resistencia física, caía ante paralisis/golpes en área
+  paladin:   {hp:[1.00,1.19,1.10,1.02,0.95,0.88,0.81,0.81,0.81], dmg:[1.00,1.09,1.05,1.01,0.97,0.94,0.90,0.90,0.90]},
+  // Hechicero 60/70/80 (2026-10-08, pedido explícito): con 0.95/0.97 ganaba 0% a Storm Gush y ~0-7% a los
+  // jefes del 70 y 80. Medido con 50 combates: 70 → 40%, 80 → 30%; el 60 queda cerca del 50% (1.35/1.18 daba 34%, 1.5/1.25 daba 63%).
+  hechicero: {hp:[1.00,0.55,0.60,0.67,0.76,0.85,1.43,1.65,1.88], dmg:[1.00,0.73,0.77,0.82,0.87,0.92,1.22,1.30,1.39]},
 };
 // Curva de la BETA (con BETA_ALLY_UNLOCKS): en las décadas 0-3 se juega con
 // menos aliados (0-3), así que las clases frágiles necesitan otro ajuste;
@@ -4538,12 +4541,14 @@ const CLASS_CURVE_BETA = {
   // El mago gana a Matriarca y Riakis casi siempre aunque se le baje la curva
   // (a distancia y con un tanque delante); no se le recortó más para no
   // hundirlo en los pisos normales.
-  pesada:    {hp:[1.00,0.43,0.58,0.56,0.61,0.55,0.49], dmg:[1.00,0.59,0.76,0.74,0.61,0.74,0.70]},
-  tirador:   {hp:[1.00,1.15,0.83,0.92,1.69,1.10,1.24], dmg:[1.00,1.06,0.91,0.96,1.30,1.05,1.11]},
-  doblefilo: {hp:[1.00,1.22,1.27,1.57,1.34,0.93,0.90], dmg:[1.00,1.11,1.10,1.25,1.05,0.96,0.95]},
-  mago:      {hp:[1.00,0.93,0.70,0.75,0.70,0.95,1.60], dmg:[1.00,0.97,0.85,0.85,0.81,0.93,1.14]},
-  paladin:   {hp:[1.00,0.58,0.67,0.75,0.64,0.88,0.81], dmg:[1.00,0.76,0.82,0.86,0.79,0.94,0.90]},
-  hechicero: {hp:[1.00,1.25,1.37,1.23,1.21,0.85,0.95], dmg:[1.00,1.10,1.16,0.85,1.11,0.92,0.97]},
+  pesada:    {hp:[1.00,0.43,0.58,0.56,0.61,0.55,0.49,0.49,0.49], dmg:[1.00,0.59,0.76,0.74,0.61,0.74,0.70,0.70,0.70]},
+  tirador:   {hp:[1.00,1.15,0.83,0.92,1.69,1.10,1.24,1.24,1.24], dmg:[1.00,1.06,0.91,0.96,1.30,1.05,1.11,1.11,1.11]},
+  doblefilo: {hp:[1.00,1.22,1.27,1.57,1.34,0.93,0.90,0.90,0.90], dmg:[1.00,1.11,1.10,1.25,1.05,0.96,0.95,0.95,0.95]},
+  mago:      {hp:[1.00,0.93,0.70,0.75,0.70,0.95,1.60,1.60,1.60], dmg:[1.00,0.97,0.85,0.85,0.81,0.93,1.14,1.14,1.14]},
+  paladin:   {hp:[1.00,0.58,0.67,0.75,0.64,0.88,0.81,0.81,0.81], dmg:[1.00,0.76,0.82,0.86,0.79,0.94,0.90,0.90,0.90]},
+  // Hechicero 60/70/80 (2026-10-08, pedido explícito): con 0.95/0.97 ganaba 0% a Storm Gush y ~0-7% a los
+  // jefes del 70 y 80. Medido con 50 combates: 70 → 40%, 80 → 30%; el 60 queda cerca del 50% (1.35/1.18 daba 34%, 1.5/1.25 daba 63%).
+  hechicero: {hp:[1.00,1.25,1.37,1.23,1.21,0.85,1.43,1.65,1.88], dmg:[1.00,1.10,1.16,0.85,1.11,0.92,1.22,1.30,1.39]},
 };
 function classCurve(kind){
   const c = (BETA_BALANCE ? CLASS_CURVE_BETA : CLASS_CURVE)[state.char.style];
@@ -4571,6 +4576,12 @@ function migrateState(){
     state.char.maxLevelUnlocked = Math.max(1, Math.min(LEVEL_CAP, (state.char.dungeonsCleared||0) + 1));
   }
   if(state.char.checkpointLevel===undefined) state.char.checkpointLevel = 1;
+  // Con el tope viejo (60), vencer a Storm Gush dejaba el checkpoint en 60. Al
+  // abrirse La Grieta le corresponde el del piso 61 (y el laberinto hasta ahí).
+  if((state.char.bossesBeaten||0) >= 6 && state.char.checkpointLevel < 61){
+    state.char.checkpointLevel = 61;
+    state.char.maxLevelUnlocked = Math.max(state.char.maxLevelUnlocked||1, 61);
+  }
   if(!state.char.stash) state.char.stash = {gold:0, items:[]};
   if(!state.char.equip.hasOwnProperty('arma2')) state.char.equip.arma2 = null;
   ['casco','botas','guantes'].forEach(s=>{ if(!state.char.equip.hasOwnProperty(s)) state.char.equip[s] = null; });
@@ -5115,6 +5126,11 @@ function checkpointLevelsUnlocked(){
   for(let lvl=1; lvl<=cap; lvl+=10) levels.push(lvl);
   return levels;
 }
+// Último punto de control (pedido explícito 2026-10-08): vencer al jefe del
+// último piso abierto deja el checkpoint en el piso siguiente (81) como
+// mención honorífica. Aún no hay nada ahí, así que no es una puerta: se
+// muestra aparte y no se puede entrar (checkpointLevelsUnlocked topa en LEVEL_CAP).
+function honorCheckpoint(){ return (state.char.checkpointLevel||1) > LEVEL_CAP ? state.char.checkpointLevel : 0; }
 
 // real (mechanical) difficulty multiplier: compounds ~14% per level, as requested
 // La curva original (1.14 compuesto) se pensó para 10 pisos; compuesta hasta
@@ -7133,6 +7149,7 @@ function renderCityDungeonEntry(){
           ${gates.map(lvl=>`<button class="checkpoint-btn lb-gate ${lvl===state.char.checkpointLevel?'current':''}" data-level="${lvl}">
             <span class="lb-gate-arch"></span><b>${lvl}</b><small>${DECADE_GATE_NAMES[lvl] || 'Nivel '+lvl}</small></button>`).join('')}
         </div>
+        ${honorCheckpoint() ? `<p class="lb-honor">⚜ Punto de control del piso <b>${honorCheckpoint()}</b> alcanzado. Has llegado al fondo conocido del laberinto: lo que hay más abajo aún no se abre.</p>` : ''}
         <p class="lb-hint">${gates.length>1 ? 'Elige por qué puerta bajar. Se abre una nueva cada vez que derrotas al jefe de una década.' : 'Solo hay una puerta abierta: nivel 1, piso 1.'}</p>
       </div>
     </div>
@@ -10042,17 +10059,26 @@ function makeEnemy(tpl, floorIdx, level){
 // las reglas, pero nunca las oculta"). Cada combate de esa década recibe una
 // ley al azar que afecta a TODOS por igual, dura el combate entero y se
 // anuncia al empezar; queda a la vista como un estado en cada combatiente.
+const CHAOS_IMMUNITY_TURNS = 3;
 const CHAOS_LAWS = [
   {name:'Ley: Gravedad Reducida', text:'todos esquivan más (+10% de evasión)', status:{evasionDelta:10}},
   {name:'Ley: Eco Violento', text:'todos golpean más fuerte (+15% de daño)', status:{dmgMult:1.15}},
   {name:'Ley: Piel de Vidrio', text:'todos reciben más daño (+15%)', status:{incomingDmgReduction:-0.15}},
-  {name:'Ley: Sangre Espesa', text:'todos resisten más (−12% de daño recibido)', status:{incomingDmgReduction:0.12}},
+  // Inmunidades (pedido explícito 2026-10-08, reemplazan a "menos daño
+  // recibido"). Afectan a los dos bandos y duran solo los primeros turnos:
+  // para todo el combate, un grupo sin magia (o sin golpes físicos) no podría
+  // ganar nunca. Golpe físico = habilidades de daño físico y los enemigos de
+  // primera línea; mágico = el resto (fuego, hielo, veneno, arcano y los
+  // enemigos de retaguardia). No frena el daño por turno (Sangrado, Veneno…).
+  {name:'Ley: Carne de Piedra', text:`nadie recibe daño de golpes físicos durante los primeros ${CHAOS_IMMUNITY_TURNS} turnos`, status:{immune:'fisico'}, turns:CHAOS_IMMUNITY_TURNS},
+  {name:'Ley: Silencio Arcano', text:`nadie recibe daño de ataques mágicos durante los primeros ${CHAOS_IMMUNITY_TURNS} turnos`, status:{immune:'magico'}, turns:CHAOS_IMMUNITY_TURNS},
 ];
+function lawImmune(statuses, kind){ return (statuses||[]).some(st=> st.immune===kind); }
 function applyChaosLaw(){
   const lvl = (state.dungeon && state.dungeon.level) || 1;
   if(lvl < 61 || lvl > 70 || !combat) return;
   const law = pick(CHAOS_LAWS);
-  const st = ()=> Object.assign({name: law.name, duration:99, chaosLaw:true}, law.status);
+  const st = ()=> Object.assign({name: law.name, duration: law.turns || 99, chaosLaw:true}, law.status);
   combat.playerStatuses.push(st());
   (combat.allies||[]).forEach(a=> a.statuses.push(st()));
   combat.enemies.forEach(e=> e.statuses.push(st()));
@@ -10158,6 +10184,7 @@ function frontlineTarget(){
 }
 function dealDamageToAlly(ally, amount){
   if(amount<=0) return;
+  if(combat && combat.attackKind && lawImmune(ally.statuses, combat.attackKind)) return; // Ley del Caos de inmunidad
   // Corrupción y Leyes del Caos sobre el aliado (los estados con nombre propio
   // — Bastión, Égida… — ya se aplicaron antes de llegar acá).
   let extra = statusStackTakenMult(ally.statuses);
@@ -10309,6 +10336,8 @@ const ALLY_SKILL_COOLDOWN = 3; // cada cuántos turnos propios repite su habilid
 // mientras dura) — centralizado aquí para que tanto el jugador como los
 // aliados se beneficien de la misma forma al golpear a un enemigo bendecido.
 function effectiveEnemyRes(enemy, resKey){
+  // Ley del Caos de inmunidad: resistencia total a ese tipo de golpe.
+  if(resKey && lawImmune(enemy.statuses, resKey==='fisico' ? 'fisico' : 'magico')) return 100;
   const base = (enemy.res && enemy.res[resKey]) || 0;
   const blessed = hasStatus(enemy.statuses, 'Bendecido');
   // Ruina (Vara de la Ruina del Hechicero, 2026-10-02): resta puntos planos a
@@ -11612,6 +11641,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
       resKey = effectiveEnemyRes(target,'fuego') <= effectiveEnemyRes(target,'hielo') ? 'fuego' : 'hielo';
     }
     let resVal = resKey ? effectiveEnemyRes(target, resKey)*(1-ignore) : 0;
+    if(!resKey && lawImmune(target.statuses, 'magico')) resVal = 100; // el daño arcano no mira resistencias, pero la Ley sí lo frena
     // Arco largo/Carcaj y guantes de Guerrero/Arquero: penetración de
     // ARMADURA FÍSICA, solo contra golpes físicos. Guantes de Asesino/Mago/
     // Sacerdote: penetración de RESISTENCIA MÁGICA, solo contra golpes que
@@ -12491,7 +12521,7 @@ async function processEnemyTurns(){
     combat.lastAction = null;
     if(enemy.tpl && enemy.tpl.decoy) continue; // los señuelos no actúan
     if(stunFlags.get(enemy)){ log(`${enemy.name} está aturdido y pierde su turno.`); combat.lastAction = {label:'Aturdido', effects:[]}; }
-    else enemyAct(enemy);
+    else { combat.attackKind = enemy.tpl && enemy.tpl.frontline ? 'fisico' : 'magico'; enemyAct(enemy); if(combat) combat.attackKind = null; }
     if(stepDelay>0){ renderCombat(); await withAnimTimeout(playBattleAnim(combat.lastActor, combat.lastAction)); combat.lastActor = null; combat.lastAction = null; }
     if(combat !== myCombat) return;
   }
@@ -13737,7 +13767,7 @@ function handleVictory(){
     // quien lo usaba quedaba atrapado en un bucle. Mismo Math.min que ya usa
     // maxLevelUnlocked justo arriba.
     if(isDecadeFinal){
-      state.char.checkpointLevel = Math.min(LEVEL_CAP, Math.max(state.char.checkpointLevel||1, clearedLevel+1));
+      state.char.checkpointLevel = Math.min(LEVEL_CAP+1, Math.max(state.char.checkpointLevel||1, clearedLevel+1));
       noteDecadeBossBeaten(clearedLevel);
       // "El primer retornado": lo concede la base al guardar el jefe del piso
       // 100 (trigger de la migración 0032), así que se relee tras el guardado.

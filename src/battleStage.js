@@ -106,7 +106,7 @@ const STATUS_ICON = {
   'Último Bastión':'🛡', Empapado:'💧', Lluvia:'🌧', 'Cristalización':'💎', 'Forma Robada':'🎭', 'Caos Desatado':'🌪',
   'Sacerdote de la Tormenta':'⚡', Mermado:'📉', Ruina:'🏚', Paralisis:'⛓', Ceguera:'🙈', Miedo:'😱', Confusion:'❓',
   Silencio:'🤐', 'Bastión':'🧱', 'Égida':'🔰',
-  'Corrupción':'🥀', 'Ley: Gravedad Reducida':'🪶', 'Ley: Eco Violento':'📣', 'Ley: Piel de Vidrio':'🪟', 'Ley: Sangre Espesa':'🩸',
+  'Corrupción':'🥀', 'Ley: Gravedad Reducida':'🪶', 'Ley: Eco Violento':'📣', 'Ley: Piel de Vidrio':'🪟', 'Ley: Carne de Piedra':'🗿', 'Ley: Silencio Arcano':'🔇',
 };
 // Los estados "para todo el combate" se guardan con duración 99 y van bajando
 // (97, 96…): se muestran como ∞ en vez de un número que no dice nada.
