@@ -4377,7 +4377,7 @@ function statGrowth(key){
 }
 // Vida por nivel con el rediseño: Guerrero 100, Paladín ~90, Asesino ~70,
 // Arquero ~65, Hechicero ~62, Mago ~58 (contando lo que suma el Vigor).
-const HP_PER_LEVEL_REDESIGN = {pesada:17, paladin:18, doblefilo:15.5, tirador:14, hechicero:13, mago:12, sacerdote:10};
+const HP_PER_LEVEL_REDESIGN = {pesada:17, paladin:16, doblefilo:15.5, tirador:14, hechicero:13, mago:12, sacerdote:10};
 function baseStat(key){
   const r = race();
   let v = r.stats[key] + Math.floor((state.char.level-1) * statGrowth(key)); // puntos por nivel según la senda
@@ -13471,6 +13471,12 @@ function syncAllyHPToDungeon(){
 // ============================================================
 const SIM_SET = {pesada:'guardian', paladin:'bastion', tirador:'artemisa', doblefilo:'jack', mago:'soberano', hechicero:'eclipse'};
 const SIM_ALLIES = [['aldric','guerrero','pesada'], ['delyth','sacerdote',null], ['neira','arquero','tirador'], ['fennwick','mago','mago']];
+// Referencia fijada por ariochbu el 2026-10-08: un jugador de retaguardia pelea
+// con DOS tanques (un Guerrero o Paladín ya pone su propio cuerpo al frente).
+// El orden importa cuando el tramo da menos de 4 aliados: tanque, sacerdotisa,
+// segundo tanque, mago.
+const SIM_REAR_STYLES = ['tirador','mago','hechicero','doblefilo'];
+const SIM_ALLIES_REAR = [['aldric','guerrero','pesada'], ['delyth','sacerdote',null], ['brann','guerrero','pesada'], ['fennwick','mago','mago']];
 function simBuildState(cfg){
   const level = cfg.level, rank = cfg.gear || 'rango_a';
   const equip = {arma:null, arma2:null, armadura:null, amuleto:null, casco:null, botas:null, guantes:null};
@@ -13483,7 +13489,7 @@ function simBuildState(cfg){
   const soulSlots = cfg.stoneTier === 'none' ? [] : families.slice(0, maxSoulSlots(level)).map(f=> makeSoulStoneItem(stonePool.find(t=> t.family === f)));
   const petPool = PET_CATALOG.filter(t=> t.rarity === (cfg.petRarity || 'epico')).sort(()=> Math.random() - 0.5);
   // cfg.allyList: otro grupo de aliados (p. ej. dos tanques para un jugador de retaguardia)
-  const allies = (cfg.allyList || SIM_ALLIES).slice(0, cfg.allies == null ? 4 : cfg.allies).map(([id, role, wstyle], i)=>{
+  const allies = (cfg.allyList || (SIM_REAR_STYLES.includes(cfg.style) ? SIM_ALLIES_REAR : SIM_ALLIES)).slice(0, cfg.allies == null ? 4 : cfg.allies).map(([id, role, wstyle], i)=>{
     const tpl = ALLY_ROSTER.find(t=> t.templateId === id);
     const eq = {};
     if(rank !== 'none'){
