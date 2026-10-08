@@ -2683,8 +2683,8 @@ const WEAPON_CATALOG = {
         wTier('poco_comun', 10, [{type:'sangrado', chance:0.12, text:'de aplicar sangrado 2 turnos'}]),
         wTier('raro', 13, [{type:'sangrado', chance:0.15, text:'de aplicar sangrado 2 turnos'}]),
         wTier('rango_b', 17, [{type:'sangrado', chance:0.20, text:'de aplicar sangrado 2 turnos'}]),
-        wTier('rango_a', 20, [{type:'sangrado', chance:0.20, text:'de aplicar sangrado 2 turnos'}, {type:'succion_hechizo', percent:0.10, text:'succión de hechizo (solo habilidades)'}]),
-        wTier('legendario', 27, [{type:'sangrado', chance:0.25, duration:4, text:'de aplicar sangrado 4 turnos', tierSProc:'daga_s'}, {type:'succion_hechizo', percent:0.15, text:'succión de hechizo (solo habilidades)'}]),
+        wTier('rango_a', 20, [{type:'sangrado', chance:0.20, text:'de aplicar sangrado 2 turnos'}, {type:'robovida', percent:0.10, text:'de robo de vida (solo ataque básico)'}]),
+        wTier('legendario', 27, [{type:'sangrado', chance:0.25, duration:4, text:'de aplicar sangrado 4 turnos', tierSProc:'daga_s'}, {type:'robovida', percent:0.15, text:'de robo de vida (solo ataque básico)'}]),
       ],
       'Cuchillo largo': [
         wTier('comun', 7),
@@ -2701,8 +2701,8 @@ const WEAPON_CATALOG = {
         wTier('poco_comun', 10, [{type:'sangrado', chance:0.12, text:'de aplicar sangrado 2 turnos'}]),
         wTier('raro', 13, [{type:'sangrado', chance:0.15, text:'de aplicar sangrado 2 turnos'}]),
         wTier('rango_b', 17, [{type:'sangrado', chance:0.20, text:'de aplicar sangrado 2 turnos'}]),
-        wTier('rango_a', 20, [{type:'sangrado', chance:0.20, text:'de aplicar sangrado 2 turnos'}, {type:'succion_hechizo', percent:0.10, text:'succión de hechizo (solo habilidades)'}]),
-        wTier('legendario', 27, [{type:'sangrado', chance:0.25, duration:4, text:'de aplicar sangrado 4 turnos', tierSProc:'daga_s'}, {type:'succion_hechizo', percent:0.15, text:'succión de hechizo (solo habilidades)'}]),
+        wTier('rango_a', 20, [{type:'sangrado', chance:0.20, text:'de aplicar sangrado 2 turnos'}, {type:'robovida', percent:0.10, text:'de robo de vida (solo ataque básico)'}]),
+        wTier('legendario', 27, [{type:'sangrado', chance:0.25, duration:4, text:'de aplicar sangrado 4 turnos', tierSProc:'daga_s'}, {type:'robovida', percent:0.15, text:'de robo de vida (solo ataque básico)'}]),
       ],
       'Cuchillo gemelo': [
         wTier('comun', 7),
@@ -4418,9 +4418,6 @@ function baseStat(key){
 // física y mágica, hasta `cap` puntos porcentuales.
 const PALADIN_ESP_RES = {rate:0.05, cap:10}; // medido 2026-10-08: con 15 o más el Paladín pasa de 67% contra el jefe del 80
 function paladinEspRes(esp){ return state.char.style==='paladin' ? Math.round(Math.min(PALADIN_ESP_RES.cap, esp*PALADIN_ESP_RES.rate)) : 0; }
-// Instinto del Cazador (pedido de ariochbu, 2026-10-08): el Arquero trae de
-// serie succión de hechizo (cura con sus habilidades, no con el básico).
-const ARQUERO_SUCCION = 0.03;
 
 function totalRes(key){
   const r = race();
@@ -10855,7 +10852,7 @@ function combatStatsSummary(){
     bloqueo: blockChance(specials),
     retroceso: sumBy('retroceso','chance'),
     robovida: sumBy('robovida','percent'),
-    succionHechizo: sumBy('succion_hechizo','percent') + (state.char.style==='tirador' ? ARQUERO_SUCCION : 0),
+    succionHechizo: sumBy('succion_hechizo','percent'),
     penetracionFisica: sumBy('penetracion_armadura','value'),
     penetracionMagica: sumBy('penetracion_magica','value'),
     segundoAtaque: Math.min(SEGUNDO_ATAQUE_CAP, sumBy('segundo_ataque_basico','chance')),
@@ -11178,7 +11175,6 @@ function applyEquippedSpecials(target, dmgDealt, skill){
     // Igual con la única "Succión de hechizo"/"Absorción Arcana" (tampoco tenía código).
     if(unique.effect && unique.effect.kind==='succion_hechizo') sources.push({it:{name}, sp:{type:'succion_hechizo', percent:unique.effect.percent}});
   });
-  if(state.char.style==='tirador') sources.push({it:{name:'Instinto del Cazador'}, sp:{type:'succion_hechizo', percent:ARQUERO_SUCCION}});
   const isBasicHit = !!skill && skill.id==='ataque_basico';
   const procOnThisHit = isBasicHit || state.char.style==='doblefilo';
   sources.forEach(({it, sp})=>{
