@@ -4368,8 +4368,8 @@ const CLASS_GROWTH = {
   doblefilo: {fis:1.4, hab:0.8, esp:0.5, agi:1.6, vig:0.7},
   tirador:   {fis:1.3, hab:0.9, esp:0.6, agi:1.5, vig:0.7},
   // Mago y Hechicero: Vigor 0.7 y Agilidad 0.4 por decisión de ariochbu (2026-10-08); suman menos de 5 a propósito.
-  mago:      {fis:0.4, hab:1.8, esp:1.1, agi:0.4, vig:0.7},
-  hechicero: {fis:0.4, hab:1.7, esp:1.2, agi:0.4, vig:0.7},
+  mago:      {fis:0.4, hab:1.8, esp:1.1, agi:0.6, vig:1.0},   // Vigor 1.0 y Agilidad 0.6: tercera ronda de ajustes de ariochbu (2026-10-08)
+  hechicero: {fis:0.4, hab:1.7, esp:1.2, agi:0.6, vig:1.0},
 };
 function statGrowth(key){
   const g = CLASS_REDESIGN && state.char && CLASS_GROWTH[state.char.style];
@@ -13285,12 +13285,23 @@ function resolveNewStyleEnemyMove(enemy, target, enemyCrit){
     enemy.statuses.forEach(st=>{ if(st.dmgMult) base *= st.dmgMult; });
     base *= enemyPassiveDealtMult(enemy);
     const effects = [];
-    const pRes = totalRes('fisico') - corrosionResPenalty(combat.playerStatuses);
-    const pDmg = Math.max(1, Math.round(base*(1-pRes/100)));
-    dealDamageToPlayer(pDmg);
-    effects.push({targetKind:'player', amount:pDmg, kind:'dmg'});
-    if(ability.applies) applyStatus(null, Object.assign({}, ability.applies), true);
-    livingAllies().forEach(ally=>{
+    // PROTECCIÓN DE RETAGUARDIA (pedido explícito 2026-10-08): los golpes a un
+    // solo objetivo ya respetaban la primera línea (ver frontlineTarget); los
+    // golpes en área no. Ahora, mientras quede alguien vivo al frente, el área
+    // de normales y élites solo alcanza a esa fila. La de guardianes y jefes
+    // de década sigue pegando a todo el grupo.
+    const frontAlive = combat.playerPos==='frente' || livingAllies().some(a=> a.pos==='frente');
+    const frontOnly = !enemy.tpl.boss && frontAlive;
+    const hitsPlayer = !frontOnly || combat.playerPos==='frente';
+    let pDmg = 0;
+    if(hitsPlayer){
+      const pRes = totalRes('fisico') - corrosionResPenalty(combat.playerStatuses);
+      pDmg = Math.max(1, Math.round(base*(1-pRes/100)));
+      dealDamageToPlayer(pDmg);
+      effects.push({targetKind:'player', amount:pDmg, kind:'dmg'});
+      if(ability.applies) applyStatus(null, Object.assign({}, ability.applies), true);
+    }
+    livingAllies().filter(a=> !frontOnly || a.pos==='frente').forEach(ally=>{
       const aRes = ((ally.res && ally.res.fisico)||0) - corrosionResPenalty(ally.statuses);
       const aDmg = Math.max(1, Math.round(base*(1-aRes/100)));
       dealDamageToAlly(ally, aDmg);
@@ -13298,7 +13309,8 @@ function resolveNewStyleEnemyMove(enemy, target, enemyCrit){
       effects.push({targetKind:'ally', key:ally.id, amount:aDmg, kind:'dmg'});
       if(ally.hp<=0) log(`<b>${ally.name}</b> cae en combate y queda fuera de acción hasta que avances al siguiente nivel del laberinto.`);
     });
-    log(`${enemy.name} usa ${ability.label}: golpea a todo tu grupo (${pDmg} de daño a ti).`);
+    log(frontOnly ? `${enemy.name} usa ${ability.label}: golpea a tu primera línea${hitsPlayer ? ` (${pDmg} de daño a ti)` : '; la retaguardia queda a cubierto'}.`
+      : `${enemy.name} usa ${ability.label}: golpea a todo tu grupo (${pDmg} de daño a ti).`);
     combat.lastAction = {label:ability.label, effects};
     return;
   }
