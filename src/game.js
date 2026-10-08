@@ -10675,6 +10675,12 @@ function corrosionResPenalty(statuses){
 // reducción (Armadura/Maza/Furioso/Bendición/Tier S, etc.) — no la
 // reemplaza. No aplica a Retaguardia.
 const FRONTLINE_DAMAGE_REDUCTION = 0; // era 0.10; retirada por decisión de ariochbu (2026-10-08): el frente ya no recibe menos daño por estar al frente
+// Guardia interna (pedido explícito de ariochbu, 2026-10-08): los aliados del
+// frente y el Paladín al frente traen un -10% de daño recibido incorporado,
+// para que el retiro de la bonificación de arriba solo le pese al Guerrero.
+// A propósito NO se muestra en ninguna parte (ni estado, ni ficha, ni texto).
+const HIDDEN_FRONT_GUARD = 0.10;
+function hiddenFrontGuard(isPlayer){ return (!isPlayer || state.char.style==='paladin') ? (1-HIDDEN_FRONT_GUARD) : 1; }
 // Crítico de enemigo (pedido explícito 2026-09-28) — antes NINGÚN enemigo
 // criteaba. Multiplicador conservador a propósito (el jugador usa 1.5x+
 // bono): mejor que arranque sobrio y lo subamos si en la práctica se siente
@@ -12973,7 +12979,7 @@ function enemyAct(enemy){
     if(enemyCrit) finalDmg *= ENEMY_CRIT_MULT;
     if(state.char.race==='enano') finalDmg -= 2;
     if(combat.playerDefending) finalDmg *= 0.5;
-    if(combat.playerPos==='frente') finalDmg *= (1-FRONTLINE_DAMAGE_REDUCTION);
+    if(combat.playerPos==='frente') finalDmg *= (1-FRONTLINE_DAMAGE_REDUCTION) * hiddenFrontGuard(true);
     const furiosoBuff = hasStatus(combat.playerStatuses,'Furioso');
     if(furiosoBuff && furiosoBuff.incomingDmgReduction) finalDmg *= (1 - furiosoBuff.incomingDmgReduction);
     finalDmg *= playerStatusIncomingMult(); // Muro de Fe y otros buffs defensivos propios
@@ -13014,7 +13020,7 @@ function enemyAct(enemy){
     let allyDmg = dmg*(1-(((ally.res && ally.res[allyResKey])||0) + (allyBendicion?allyBendicion.resBonus||0:0) - (elementalType?0:corrosionResPenalty(ally.statuses)))/100);
     if(enemyCrit) allyDmg *= ENEMY_CRIT_MULT;
     if(hasStatus(ally.statuses,'Paralisis')) allyDmg *= 1.25; // indefenso: igual que al jugador
-    if(ally.pos==='frente') allyDmg *= (1-FRONTLINE_DAMAGE_REDUCTION);
+    if(ally.pos==='frente') allyDmg *= (1-FRONTLINE_DAMAGE_REDUCTION) * hiddenFrontGuard(false);
     (ally.specials||[]).forEach(sp=>{ if(sp.type==='reduccion_dano') allyDmg *= (1-sp.value); });
     const allyFuriosoDef = hasStatus(ally.statuses,'Furioso');
     if(allyFuriosoDef && allyFuriosoDef.incomingDmgReduction) allyDmg *= (1 - allyFuriosoDef.incomingDmgReduction);
@@ -13413,7 +13419,7 @@ function resolveNewStyleEnemyMove(enemy, target, enemyCrit){
     if(enemyCrit) finalDmg *= ENEMY_CRIT_MULT;
     if(state.char.race==='enano') finalDmg -= 2;
     if(combat.playerDefending) finalDmg *= 0.5;
-    if(combat.playerPos==='frente') finalDmg *= (1-FRONTLINE_DAMAGE_REDUCTION);
+    if(combat.playerPos==='frente') finalDmg *= (1-FRONTLINE_DAMAGE_REDUCTION) * hiddenFrontGuard(true);
     const furiosoBuff = hasStatus(combat.playerStatuses,'Furioso');
     if(furiosoBuff && furiosoBuff.incomingDmgReduction) finalDmg *= (1 - furiosoBuff.incomingDmgReduction);
     finalDmg *= playerStatusIncomingMult();
@@ -13450,7 +13456,7 @@ function resolveNewStyleEnemyMove(enemy, target, enemyCrit){
     let allyDmg = dmg*(1-resVal/100);
     if(enemyCrit) allyDmg *= ENEMY_CRIT_MULT;
     if(hasStatus(ally.statuses,'Paralisis')) allyDmg *= 1.25;
-    if(ally.pos==='frente') allyDmg *= (1-FRONTLINE_DAMAGE_REDUCTION);
+    if(ally.pos==='frente') allyDmg *= (1-FRONTLINE_DAMAGE_REDUCTION) * hiddenFrontGuard(false);
     (ally.specials||[]).forEach(sp=>{ if(sp.type==='reduccion_dano') allyDmg *= (1-sp.value); });
     const allyFuriosoDef = hasStatus(ally.statuses,'Furioso');
     if(allyFuriosoDef && allyFuriosoDef.incomingDmgReduction) allyDmg *= (1 - allyFuriosoDef.incomingDmgReduction);
@@ -13533,12 +13539,14 @@ function simBuildState(cfg){
   const equip = {arma:null, arma2:null, armadura:null, amuleto:null, casco:null, botas:null, guantes:null};
   if(rank !== 'none'){
     SET_SLOTS.forEach(slot=>{ equip[slot] = makeSetItem(SIM_SET[cfg.style], slot, rank); });
-    equip.arma = makeWeaponItem('arma', cfg.style, rank); equip.arma2 = makeWeaponItem('arma2', cfg.style, rank);
+    equip.arma = makeWeaponItem('arma', cfg.style, rank, cfg.weapons && cfg.weapons.arma); equip.arma2 = makeWeaponItem('arma2', cfg.style, rank, cfg.weapons && cfg.weapons.arma2);
   }
   const stonePool = Object.values(SOUL_STONES).filter(t=> t.tier === (cfg.stoneTier || 'A'));
   const families = [...new Set(stonePool.map(t=> t.family))].sort(()=> Math.random() - 0.5);
   const soulSlots = cfg.stoneTier === 'none' ? [] : families.slice(0, maxSoulSlots(level)).map(f=> makeSoulStoneItem(stonePool.find(t=> t.family === f)));
-  const petPool = PET_CATALOG.filter(t=> t.rarity === (cfg.petRarity || 'epico')).sort(()=> Math.random() - 0.5);
+  // cfg.pets: ids de Caídos que van primero sí o sí (el resto, al azar de la rareza pedida)
+  const forced = (cfg.pets || []).map(id=> PET_CATALOG.find(t=> t.id === id)).filter(Boolean);
+  const petPool = forced.concat(PET_CATALOG.filter(t=> t.rarity === (cfg.petRarity || 'epico') && !forced.includes(t)).sort(()=> Math.random() - 0.5));
   // cfg.allyList: otro grupo de aliados (p. ej. dos tanques para un jugador de retaguardia)
   const allies = (cfg.allyList || (SIM_REAR_STYLES.includes(cfg.style) ? SIM_ALLIES_REAR : SIM_ALLIES)).slice(0, cfg.allies == null ? 4 : cfg.allies).map(([id, role, wstyle], i)=>{
     const tpl = ALLY_ROSTER.find(t=> t.templateId === id);
