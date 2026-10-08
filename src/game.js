@@ -4342,21 +4342,21 @@ function slotLabel(slot){
   return {arma:'Arma', armadura:'Armadura', amuleto:'Accesorio', casco:'Casco', botas:'Botas', guantes:'Guantes'}[slot] || slot;
 }
 
-// REDISEÑO DE CLASES (2026-10-08, en pruebas — rama rediseno-clases, sin
-// desplegar). Hasta ahora todas las sendas subían +1 a los cinco atributos por
+// REDISEÑO DE CLASES (2026-10-08, desplegado ese mismo día a pedido de ariochbu). Hasta ahora todas las sendas subían +1 a los cinco atributos por
 // nivel y la identidad de clase la "corregía" CLASS_CURVE, que acabó
 // invirtiéndola (Guerrero con la mitad de vida que un Mago). Reparto aprobado
 // por ariochbu: mismo total (5 puntos por nivel), repartido según la senda.
 // Con CLASS_REDESIGN la vida ya no pasa por CLASS_CURVE.
 let CLASS_REDESIGN = true;
 const CLASS_GROWTH = {
-  pesada:    {fis:1.4, hab:0.5, esp:0.7, agi:0.6, vig:1.8},
-  paladin:   {fis:0.9, hab:0.6, esp:1.4, agi:0.5, vig:1.6},
+  // Guerrero, Paladín y Hechicero ajustados por ariochbu el 2026-10-08 (ya no suman 5 exactos).
+  pesada:    {fis:1.2, hab:0.5, esp:0.7, agi:0.6, vig:1.6},
+  paladin:   {fis:0.8, hab:0.6, esp:1.2, agi:0.5, vig:1.5},
   doblefilo: {fis:1.4, hab:0.8, esp:0.5, agi:1.6, vig:0.7},
   tirador:   {fis:1.3, hab:0.9, esp:0.6, agi:1.5, vig:0.7},
   // Mago y Hechicero: Vigor 0.7 y Agilidad 0.4 por decisión de ariochbu (2026-10-08); suman menos de 5 a propósito.
   mago:      {fis:0.4, hab:1.8, esp:1.1, agi:0.4, vig:0.7},
-  hechicero: {fis:0.4, hab:1.6, esp:1.4, agi:0.4, vig:0.7},
+  hechicero: {fis:0.4, hab:1.7, esp:1.2, agi:0.4, vig:0.7},
 };
 function statGrowth(key){
   const g = CLASS_REDESIGN && state.char && CLASS_GROWTH[state.char.style];
@@ -9931,7 +9931,7 @@ const DECADE_BOSS_TUNING = {
   // REDISEÑO DE CLASES (2026-10-08, rama rediseno-clases): recalibrados con el
   // arnés tools/calib_harness.js — media de las seis sendas, 40 combates cada
   // una, 4 aliados y todo rango A. Metas: 50 → 60%, 60 → 50%, 70 → 40%, 80 → 30%.
-  50: {hp:1.64, atk:1.67},  // Custodio: 60%
+  50: {hp:1.55, atk:1.58},  // Custodio: 57% (1.64/1.67 daba 44% tras el ajuste de atributos)
   60: {hp:2.12, atk:2.35},  // Storm Gush: 53%
   70: {hp:2.08, atk:2.30},  // El Sin Forma: 47% con 2.03/2.24
   80: {hp:2.06, atk:2.23},  // El Corazón Marchito: 28%
@@ -9948,7 +9948,7 @@ const BETA_DECADE_BOSS_TUNING = {
   // Pisos 1-20 se dejan como están en producción (decisión de ariochbu, 2026-10-08).
   10: {hp:0.24, atk:0.50},  // Ogro
   20: {hp:0.80, atk:0.80},  // Matriarca
-  30: {hp:2.02, atk:1.92},  // Riakis: 73% con 1.96/1.86
+  30: {hp:1.85, atk:1.76},  // Riakis: 71% (tras bajar Físico/Vigor a Guerrero y Paladín; 2.02/1.92 daba 42%)
   40: {hp:1.64, atk:1.54},  // Usurpador: 70% con 1.60/1.50
 };
 // Enemigos que NO son jefe de década, por índice de década (1 = pisos 11-19...).
