@@ -9869,10 +9869,11 @@ const DECADE_BOSS_TUNING = {
   30: {hp:1.49, atk:1.20},
   40: {hp:1.32, atk:1.16},
   50: {hp:1.42, atk:1.45},  // 2026-10-04: Custodio ~61% con la referencia nueva (rango A + piedras A + Caídos épicos)
-  60: {hp:1.85, atk:2.05},  // 2026-10-04: Storm Gush ~50% con esa referencia (antes 94%: se había calibrado sin Caídos)  // 2026-10-08, primera calibración (16 combates por senda, 4 sendas, misma
-  // referencia a nivel 70/80): meta 40% y 30%.
-  70: {hp:1.90, atk:2.10},  // El Sin Forma (~35% con 4 sendas; 1.8/2.0 daba 56% con las seis)
-  80: {hp:1.75, atk:1.90},  // El Corazón Marchito (1.6/1.75 daba 48% con las seis sendas; 1.9/2.1, 11% con cuatro)
+  60: {hp:1.85, atk:2.05},  // 2026-10-04: Storm Gush ~50% con esa referencia (antes 94%: se había calibrado sin Caídos)  // 2026-10-08, calibrado con las seis sendas (40 combates cada una) y la misma
+  // referencia a nivel del jefe. Metas fijadas por ariochbu con equipo Rango A:
+  // 70 → 40%, 80 → 30%, 90 → 20%, 100 → 10%.
+  70: {hp:1.90, atk:2.10},  // El Sin Forma: 39% (dos mediciones: 47% y 39%)
+  80: {hp:1.89, atk:2.04},  // El Corazón Marchito: 30%
 };
 // BETA (con BETA_ALLY_UNLOCKS): en las décadas 0-3 el jugador lleva menos
 // aliados (0 hasta el Ogro, 1 hasta la Matriarca, 2 hasta Riakis, 3 hasta
