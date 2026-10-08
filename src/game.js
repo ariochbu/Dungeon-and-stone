@@ -521,7 +521,7 @@ const LEVEL30_SKILL_BONUS = {
   danza_cuchillas:  {perStackMult: 0.20},                     // era 0.15
   disparo_certero:  {ignoreResist: 0.65},                     // era 0.50
   lluvia_flechas:   {bonusVsMarked: 0.35},                    // era 0.25 (sin subir el daño en área)
-  bola_fuego:       {applyChance: 1.0},                       // era 0.8
+  bola_fuego:       {applyChance: 1.0, maxStack: 5},                     // era 0.8
   lanza_hielo:      {duration: 3},                            // era 2
   toque_venenoso:   {maxStack: 5}                             // era 3 (4 hasta el rediseño del Hechicero, 2026-10-08)
 };
@@ -624,11 +624,11 @@ const SKILLS = {
 
   bola_fuego: {
     id:'bola_fuego', name:'Bola de fuego', cost:{tipo:'estamina', valor:15}, dmgType:'fuego', mult:0.9,
-    applies:{name:'Quemadura', chance:0.8, duration:3},
-    desc: ()=> `Daño de fuego. ${Math.round(skillBonus('bola_fuego','applyChance',0.8)*100)}% de aplicar Quemadura (daño por turno).`, targetMode:'any'
+    applies:{name:'Quemadura', chance:0.8, duration:3, stack:true, maxStack:3},
+    desc: ()=> `Daño de fuego. ${Math.round(skillBonus('bola_fuego','applyChance',0.8)*100)}% de apilar Quemadura (hasta x${skillBonus('bola_fuego','maxStack',3)}, daño por turno) durante 3 turnos.`, targetMode:'any'
   },
   lanza_hielo: {
-    id:'lanza_hielo', name:'Lanza de hielo', cost:{tipo:'estamina', valor:15}, dmgType:'hielo', mult:0.8,
+    id:'lanza_hielo', name:'Lanza de hielo', cost:{tipo:'estamina', valor:15}, dmgType:'hielo', mult:0.9,
     applies:{name:'Ralentizado', chance:0.8, duration:2},
     desc: ()=> `Daño de hielo. Aplica Ralentizado (-20% evasión, actúa después) durante ${skillBonus('lanza_hielo','duration',2)} turnos.`, targetMode:'any'
   },
@@ -713,8 +713,8 @@ const SKILLS = {
   },
   cataclismo_elemental: {
     id:'cataclismo_elemental', name:'Cataclismo elemental', cost:null, dmgType:'mixto', mult:1.0, ultimate:true,
-    targetMode:'all', applies:{name:'Quemadura', chance:1, duration:2},
-    desc:'Ultimate del Mago. Fuego y hielo combinados a todos los enemigos, golpeando la resistencia más débil de cada uno entre las dos.'
+    targetMode:'all', applies:{name:'Quemadura', chance:1, duration:3},
+    desc:'Ultimate del Mago. Fuego y hielo combinados a todos los enemigos, golpeando la resistencia más débil de cada uno entre las dos. Deja Quemadura si golpeó con fuego o Ralentizado si golpeó con hielo, 3 turnos, garantizado.'
   },
   juicio_divino: {
     id:'juicio_divino', name:'Juicio Divino', cost:null, dmgType:'fisico', mult:0.8, ultimate:true,
@@ -11865,7 +11865,9 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
       });
       else if(skillId==='grito_de_panico') applyDef = Object.assign({}, (skill.appliesAlt && chance(0.5)) ? skill.appliesAlt : skill.applies, {chance: skillBonus('grito_de_panico','applyChance', skill.applies.chance)});
       else if(skillId==='mirada_de_locura') applyDef = Object.assign({}, skill.applies, {chance: skillBonus('mirada_de_locura','applyChance', skill.applies.chance)});
-      else if(skillId==='bola_fuego') applyDef = Object.assign({}, skill.applies, {chance: skillBonus('bola_fuego','applyChance', skill.applies.chance)});
+      else if(skillId==='bola_fuego') applyDef = Object.assign({}, skill.applies, {chance: skillBonus('bola_fuego','applyChance', skill.applies.chance), maxStack: skillBonus('bola_fuego','maxStack', skill.applies.maxStack)});
+      // Cataclismo: el estado sigue al elemento con el que golpeó a ESTE enemigo.
+      else if(skillId==='cataclismo_elemental') applyDef = resKey==='hielo' ? {name:'Ralentizado', chance:1, duration:3} : {name:'Quemadura', chance:1, duration:3, stack:true, maxStack: skillBonus('bola_fuego','maxStack',3)};
       else if(skillId==='lanza_hielo') applyDef = Object.assign({}, skill.applies, {duration: skillBonus('lanza_hielo','duration', skill.applies.duration)});
       else if(skillId==='toque_venenoso') applyDef = Object.assign({}, skill.applies, {maxStack: skillBonus('toque_venenoso','maxStack', skill.applies.maxStack)});
       // Conjuntos (2026-10-02): probabilidad extra de aplicar estados.
@@ -12566,7 +12568,7 @@ function applyAllySpecials(ally, target, dmgDealt, isSkill){
 
 // Daño por turno y por carga de los estados que tu grupo pone a un enemigo,
 // como fracción del daño base (antes 0.08 y 0.06).
-const DOT_ENEMY = { Sangrado: 0.18, Veneno: 0.13 };
+const DOT_ENEMY = { Sangrado: 0.18, Veneno: 0.13, Quemadura: 0.15 }; // Quemadura por carga desde 2026-10-08 (antes 22% fijo, sin apilar)
 function tickStatuses(list, ownerName, target){
   // target = the enemy object being ticked, or null/undefined for the player.
   // Applies damage-over-time and reports whether the owner is stunned this turn.
@@ -12597,7 +12599,7 @@ function tickStatuses(list, ownerName, target){
       else { dealDamageToPlayer(dmg); log(`El veneno te quita ${dmg} de vida.`); }
     }
     if(st.name==='Quemadura'){
-      const dmg = Math.max(1, Math.round(skillBaseDamage()*0.22));
+      const dmg = Math.max(1, Math.round(onEnemy ? baseDamageFromStat(derived().hab)*DOT_ENEMY.Quemadura*(st.stacks||1) : skillBaseDamage()*0.22));
       if(target){ target.hp = Math.max(0, target.hp-dmg); log(`${ownerName} arde por ${dmg}.`); }
       else { dealDamageToPlayer(dmg); log(`Ardes por ${dmg}.`); }
     }
