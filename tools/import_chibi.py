@@ -154,7 +154,7 @@ MIRA_IZQUIERDA = {'enemigo_' + n for n in (
     'tarantula_saltarina', 'tarantula_tejedora', 'tigre_sable', 'triton_guerrero', 'triton_hechicero', 'usurpador_f2',
     'usurpador_f3', 'usurpador_f4', 'viuda_alfa', 'viuda_carmesi', 'viuda_venenosa',
     # La Grieta (61-70): todo el lote vino mirando a la izquierda
-    'acaro_umbral', 'ancla_vacio', 'boca_peregrina', 'ciempies_especular', 'ciervo_torcido', 'coro_hueco',
+    'hambre_colores', 'acaro_umbral', 'ancla_vacio', 'boca_peregrina', 'ciempies_especular', 'ciervo_torcido', 'coro_hueco',
     'eco_heredado', 'el_inversor', 'geometra_ciega', 'la_costura', 'larva_fase', 'marea_seca', 'ojo_reflujo',
     'pastor_errores', 'puerta_camina', 'quimera_disonante', 'recuerdo_mal_nacido', 'rey_articulaciones',
     'sabueso_invertido', 'sin_forma', 'sin_forma_f2', 'sin_forma_f3', 'vigilante_descosido',

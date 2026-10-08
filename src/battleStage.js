@@ -312,8 +312,20 @@ function spriteFor(kind, entity, playerStyle, playerRace){
 function roleFor(kind, entity, playerStyle){
   if(kind==='player') return ['tirador','mago','hechicero'].includes(playerStyle) ? 'ranged' : 'melee';
   if(kind==='ally') return ['arquero','mago','sacerdote'].includes(entity.role) ? 'ranged' : 'melee';
-  return entity.tpl ? (entity.tpl.role || 'melee') : 'melee';
+  // Enemigos: solo la primera década traía `role`; el resto caía en 'melee' y
+  // los de arco o báculo embestían cuerpo a cuerpo. Ahora los que atacan a
+  // distancia se listan aquí (2026-10-09). Para sumar uno: agregar su id.
+  if(!entity.tpl) return 'melee';
+  if(entity.tpl.role === 'ranged' || entity.tpl.role === 'mago' || RANGED_ENEMY_IDS.has(entity.tpl.id)) return 'ranged';
+  return 'melee';
 }
+const RANGED_ENEMY_IDS = new Set([
+  'goblin_arquero', 'goblin_chaman', 'tarantula_tejedora',
+  'cazarrecompensas', 'cazador_veterano', 'medico_campana',
+  'triton_hechicero', 'sirena_corrupta', 'naga_arquero', 'naga_capitan', 'sacerdotisa_mareas', 'naga_maestro', 'sirena_matriarca',
+  'ojo_reflujo', 'pastor_errores', 'eco_heredado',
+  'hongo_osario', 'semilla_doliente', 'madre_micelio', 'heraldo_flor_negra', 'flor_mil_voces',
+]);
 
 // Reparte `count` actores en UNA sola fila centrada, sin límite de cuántos
 // caben en frente o en retaguardia: el ancho de cada casilla se achica solo

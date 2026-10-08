@@ -2,7 +2,7 @@
 
 import { supabase } from './supabaseClient.js';
 import * as auth from './auth.js';
-import { syncBattleStage, playBattleAnim } from './battleStage.js?v=100';
+import { syncBattleStage, playBattleAnim } from './battleStage.js?v=101';
 import { mountLabyrinth } from './labyrinthMap.js?v=4';
 import { CLASS_SPRITES, ENEMY_SPRITES, playerSpriteFor, playerIllustrationFor, enemySpriteFor, ALLY_TEMPLATE_SPRITES } from './battleSprites.js?v=86';
 
@@ -4419,16 +4419,16 @@ function baseStat(key){
 // Temple del Paladín (pedido de ariochbu, 2026-10-08): su Espíritu alto se
 // traduce en resistencia. Cada punto de Espíritu le da `rate`% de resistencia
 // física y mágica, hasta `cap` puntos porcentuales.
-// PRESIÓN DE COMBATE LARGO (pedido de ariochbu, 2026-10-09): en los pisos 61-79
-// (no en los jefes de década) los enemigos pegan más cuanto más se alarga el
-// combate: a partir del turno `start`, +`step` de daño cada `every` turnos,
-// hasta +`max`. Frena a quien gana solo por aguante sin tocar a quien mata rápido.
-const LONG_FIGHT_PRESSURE = {from:61, to:79, start:15, every:5, step:0.05, max:1.0};
-function longFightPressure(){
-  const lvl = (state.dungeon && state.dungeon.level) || 0, P = LONG_FIGHT_PRESSURE;
-  if(!combat || lvl < P.from || lvl > P.to || lvl % 10 === 0) return 1;
-  const steps = Math.floor((combat.turnCount - P.start) / P.every) + 1;
-  return steps > 0 ? 1 + Math.min(P.max, steps * P.step) : 1;
+// GUARDIANES DE 61-79 CONTRA EL FRENTE (decisión de ariochbu, 2026-10-09): los
+// guardianes de piso de La Grieta y el Bosque muerto (no los jefes de década)
+// pegan +50% a quien está al frente y le rompen la armadura. Es lo único que
+// acercó a los tanques al resto en las pruebas; a cambio los guardianes de
+// esas décadas bajaron un 15% de vida y ataque (ver DECADE_ENEMY_TUNING 6 y 7).
+const GUARDIAN_VS_FRONT = {from:61, to:79, dmgMult:1.50, armorBreak:{name:'Armadura Rota', duration:3, resPenalty:15}};
+function guardianVsFront(enemy){
+  const lvl = (state.dungeon && state.dungeon.level) || 0;
+  if(lvl < GUARDIAN_VS_FRONT.from || lvl > GUARDIAN_VS_FRONT.to || lvl % 10 === 0) return null;
+  return (enemy.tpl && enemy.tpl.boss && !enemy.summoned) ? GUARDIAN_VS_FRONT : null;
 }
 // CURACIÓN ENEMIGA COMPARTIDA (pedido de ariochbu, 2026-10-09): en 61-80, tras
 // una curación de cualquier enemigo, ninguno del grupo puede curar durante
@@ -4438,14 +4438,6 @@ const ENEMY_HEAL_LOCK = {from:61, to:80, turns:4};
 function enemyHealLocked(){
   const lvl = (state.dungeon && state.dungeon.level) || 0;
   return !!combat && lvl >= ENEMY_HEAL_LOCK.from && lvl <= ENEMY_HEAL_LOCK.to && combat.turnCount < (combat.enemyHealReadyAt||0);
-}
-// SEGUNDO AIRE (alternativa aprobada por ariochbu, 2026-10-09): en los pisos
-// 61-80 un aliado caído no queda fuera todo el piso; vuelve en el siguiente
-// combate con `pct` de su vida. pct 0 = apagado.
-const ALLY_REVIVE = {from:61, to:80, pct:0};
-function allyReviveActive(){
-  const lvl = (state.dungeon && state.dungeon.level) || 0;
-  return ALLY_REVIVE.pct > 0 && lvl >= ALLY_REVIVE.from && lvl <= ALLY_REVIVE.to;
 }
 const SAVIA_PODRIDA = {from:71, to:80, witherPct:0.16}; // efecto de campo del Hechicero, ver saviaPodridaActive()
 const PALADIN_ESP_RES = {rate:0.05, cap:10}; // medido 2026-10-08: con 15 o más el Paladín pasa de 67% contra el jefe del 80
@@ -9573,7 +9565,7 @@ function roomPreviewIds(nodeType, dg, f){
   if(nodeType === 'jefe'){
     if(level % 10 === 0) return [bestiary.decadeBoss.id];
     const bossF = dg.floors.length - 1;
-    const g = (bestiary.guardianByFloor && bestiary.guardianByFloor[bossF % 10]) || at(bestiary.guardians, level) || at(bestiary.elite, 0);
+    const g = (bestiary.guardianByFloor && bestiary.guardianByFloor[level % 10]) || at(bestiary.guardians, level) || at(bestiary.elite, 0);
     return g ? [g.id] : [];
   }
   if(nodeType === 'elite'){ const e = at(bestiary.elite, f + level); return e ? [e.id] : []; }
@@ -9603,11 +9595,13 @@ function buildEncounterGroup(nodeType, f, level){
       count = 1;
     } else if(paraisoGuardianFloor){
       templates = null; count = 0; // se arma a mano más abajo
-    } else if(bestiary.guardianByFloor && bestiary.guardianByFloor[f%10]){
+    } else if(bestiary.guardianByFloor && bestiary.guardianByFloor[level%10]){
       // Guardián único y determinista por piso (2026-09-25, "Década 2 -
       // Arañas" en adelante) — en vez de sortear entre un pool compartido
       // de 2, cada piso 11-19 tiene su propio mini-jefe fijo.
-      templates = [bestiary.guardianByFloor[f%10]];
+      // Corregido 2026-10-09: se indexaba con el piso dentro del nivel (f, siempre el último = 8),
+      // así que en todas las décadas aparecía solo el guardián nº 8. Va por nivel: 51→1 … 59→9.
+      templates = [bestiary.guardianByFloor[level%10]];
       count = 1;
     } else {
       templates = bestiary.guardians;
@@ -10074,8 +10068,8 @@ const DECADE_ENEMY_TUNING = {
   // del último retoque, 61-69 → 69% y 71-79 → 65% antes del último retoque.
   4: {regular:{hp:1.36, atk:1.36}, elite:{hp:1.36, atk:1.36}, guardian:{hp:1.36, atk:1.36}},   // 74% (quinta vuelta)
   5: {regular:{hp:2.36, atk:3.42}, elite:{hp:2.24, atk:3.16}, guardian:{hp:1.98, atk:2.31}},   // 75%
-  6: {regular:{hp:3.29, atk:4.99}, elite:{hp:3.29, atk:4.99}, guardian:{hp:2.50, atk:3.15}},   // 61%
-  7: {regular:{hp:3.63, atk:5.57}, elite:{hp:3.63, atk:5.57}, guardian:{hp:2.72, atk:3.44}},
+  6: {regular:{hp:3.29, atk:4.99}, elite:{hp:3.29, atk:4.99}, guardian:{hp:1.95, atk:2.46}},   // 2026-10-09: guardian correcto por nivel + castigo al frente; media 61-69 ~60%
+  7: {regular:{hp:3.63, atk:5.57}, elite:{hp:3.63, atk:5.57}, guardian:{hp:1.78, atk:2.25}},   // 2026-10-09: idem; media 71-79 ~63%
 };
 function makeEnemy(tpl, floorIdx, level){
   const lvlMult = levelMult(level||1);
@@ -10444,8 +10438,6 @@ function makeCombatAlly(row){
   let hp = maxHP;
   const savedHP = state.dungeon && state.dungeon.allyHP ? state.dungeon.allyHP[row.id] : undefined;
   if(savedHP !== undefined) hp = Math.max(0, Math.min(maxHP, savedHP));
-  // Segundo aire (61-80): un aliado derribado se reincorpora al siguiente combate con parte de su vida.
-  if(hp <= 0 && allyReviveActive()) hp = Math.max(1, Math.round(maxHP * ALLY_REVIVE.pct));
   const maxMP = allyMaxMP(row);
   const maxSpirit = allyMaxSpirit(row);
   let mp = maxMP, spirit = maxSpirit;
@@ -13417,7 +13409,7 @@ function resolveNewStyleEnemyMove(enemy, target, enemyCrit){
   // (jugador + aliados vivos) con la resistencia física de cada uno, y puede
   // aplicar un estado a cada golpeado (ej. Corrosión).
   if(ability.utility==='aoe'){
-    let base = enemy.atk * (ability.mult!=null ? ability.mult : 0.5) * longFightPressure();
+    let base = enemy.atk * (ability.mult!=null ? ability.mult : 0.5);
     const fz = hasStatus(enemy.statuses,'Fortalecido');
     if(fz) base *= (1 + (fz.stacks||1)*0.04);
     if(hasStatus(enemy.statuses,'Debilitado')) base *= 0.85;
@@ -13458,7 +13450,7 @@ function resolveNewStyleEnemyMove(enemy, target, enemyCrit){
     return;
   }
 
-  let dmg = enemy.atk * (ability.mult!=null ? ability.mult : 1) * longFightPressure();
+  let dmg = enemy.atk * (ability.mult!=null ? ability.mult : 1);
   const fortalecido = hasStatus(enemy.statuses,'Fortalecido');
   if(fortalecido) dmg = Math.round(dmg * (1 + (fortalecido.stacks||1)*0.04));
   if(hasStatus(enemy.statuses,'Debilitado')) dmg = Math.round(dmg*0.85);
@@ -13474,11 +13466,12 @@ function resolveNewStyleEnemyMove(enemy, target, enemyCrit){
   // "+X% si el objetivo está por debajo del Y% de vida" (PDFs de décadas
   // 3 y 4 — auditoría 2026-10-02: antes solo existía como condición de uso
   // y el +X% se perdía).
-  if(tpl.vsFront && (onPlayer ? combat.playerPos==='frente' : target.ally.pos==='frente')){
-    dmg = Math.round(dmg*tpl.vsFront.dmgMult);
-    if(tpl.vsFront.armorBreak){
-      if(onPlayer) applyStatus(null, Object.assign({}, tpl.vsFront.armorBreak), true);
-      else applyStatus(target.ally, Object.assign({}, tpl.vsFront.armorBreak), false);
+  const vsFront = tpl.vsFront || guardianVsFront(enemy);
+  if(vsFront && (onPlayer ? combat.playerPos==='frente' : target.ally.pos==='frente')){
+    dmg = Math.round(dmg*vsFront.dmgMult);
+    if(vsFront.armorBreak){
+      if(onPlayer) applyStatus(null, Object.assign({}, vsFront.armorBreak), true);
+      else applyStatus(target.ally, Object.assign({}, vsFront.armorBreak), false);
     }
   }
   if(ability.bonusVsLowHp && ctx.targetHpPct < ability.bonusVsLowHp.below){
@@ -13859,7 +13852,7 @@ if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
   window.__rearAoe = (v)=>{ if(v !== undefined) BOSS_AOE_REAR_FACTOR = v; return BOSS_AOE_REAR_FACTOR; };
   window.__hpPerLevel = HP_PER_LEVEL_REDESIGN; window.__growth = CLASS_GROWTH; // palancas de clase para probar en simulación
   window.__combat = ()=> combat; // inspección del combate en curso (simulaciones que no terminan)
-  window.__revive = ALLY_REVIVE; window.__presion = LONG_FIGHT_PRESSURE; window.__healLock = ENEMY_HEAL_LOCK;
+  window.__healLock = ENEMY_HEAL_LOCK; window.__gFrente = GUARDIAN_VS_FRONT;
   window.__palRes = PALADIN_ESP_RES; window.__savia = SAVIA_PODRIDA;
   window.__simDot = DOT_ENEMY;
   window.__bestiary = DECADE_BESTIARY; // para probar ajustes de un enemigo en las simulaciones sin tocar el código // para comparar el daño por turno de Sangrado/Veneno en las simulaciones

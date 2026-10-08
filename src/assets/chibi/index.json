@@ -719,6 +719,17 @@
    4
   ]
  },
+ "enemigo_hambre_colores": {
+  "bh": 128,
+  "ch": 141,
+  "cw": 176,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
  "enemigo_heraldo_tormenta": {
   "bh": 128,
   "ch": 147,
