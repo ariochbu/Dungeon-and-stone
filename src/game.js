@@ -3240,7 +3240,6 @@ const SHOP_POTION_PRICES = {vida_menor:12, vida_mayor:30, estamina:12, espiritu:
 
 function dealDamageToPlayer(amount){
   if(amount<=0) return;
-  if(combat && combat.attackKind && lawImmune(combat.playerStatuses, combat.attackKind)){ log('La Ley del Caos anula el golpe: no recibes daño.'); return; }
   let shieldBroke = false;
   if(combat && combat.playerShield>0){
     const absorbed = Math.min(combat.playerShield, amount);
@@ -10055,36 +10054,32 @@ function makeEnemy(tpl, floorIdx, level){
 /* ============================================================
    COMBAT
    ============================================================ */
-// LEY DEL CAOS (La Grieta, pisos 61-70 — diseño de ariochbu: "el caos cambia
-// las reglas, pero nunca las oculta"). Cada combate de esa década recibe una
-// ley al azar que afecta a TODOS por igual, dura el combate entero y se
-// anuncia al empezar; queda a la vista como un estado en cada combatiente.
-const CHAOS_IMMUNITY_TURNS = 3;
+// LEY DEL CAOS (La Grieta, pisos 61-70). Definición de ariochbu del
+// 2026-10-08: es una alteración que hace el piso más difícil. En cada combate
+// la recibe UN solo monstruo al azar, le dura todo el combate y queda a la
+// vista como un estado suyo ("el caos cambia las reglas, pero nunca las oculta").
+// Las dos inmunidades no se le dan a guardianes ni al jefe de década: ahí,
+// para un grupo sin magia (o sin golpes físicos), cerrarían el paso del piso
+// sin salida — no hay forma de huir de un combate. El daño por turno
+// (Sangrado, Veneno, Quemadura) sí atraviesa la inmunidad.
 const CHAOS_LAWS = [
-  {name:'Ley: Gravedad Reducida', text:'todos esquivan más (+10% de evasión)', status:{evasionDelta:10}},
-  {name:'Ley: Eco Violento', text:'todos golpean más fuerte (+15% de daño)', status:{dmgMult:1.15}},
-  {name:'Ley: Piel de Vidrio', text:'todos reciben más daño (+15%)', status:{incomingDmgReduction:-0.15}},
-  // Inmunidades (pedido explícito 2026-10-08, reemplazan a "menos daño
-  // recibido"). Afectan a los dos bandos y duran solo los primeros turnos:
-  // para todo el combate, un grupo sin magia (o sin golpes físicos) no podría
-  // ganar nunca. Golpe físico = habilidades de daño físico y los enemigos de
-  // primera línea; mágico = el resto (fuego, hielo, veneno, arcano y los
-  // enemigos de retaguardia). No frena el daño por turno (Sangrado, Veneno…).
-  {name:'Ley: Carne de Piedra', text:`nadie recibe daño de golpes físicos durante los primeros ${CHAOS_IMMUNITY_TURNS} turnos`, status:{immune:'fisico'}, turns:CHAOS_IMMUNITY_TURNS},
-  {name:'Ley: Silencio Arcano', text:`nadie recibe daño de ataques mágicos durante los primeros ${CHAOS_IMMUNITY_TURNS} turnos`, status:{immune:'magico'}, turns:CHAOS_IMMUNITY_TURNS},
+  {name:'Ley: Gravedad Reducida', text:'esquiva más (+10% de evasión)', status:{evasionDelta:10}},
+  {name:'Ley: Eco Violento', text:'golpea más fuerte (+15% de daño)', status:{dmgMult:1.15}},
+  {name:'Ley: Carne de Piedra', text:'es inmune a los golpes físicos', status:{immune:'fisico'}, noBoss:true},
+  {name:'Ley: Silencio Arcano', text:'es inmune a los ataques mágicos', status:{immune:'magico'}, noBoss:true},
 ];
 function lawImmune(statuses, kind){ return (statuses||[]).some(st=> st.immune===kind); }
 function applyChaosLaw(){
   const lvl = (state.dungeon && state.dungeon.level) || 1;
   if(lvl < 61 || lvl > 70 || !combat) return;
-  const law = pick(CHAOS_LAWS);
-  const st = ()=> Object.assign({name: law.name, duration: law.turns || 99, chaosLaw:true}, law.status);
-  combat.playerStatuses.push(st());
-  (combat.allies||[]).forEach(a=> a.statuses.push(st()));
-  combat.enemies.forEach(e=> e.statuses.push(st()));
+  const candidates = combat.enemies.filter(e=> e.hp > 0 && !e.summoned && !(e.tpl && e.tpl.decoy));
+  if(!candidates.length) return;
+  const target = pick(candidates);
+  const law = pick(CHAOS_LAWS.filter(l=> !(l.noBoss && target.tpl && target.tpl.boss)));
+  target.statuses.push(Object.assign({name: law.name, duration:99, chaosLaw:true}, law.status));
   combat.chaosLaw = law;
-  STATUS_INFO[law.name] = {buff: !(law.status.incomingDmgReduction < 0), desc: `Ley del Caos de este combate: ${law.text}. Afecta a todos por igual.`};
-  log(`⚠ <b>${law.name.replace('Ley: ', 'Ley del Caos — ')}</b>: ${law.text}.`);
+  STATUS_INFO[law.name] = {buff:true, desc:`Ley del Caos de este combate: ${law.text}. Dura todo el combate.`};
+  log(`⚠ <b>${law.name.replace('Ley: ', 'Ley del Caos — ')}</b>: ${target.name} ${law.text}.`);
 }
 // Estados genéricos sobre el jugador y sus aliados: dmgMult (p. ej. una Ley
 // del Caos) y los que escalan por carga (Corrupción). Furioso/Inspirado
@@ -10184,11 +10179,9 @@ function frontlineTarget(){
 }
 function dealDamageToAlly(ally, amount){
   if(amount<=0) return;
-  if(combat && combat.attackKind && lawImmune(ally.statuses, combat.attackKind)) return; // Ley del Caos de inmunidad
-  // Corrupción y Leyes del Caos sobre el aliado (los estados con nombre propio
-  // — Bastión, Égida… — ya se aplicaron antes de llegar acá).
-  let extra = statusStackTakenMult(ally.statuses);
-  (ally.statuses||[]).forEach(st=>{ if(st.chaosLaw && st.incomingDmgReduction) extra *= (1 - st.incomingDmgReduction); });
+  // Corrupción sobre el aliado (los estados con nombre propio — Bastión,
+  // Égida… — ya se aplicaron antes de llegar acá).
+  const extra = statusStackTakenMult(ally.statuses);
   if(extra !== 1) amount = Math.max(1, Math.round(amount*extra));
   let shieldBroke = false;
   if(ally.shield>0){
@@ -12521,7 +12514,7 @@ async function processEnemyTurns(){
     combat.lastAction = null;
     if(enemy.tpl && enemy.tpl.decoy) continue; // los señuelos no actúan
     if(stunFlags.get(enemy)){ log(`${enemy.name} está aturdido y pierde su turno.`); combat.lastAction = {label:'Aturdido', effects:[]}; }
-    else { combat.attackKind = enemy.tpl && enemy.tpl.frontline ? 'fisico' : 'magico'; enemyAct(enemy); if(combat) combat.attackKind = null; }
+    else enemyAct(enemy);
     if(stepDelay>0){ renderCombat(); await withAnimTimeout(playBattleAnim(combat.lastActor, combat.lastAction)); combat.lastActor = null; combat.lastAction = null; }
     if(combat !== myCombat) return;
   }
@@ -13551,6 +13544,20 @@ if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
     else if(view === 'aviso'){ showMythicBanner({nickname:'Trinity', pet_id: MYTHIC_PET_IDS[0]}); document.getElementById('main-panel').innerHTML = `<div class="sn-name">Sim${renownBadge(4)}${mythicBadge(true)}</div>`; }
     else if(view === 'flash'){ combat = combat || {}; document.getElementById('main-panel').innerHTML = '<div id="battle-stage-mount" style="height:300px;background:#222"></div>'; const pt = equippedPets()[0]; petFlashFromLog(`<b>${pt.name}</b> se activa (Prueba): recuperas 120 de vida.`); }
   };
+  // Estadísticas de una senda a un nivel, sin equipo, piedras, Caídos ni título
+  // (raza humano por defecto): __stats('pesada', 40).
+  window.__stats = (styleId, level, raceId)=>{
+    const saved = {state, combat, sim: simMode};
+    try{
+      simMode = true;
+      state = simBuildState({style: styleId, race: raceId || 'humano', level, dungeonLevel: Math.min(LEVEL_CAP, level), gear:'none', stoneTier:'none', petRarity:'none', allies:0}).st;
+      state.char.pets = {owned:{}, equipped:[]}; combat = null;
+      const d = derived(), r = (v)=> Math.round(v*10)/10;
+      return {nivel: level, fis: r(d.fis), hab: r(d.hab), esp: r(d.esp), agi: r(d.agi), vig: r(d.vig), vida: Math.round(d.maxHP), mp: Math.round(d.maxSta), espiritu: Math.round(d.maxSpi),
+        danoBase: Math.round(skillBaseDamage()), critico: r(d.critChance*100), evasion: r(d.evasionBase*100), curvaVida: r(classCurve('hp')*100)/100, curvaDano: r(classCurve('dmg')*100)/100};
+    } finally { state = saved.state; combat = saved.combat; simMode = saved.sim; }
+  };
+  window.__combat = ()=> combat; // inspección del combate en curso (simulaciones que no terminan)
   window.__simDot = DOT_ENEMY;
   window.__bestiary = DECADE_BESTIARY; // para probar ajustes de un enemigo en las simulaciones sin tocar el código // para comparar el daño por turno de Sangrado/Veneno en las simulaciones
   window.__creation = (step, st, r)=>{ crStep = step || 2; if(st) selStyle = st; if(r) selRace = r; showScreen('screen-create'); renderCreation(); };
