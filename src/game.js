@@ -585,7 +585,7 @@ const SKILLS = {
     targetMode:'front'
   },
   danza_cuchillas: {
-    id:'danza_cuchillas', name:'Danza de cuchillas', cost:{tipo:'estamina', valor:22}, dmgType:'fisico', mult:0.40, hits:2,
+    id:'danza_cuchillas', name:'Danza de cuchillas', cost:{tipo:'estamina', valor:22}, dmgType:'fisico', mult:0.38, hits:2,
     scalesWithStack:{name:'Sangrado', perStackMult:0.13},
     // Rebote (pedido de ariochbu, 2026-10-08): UN enemigo más recibe la mitad del daño hecho al objetivo — uno del frente; si no queda nadie ahí, uno de retaguardia.
     splashPct:0.5,
@@ -663,7 +663,7 @@ const SKILLS = {
   toque_venenoso: {
     id:'toque_venenoso', name:'Toque Venenoso', cost:{tipo:'estamina', valor:15}, dmgType:'veneno', mult:0.90,
     applies:{name:'Veneno', chance:0.85, duration:3, stack:true, maxStack:3},
-    desc: ()=> `Daño de veneno. Apila Veneno (hasta x${skillBonus('toque_venenoso','maxStack',3)}) durante 3 turnos.`, targetMode:'any'
+    desc: ()=> `Daño de veneno. Apila Veneno (hasta x${skillBonus('toque_venenoso','maxStack',3)}) durante 3 turnos.` + (saviaPodridaActive() ? ' <b>Savia podrida</b> (Bosque muerto): ignora la resistencia al veneno y, con el Veneno al tope, marchita cada turno a las invocaciones enemigas.' : ''), targetMode:'any'
   },
   // Rediseño del Hechicero (2026-10-08): Grito de Pánico y Mirada de Locura se
   // funden en una sola habilidad que aplica Miedo o Confusión al azar (ver
@@ -4418,6 +4418,7 @@ function baseStat(key){
 // Temple del Paladín (pedido de ariochbu, 2026-10-08): su Espíritu alto se
 // traduce en resistencia. Cada punto de Espíritu le da `rate`% de resistencia
 // física y mágica, hasta `cap` puntos porcentuales.
+const SAVIA_PODRIDA = {from:71, to:80, witherPct:0.16}; // efecto de campo del Hechicero, ver saviaPodridaActive()
 const PALADIN_ESP_RES = {rate:0.05, cap:10}; // medido 2026-10-08: con 15 o más el Paladín pasa de 67% contra el jefe del 80
 function paladinEspRes(esp){ return state.char.style==='paladin' ? Math.round(Math.min(PALADIN_ESP_RES.cap, esp*PALADIN_ESP_RES.rate)) : 0; }
 
@@ -11766,6 +11767,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
       resKey = effectiveEnemyRes(target,'fuego') <= effectiveEnemyRes(target,'hielo') ? 'fuego' : 'hielo';
     }
     let resVal = resKey ? effectiveEnemyRes(target, resKey)*(1-ignore) : 0;
+    if(skillId==='toque_venenoso' && resVal > 0 && saviaPodridaActive()) resVal = 0; // Savia podrida
     if(!resKey && lawImmune(target.statuses, 'magico')) resVal = 100; // el daño arcano no mira resistencias, pero la Ley sí lo frena
     // Arco largo/Carcaj y guantes de Guerrero/Arquero: penetración de
     // ARMADURA FÍSICA, solo contra golpes físicos. Guantes de Asesino/Mago/
@@ -12598,6 +12600,11 @@ function tickStatuses(list, ownerName, target){
       const dmg = Math.max(1, Math.round(baseDamageFromStat(derived().hab)*(onEnemy ? DOT_ENEMY.Veneno : 0.06)*(st.stacks||1)));
       if(target){
         target.hp = Math.max(0, target.hp-dmg); log(`${ownerName} sufre el veneno por ${dmg}.`);
+        if(onEnemy && saviaPodridaActive() && (st.stacks||1) >= skillBonus('toque_venenoso','maxStack',3)){
+          const brotes = combat.enemies.filter(e=> e.hp>0 && e.summoned && e!==target);
+          brotes.forEach(e=>{ e.hp = Math.max(0, e.hp - Math.ceil(e.maxHP*SAVIA_PODRIDA.witherPct)); });
+          if(brotes.length) log(`<b>Savia podrida</b>: el veneno de ${ownerName} marchita a ${brotes.map(e=>e.name).join(', ')}.`);
+        }
       }
       else { dealDamageToPlayer(dmg); log(`El veneno te quita ${dmg} de vida.`); }
     }
@@ -13795,7 +13802,7 @@ if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
   window.__rearAoe = (v)=>{ if(v !== undefined) BOSS_AOE_REAR_FACTOR = v; return BOSS_AOE_REAR_FACTOR; };
   window.__hpPerLevel = HP_PER_LEVEL_REDESIGN; window.__growth = CLASS_GROWTH; // palancas de clase para probar en simulación
   window.__combat = ()=> combat; // inspección del combate en curso (simulaciones que no terminan)
-  window.__palRes = PALADIN_ESP_RES;
+  window.__palRes = PALADIN_ESP_RES; window.__savia = SAVIA_PODRIDA;
   window.__simDot = DOT_ENEMY;
   window.__bestiary = DECADE_BESTIARY; // para probar ajustes de un enemigo en las simulaciones sin tocar el código // para comparar el daño por turno de Sangrado/Veneno en las simulaciones
   window.__creation = (step, st, r)=>{ crStep = step || 2; if(st) selStyle = st; if(r) selRace = r; showScreen('screen-create'); renderCreation(); };
@@ -13813,6 +13820,16 @@ if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
 // —por golpe o por el propio Veneno— y el jugador es Hechicero, el Veneno pasa
 // con todas sus cargas a otro enemigo de su misma línea; si no queda nadie
 // ahí, a uno de la otra. Se revisa cada vez que se comprueba el fin del combate.
+// SAVIA PODRIDA (pedido de ariochbu, 2026-10-08): efecto de campo del Bosque
+// muerto (pisos 71-80) solo para el Hechicero y atado a su Veneno. Las plantas
+// resisten el veneno, pero el suyo las pudre por dentro:
+//  1) Toque Venenoso ignora la resistencia al veneno de los enemigos.
+//  2) Mientras un enemigo tenga su Veneno al tope de cargas, cada turno todas
+//     las invocaciones vivas pierden `witherPct` de su vida máxima.
+function saviaPodridaActive(){
+  const lvl = (state.dungeon && state.dungeon.level) || 0;
+  return state.char.style==='hechicero' && lvl >= SAVIA_PODRIDA.from && lvl <= SAVIA_PODRIDA.to;
+}
 function spreadVenenoFromDead(){
   if(!combat || state.char.style!=='hechicero') return;
   combat.enemies.forEach(dead=>{
