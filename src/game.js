@@ -582,20 +582,20 @@ const SKILLS = {
     id:'corte_rapido', name:'Corte rápido', cost:{tipo:'estamina', valor:12}, dmgType:'fisico', mult:0.6,
     applies:{name:'Sangrado', chance:0.85, duration:3, stack:true, maxStack:3},
     desc: ()=> `Daño físico. Apila Sangrado (hasta x${skillBonus('corte_rapido','maxStack',3)}) durante ${skillBonus('corte_rapido','duration',3)} turnos.`,
-    targetMode:'front'
+    targetMode:'any'
   },
   danza_cuchillas: {
     id:'danza_cuchillas', name:'Danza de cuchillas', cost:{tipo:'estamina', valor:22}, dmgType:'fisico', mult:0.38, hits:2,
     scalesWithStack:{name:'Sangrado', perStackMult:0.13},
     // Rebote (pedido de ariochbu, 2026-10-08): UN enemigo más recibe la mitad del daño hecho al objetivo — uno del frente; si no queda nadie ahí, uno de retaguardia.
     splashPct:0.5,
-    desc: ()=> `Golpea dos veces. +${Math.round(skillBonus('danza_cuchillas','perStackMult',0.13)*100)}% de daño por cada carga de Sangrado en el objetivo. Las cuchillas rebotan en un enemigo más (del frente; si no queda ninguno, de la retaguardia), que recibe el 50% de ese daño.`, targetMode:'front'
+    desc: ()=> `Golpea dos veces. +${Math.round(skillBonus('danza_cuchillas','perStackMult',0.13)*100)}% de daño por cada carga de Sangrado en el objetivo. Las cuchillas rebotan en un enemigo más (del frente; si no queda ninguno, de la retaguardia), que recibe el 50% de ese daño.`, targetMode:'any'
   },
   golpe_gracia: {
     id:'golpe_gracia', name:'Golpe de gracia', cost:{tipo:'estamina', valor:18}, dmgType:'fisico', mult:0.9,
     consumesStackBonus:{name:'Sangrado', perStackMult:0.22},
     desc: ()=> `Consume el Sangrado del objetivo: +${Math.round(skillBonus('golpe_gracia','perStackMult',0.22)*100)}% daño por carga consumida.`,
-    targetMode:'front'
+    targetMode:'any'
   },
 
   disparo_certero: {
@@ -673,7 +673,8 @@ const SKILLS = {
     id:'grito_de_panico', name:'Grito de Locura', cost:{tipo:'estamina', valor:20}, dmgType:'arcano', mult:0.55,
     applies:{name:'Miedo', chance:0.6, duration:2, procChance:0.4},
     appliesAlt:{name:'Confusion', chance:0.6, duration:2, procChance:0.35},
-    desc: ()=> `Daño arcano menor. ${Math.round(skillBonus('grito_de_panico','applyChance',0.6)*100)}% de aplicar, al azar, Miedo (40% de perder el turno) o Confusión (35% de golpear a otro enemigo, o a sí mismo si está solo) durante 2 turnos.`,
+    controlTargets:2, // el estado alcanza también a un segundo enemigo (pedido de ariochbu, 2026-10-08)
+    desc: ()=> `Daño arcano menor. ${Math.round(skillBonus('grito_de_panico','applyChance',0.6)*100)}% de aplicar, al azar, Miedo (40% de perder el turno) o Confusión (35% de golpear a otro enemigo, o a sí mismo si está solo) durante 2 turnos. El estado alcanza también a un segundo enemigo.`,
     targetMode:'any'
   },
   // Tercera habilidad nueva: daño moderado que te cura y deja al enemigo
@@ -1761,7 +1762,7 @@ const DECADE_BESTIARY = [
         masa_viva:{label:'Masa Viva', utility:'self_buff', oncePerCombat:true, condition:(ctx)=>ctx.selfHpPct>=0.66 && ctx.selfHpPct<0.9, selfBuff:{name:'Masa Viva', duration:3, incomingDmgReduction:0.20}},
         idea_cortante:{label:'Idea Cortante', mult:0.95, cooldown:3, condition:(ctx)=>ctx.selfHpPct<0.66, applies:{name:'Confusion', chance:0.35, duration:1}, ignoreResist:0.25},
         olvido:{label:'Olvido', mult:0.80, cooldown:4, condition:(ctx)=>ctx.selfHpPct<0.66, applies:{name:'Silencio', chance:0.40, duration:1}, mpDrain:0.10},
-        pliegue_espacial:{label:'Pliegue Espacial', utility:'aoe', mult:0.38, cooldown:5, condition:(ctx)=>ctx.selfHpPct<0.66, applies:{name:'Miedo', chance:0.4, duration:2, procChance:0.35}},
+        pliegue_espacial:{label:'Pliegue Espacial', utility:'aoe', mult:0.38, cooldown:3, condition:(ctx)=>ctx.selfHpPct<0.66, applies:{name:'Miedo', chance:0.4, duration:2, procChance:0.35}},
         reflejo_imperfecto:{label:'Reflejo Imperfecto', utility:'summon', cooldown:6, condition:(ctx)=>ctx.selfHpPct<0.33, summon:{tpl:REFLEJO_FALLIDO_TPL, count:2, maxAlive:2, hpPct:0.05, atkPct:0.35}},
         forma_fallida:{label:'Forma Fallida', utility:'self_buff', oncePerCombat:true, instant:true, condition:(ctx)=>ctx.selfHpPct<0.33, selfBuff:{name:'Forma Fallida', duration:99, dmgMult:1.20, evasionDelta:8}},
         colapso:{label:'Colapso', mult:1.45, cooldown:4, condition:(ctx)=>ctx.selfHpPct<0.33},
@@ -11890,6 +11891,14 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
         const et = playerSetSp('set_eclipse_total');
         if(et && targetNegStatuses>=2) applyMermado(target, et.reduction, 2);
       }
+      // Control a varios enemigos: el mismo estado, con su propia tirada, sobre
+      // otro(s) enemigo(s) — de la misma línea del objetivo si queda alguno.
+      for(let extra = 1; extra < (skill.controlTargets||1); extra++){
+        const others = livingEnemies().filter(e=> e!==target && !hasStatus(e.statuses, applyDef.name));
+        const sameLine = others.filter(e=> !!(e.tpl && e.tpl.frontline) === !!(target.tpl && target.tpl.frontline));
+        const second = sameLine.length ? pick(sameLine) : (others.length ? pick(others) : null);
+        if(second && applyStatus(second, applyDef, false)){ onPlayerAppliedStatus(second, applyDef.name); log(`${skill.name} alcanza también a ${second.name}.`); }
+      }
     }
     applyEquippedSpecials(target, dmg, skill);
     // Riposte (Duelista Veterano, Isla Paraíso): contraataque tras un golpe físico.
@@ -13604,7 +13613,7 @@ function simBuildState(cfg){
 // al enemigo más grande (su Veneno necesita apilarse en uno solo; persiguiendo
 // siempre al más débil se pasaba el combate contra las invocaciones del jefe).
 function simTargetIndex(){
-  if(state.char.style !== 'hechicero') return autoPickEnemyIndex();
+  if(state.char.style !== 'hechicero' && state.char.style !== 'doblefilo') return autoPickEnemyIndex();
   const living = livingEnemies();
   if(!living.length) return -1;
   // contra un jefe, al jefe; contra un grupo normal, al más débil (menos enemigos pegando y el Veneno se contagia al morir)
@@ -13621,7 +13630,7 @@ function simPickSkill(usable){
   // curarse. __simAsesinoTonto la apaga.
   if(state.char.style === 'doblefilo' && target && !window.__simAsesinoTonto){
     // Sus habilidades son de primera línea: mirar al enemigo que de verdad va a golpear, no al más débil.
-    const front = combat.enemies[playerFrontTargetIndices()[0]] || target;
+    const front = target;
     const sg = hasStatus(front.statuses, 'Sangrado');
     const stacks = sg ? (sg.stacks||1) : 0, max = skillBonus('corte_rapido','maxStack',3);
     const hpPct = state.char.curHP / (derived().maxHP || 1);
