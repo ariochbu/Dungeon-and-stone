@@ -1991,6 +1991,7 @@ async function pullGacha(kind, payWith){
   log(`Otorgas una ofrenda al árbol (${k.label}, -${costLabel}): consigues ${count} Caído(s) del Laberinto${rareCount?`, ¡${rareCount} de rango Épico o superior!`:''}.`);
   renderSheet();
   await flushSave();
+  results.filter(r=> r.tpl.rarity==='mitico' && !r.isDup).forEach(r=> announceMythicSummon(r.id));
   return results;
 }
 // Tiradas de regalo (check-in diario y otorgadas por admin, ver más abajo)
@@ -2005,6 +2006,7 @@ async function grantFreePetPulls(count){
   log(`El árbol te concede ${count} ofrenda(s) gratis: consigues ${count} Caído(s) del Laberinto${rareCount?`, ¡${rareCount} de rango Épico o superior!`:''}.`);
   renderSheet();
   await flushSave();
+  results.filter(r=> r.tpl.rarity==='mitico' && !r.isDup).forEach(r=> announceMythicSummon(r.id));
   return results;
 }
 
@@ -4984,7 +4986,7 @@ function renderDungeonNav(){
       <div class="dn-who">
         <div class="sn-ava"><img src="${playerSpriteFor(state.char.style, state.char.race)||''}" alt=""><span class="sn-lvl">${state.char.level}</span></div>
         <div class="sn-who">
-          <div class="sn-name">${state.char.nickname}${renownBadge(myTitleN())}</div>
+          <div class="sn-name">${state.char.nickname}${renownBadge(myTitleN())}${myMythicBadge()}</div>
           <div class="sn-sub"><img src="src/assets/razas/${r.id}.png" alt="" onerror="this.remove()">${r.name} · <img src="src/assets/clases/${st.id}.png" alt="" onerror="this.remove()">${st.name}</div>
           <div class="sn-sub">Nivel ${state.char.level}</div>
         </div>
@@ -5068,7 +5070,7 @@ function renderSheetPanel(targetId){
     <div class="sheet-title">
       <div class="sheet-emblem"><img src="src/assets/razas/${r.id}.png" alt="" onerror="this.replaceWith('${r.icon}')"></div>
       <div>
-        <div class="name">${state.char.nickname}${renownBadge(myTitleN())} · ${r.name} · <img src="src/assets/clases/${s.id}.png" alt="" style="width:1.1em; height:1.1em; object-fit:contain; vertical-align:-2px;" onerror="this.replaceWith('${s.icon} ')"> ${s.name}</div>
+        <div class="name">${state.char.nickname}${renownBadge(myTitleN())}${myMythicBadge()} · ${r.name} · <img src="src/assets/clases/${s.id}.png" alt="" style="width:1.1em; height:1.1em; object-fit:contain; vertical-align:-2px;" onerror="this.replaceWith('${s.icon} ')"> ${s.name}</div>
         <div class="tag">Nivel ${state.char.level}</div>
       </div>
     </div>
@@ -5221,7 +5223,7 @@ function renderFicha(){
     <div class="fc">
       <div class="fc-left">
         <div class="fc-portrait"><img src="${playerSpriteFor(state.char.style, state.char.race)||''}" alt=""><span class="fc-lvl">Nivel ${state.char.level}</span></div>
-        <div class="fc-name">${state.char.nickname}${renownBadge(myTitleN())}</div>
+        <div class="fc-name">${state.char.nickname}${renownBadge(myTitleN())}${myMythicBadge()}</div>
         <div class="fc-sub"><img src="src/assets/razas/${r.id}.png" alt="" onerror="this.remove()">${r.name} · <img src="src/assets/clases/${st.id}.png" alt="" onerror="this.remove()">${st.name}</div>
         <div class="fc-xp"><div class="bar-track"><div class="bar-fill xp" style="width:${xpPct}%"></div></div><small>${state.char.xp} / ${xpNeeded} de experiencia</small></div>
         <div class="fc-passive"><b>Rasgo: ${r.passive}</b>${r.passiveDesc}</div>
@@ -6446,7 +6448,7 @@ function renderSideNav(){
     <div class="sn-me">
       <div class="sn-ava"><img src="${playerSpriteFor(state.char.style, state.char.race)||''}" alt=""><span class="sn-lvl">${state.char.level}</span></div>
       <div class="sn-who">
-        <div class="sn-name">${state.char.nickname}${renownBadge(myTitleN())}</div>
+        <div class="sn-name">${state.char.nickname}${renownBadge(myTitleN())}${myMythicBadge()}</div>
         <div class="sn-sub">${r.name} · ${st.name}</div>
         <div class="sn-cur"><span title="Oro">⛁ ${state.char.gold}</span><span title="Sellos del Laberinto">🔷 ${state.char.missionCurrency||0}</span></div>
         <div class="sn-bar hp" title="Vida ${state.char.curHP}/${d.maxHP}"><i style="width:${hpPct}%"></i></div>
@@ -6741,6 +6743,75 @@ function showPetRates(){
   `, ()=>{});
 }
 function isRarePetResult(r){ return ['epico','legendario','mitico'].includes(r.tpl.rarity); }
+
+// ============================================================
+// CAÍDO MÍTICO (pedido explícito 2026-10-07). Tres cosas cuando alguien lo invoca:
+//  1. Revelado propio a pantalla completa, distinto del destello de los
+//     Épicos/Legendarios. Usa src/assets/ofrenda/mitico_<id>.jpg si existe
+//     (arte especial, apaisado o vertical); si no, la ilustración del Caído.
+//  2. Aviso a TODOS los jugadores (tabla mythic_summons, migración 0038): cada
+//     cliente la consulta al entrar y cada 2 minutos.
+//  3. Distintivo "Elegido del Emperador" junto al nombre: solo se luce, no da
+//     nada. No es un título de Fama (esos van en escalera y dan beneficios):
+//     se muestra además del que lleves. Lo tiene quien posea un Mítico.
+// ============================================================
+const MYTHIC_TITLE = 'Elegido del Emperador';
+const MYTHIC_PET_IDS = PET_CATALOG.filter(p=> p.rarity==='mitico').map(p=> p.id);
+function ownsMythic(owned){ return MYTHIC_PET_IDS.some(id=> ((owned||{})[id]||0) > 0); }
+function mythicBadge(has){
+  return has ? ` <span class="mythic-badge" title="Invocó a un Caído del Laberinto Mítico">⚜ ${MYTHIC_TITLE}</span>` : '';
+}
+function myMythicBadge(){ return mythicBadge(!!(state && state.char && state.char.pets && ownsMythic(state.char.pets.owned))); }
+function showMythicReveal(r){
+  if(document.querySelector('.mythic-ov')) return;
+  const tpl = r.tpl, ov = document.createElement('div');
+  ov.className = 'mythic-ov';
+  ov.innerHTML = `<div class="mythic-rays"></div><div class="mythic-ring"></div>
+    <div class="mythic-stage">
+      <div class="mythic-kicker">Caído del Laberinto</div>
+      <div class="mythic-rank">MÍTICO</div>
+      <div class="mythic-art"><img src="src/assets/ofrenda/mitico_${r.id}.jpg?v=1" alt="" onerror="this.onerror=null; this.src='${petArtPath(r.id)}'"></div>
+      <h2>${tpl.name}</h2>
+      <p>${r.isDup ? 'El Emperador vuelve a responder a tu ofrenda.' : `El árbol tiembla. Desde hoy eres <b>${MYTHIC_TITLE}</b>.`}</p>
+      <button class="btn-main">Continuar</button>
+    </div>${Array.from({length:26}, (_, i)=>`<i class="mythic-ember" style="--x:${(i*37)%100}%; --d:${(i%7)*0.45}s; --s:${3 + (i%5)}s"></i>`).join('')}`;
+  document.body.appendChild(ov);
+  ov.querySelector('button').onclick = ()=>{ ov.classList.add('out'); setTimeout(()=> ov.remove(), 450); renderAll(); };
+}
+// Avisa al resto: una fila por personaje y Caído (la base no deja repetir ni
+// anunciar uno que no se tiene). Si la tabla aún no existe, no pasa nada.
+function announceMythicSummon(petId){
+  if(simMode || !currentUser || !state.char || !state.char.id) return;
+  supabase.from('mythic_summons').insert({character_id: state.char.id, user_id: currentUser.id, nickname: state.char.nickname, pet_id: petId})
+    .then(({error})=>{ if(error && !/duplicate|does not exist|schema cache/i.test(error.message||'')) console.warn('Aviso de Mítico no enviado:', error.message); });
+}
+let mythicPollTimer = null;
+async function pollMythicSummons(){
+  if(!currentUser) return;
+  const key = 'ds_mythic_seen', dayAgo = new Date(Date.now() - 24*3600*1000).toISOString();
+  let since = dayAgo;
+  try{ const v = localStorage.getItem(key); if(v && v > dayAgo) since = v; }catch(e){}
+  const { data, error } = await supabase.from('mythic_summons').select('nickname, pet_id, user_id, created_at').gt('created_at', since).order('created_at').limit(5);
+  if(error || !data || !data.length) return;
+  try{ localStorage.setItem(key, data[data.length-1].created_at); }catch(e){}
+  data.filter(row=> row.user_id !== currentUser.id).forEach((row, i)=> setTimeout(()=> showMythicBanner(row), i*7500));
+}
+function showMythicBanner(row){
+  const tpl = petTpl(row.pet_id);
+  if(!tpl) return;
+  const el = document.createElement('div');
+  el.className = 'mythic-banner';
+  el.innerHTML = `<img src="${petArtPath(row.pet_id)}" alt=""><div><small>⚜ Invocación mítica ⚜</small><b></b><span>ha invocado a <em>${tpl.name}</em></span></div>`;
+  el.querySelector('b').textContent = row.nickname; // textContent: el apodo lo escribe un jugador
+  document.body.appendChild(el);
+  el.onclick = ()=> el.remove();
+  setTimeout(()=>{ if(el.parentNode) el.remove(); }, 7000);
+}
+function startMythicPolling(){
+  if(mythicPollTimer) return;
+  setTimeout(pollMythicSummons, 4000);
+  mythicPollTimer = setInterval(pollMythicSummons, 120000);
+}
 // Revelado de la ofrenda al estilo MIR4 (2026-10-03, pedido explícito: "que
 // no aparezcan de manera brusca... si tienen x100 lanzamientos se irán
 // abriendo de 10 en 10"). Las cartas se reparten boca abajo de a una, en
@@ -6811,7 +6882,11 @@ function updateOfrendaControls(){
   const nextBtn = document.getElementById('btn-next-page');
   if(nextBtn) nextBtn.onclick = ()=>{ ofrendaPage++; renderOfrendaPage(); };
   const skipBtn = document.getElementById('btn-reveal-skip');
-  if(skipBtn) skipBtn.onclick = ()=>{ ofrendaPullResults.forEach(r=> r.flipped = true); renderOfrendaPage(true); };
+  if(skipBtn) skipBtn.onclick = ()=>{
+    const myth = ofrendaPullResults.find(r=> !r.flipped && r.tpl.rarity==='mitico');
+    ofrendaPullResults.forEach(r=> r.flipped = true); renderOfrendaPage(true);
+    if(myth) showMythicReveal(myth);
+  };
 }
 // Arma (reparte) la tanda actual. showAll: todas las cartas juntas, ya
 // volteadas (el "Ver todas de una vez" de las ofrendas grandes).
@@ -6857,6 +6932,7 @@ function flipOfrendaCard(idx){
     if(isRarePetResult(r)) el.classList.add('burst');
     armFlippedCard(el, r);
   }
+  if(r.tpl.rarity==='mitico') setTimeout(()=> showMythicReveal(r), 650);
   updateOfrendaControls();
 }
 // "Voltear todo": las comunes/raras/únicas de la tanda en cadena, y tras una
@@ -7935,7 +8011,7 @@ async function renderRanking(){
     return src ? `<img src="${src}" alt="">` : `<em>${(row.nickname||'?').charAt(0).toUpperCase()}</em>`;
   };
   const isMine = (row)=> row.nickname.toLowerCase() === state.char.nickname.toLowerCase();
-  const fame = (row)=> row.record_level ? renownBadge(titleFromChoice(row.title_choice, decadeBossesBeaten(1, row.record_level, row.bosses_beaten), !!row.first_retornado)) : '';
+  const fame = (row)=> (row.record_level ? renownBadge(titleFromChoice(row.title_choice, decadeBossesBeaten(1, row.record_level, row.bosses_beaten), !!row.first_retornado)) : '') + mythicBadge(!!row.has_mythic);
   const podium = data.slice(0,3).map((row,i)=>`
     <div class="rk-pod p${i+1} ${isMine(row)?'mine':''}">
       <div class="rk-medal">${['🥇','🥈','🥉'][i]}</div>
@@ -9363,7 +9439,11 @@ const BETA_DECADE_BOSS_TUNING = {
   // 2026-10-04: medido con la referencia de cada tramo (ver CLASS_CURVE_BETA);
   // media de las seis sendas entre paréntesis.
   10: {hp:0.24, atk:0.50},  // Ogro en solitario, equipo raro (68%)
-  20: {hp:0.89, atk:0.96},  // Matriarca con 1 aliado, rango B (76%; 71% sin contar al mago)
+  // 2026-10-08, pedido explícito ("casi imposible de pasar"): antes hp 0.89 /
+  // atk 0.96. Con 1 aliado, equipo Raro, piedras C y Caídos raros ganaba el 3%
+  // de las veces; ahora ~34% (y ~97% con equipo Rango B). No tenía ninguna
+  // "anticuración": era puro daño y vida.
+  20: {hp:0.80, atk:0.80},  // Matriarca con 1 aliado
   30: {hp:1.05, atk:1.00},  // Riakis con 2 aliados, rango B (69%)
   40: {hp:0.87, atk:0.82},  // Usurpador con 3 aliados, rango B (65%)
 };
@@ -12939,9 +13019,12 @@ if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
     showScreen('screen-game');
     if(view === 'cronicas'){ cronTab = tab || 'historia'; renderCronicas(); }
     else if(view === 'inv'){ invOpen = true; invTab = tab || 'mochila'; renderInventory(); }
+    else if(view === 'mitico'){ const t = petTpl(MYTHIC_PET_IDS[0]); showMythicReveal({id:t.id, tpl:t, isDup:false}); }
+    else if(view === 'aviso'){ showMythicBanner({nickname:'Trinity', pet_id: MYTHIC_PET_IDS[0]}); document.getElementById('main-panel').innerHTML = `<div class="sn-name">Sim${renownBadge(4)}${mythicBadge(true)}</div>`; }
     else if(view === 'flash'){ combat = combat || {}; document.getElementById('main-panel').innerHTML = '<div id="battle-stage-mount" style="height:300px;background:#222"></div>'; const pt = equippedPets()[0]; petFlashFromLog(`<b>${pt.name}</b> se activa (Prueba): recuperas 120 de vida.`); }
   };
-  window.__simDot = DOT_ENEMY; // para comparar el daño por turno de Sangrado/Veneno en las simulaciones
+  window.__simDot = DOT_ENEMY;
+  window.__bestiary = DECADE_BESTIARY; // para probar ajustes de un enemigo en las simulaciones sin tocar el código // para comparar el daño por turno de Sangrado/Veneno en las simulaciones
   window.__creation = (step, st, r)=>{ crStep = step || 2; if(st) selStyle = st; if(r) selRace = r; showScreen('screen-create'); renderCreation(); };
   window.__simTuneBeta = (level, hp, atk)=>{ BETA_DECADE_BOSS_TUNING[level] = {hp, atk}; return BETA_DECADE_BOSS_TUNING[level]; };
   window.__simScaleBeta = (dec, kind, hp, atk)=>{ BETA_ENEMY_SCALE[dec] = Object.assign(BETA_ENEMY_SCALE[dec] && !BETA_ENEMY_SCALE[dec].hp ? BETA_ENEMY_SCALE[dec] : {}, {[kind]: {hp, atk}}); return BETA_ENEMY_SCALE; };
@@ -14124,7 +14207,7 @@ function renderCharacterSelect(rows){
       <div style="display:flex; align-items:center; gap:10px; min-width:0; flex:1;">
         <div class="sheet-emblem" style="width:40px; height:40px; font-size:1.3em;"><img src="src/assets/razas/${r.id}.png" alt="" onerror="this.replaceWith('${r.icon}')"></div>
         <div style="min-width:0; flex:1;">
-          <b>${row.nickname}</b>${renownBadge(titleFromChoice(row.title_choice, decadeBossesBeaten(row.checkpoint_level, row.record_level, row.bosses_beaten), !!row.first_retornado))} <span class="slot-tag">${r.name} · ${s.name}</span>${row.role==='admin' ? ' <span class="slot-tag">admin</span>' : ''}
+          <b>${row.nickname}</b>${renownBadge(titleFromChoice(row.title_choice, decadeBossesBeaten(row.checkpoint_level, row.record_level, row.bosses_beaten), !!row.first_retornado))}${mythicBadge(ownsMythic(row.pets && row.pets.owned))} <span class="slot-tag">${r.name} · ${s.name}</span>${row.role==='admin' ? ' <span class="slot-tag">admin</span>' : ''}
           <div class="inv-item-bonus neutral">Nivel ${row.level} · Récord: Nivel ${row.record_level} · Piso ${row.record_floor_idx}</div>
         </div>
       </div>
@@ -14314,6 +14397,7 @@ async function onAuthed(user){
     return;
   }
   currentProfile = profile;
+  startMythicPolling();
   await enterGame();
 }
 
