@@ -4342,9 +4342,31 @@ function slotLabel(slot){
   return {arma:'Arma', armadura:'Armadura', amuleto:'Accesorio', casco:'Casco', botas:'Botas', guantes:'Guantes'}[slot] || slot;
 }
 
+// REDISEÑO DE CLASES (2026-10-08, en pruebas — rama rediseno-clases, sin
+// desplegar). Hasta ahora todas las sendas subían +1 a los cinco atributos por
+// nivel y la identidad de clase la "corregía" CLASS_CURVE, que acabó
+// invirtiéndola (Guerrero con la mitad de vida que un Mago). Reparto aprobado
+// por ariochbu: mismo total (5 puntos por nivel), repartido según la senda.
+// Con CLASS_REDESIGN la vida ya no pasa por CLASS_CURVE.
+let CLASS_REDESIGN = true;
+const CLASS_GROWTH = {
+  pesada:    {fis:1.4, hab:0.5, esp:0.7, agi:0.6, vig:1.8},
+  paladin:   {fis:0.9, hab:0.6, esp:1.4, agi:0.5, vig:1.6},
+  doblefilo: {fis:1.4, hab:0.8, esp:0.5, agi:1.6, vig:0.7},
+  tirador:   {fis:1.3, hab:0.9, esp:0.6, agi:1.5, vig:0.7},
+  mago:      {fis:0.4, hab:1.8, esp:1.1, agi:0.9, vig:0.8},
+  hechicero: {fis:0.4, hab:1.6, esp:1.4, agi:0.8, vig:0.8},
+};
+function statGrowth(key){
+  const g = CLASS_REDESIGN && state.char && CLASS_GROWTH[state.char.style];
+  return g ? g[key] : 1;
+}
+// Vida por nivel con el rediseño: Guerrero 100, Paladín ~90, Asesino ~70,
+// Arquero ~65, Hechicero ~62, Mago ~58 (contando lo que suma el Vigor).
+const HP_PER_LEVEL_REDESIGN = {pesada:20, paladin:18, doblefilo:15.5, tirador:14, hechicero:13, mago:12, sacerdote:10};
 function baseStat(key){
   const r = race();
-  let v = r.stats[key] + Math.floor((state.char.level-1) * 1); // +1 all stats per level
+  let v = r.stats[key] + Math.floor((state.char.level-1) * statGrowth(key)); // puntos por nivel según la senda
   const eq = state.char.equip;
   EQUIP_SLOTS.forEach(slot=>{
     const it = eq[slot];
@@ -4399,7 +4421,7 @@ const HP_PER_LEVEL = {pesada:20, tirador:10, doblefilo:10, mago:10, sacerdote:10
 // Habilidad) rige su crítico/evasión, igual que para el resto.
 function derived(){
   const fis = baseStat('fis'), esp = baseStat('esp'), hab = baseStat('hab'), agi = baseStat('agi'), vig = baseStat('vig');
-  let maxHP = Math.round((HP_BASE + state.char.level * (HP_PER_LEVEL[state.char.style]||40)) * classCurve('hp'));
+  let maxHP = Math.round((HP_BASE + state.char.level * ((CLASS_REDESIGN ? HP_PER_LEVEL_REDESIGN : HP_PER_LEVEL)[state.char.style]||40)) * classCurve('hp'));
   // MP (barra "MP", internamente curSta) ahora la alimenta SOLO Habilidad —
   // antes era fis×3+hab×2. Efecto esperado y ya avisado: Guerrero/Arquero/
   // Asesino, que hoy no invierten nada en Habilidad, van a notar su MP más
@@ -4478,7 +4500,7 @@ function derived(){
   // "natural" (raza + nivel) pesa completo — la que aporta EQUIPO pesa la
   // mitad (mismo freno que ya existía para Habilidad, ahora aplicado a
   // Agilidad: evita que itemizar a fondo un solo stat dispare la evasión).
-  const agiNatural = race().stats.agi + Math.floor((state.char.level-1)*1);
+  const agiNatural = race().stats.agi + Math.floor((state.char.level-1)*statGrowth('agi'));
   const agiGear = Math.max(0, agi - agiNatural);
   const EVASION_GEAR_AGI_WEIGHT = 0.5;
   let evasionBase = 0.04 + agiNatural*AGI_EVASION_RATE + agiGear*AGI_EVASION_RATE*EVASION_GEAR_AGI_WEIGHT + (race().id==='hada'?0.15:0);
@@ -4549,7 +4571,11 @@ const CLASS_CURVE_BETA = {
   // jefes del 70 y 80. Medido con 50 combates: 70 → 40%, 80 → 30%; el 60 queda cerca del 50% (1.35/1.18 daba 34%, 1.5/1.25 daba 63%).
   hechicero: {hp:[1.00,1.25,1.37,1.23,1.21,0.85,1.43,1.65,1.88], dmg:[1.00,1.10,1.16,0.85,1.11,0.92,1.22,1.30,1.39]},
 };
+// Multiplicador de DAÑO por senda con el rediseño (la vida queda en 1). Margen
+// estrecho a propósito: el equilibrio contra jefes va en el jefe, no acá.
+const CLASS_DMG_REDESIGN = {pesada:0.85, paladin:0.85, doblefilo:1.10, tirador:1.15, mago:1.0, hechicero:1.15}; // segunda pasada de simulación (2026-10-08), sin recalibrar jefes todavía
 function classCurve(kind){
+  if(CLASS_REDESIGN) return kind === 'dmg' ? (CLASS_DMG_REDESIGN[state.char.style] || 1) : 1;
   const c = (BETA_BALANCE ? CLASS_CURVE_BETA : CLASS_CURVE)[state.char.style];
   if(!c) return 1;
   const v = c[kind], L = CLASS_CURVE_LEVELS, lvl = state.char.level||1;
@@ -13557,6 +13583,8 @@ if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
         danoBase: Math.round(skillBaseDamage()), critico: r(d.critChance*100), evasion: r(d.evasionBase*100), curvaVida: r(classCurve('hp')*100)/100, curvaDano: r(classCurve('dmg')*100)/100};
     } finally { state = saved.state; combat = saved.combat; simMode = saved.sim; }
   };
+  window.__redesign = (on)=>{ if(on !== undefined) CLASS_REDESIGN = !!on; return CLASS_REDESIGN; };
+  window.__classDmg = CLASS_DMG_REDESIGN;
   window.__combat = ()=> combat; // inspección del combate en curso (simulaciones que no terminan)
   window.__simDot = DOT_ENEMY;
   window.__bestiary = DECADE_BESTIARY; // para probar ajustes de un enemigo en las simulaciones sin tocar el código // para comparar el daño por turno de Sangrado/Veneno en las simulaciones
