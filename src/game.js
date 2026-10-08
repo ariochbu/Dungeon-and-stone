@@ -1755,8 +1755,8 @@ const DECADE_BESTIARY = [
         masa_viva:{label:'Masa Viva', utility:'self_buff', oncePerCombat:true, condition:(ctx)=>ctx.selfHpPct>=0.66 && ctx.selfHpPct<0.9, selfBuff:{name:'Masa Viva', duration:3, incomingDmgReduction:0.20}},
         idea_cortante:{label:'Idea Cortante', mult:0.95, cooldown:3, condition:(ctx)=>ctx.selfHpPct<0.66, applies:{name:'Confusion', chance:0.35, duration:1}, ignoreResist:0.25},
         olvido:{label:'Olvido', mult:0.80, cooldown:4, condition:(ctx)=>ctx.selfHpPct<0.66, applies:{name:'Silencio', chance:0.40, duration:1}, mpDrain:0.10},
-        pliegue_espacial:{label:'Pliegue Espacial', utility:'aoe', mult:0.50, cooldown:5, condition:(ctx)=>ctx.selfHpPct<0.66, applies:{name:'Miedo', chance:0.4, duration:2, procChance:0.35}},
-        reflejo_imperfecto:{label:'Reflejo Imperfecto', utility:'summon', cooldown:6, condition:(ctx)=>ctx.selfHpPct<0.33, summon:{tpl:REFLEJO_FALLIDO_TPL, count:2, maxAlive:2, hpPct:0.05, atkPct:0.35}},
+        pliegue_espacial:{label:'Pliegue Espacial', utility:'aoe', mult:0.38, cooldown:5, condition:(ctx)=>ctx.selfHpPct<0.66, applies:{name:'Miedo', chance:0.4, duration:2, procChance:0.35}},
+        reflejo_imperfecto:{label:'Reflejo Imperfecto', utility:'summon', cooldown:6, condition:(ctx)=>ctx.selfHpPct<0.33, summon:{tpl:REFLEJO_FALLIDO_TPL, count:1, maxAlive:1, hpPct:0.05, atkPct:0.35}},
         forma_fallida:{label:'Forma Fallida', utility:'self_buff', oncePerCombat:true, instant:true, condition:(ctx)=>ctx.selfHpPct<0.33, selfBuff:{name:'Forma Fallida', duration:99, dmgMult:1.20, evasionDelta:8}},
         colapso:{label:'Colapso', mult:1.45, cooldown:4, condition:(ctx)=>ctx.selfHpPct<0.33},
       },
@@ -9964,7 +9964,8 @@ const DECADE_BOSS_TUNING = {
   // 2026-10-08, quinta vuelta (rama clases-x1): daño x1, vida nueva, kit y rotación del Hechicero, dos tanques para la retaguardia.
   50: {hp:1.68, atk:1.72},  // Custodio: 56%
   60: {hp:2.42, atk:2.68},  // Storm Gush: 59% con sus áreas al 75% (Arquero 30, Mago 43; antes 10 y 3)
-  70: {hp:2.08, atk:2.30},  // El Sin Forma: 33-36%
+  // En pruebas (rama sin-forma): área -25% y un solo Reflejo → media 60%, la senda más floja en 43%.
+  70: {hp:2.08, atk:2.30},  // El Sin Forma: 44% antes de ese cambio
   80: {hp:2.06, atk:2.23},  // El Corazón Marchito: 29-30%
 };
 // BETA (con BETA_ALLY_UNLOCKS): en las décadas 0-3 el jugador lleva menos
