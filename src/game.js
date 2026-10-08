@@ -2074,7 +2074,7 @@ function petCardHTML(petId){
       <div class="pet-card-name">${tpl.name}</div>
       <div class="pet-card-rank">${r.name}</div>
       <ul class="pet-card-bonuses">${petBonusLines(tpl).map(l=>`<li>${l}</li>`).join('')}</ul>
-      ${tpl.unique ? `<div class="pet-card-unique"><b>${tpl.unique.name}</b>${tpl.unique.desc}</div>` : ''}
+      ${tpl.unique ? `<div class="pet-card-unique"><b>${tpl.unique.name}</b>${tpl.unique.desc}${tpl.unique.effect && tpl.unique.effect.kind==='shield_on_hit' && PET_UNIQUE_COOLDOWN[tpl.rarity] ? ` Reutilización: ${PET_UNIQUE_COOLDOWN[tpl.rarity]} turnos.` : ''}</div>` : ''}
     </div>
   </div>`;
 }
@@ -3287,13 +3287,23 @@ function checkPetTriggers(){
 // Escudo al recibir daño (Fomor/Griffin/Thunder Dragon): a diferencia de lo
 // de arriba, NO es "1 vez por combate" — su propio texto dice "X% de
 // probabilidad al recibir daño", así que puede repetirse golpe a golpe.
+// Reutilización de las habilidades únicas "con probabilidad" (pedido explícito
+// 2026-10-08). El escudo se tira en CADA daño recibido — cada golpe de cada
+// enemigo, cada tic de Sangrado o Veneno —, así que un 15% salía en más de la
+// mitad de las rondas y parecía seguro. Tras activarse descansa unos turnos
+// propios según el rango del Caído.
+const PET_UNIQUE_COOLDOWN = {epico:5, legendario:3, mitico:2};
+function petUniqueCooldown(petId){ const t = petTpl(petId); return (t && PET_UNIQUE_COOLDOWN[t.rarity]) || 0; }
 function checkPetShieldOnHit(){
   if(!combat) return;
   const d = derived();
-  petUniqueEffects().forEach(({name, unique})=>{
+  if(!combat.petReadyAt) combat.petReadyAt = {};
+  petUniqueEffects().forEach(({petId, name, unique})=>{
     const eff = unique.effect;
     if(eff.kind!=='shield_on_hit') return;
+    if((combat.turnCount||0) < (combat.petReadyAt[petId]||0)) return; // en reutilización
     if(chance(eff.chance)){
+      combat.petReadyAt[petId] = (combat.turnCount||0) + petUniqueCooldown(petId);
       grantShield(true, null, Math.round(d.maxHP*eff.shieldPct));
       log(`<b>${name}</b> genera un escudo que absorbe ${Math.round(eff.shieldPct*100)}% de tu vida máxima.`);
     }
@@ -4294,6 +4304,9 @@ function petFlashFromLog(msg){
   if(!m) return;
   const pet = equippedPets().find(p=> p.name === m[1]);
   if(!pet) return;
+  // La succión de vida o de hechizo es un pasivo que actúa en cada golpe, no
+  // una activación: sin esto la carta salía todo el rato y parecía un 100%.
+  if(/te devuelve \d+ de (vida|MP)/.test(m[2])) return;
   const now = Date.now();
   if(now - (petFlashLast[pet.id]||0) < 2500 || petFlashQueue.length >= 3) return; // el mismo Caído no se repite golpe a golpe
   petFlashLast[pet.id] = now;
