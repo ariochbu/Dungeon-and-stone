@@ -508,7 +508,7 @@ const LEVEL30_SKILL_BONUS = {
   machacar:         {comboBonusMult: 2.1},                  // era 1.8
   grito_guerra:     {healPct: 0.10, allyDmgMult: 1.10},      // nuevo: cura 10% y +10% daño a aliados 2 turnos
   corte_rapido:     {maxStack: 4, duration: 4},              // maxStack era 3, duration era 3
-  golpe_gracia:     {perStackMult: 0.32},                    // era 0.25
+  golpe_gracia:     {perStackMult: 0.25},                    // era 0.25
   marca_cazador:    {duration: 4},                           // era 3
   explosion_arcana: {bonusMult: 0.75, penaltyIfNone: 0.20},  // era 0.60 / 0.30
   golpe_consagrado: {healPct: 0.22},                          // era 0.15
@@ -518,7 +518,7 @@ const LEVEL30_SKILL_BONUS = {
   mirada_de_locura: {applyChance: 0.8},                       // era 0.6
   // 2026-10-02 (pedido explícito): las 6 habilidades que no tenían mejora de
   // nivel 30, aunque el tutorial lo promete para las 3 de cada senda.
-  danza_cuchillas:  {perStackMult: 0.20},                     // era 0.15
+  danza_cuchillas:  {perStackMult: 0.15},                     // era 0.15
   disparo_certero:  {ignoreResist: 0.65},                     // era 0.50
   lluvia_flechas:   {bonusVsMarked: 0.35},                    // era 0.25 (sin subir el daño en área)
   bola_fuego:       {applyChance: 1.0},                       // era 0.8
@@ -12569,7 +12569,7 @@ function applyAllySpecials(ally, target, dmgDealt, isSkill){
 
 // Daño por turno y por carga de los estados que tu grupo pone a un enemigo,
 // como fracción del daño base (antes 0.08 y 0.06).
-const DOT_ENEMY = { Sangrado: 0.18, Veneno: 0.13, Quemadura: 0.10 }; // Quemadura por carga desde 2026-10-08 (antes 22% fijo, sin apilar)
+const DOT_ENEMY = { Sangrado: 0.13, Veneno: 0.13, Quemadura: 0.10 }; // Quemadura por carga desde 2026-10-08 (antes 22% fijo, sin apilar)
 function tickStatuses(list, ownerName, target){
   // target = the enemy object being ticked, or null/undefined for the player.
   // Applies damage-over-time and reports whether the owner is stunned this turn.
