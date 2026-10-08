@@ -582,20 +582,20 @@ const SKILLS = {
     id:'corte_rapido', name:'Corte rápido', cost:{tipo:'estamina', valor:12}, dmgType:'fisico', mult:0.6,
     applies:{name:'Sangrado', chance:0.85, duration:3, stack:true, maxStack:3},
     desc: ()=> `Daño físico. Apila Sangrado (hasta x${skillBonus('corte_rapido','maxStack',3)}) durante ${skillBonus('corte_rapido','duration',3)} turnos.`,
-    targetMode:'any'
+    targetMode:'front'
   },
   danza_cuchillas: {
     id:'danza_cuchillas', name:'Danza de cuchillas', cost:{tipo:'estamina', valor:22}, dmgType:'fisico', mult:0.38, hits:2,
     scalesWithStack:{name:'Sangrado', perStackMult:0.13},
     // Rebote (pedido de ariochbu, 2026-10-08): UN enemigo más recibe la mitad del daño hecho al objetivo — uno del frente; si no queda nadie ahí, uno de retaguardia.
     splashPct:0.5,
-    desc: ()=> `Golpea dos veces. +${Math.round(skillBonus('danza_cuchillas','perStackMult',0.13)*100)}% de daño por cada carga de Sangrado en el objetivo. Las cuchillas rebotan en un enemigo más (del frente; si no queda ninguno, de la retaguardia), que recibe el 50% de ese daño.`, targetMode:'any'
+    desc: ()=> `Golpea dos veces. +${Math.round(skillBonus('danza_cuchillas','perStackMult',0.13)*100)}% de daño por cada carga de Sangrado en el objetivo. Las cuchillas rebotan en un enemigo más (del frente; si no queda ninguno, de la retaguardia), que recibe el 50% de ese daño.`, targetMode:'front'
   },
   golpe_gracia: {
     id:'golpe_gracia', name:'Golpe de gracia', cost:{tipo:'estamina', valor:18}, dmgType:'fisico', mult:0.9,
     consumesStackBonus:{name:'Sangrado', perStackMult:0.22},
     desc: ()=> `Consume el Sangrado del objetivo: +${Math.round(skillBonus('golpe_gracia','perStackMult',0.22)*100)}% daño por carga consumida.`,
-    targetMode:'any'
+    targetMode:'front'
   },
 
   disparo_certero: {
@@ -9996,7 +9996,7 @@ const BETA_DECADE_BOSS_TUNING = {
   10: {hp:0.24, atk:0.50},  // Ogro
   20: {hp:0.80, atk:0.80},  // Matriarca
   30: {hp:1.96, atk:1.87},  // Riakis: 66% (quinta vuelta, 2026-10-08)
-  40: {hp:1.50, atk:1.40},  // Usurpador: ~70% (rama sin-forma: sin bono de frente y con su castigo al frente; 1.46/1.37 daba 74%, 1.70/1.59 daba 31%)
+  40: {hp:1.57, atk:1.47},  // Usurpador: objetivo 65%. Medido 2026-10-08 (noche): 1.50/1.40 daba 80%, 1.56/1.46 ~69%, 1.63/1.52 54% — muy sensible
 };
 // Enemigos que NO son jefe de década, por índice de década (1 = pisos 11-19...).
 // Medido: con 2-3 aliados los combates normales/élite/guardián rinden igual
@@ -13613,7 +13613,7 @@ function simBuildState(cfg){
 // al enemigo más grande (su Veneno necesita apilarse en uno solo; persiguiendo
 // siempre al más débil se pasaba el combate contra las invocaciones del jefe).
 function simTargetIndex(){
-  if(state.char.style !== 'hechicero' && state.char.style !== 'doblefilo') return autoPickEnemyIndex();
+  if(state.char.style !== 'hechicero') return autoPickEnemyIndex();
   const living = livingEnemies();
   if(!living.length) return -1;
   // contra un jefe, al jefe; contra un grupo normal, al más débil (menos enemigos pegando y el Veneno se contagia al morir)
@@ -13630,7 +13630,7 @@ function simPickSkill(usable){
   // curarse. __simAsesinoTonto la apaga.
   if(state.char.style === 'doblefilo' && target && !window.__simAsesinoTonto){
     // Sus habilidades son de primera línea: mirar al enemigo que de verdad va a golpear, no al más débil.
-    const front = target;
+    const front = combat.enemies[playerFrontTargetIndices()[0]] || target;
     const sg = hasStatus(front.statuses, 'Sangrado');
     const stacks = sg ? (sg.stacks||1) : 0, max = skillBonus('corte_rapido','maxStack',3);
     const hpPct = state.char.curHP / (derived().maxHP || 1);
