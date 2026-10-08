@@ -4420,7 +4420,7 @@ const PALADIN_ESP_RES = {rate:0.05, cap:10}; // medido 2026-10-08: con 15 o más
 function paladinEspRes(esp){ return state.char.style==='paladin' ? Math.round(Math.min(PALADIN_ESP_RES.cap, esp*PALADIN_ESP_RES.rate)) : 0; }
 // Instinto del Cazador (pedido de ariochbu, 2026-10-08): el Arquero trae de
 // serie succión de hechizo (cura con sus habilidades, no con el básico).
-const ARQUERO_SUCCION = 0.10;
+const ARQUERO_SUCCION = 0.03;
 
 function totalRes(key){
   const r = race();
