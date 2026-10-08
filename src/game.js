@@ -4299,7 +4299,7 @@ function pickWeighted(list){
 }
 
 function log(msg){
-  if(simMode) return;
+  if(simMode){ if(window.__simLog){ window.__simLog.push((combat ? combat.turnCount : '') + ' ' + String(msg).replace(/<[^>]+>/g, '')); if(window.__simLog.length > 400) window.__simLog.shift(); } return; } // __simLog: solo para depurar simulaciones en localhost
   petFlashFromLog(msg);
   state.log.push(msg);
   if(state.log.length > 60) state.log.shift();
@@ -10687,7 +10687,7 @@ const FRONTLINE_DAMAGE_REDUCTION = 0; // era 0.10; retirada por decisión de ari
 // para que el retiro de la bonificación de arriba solo le pese al Guerrero.
 // A propósito NO se muestra en ninguna parte (ni estado, ni ficha, ni texto).
 const HIDDEN_FRONT_GUARD = 0.10;
-function hiddenFrontGuard(isPlayer){ return (!isPlayer || state.char.style==='paladin') ? (1-HIDDEN_FRONT_GUARD) : 1; }
+function hiddenFrontGuard(isPlayer){ return isPlayer ? 1 : (1-HIDDEN_FRONT_GUARD); } // el Paladín la tuvo unas horas; ariochbu se la quitó el mismo 2026-10-08
 // Crítico de enemigo (pedido explícito 2026-09-28) — antes NINGÚN enemigo
 // criteaba. Multiplicador conservador a propósito (el jugador usa 1.5x+
 // bono): mejor que arranque sobrio y lo subamos si en la práctica se siente
@@ -10990,8 +10990,10 @@ function applyStatus(target, statusDef, isPlayer){
   }
   const existing = list.find(s=>s.name===statusDef.name);
   if(existing && statusDef.stack){
-    existing.stacks = Math.min(statusDef.maxStack||3, (existing.stacks||1)+1);
-    existing.duration = statusDef.duration;
+    // Una fuente con tope menor (el Sangrado de la daga, x3) no baja las cargas
+    // ni acorta la duración que ya puso otra con tope mayor (Corte rápido, x5).
+    existing.stacks = Math.max(existing.stacks||1, Math.min(statusDef.maxStack||3, (existing.stacks||1)+1));
+    existing.duration = Math.max(existing.duration||0, statusDef.duration);
   } else if(existing){
     existing.duration = statusDef.duration;
   } else {
@@ -13585,9 +13587,22 @@ function simBuildState(cfg){
 //   4. Toque Venenoso el resto del tiempo.
 function simPickSkill(usable){
   const byDmg = ()=> usable.slice().sort((a, b)=> (SKILLS[b].mult||0) - (SKILLS[a].mult||0))[0] || 'ataque_basico';
-  if(state.char.style !== 'hechicero') return byDmg();
   const can = (id)=> usable.includes(id);
   const target = combat.enemies[autoPickEnemyIndex()];
+  // Asesino (2026-10-08): por multiplicador elegía siempre Golpe de gracia y
+  // nunca apilaba Sangrado. Rotación: apilar con Corte rápido, mantener con
+  // Danza de cuchillas, refrescar antes de que caiga; Vals de sangre para
+  // curarse o cuando hay varios enemigos. __simAsesinoTonto la apaga.
+  if(state.char.style === 'doblefilo' && target && !window.__simAsesinoTonto){
+    const sg = hasStatus(target.statuses, 'Sangrado');
+    const stacks = sg ? (sg.stacks||1) : 0, max = skillBonus('corte_rapido','maxStack',3);
+    const hpPct = state.char.curHP / (derived().maxHP || 1);
+    if(can('vals_sangre') && (hpPct < 0.5 || livingEnemies().length >= 3)) return 'vals_sangre';
+    if(can('corte_rapido') && (stacks < max || (sg.duration||0) <= 1)) return 'corte_rapido';
+    if(can('danza_cuchillas')) return 'danza_cuchillas';
+    return byDmg();
+  }
+  if(state.char.style !== 'hechicero') return byDmg();
   if(!target) return byDmg();
   const has = (n)=> !!hasStatus(target.statuses, n);
   const hpPct = state.char.curHP / (derived().maxHP || 1);
