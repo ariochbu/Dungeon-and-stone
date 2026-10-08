@@ -205,3 +205,41 @@ W.calibLow = async (nPer)=>{
   }
   W.calibDone = true;
 };
+
+// ---- Quinta vuelta (2026-10-08): evaluación completa con la rama clases-x1 ----
+// (daño x1, vida nueva, kit y rotación del Hechicero, dos tanques para la
+// retaguardia). evalAll mide; calibAll5 ajusta jefes 30-80 y pisos 21-80.
+W.evalAll = async (nBoss, nFloor)=>{
+  const out = {boss: {}, floor: {}};
+  for(const lv of [10, 20, 30, 40, 50, 60, 70, 80]) out.boss[lv] = await W.measure(W.fight, lv, nBoss);
+  W.__alter(false);
+  for(const lv of [5, 15, 25, 35, 45, 55, 65, 75]) out.floor[lv] = await W.measure(W.clearLevel, lv, nFloor);
+  W.__alter(true);
+  return out;
+};
+W.calibAll5 = async (bossBase, floorBase)=>{
+  W.calibDone = false; W.c5 = {before: await W.evalAll(24, 6), boss: {}, floor: {}};
+  W.calibStep = 'c5-before';
+  for(const lv of [30, 40, 50, 60, 70, 80]){
+    const rec = await W.search(W.fight, lv, W.BOSS_TARGET[lv], bossBase[lv], W.setBoss(lv), 30, 6, 0.6, 1.7);
+    W.c5.boss[lv] = {hp: rec.hp, atk: rec.atk, log: rec.log}; W.calibStep = 'c5-b' + lv;
+  }
+  W.__alter(false);
+  const setF = (dec, s)=> ['regular', 'elite', 'guardian'].forEach(k=>{ const b = floorBase[dec][k]; (dec <= 3 ? W.__simScaleBeta : W.__simScale)(dec, k, +(b[0]*s).toFixed(3), +(b[1]*s).toFixed(3)); });
+  const meas = async (dec, n)=>{ const a = await W.measure(W.clearLevel, dec*10 + 3, n), b = await W.measure(W.clearLevel, dec*10 + 7, n); return Math.round((a.mean + b.mean) / 2); };
+  for(const dec of [2, 3, 4, 5, 6, 7]){
+    const t = W.FLOOR_TARGET3[dec]; let lo = 0.5, hi = 2.2, s = 1; const log = [];
+    for(let i = 0; i < 5; i++){
+      setF(dec, s); const m = await meas(dec, 6); log.push(`${s.toFixed(2)}→${m}`);
+      if(Math.abs(m - t) <= 5) break;
+      if(m > t) lo = s; else hi = s;
+      s = Math.sqrt(lo * hi);
+    }
+    setF(dec, s);
+    W.c5.floor[dec] = {s: +s.toFixed(2), log: log.join(' '), vals: ['regular', 'elite', 'guardian'].map(k=> floorBase[dec][k].map(v=> +(v*s).toFixed(2)))};
+    W.calibStep = 'c5-f' + dec;
+  }
+  W.__alter(true);
+  W.c5.after = await W.evalAll(30, 6);
+  W.calibDone = true;
+};

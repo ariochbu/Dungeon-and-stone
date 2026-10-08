@@ -9960,10 +9960,11 @@ const DECADE_BOSS_TUNING = {
   // REDISEÑO DE CLASES (2026-10-08, rama rediseno-clases): recalibrados con el
   // arnés tools/calib_harness.js — media de las seis sendas, 40 combates cada
   // una, 4 aliados y todo rango A. Metas: 50 → 60%, 60 → 50%, 70 → 40%, 80 → 30%.
-  50: {hp:1.55, atk:1.58},  // Custodio: 57% (1.64/1.67 daba 44% tras el ajuste de atributos)
-  60: {hp:2.12, atk:2.35},  // Storm Gush: 53%
-  70: {hp:2.08, atk:2.30},  // El Sin Forma: 47% con 2.03/2.24
-  80: {hp:2.06, atk:2.23},  // El Corazón Marchito: 28%
+  // 2026-10-08, quinta vuelta (rama clases-x1): daño x1, vida nueva, kit y rotación del Hechicero, dos tanques para la retaguardia.
+  50: {hp:1.68, atk:1.72},  // Custodio: 56%
+  60: {hp:2.42, atk:2.68},  // Storm Gush: 45%
+  70: {hp:2.08, atk:2.30},  // El Sin Forma: 33-36%
+  80: {hp:2.06, atk:2.23},  // El Corazón Marchito: 29-30%
 };
 // BETA (con BETA_ALLY_UNLOCKS): en las décadas 0-3 el jugador lleva menos
 // aliados (0 hasta el Ogro, 1 hasta la Matriarca, 2 hasta Riakis, 3 hasta
@@ -9977,8 +9978,8 @@ const BETA_DECADE_BOSS_TUNING = {
   // Pisos 1-20 se dejan como están en producción (decisión de ariochbu, 2026-10-08).
   10: {hp:0.24, atk:0.50},  // Ogro
   20: {hp:0.80, atk:0.80},  // Matriarca
-  30: {hp:1.85, atk:1.76},  // Riakis: 71% (tras bajar Físico/Vigor a Guerrero y Paladín; 2.02/1.92 daba 42%)
-  40: {hp:1.64, atk:1.54},  // Usurpador: 70% con 1.60/1.50
+  30: {hp:1.96, atk:1.87},  // Riakis: 66% (quinta vuelta, 2026-10-08)
+  40: {hp:1.70, atk:1.59},  // Usurpador: 63%
 };
 // Enemigos que NO son jefe de década, por índice de década (1 = pisos 11-19...).
 // Medido: con 2-3 aliados los combates normales/élite/guardián rinden igual
@@ -9995,7 +9996,7 @@ const BETA_ENEMY_SCALE = {
   // 41-60 70%, 61-80 60%. Medido: 21-29 → 81%, 31-39 → 85%.
   1: {regular:{hp:1.08, atk:1.16}, elite:{hp:1.08, atk:1.16}, guardian:{hp:1.08, atk:1.16}},   // sin cambios (pisos 1-20 como en producción)
   2: {regular:{hp:1.73, atk:1.73}, elite:{hp:1.73, atk:1.73}, guardian:{hp:1.73, atk:1.73}},
-  3: {regular:{hp:2.29, atk:2.64}, elite:{hp:2.29, atk:2.64}, guardian:{hp:2.11, atk:2.37}},
+  3: {regular:{hp:2.79, atk:3.22}, elite:{hp:2.79, atk:3.22}, guardian:{hp:2.57, atk:2.89}},   // 84% (quinta vuelta)
 };
 // Normales, élites y guardianes por década (índice 4 = pisos 41-50, 5 = 51-60).
 // Calibrado con el simulador de balance (simLevels) contra la misma referencia
@@ -10013,9 +10014,9 @@ const DECADE_ENEMY_TUNING = {
   // REDISEÑO DE CLASES (2026-10-08), mismos objetivos que arriba. Medido (dos
   // niveles por década, 8 intentos por senda): 41-49 → 73%, 51-59 → 75% antes
   // del último retoque, 61-69 → 69% y 71-79 → 65% antes del último retoque.
-  4: {regular:{hp:1.23, atk:1.23}, elite:{hp:1.23, atk:1.23}, guardian:{hp:1.23, atk:1.23}},
-  5: {regular:{hp:2.14, atk:3.10}, elite:{hp:2.03, atk:2.86}, guardian:{hp:1.79, atk:2.09}},
-  6: {regular:{hp:3.13, atk:4.75}, elite:{hp:3.13, atk:4.75}, guardian:{hp:2.38, atk:3.00}},
+  4: {regular:{hp:1.36, atk:1.36}, elite:{hp:1.36, atk:1.36}, guardian:{hp:1.36, atk:1.36}},   // 74% (quinta vuelta)
+  5: {regular:{hp:2.36, atk:3.42}, elite:{hp:2.24, atk:3.16}, guardian:{hp:1.98, atk:2.31}},   // 75%
+  6: {regular:{hp:3.29, atk:4.99}, elite:{hp:3.29, atk:4.99}, guardian:{hp:2.50, atk:3.15}},   // 61%
   7: {regular:{hp:3.63, atk:5.57}, elite:{hp:3.63, atk:5.57}, guardian:{hp:2.72, atk:3.44}},
 };
 function makeEnemy(tpl, floorIdx, level){
@@ -13532,6 +13533,28 @@ function simBuildState(cfg){
   }, dungeon:{level: cfg.dungeonLevel, floors:[[{type: cfg.node || 'jefe', done:false}]], atFloor:0, atNode:0, visited:{}, allyHP:{}, allyMP:{}, allySpirit:{}}, log:[]};
   return {st, petPool};
 }
+// Qué habilidad usa el simulador este turno. Por defecto, la de más daño que
+// pueda pagar. El Hechicero lleva su propia rotación (2026-10-08): elegir por
+// daño dejaba fuera justo lo que lo define — nunca usaba control ni debilitaba —
+// y sus resultados no decían nada de un jugador real.
+//   1. Definitiva en área si hay dos o más enemigos.
+//   2. Drenaje de Esencia si el objetivo no está Quebrantado, o si va por debajo de media vida.
+//   3. Grito de Locura si el objetivo no tiene ni Miedo ni Confusión.
+//   4. Toque Venenoso el resto del tiempo.
+function simPickSkill(usable){
+  const byDmg = ()=> usable.slice().sort((a, b)=> (SKILLS[b].mult||0) - (SKILLS[a].mult||0))[0] || 'ataque_basico';
+  if(state.char.style !== 'hechicero') return byDmg();
+  const can = (id)=> usable.includes(id);
+  const target = combat.enemies[autoPickEnemyIndex()];
+  if(!target) return byDmg();
+  const has = (n)=> !!hasStatus(target.statuses, n);
+  const hpPct = state.char.curHP / (derived().maxHP || 1);
+  if(can('grito_del_abismo') && livingEnemies().length >= 2) return 'grito_del_abismo';
+  if(can('drenaje_de_esencia') && (!has('Quebranto') || hpPct < 0.5)) return 'drenaje_de_esencia';
+  if(can('grito_de_panico') && !has('Miedo') && !has('Confusion')) return 'grito_de_panico';
+  if(can('toque_venenoso')) return 'toque_venenoso';
+  return byDmg();
+}
 async function simOneFight(cfg){
   const {st, petPool} = simBuildState(cfg);
   state = st;
@@ -13557,7 +13580,7 @@ async function simOneFight(cfg){
         if(sk.requiresPos && combat.playerPos !== sk.requiresPos && !sk.penaltyIfFrente) return false;
         return true;
       };
-      const best = skillIds.filter(ok).sort((a, b)=> (SKILLS[b].mult||0) - (SKILLS[a].mult||0))[0] || 'ataque_basico';
+      const best = simPickSkill(skillIds.filter(ok));
       const idx = resolvedTargetMode(SKILLS[best]) === 'any' ? autoPickEnemyIndex() : null;
       await playerUseSkill(best, idx);
       // si por lo que sea no consumió el turno, ataque básico para no quedar en bucle
@@ -13585,7 +13608,7 @@ async function simFightLoop(){
         if(sk.requiresPos && combat.playerPos !== sk.requiresPos && !sk.penaltyIfFrente) return false;
         return true;
       };
-      const best = skillIds.filter(ok).sort((a, b)=> (SKILLS[b].mult||0) - (SKILLS[a].mult||0))[0] || 'ataque_basico';
+      const best = simPickSkill(skillIds.filter(ok));
       await playerUseSkill(best, resolvedTargetMode(SKILLS[best]) === 'any' ? autoPickEnemyIndex() : null);
       if(combat && !combat.over && !simOutcome && combat.turnCount === tc) await playerUseSkill('ataque_basico', resolvedTargetMode(SKILLS.ataque_basico) === 'any' ? autoPickEnemyIndex() : null);
       if(combat && !combat.over && !simOutcome && combat.turnCount === tc){ combat.turnCount++; await endPlayerTurn(); }
