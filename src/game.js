@@ -4413,6 +4413,15 @@ function baseStat(key){
   return v;
 }
 
+// Temple del Paladín (pedido de ariochbu, 2026-10-08): su Espíritu alto se
+// traduce en resistencia. Cada punto de Espíritu le da `rate`% de resistencia
+// física y mágica, hasta `cap` puntos porcentuales.
+const PALADIN_ESP_RES = {rate:0.05, cap:10}; // medido 2026-10-08: con 15 o más el Paladín pasa de 67% contra el jefe del 80
+function paladinEspRes(esp){ return state.char.style==='paladin' ? Math.round(Math.min(PALADIN_ESP_RES.cap, esp*PALADIN_ESP_RES.rate)) : 0; }
+// Instinto del Cazador (pedido de ariochbu, 2026-10-08): el Arquero trae de
+// serie succión de hechizo (cura con sus habilidades, no con el básico).
+const ARQUERO_SUCCION = 0.10;
+
 function totalRes(key){
   const r = race();
   let v = r.res[key] || 0;
@@ -4423,6 +4432,7 @@ function totalRes(key){
   });
   socketedStones().forEach(s=>{ if(s.bonus && s.bonus.res === key) v += s.bonus.value; });
   if(key==='fisico') v += petModSum('defensa_fisica') + equipModsSum(eq, 'res_fisica'); // RF de piezas de conjunto
+  if(key==='fisico' && state.char.style==='paladin') v += paladinEspRes(derived().esp);
   if(state.char.race === 'enano' && key==='fisico'){ /* flat handled in damage calc */ }
   return clamp(v, -60, 80);
 }
@@ -4507,7 +4517,7 @@ function derived(){
   // también aumente un poco resistencia mágica") — a una fracción de lo que
   // aporta Botas, para que Botas siga siendo la fuente principal.
   const FORTALEZA_MENTAL_TO_RES_MAGICA = 0.4;
-  const resMagica = clamp(equipModsSum(eq, 'res_magica') + petModSum('res_magica') + fortalezaMentalPct*FORTALEZA_MENTAL_TO_RES_MAGICA, -60, 80);
+  const resMagica = clamp(equipModsSum(eq, 'res_magica') + petModSum('res_magica') + fortalezaMentalPct*FORTALEZA_MENTAL_TO_RES_MAGICA + paladinEspRes(esp), -60, 80);
   const fortalezaMental = clamp(fortalezaMentalPct/100, 0, FORTALEZA_MENTAL_CAP);
   const resistenciaEstado = clamp((equipModsSum(eq, 'resistencia_estado') + petModSum('resistencia_estado') + esp*ESP_RESIST_RATE)/100, 0, 0.9);
   // Precisión y Penetración: además de lo que dé el equipo, crecen solas
@@ -10845,7 +10855,7 @@ function combatStatsSummary(){
     bloqueo: blockChance(specials),
     retroceso: sumBy('retroceso','chance'),
     robovida: sumBy('robovida','percent'),
-    succionHechizo: sumBy('succion_hechizo','percent'),
+    succionHechizo: sumBy('succion_hechizo','percent') + (state.char.style==='tirador' ? ARQUERO_SUCCION : 0),
     penetracionFisica: sumBy('penetracion_armadura','value'),
     penetracionMagica: sumBy('penetracion_magica','value'),
     segundoAtaque: Math.min(SEGUNDO_ATAQUE_CAP, sumBy('segundo_ataque_basico','chance')),
@@ -11168,6 +11178,7 @@ function applyEquippedSpecials(target, dmgDealt, skill){
     // Igual con la única "Succión de hechizo"/"Absorción Arcana" (tampoco tenía código).
     if(unique.effect && unique.effect.kind==='succion_hechizo') sources.push({it:{name}, sp:{type:'succion_hechizo', percent:unique.effect.percent}});
   });
+  if(state.char.style==='tirador') sources.push({it:{name:'Instinto del Cazador'}, sp:{type:'succion_hechizo', percent:ARQUERO_SUCCION}});
   const isBasicHit = !!skill && skill.id==='ataque_basico';
   const procOnThisHit = isBasicHit || state.char.style==='doblefilo';
   sources.forEach(({it, sp})=>{
@@ -13749,6 +13760,7 @@ if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
   window.__rearAoe = (v)=>{ if(v !== undefined) BOSS_AOE_REAR_FACTOR = v; return BOSS_AOE_REAR_FACTOR; };
   window.__hpPerLevel = HP_PER_LEVEL_REDESIGN; window.__growth = CLASS_GROWTH; // palancas de clase para probar en simulación
   window.__combat = ()=> combat; // inspección del combate en curso (simulaciones que no terminan)
+  window.__palRes = PALADIN_ESP_RES;
   window.__simDot = DOT_ENEMY;
   window.__bestiary = DECADE_BESTIARY; // para probar ajustes de un enemigo en las simulaciones sin tocar el código // para comparar el daño por turno de Sangrado/Veneno en las simulaciones
   window.__creation = (step, st, r)=>{ crStep = step || 2; if(st) selStyle = st; if(r) selRace = r; showScreen('screen-create'); renderCreation(); };
