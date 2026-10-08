@@ -587,7 +587,9 @@ const SKILLS = {
   danza_cuchillas: {
     id:'danza_cuchillas', name:'Danza de cuchillas', cost:{tipo:'estamina', valor:22}, dmgType:'fisico', mult:0.5, hits:2,
     scalesWithStack:{name:'Sangrado', perStackMult:0.15},
-    desc: ()=> `Golpea dos veces. +${Math.round(skillBonus('danza_cuchillas','perStackMult',0.15)*100)}% de daño por cada carga de Sangrado en el objetivo.`, targetMode:'front'
+    // Rebote (pedido de ariochbu, 2026-10-08): el resto de enemigos recibe la mitad del daño hecho al objetivo.
+    splashPct:0.5,
+    desc: ()=> `Golpea dos veces. +${Math.round(skillBonus('danza_cuchillas','perStackMult',0.15)*100)}% de daño por cada carga de Sangrado en el objetivo. Las cuchillas rebotan: los demás enemigos reciben el 50% de ese daño.`, targetMode:'front'
   },
   golpe_gracia: {
     id:'golpe_gracia', name:'Golpe de gracia', cost:{tipo:'estamina', valor:18}, dmgType:'fisico', mult:0.9,
@@ -11828,6 +11830,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
       if(fe) splashHits.push({dmg: Math.max(1, Math.round(dmg*fe.pct)), exclude: target, single:true, label:'Flecha Expansiva'});
     }
     if(lunaLlenaSp) splashHits.push({dmg: Math.max(1, Math.round(dmg*lunaLlenaSp.splash)), exclude: target, single:false, label:'Lluvia de Artemisa'});
+    if(skill.splashPct) splashHits.push({dmg: Math.max(1, Math.round(dmg*skill.splashPct)), exclude: target, single:false, label:`El rebote de ${skill.name}`});
 
     // Efectos al golpear de las armas de Paladín/Hechicero (2026-10-02).
     if(skillId==='golpe_consagrado'){
