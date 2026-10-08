@@ -659,7 +659,7 @@ const SKILLS = {
 
   // ---------- Hechicero ----------
   toque_venenoso: {
-    id:'toque_venenoso', name:'Toque Venenoso', cost:{tipo:'estamina', valor:15}, dmgType:'veneno', mult:0.95,
+    id:'toque_venenoso', name:'Toque Venenoso', cost:{tipo:'estamina', valor:15}, dmgType:'veneno', mult:0.90,
     applies:{name:'Veneno', chance:0.85, duration:3, stack:true, maxStack:3},
     desc: ()=> `Daño de veneno. Apila Veneno (hasta x${skillBonus('toque_venenoso','maxStack',3)}) durante 3 turnos.`, targetMode:'any'
   },
@@ -668,7 +668,7 @@ const SKILLS = {
   // appliesAlt en playerUseSkill). Conserva el id grito_de_panico para no
   // romper mejoras de nivel 30, descuentos de control ni armas que lo nombran.
   grito_de_panico: {
-    id:'grito_de_panico', name:'Grito de Locura', cost:{tipo:'estamina', valor:20}, dmgType:'arcano', mult:0.6,
+    id:'grito_de_panico', name:'Grito de Locura', cost:{tipo:'estamina', valor:20}, dmgType:'arcano', mult:0.55,
     applies:{name:'Miedo', chance:0.6, duration:2, procChance:0.4},
     appliesAlt:{name:'Confusion', chance:0.6, duration:2, procChance:0.35},
     desc: ()=> `Daño arcano menor. ${Math.round(skillBonus('grito_de_panico','applyChance',0.6)*100)}% de aplicar, al azar, Miedo (40% de perder el turno) o Confusión (35% de golpear a otro enemigo, o a sí mismo si está solo) durante 2 turnos.`,
@@ -677,7 +677,7 @@ const SKILLS = {
   // Tercera habilidad nueva: daño moderado que te cura y deja al enemigo
   // Quebrantado (menos resistencias físicas, mágicas y mentales) 3 turnos.
   drenaje_de_esencia: {
-    id:'drenaje_de_esencia', name:'Drenaje de Esencia', cost:{tipo:'estamina', valor:18}, dmgType:'arcano', mult:0.75,
+    id:'drenaje_de_esencia', name:'Drenaje de Esencia', cost:{tipo:'estamina', valor:18}, dmgType:'arcano', mult:0.70,
     selfHealPctOfDmg:0.30,
     applies:{name:'Quebranto', chance:1, duration:3, resPenalty:15, mentalPenalty:0.5},
     desc:'Daño arcano moderado. Te cura el 30% de lo infligido y deja al objetivo Quebrantado 3 turnos: -15 a todas sus resistencias y la mitad de su resistencia a estados.',
@@ -720,7 +720,7 @@ const SKILLS = {
     desc:'Ultimate del Paladín. Golpea a todos los enemigos y te cura el 25% de todo lo infligido.'
   },
   grito_del_abismo: {
-    id:'grito_del_abismo', name:'Grito del Abismo', cost:null, dmgType:'arcano', mult:0.7, ultimate:true,
+    id:'grito_del_abismo', name:'Grito del Abismo', cost:null, dmgType:'arcano', mult:0.65, ultimate:true,
     targetMode:'all', applies:{name:'Paralisis', chance:1, duration:2},
     desc:'Ultimate del Hechicero. Daño arcano moderado a TODOS los enemigos y los Paraliza 2 turnos (sin evasión y +25% de daño recibido) — garantizado, no depende de probabilidad.'
   }
@@ -2683,8 +2683,8 @@ const WEAPON_CATALOG = {
         wTier('poco_comun', 10, [{type:'sangrado', chance:0.12, text:'de aplicar sangrado 2 turnos'}]),
         wTier('raro', 13, [{type:'sangrado', chance:0.15, text:'de aplicar sangrado 2 turnos'}]),
         wTier('rango_b', 17, [{type:'sangrado', chance:0.20, text:'de aplicar sangrado 2 turnos'}]),
-        wTier('rango_a', 20, [{type:'sangrado', chance:0.20, text:'de aplicar sangrado 2 turnos'}, {type:'robovida', percent:0.10, text:'de robo de vida (ataque básico y habilidades)'}]),
-        wTier('legendario', 27, [{type:'sangrado', chance:0.25, duration:4, text:'de aplicar sangrado 4 turnos', tierSProc:'daga_s'}, {type:'robovida', percent:0.15, text:'de robo de vida (ataque básico y habilidades)'}]),
+        wTier('rango_a', 20, [{type:'sangrado', chance:0.20, text:'de aplicar sangrado 2 turnos'}, {type:'robovida', percent:0.10, text:'de robo de vida (solo ataque básico)'}]),
+        wTier('legendario', 27, [{type:'sangrado', chance:0.25, duration:4, text:'de aplicar sangrado 4 turnos', tierSProc:'daga_s'}, {type:'robovida', percent:0.15, text:'de robo de vida (solo ataque básico)'}]),
       ],
       'Cuchillo largo': [
         wTier('comun', 7),
@@ -2701,8 +2701,8 @@ const WEAPON_CATALOG = {
         wTier('poco_comun', 10, [{type:'sangrado', chance:0.12, text:'de aplicar sangrado 2 turnos'}]),
         wTier('raro', 13, [{type:'sangrado', chance:0.15, text:'de aplicar sangrado 2 turnos'}]),
         wTier('rango_b', 17, [{type:'sangrado', chance:0.20, text:'de aplicar sangrado 2 turnos'}]),
-        wTier('rango_a', 20, [{type:'sangrado', chance:0.20, text:'de aplicar sangrado 2 turnos'}, {type:'robovida', percent:0.10, text:'de robo de vida (ataque básico y habilidades)'}]),
-        wTier('legendario', 27, [{type:'sangrado', chance:0.25, duration:4, text:'de aplicar sangrado 4 turnos', tierSProc:'daga_s'}, {type:'robovida', percent:0.15, text:'de robo de vida (ataque básico y habilidades)'}]),
+        wTier('rango_a', 20, [{type:'sangrado', chance:0.20, text:'de aplicar sangrado 2 turnos'}, {type:'robovida', percent:0.10, text:'de robo de vida (solo ataque básico)'}]),
+        wTier('legendario', 27, [{type:'sangrado', chance:0.25, duration:4, text:'de aplicar sangrado 4 turnos', tierSProc:'daga_s'}, {type:'robovida', percent:0.15, text:'de robo de vida (solo ataque básico)'}]),
       ],
       'Cuchillo gemelo': [
         wTier('comun', 7),
@@ -11179,7 +11179,7 @@ function applyEquippedSpecials(target, dmgDealt, skill){
   const procOnThisHit = isBasicHit || state.char.style==='doblefilo';
   sources.forEach(({it, sp})=>{
     if(sp.type==='sangrado' && !procOnThisHit) return;
-    if(sp.type==='robovida' && !isBasicHit && state.char.style!=='doblefilo') return; // el Asesino es la excepción (2026-10-08)
+    if(sp.type==='robovida' && !isBasicHit) return;
     if(sp.type==='succion_hechizo' && isBasicHit) return;
     if(sp.type==='aturdir'){
       // Piedras de alma únicamente (formato viejo) — inmediato, sin cambios.
@@ -12528,7 +12528,7 @@ function applyAllySpecials(ally, target, dmgDealt, isSkill){
   const procOnThisHit = !isSkill || ally.role==='asesino';
   (ally.specials||[]).forEach(sp=>{
     if(sp.type==='sangrado' && !procOnThisHit) return;
-    if(sp.type==='robovida' && isSkill && ally.role!=='asesino') return; // el Asesino es la excepción (2026-10-08)
+    if(sp.type==='robovida' && isSkill) return;
     if(sp.type==='succion_hechizo' && !isSkill) return;
     if(sp.type==='retroceso'){
       if(chance(sp.chance)){
