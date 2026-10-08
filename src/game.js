@@ -4419,6 +4419,34 @@ function baseStat(key){
 // Temple del Paladín (pedido de ariochbu, 2026-10-08): su Espíritu alto se
 // traduce en resistencia. Cada punto de Espíritu le da `rate`% de resistencia
 // física y mágica, hasta `cap` puntos porcentuales.
+// PRESIÓN DE COMBATE LARGO (pedido de ariochbu, 2026-10-09): en los pisos 61-79
+// (no en los jefes de década) los enemigos pegan más cuanto más se alarga el
+// combate: a partir del turno `start`, +`step` de daño cada `every` turnos,
+// hasta +`max`. Frena a quien gana solo por aguante sin tocar a quien mata rápido.
+const LONG_FIGHT_PRESSURE = {from:61, to:79, start:15, every:5, step:0.05, max:1.0};
+function longFightPressure(){
+  const lvl = (state.dungeon && state.dungeon.level) || 0, P = LONG_FIGHT_PRESSURE;
+  if(!combat || lvl < P.from || lvl > P.to || lvl % 10 === 0) return 1;
+  const steps = Math.floor((combat.turnCount - P.start) / P.every) + 1;
+  return steps > 0 ? 1 + Math.min(P.max, steps * P.step) : 1;
+}
+// CURACIÓN ENEMIGA COMPARTIDA (pedido de ariochbu, 2026-10-09): en 61-80, tras
+// una curación de cualquier enemigo, ninguno del grupo puede curar durante
+// `turns` turnos. (Cada curación ya tenía su enfriamiento; el problema eran
+// dos sanadores turnándose sobre una élite.)
+const ENEMY_HEAL_LOCK = {from:61, to:80, turns:4};
+function enemyHealLocked(){
+  const lvl = (state.dungeon && state.dungeon.level) || 0;
+  return !!combat && lvl >= ENEMY_HEAL_LOCK.from && lvl <= ENEMY_HEAL_LOCK.to && combat.turnCount < (combat.enemyHealReadyAt||0);
+}
+// SEGUNDO AIRE (alternativa aprobada por ariochbu, 2026-10-09): en los pisos
+// 61-80 un aliado caído no queda fuera todo el piso; vuelve en el siguiente
+// combate con `pct` de su vida. pct 0 = apagado.
+const ALLY_REVIVE = {from:61, to:80, pct:0};
+function allyReviveActive(){
+  const lvl = (state.dungeon && state.dungeon.level) || 0;
+  return ALLY_REVIVE.pct > 0 && lvl >= ALLY_REVIVE.from && lvl <= ALLY_REVIVE.to;
+}
 const SAVIA_PODRIDA = {from:71, to:80, witherPct:0.16}; // efecto de campo del Hechicero, ver saviaPodridaActive()
 const PALADIN_ESP_RES = {rate:0.05, cap:10}; // medido 2026-10-08: con 15 o más el Paladín pasa de 67% contra el jefe del 80
 function paladinEspRes(esp){ return state.char.style==='paladin' ? Math.round(Math.min(PALADIN_ESP_RES.cap, esp*PALADIN_ESP_RES.rate)) : 0; }
@@ -10416,6 +10444,8 @@ function makeCombatAlly(row){
   let hp = maxHP;
   const savedHP = state.dungeon && state.dungeon.allyHP ? state.dungeon.allyHP[row.id] : undefined;
   if(savedHP !== undefined) hp = Math.max(0, Math.min(maxHP, savedHP));
+  // Segundo aire (61-80): un aliado derribado se reincorpora al siguiente combate con parte de su vida.
+  if(hp <= 0 && allyReviveActive()) hp = Math.max(1, Math.round(maxHP * ALLY_REVIVE.pct));
   const maxMP = allyMaxMP(row);
   const maxSpirit = allyMaxSpirit(row);
   let mp = maxMP, spirit = maxSpirit;
@@ -13251,6 +13281,7 @@ function pickNewStyleAbilityId(enemy, ctx){
     if(enemy.cooldowns[id] > 0) continue;
     if(ab.oncePerCombat && enemy.usedOnce && enemy.usedOnce.has(id)) continue;
     if(ab.condition && !ab.condition(ctx)) continue;
+    if((ab.utility==='heal_ally' || ab.utility==='self_heal') && enemyHealLocked()) continue;
     // Invocación sin espacio (ya tiene el máximo de copias/señuelos vivos):
     // se salta para no desperdiciar el turno.
     if(ab.utility==='summon' && ab.summon){
@@ -13322,6 +13353,7 @@ function resolveNewStyleEnemyMove(enemy, target, enemyCrit){
     return;
   }
   if(ability.utility==='self_heal'){
+    combat.enemyHealReadyAt = combat.turnCount + ENEMY_HEAL_LOCK.turns;
     if(!ability.requiresStatus || hasStatus(enemy.statuses, ability.requiresStatus)){
       const before = enemy.hp;
       enemy.hp = Math.min(enemy.maxHP, enemy.hp + Math.round(enemy.maxHP*(ability.healPct||0.08)));
@@ -13366,6 +13398,7 @@ function resolveNewStyleEnemyMove(enemy, target, enemyCrit){
   // no depende de un companionRef fijo: busca entre TODOS los enemigos vivos
   // del combate, así sirve sin importar cómo se armó el grupo.
   if(ability.utility==='heal_ally'){
+    combat.enemyHealReadyAt = combat.turnCount + ENEMY_HEAL_LOCK.turns;
     const candidates = combat.enemies.filter(e=>e!==enemy && e.hp>0 && e.hp<e.maxHP);
     if(candidates.length){
       const woundedTarget = candidates.reduce((a,b)=> (b.hp/b.maxHP) < (a.hp/a.maxHP) ? b : a);
@@ -13384,7 +13417,7 @@ function resolveNewStyleEnemyMove(enemy, target, enemyCrit){
   // (jugador + aliados vivos) con la resistencia física de cada uno, y puede
   // aplicar un estado a cada golpeado (ej. Corrosión).
   if(ability.utility==='aoe'){
-    let base = enemy.atk * (ability.mult!=null ? ability.mult : 0.5);
+    let base = enemy.atk * (ability.mult!=null ? ability.mult : 0.5) * longFightPressure();
     const fz = hasStatus(enemy.statuses,'Fortalecido');
     if(fz) base *= (1 + (fz.stacks||1)*0.04);
     if(hasStatus(enemy.statuses,'Debilitado')) base *= 0.85;
@@ -13425,7 +13458,7 @@ function resolveNewStyleEnemyMove(enemy, target, enemyCrit){
     return;
   }
 
-  let dmg = enemy.atk * (ability.mult!=null ? ability.mult : 1);
+  let dmg = enemy.atk * (ability.mult!=null ? ability.mult : 1) * longFightPressure();
   const fortalecido = hasStatus(enemy.statuses,'Fortalecido');
   if(fortalecido) dmg = Math.round(dmg * (1 + (fortalecido.stacks||1)*0.04));
   if(hasStatus(enemy.statuses,'Debilitado')) dmg = Math.round(dmg*0.85);
@@ -13826,6 +13859,7 @@ if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
   window.__rearAoe = (v)=>{ if(v !== undefined) BOSS_AOE_REAR_FACTOR = v; return BOSS_AOE_REAR_FACTOR; };
   window.__hpPerLevel = HP_PER_LEVEL_REDESIGN; window.__growth = CLASS_GROWTH; // palancas de clase para probar en simulación
   window.__combat = ()=> combat; // inspección del combate en curso (simulaciones que no terminan)
+  window.__revive = ALLY_REVIVE; window.__presion = LONG_FIGHT_PRESSURE; window.__healLock = ENEMY_HEAL_LOCK;
   window.__palRes = PALADIN_ESP_RES; window.__savia = SAVIA_PODRIDA;
   window.__simDot = DOT_ENEMY;
   window.__bestiary = DECADE_BESTIARY; // para probar ajustes de un enemigo en las simulaciones sin tocar el código // para comparar el daño por turno de Sangrado/Veneno en las simulaciones
