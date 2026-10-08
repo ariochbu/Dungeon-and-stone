@@ -2,7 +2,7 @@
 
 import { supabase } from './supabaseClient.js';
 import * as auth from './auth.js';
-import { syncBattleStage, playBattleAnim } from './battleStage.js?v=98';
+import { syncBattleStage, playBattleAnim } from './battleStage.js?v=99';
 import { mountLabyrinth } from './labyrinthMap.js?v=4';
 import { CLASS_SPRITES, ENEMY_SPRITES, playerSpriteFor, playerIllustrationFor, enemySpriteFor, ALLY_TEMPLATE_SPRITES } from './battleSprites.js?v=86';
 
@@ -4369,7 +4369,8 @@ function slotLabel(slot){
   return {arma:'Arma', armadura:'Armadura', amuleto:'Accesorio', casco:'Casco', botas:'Botas', guantes:'Guantes'}[slot] || slot;
 }
 
-// REDISEÑO DE CLASES (2026-10-08, desplegado ese mismo día a pedido de ariochbu). Hasta ahora todas las sendas subían +1 a los cinco atributos por
+// REDISEÑO DE CLASES (2026-10-08, desplegado ese mismo día a pedido de ariochbu;
+// segunda tanda —daño x1, vida, kit del Hechicero— desplegada también ese día). Hasta ahora todas las sendas subían +1 a los cinco atributos por
 // nivel y la identidad de clase la "corregía" CLASS_CURVE, que acabó
 // invirtiéndola (Guerrero con la mitad de vida que un Mago). Reparto aprobado
 // por ariochbu: mismo total (5 puntos por nivel), repartido según la senda.
@@ -10898,6 +10899,7 @@ function fireTierSBuff(procId, isPlayer, target, statusDef){
 }
 // Devuelve true si el estado quedó aplicado (o refrescado), false si se
 // resistió — las armas del Hechicero reaccionan a "aplicar un estado".
+const ARQUERO_PENETRACION = 10; // puntos de resistencia física que ignora el Arquero
 const CLASS_STATUS_EDGE = {styles:['doblefilo','hechicero'], statuses:['Sangrado','Veneno','Miedo','Confusion'], resistFactor:0.5, flat:0.15};
 function applyStatus(target, statusDef, isPlayer){
   if(!statusDef) return false;
@@ -11743,6 +11745,10 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
     // Sacerdote: penetración de RESISTENCIA MÁGICA, solo contra golpes que
     // no sean físicos (fuego/hielo/veneno/arcano). Ambas restan puntos fijos,
     // siempre activas (no son un proc).
+    // Arquero (2026-10-08, pedido explícito): penetración de armadura propia de
+    // la senda — sus golpes físicos ignoran 10 puntos de resistencia física.
+    // Era la clase que peor rendía contra jefes muy acorazados (Storm Gush).
+    if(state.char.style==='tirador' && resKey==='fisico') resVal -= ARQUERO_PENETRACION;
     specialsFromEquip(state.char.equip).forEach(sp=>{
       if(sp.type==='penetracion_armadura' && resKey==='fisico') resVal -= sp.value*100;
       if(sp.type==='penetracion_magica' && resKey && resKey!=='fisico') resVal -= sp.value*100;
