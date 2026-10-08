@@ -585,7 +585,7 @@ const SKILLS = {
     targetMode:'front'
   },
   danza_cuchillas: {
-    id:'danza_cuchillas', name:'Danza de cuchillas', cost:{tipo:'estamina', valor:22}, dmgType:'fisico', mult:0.35, hits:2,
+    id:'danza_cuchillas', name:'Danza de cuchillas', cost:{tipo:'estamina', valor:22}, dmgType:'fisico', mult:0.40, hits:2,
     scalesWithStack:{name:'Sangrado', perStackMult:0.13},
     // Rebote (pedido de ariochbu, 2026-10-08): UN enemigo más recibe la mitad del daño hecho al objetivo — uno del frente; si no queda nadie ahí, uno de retaguardia.
     splashPct:0.5,
