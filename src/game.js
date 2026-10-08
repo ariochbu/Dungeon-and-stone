@@ -4377,7 +4377,7 @@ function statGrowth(key){
 }
 // Vida por nivel con el rediseño: Guerrero 100, Paladín ~90, Asesino ~70,
 // Arquero ~65, Hechicero ~62, Mago ~58 (contando lo que suma el Vigor).
-const HP_PER_LEVEL_REDESIGN = {pesada:20, paladin:18, doblefilo:15.5, tirador:14, hechicero:13, mago:12, sacerdote:10};
+const HP_PER_LEVEL_REDESIGN = {pesada:17, paladin:18, doblefilo:15.5, tirador:14, hechicero:13, mago:12, sacerdote:10};
 function baseStat(key){
   const r = race();
   let v = r.stats[key] + Math.floor((state.char.level-1) * statGrowth(key)); // puntos por nivel según la senda
@@ -4588,14 +4588,16 @@ const CLASS_CURVE_BETA = {
 // Multiplicador de DAÑO por senda y nivel con el rediseño (la vida queda en 1):
 // un valor por cada nivel de CLASS_CURVE_LEVELS, interpolado entre medio.
 const CLASS_DMG_REDESIGN = {
-  // Calibrado senda a senda contra cada jefe y luego suavizado a mano (2026-10-08).
-  // El tanque pega bastante menos de lo que dice la fórmula; el Hechicero, más.
-  pesada:    [1, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.70],
-  paladin:   [1, 0.80, 0.85, 0.90, 0.85, 0.90, 0.80, 0.85, 0.95],
-  doblefilo: [1, 1.10, 1.15, 1.10, 1.05, 1.00, 1.00, 1.05, 1.20],
-  tirador:   [1, 1.12, 1.10, 1.10, 1.12, 1.10, 1.20, 1.15, 1.15],
-  mago:      [1, 1.15, 0.85, 0.85, 1.00, 0.95, 1.20, 1.20, 1.00],
-  hechicero: [1, 1.30, 1.30, 1.40, 1.30, 1.30, 1.60, 1.67, 1.67],
+  // x1 para todas las sendas en todos los niveles (decisión de ariochbu,
+  // 2026-10-08): la tabla calibrada jefe a jefe subía y bajaba sin lógica
+  // (Guerrero 0.65, Hechicero hasta 1.67). El equilibrio va en atributos,
+  // habilidades y en el propio jefe. Se deja la estructura por si hace falta.
+  pesada:    [1,1,1,1,1,1,1,1,1],
+  paladin:   [1,1,1,1,1,1,1,1,1],
+  doblefilo: [1,1,1,1,1,1,1,1,1],
+  tirador:   [1,1,1,1,1,1,1,1,1],
+  mago:      [1,1,1,1,1,1,1,1,1],
+  hechicero: [1,1,1,1,1,1,1,1,1],
 };
 function curveAt(v){
   const L = CLASS_CURVE_LEVELS, lvl = state.char.level||1;
@@ -10222,6 +10224,7 @@ function livingAllies(){ return (combat.allies||[]).filter(a=>a.hp>0); }
 // en Retaguardia, cae en cualquier otro aliado vivo (aunque sea de
 // retaguardia) antes que en el jugador — la Retaguardia lo saca de ser
 // blanco directo salvo que de verdad no quede nadie más vivo al lado.
+let SIM_REAR_LAST = false; // variante en pruebas (solo localhost): con aliados vivos, al jugador de retaguardia no lo eligen
 function frontlineTarget(){
   // Pisos 1-60 (pedido explícito 2026-09-28): IA propia de los enemigos —
   // acaban SÍ o SÍ con toda la línea frontal antes de tocar la retaguardia.
@@ -10234,7 +10237,9 @@ function frontlineTarget(){
     const allies = livingAllies();
     const front = allies.filter(a=>a.pos==='frente').map(a=>({kind:'ally', ally:a}));
     if(combat.playerPos==='frente') front.push({kind:'player'});
-    const pool = front.length ? front : allies.map(a=>({kind:'ally', ally:a})).concat([{kind:'player'}]);
+    const rearPool = allies.map(a=>({kind:'ally', ally:a}));
+    if(!(SIM_REAR_LAST && combat.playerPos==='retaguardia' && rearPool.length)) rearPool.push({kind:'player'});
+    const pool = front.length ? front : rearPool;
     const taunter = pool.find(t=> t.kind==='ally' && (t.ally.isShadow || hasStatus(t.ally.statuses,'Bastión')));
     return taunter || pick(pool);
   }
@@ -10876,6 +10881,7 @@ function fireTierSBuff(procId, isPlayer, target, statusDef){
 }
 // Devuelve true si el estado quedó aplicado (o refrescado), false si se
 // resistió — las armas del Hechicero reaccionan a "aplicar un estado".
+const CLASS_STATUS_EDGE = {styles:['doblefilo','hechicero'], statuses:['Sangrado','Veneno','Miedo','Confusion'], resistFactor:0.5, flat:0.15};
 function applyStatus(target, statusDef, isPlayer){
   if(!statusDef) return false;
   if(SIM_NO_ALTERATIONS && statusDef.name === 'Corrupción') return false;
@@ -10902,8 +10908,16 @@ function applyStatus(target, statusDef, isPlayer){
           return false;
         }
       }
-    } else if(target && target.tpl && (target.mentalResist || target.statusResist)){
-      effChance *= isMental ? (1-(target.mentalResist||0)) : (1-(target.statusResist||0));
+    } else if(target && target.tpl){
+      // Asesino y Hechicero son las sendas de estados (pedido explícito
+      // 2026-10-08): con Sangrado, Veneno, Miedo y Confusión el enemigo solo
+      // les opone la mitad de su resistencia y parten con +15 puntos de
+      // probabilidad (tope 95%). Antes un jefe (resistencia mental 50%) dejaba
+      // el Miedo del Hechicero en ~40%.
+      const edge = state.char && CLASS_STATUS_EDGE.styles.includes(state.char.style) && CLASS_STATUS_EDGE.statuses.includes(statusDef.name);
+      const resist = isMental ? (target.mentalResist||0) : (target.statusResist||0);
+      effChance *= 1 - resist*(edge ? CLASS_STATUS_EDGE.resistFactor : 1);
+      if(edge) effChance = Math.min(0.95, effChance + CLASS_STATUS_EDGE.flat);
     }
     // Amuleto Tier S ('amuleto_s'): +10% de resistencia adicional a
     // cualquier alteración de estado negativa, mental o física.
@@ -13468,7 +13482,8 @@ function simBuildState(cfg){
   const families = [...new Set(stonePool.map(t=> t.family))].sort(()=> Math.random() - 0.5);
   const soulSlots = cfg.stoneTier === 'none' ? [] : families.slice(0, maxSoulSlots(level)).map(f=> makeSoulStoneItem(stonePool.find(t=> t.family === f)));
   const petPool = PET_CATALOG.filter(t=> t.rarity === (cfg.petRarity || 'epico')).sort(()=> Math.random() - 0.5);
-  const allies = SIM_ALLIES.slice(0, cfg.allies == null ? 4 : cfg.allies).map(([id, role, wstyle], i)=>{
+  // cfg.allyList: otro grupo de aliados (p. ej. dos tanques para un jugador de retaguardia)
+  const allies = (cfg.allyList || SIM_ALLIES).slice(0, cfg.allies == null ? 4 : cfg.allies).map(([id, role, wstyle], i)=>{
     const tpl = ALLY_ROSTER.find(t=> t.templateId === id);
     const eq = {};
     if(rank !== 'none'){
@@ -13642,6 +13657,7 @@ if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
   window.__redesign = (on)=>{ if(on !== undefined) CLASS_REDESIGN = !!on; return CLASS_REDESIGN; };
   window.__classDmg = CLASS_DMG_REDESIGN;
   window.__alter = (on)=>{ if(on !== undefined) SIM_NO_ALTERATIONS = !on; return !SIM_NO_ALTERATIONS; };
+  window.__rearLast = (on)=>{ if(on !== undefined) SIM_REAR_LAST = !!on; return SIM_REAR_LAST; };
   window.__combat = ()=> combat; // inspección del combate en curso (simulaciones que no terminan)
   window.__simDot = DOT_ENEMY;
   window.__bestiary = DECADE_BESTIARY; // para probar ajustes de un enemigo en las simulaciones sin tocar el código // para comparar el daño por turno de Sangrado/Veneno en las simulaciones
