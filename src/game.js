@@ -776,6 +776,10 @@ const GARVEL_SMALL_TPL = {id:'garvel_pequeno', name:'Garvel pequeño', icon:'�
   res:{fisico:-10,fuego:0,hielo:-5,veneno:15,aturdimiento:0},
   abilities:{mordida_gp:{label:'Mordida', mult:1.0}}, aiPriority:['mordida_gp']};
 const CORROSION_STATUS = {name:'Corrosion', duration:2, resPenalty:15, healMult:0.5};
+// Jefes del 40 y del 70 (decisión de ariochbu, 2026-10-08): +10% de daño a quien
+// esté en primera línea y le rompen la armadura (-15 de resistencia física, 3
+// turnos). Eran los dos jefes donde el Guerrero ganaba de sobra.
+const VS_FRONT_BOSS = {dmgMult:1.10, armorBreak:{name:'Armadura Rota', duration:3, resPenalty:15}};
 // Crías de la Matriarca Escarlata y cangrejos del Custodio (fases, 2026-10-02).
 const CRIA_ARANA_TPL = {id:'cria_arana', name:'Cría de araña', icon:'🕷️', hp:0.3, atk:0.4, res:{fisico:0,fuego:-10,hielo:0,veneno:30,aturdimiento:0}, frontline:true,
   abilities:{mordida_cria:{label:'Mordida', mult:1.0, applies:{name:'Veneno', chance:0.25, duration:2, stack:true, maxStack:3}}}, aiPriority:['mordida_cria']};
@@ -1266,7 +1270,7 @@ const DECADE_BESTIARY = [
     // Fases (2026-10-02, PDF Usurpador): Forma original -> Mimetismo ->
     // Autorreplicación/Intercambio (copias al Frente; mientras vivan recibe
     // -35% de daño) -> Cristalización. Stats del compendio intactos.
-    decadeBoss: {id:'usurpador', name:'El Usurpador Sin Nombre', icon:'🎭', hp:4.8, atk:1.8, res:{fisico:20,fuego:10,hielo:10,veneno:10,aturdimiento:20}, boss:true, frontline:true,
+    decadeBoss: {id:'usurpador', vsFront:VS_FRONT_BOSS, name:'El Usurpador Sin Nombre', icon:'🎭', hp:4.8, atk:1.8, res:{fisico:20,fuego:10,hielo:10,veneno:10,aturdimiento:20}, boss:true, frontline:true,
       reductionWhileSummonsAlive:0.35,
       phases:[{below:0.75, msg:'adopta tu forma (<b>Mimetismo</b>): imita tu estilo de pelea.'},{below:0.5, msg:'se <b>fragmenta en copias</b> e intercambia su lugar con ellas.'},{below:0.25, msg:'se <b>cristaliza</b>: su cuerpo se vuelve casi impenetrable por unos turnos.'}],
       abilities:{
@@ -1558,10 +1562,10 @@ const DECADE_BESTIARY = [
         ritual_lluvia_2:{label:'Ritual de Lluvia', utility:'self_buff', oncePerCombat:true, condition:(ctx)=>ctx.selfHpPct<0.4, selfBuff:{name:'Lluvia', duration:4, dmgMult:1.15, regenPct:0.03}, debuffTarget:{name:'Empapado', duration:4, evasionDelta:-10}},
         llamado_tormenta:{label:'Llamado de la Tormenta', utility:'self_heal', cooldown:4, healPct:0.08, requiresStatus:'Lluvia', condition:(ctx)=>ctx.selfHpPct<0.4 && ctx.selfHpPct>=0.1, debuffTarget:{name:'Empapado', duration:2, evasionDelta:-10}},
         sangre_tormenta:{label:'Sangre de la Tormenta', utility:'self_buff', cooldown:5, condition:(ctx)=>ctx.selfHpPct>=0.7, selfBuff:{name:'Sangre de la Tormenta', duration:2, dmgMult:1.10}},
-        rugido_tiranico:{label:'Rugido Tiránico', utility:'aoe', mult:0.41, cooldown:4, condition:(ctx)=>ctx.selfHpPct>=0.1, applies:{name:'Miedo', chance:0.15, duration:2, procChance:0.4}}, // onda que golpea a todo el grupo (lámina de Storm Gush)
+        rugido_tiranico:{label:'Rugido Tiránico', utility:'aoe', mult:0.55, rearMult:0.75, cooldown:4, condition:(ctx)=>ctx.selfHpPct>=0.1, applies:{name:'Miedo', chance:0.15, duration:2, procChance:0.4}}, // onda que golpea a todo el grupo (lámina de Storm Gush)
         vena_dragon:{label:'Vena del Dragón', mult:0.60, cooldown:4, mpDrain:0.10, condition:(ctx)=>ctx.selfHpPct>=0.1, applies:{name:'Ralentizado', chance:0.20, duration:2}},
         ojo_tormenta:{label:'Ojo de la Tormenta', mult:0.80, cooldown:3, applies:{name:'Ralentizado', chance:0.20, duration:2}},
-        golpe_cola_sg:{label:'Golpe de Cola', utility:'aoe', mult:0.52, cooldown:3}, // barrido de cola en área. Las dos áreas bajaron un 25% (2026-10-08): eran lo que hacía el jefe inviable desde la retaguardia (sin ellas ganan todos; ver nota de calibración)
+        golpe_cola_sg:{label:'Golpe de Cola', utility:'aoe', mult:0.70, rearMult:0.75, cooldown:3}, // barrido en área. Decisión de ariochbu (2026-10-08): al frente le pega el valor original; a la retaguardia, un 25% menos (era lo que la hacía inviable)
         tridente_sg:{label:'Tridente', mult:1.00}},
       aiPriority:['sacerdote_tormenta','ritual_lluvia_2','ritual_lluvia','llamado_tormenta','sangre_tormenta','rugido_tiranico','vena_dragon','ojo_tormenta','golpe_cola_sg','tridente_sg']}
   },
@@ -1747,7 +1751,7 @@ const DECADE_BESTIARY = [
     // El Sin Forma: tres configuraciones según su vida (el sprite cambia con
     // ellas, ver enemyFormId en battleSprites.js). Carne = golpes físicos
     // enormes; Idea = ataques mentales; Reflejo/Fallida = todo a la vez.
-    decadeBoss: {id:'sin_forma', name:'El Sin Forma', icon:'🕳️', hp:5.6, atk:1.90, res:rs(20,10,10,15,20), boss:true, frontline:true,
+    decadeBoss: {id:'sin_forma', vsFront:VS_FRONT_BOSS, name:'El Sin Forma', icon:'🕳️', hp:5.6, atk:1.90, res:rs(20,10,10,15,20), boss:true, frontline:true,
       phases:[{below:0.66, msg:'pierde partes del cuerpo: <b>Forma de Idea</b>, ataca la mente (fase 2).'},{below:0.33, msg:'ya no sostiene ninguna silueta: <b>Forma Fallida</b> (fase 3).'}],
       abilities:{
         golpe_de_carne:{label:'Golpe de Carne', mult:1.05},
@@ -9962,10 +9966,10 @@ const DECADE_BOSS_TUNING = {
   // arnés tools/calib_harness.js — media de las seis sendas, 40 combates cada
   // una, 4 aliados y todo rango A. Metas: 50 → 60%, 60 → 50%, 70 → 40%, 80 → 30%.
   // 2026-10-08, quinta vuelta (rama clases-x1): daño x1, vida nueva, kit y rotación del Hechicero, dos tanques para la retaguardia.
-  50: {hp:1.68, atk:1.72},  // Custodio: 56%
+  50: {hp:1.62, atk:1.66},  // Custodio: 61% sin el bono de frente
   60: {hp:2.42, atk:2.68},  // Storm Gush: 59% con sus áreas al 75% (Arquero 30, Mago 43; antes 10 y 3)
   // Área (Pliegue Espacial) -25% por decisión de ariochbu (2026-10-08); los Reflejos no se tocan.
-  70: {hp:2.08, atk:2.30},  // El Sin Forma: 44% antes de ese cambio
+  70: {hp:1.93, atk:2.13},  // El Sin Forma: 37% (sin bono de frente, área -25%, castigo al frente; con 2.08/2.30 daba 21%)
   80: {hp:2.06, atk:2.23},  // El Corazón Marchito: 29-30%
 };
 // BETA (con BETA_ALLY_UNLOCKS): en las décadas 0-3 el jugador lleva menos
@@ -9981,7 +9985,7 @@ const BETA_DECADE_BOSS_TUNING = {
   10: {hp:0.24, atk:0.50},  // Ogro
   20: {hp:0.80, atk:0.80},  // Matriarca
   30: {hp:1.96, atk:1.87},  // Riakis: 66% (quinta vuelta, 2026-10-08)
-  40: {hp:1.70, atk:1.59},  // Usurpador: 63%
+  40: {hp:1.50, atk:1.40},  // Usurpador: ~70% (rama sin-forma: sin bono de frente y con su castigo al frente; 1.46/1.37 daba 74%, 1.70/1.59 daba 31%)
 };
 // Enemigos que NO son jefe de década, por índice de década (1 = pisos 11-19...).
 // Medido: con 2-3 aliados los combates normales/élite/guardián rinden igual
@@ -10659,14 +10663,18 @@ function allyOnHealPenitencia(ally, healedPctBefore){
 // cuando lo golpeamos, aquí bajamos la del jugador/aliado cuando lo golpean.
 const CORROSION_RES_PENALTY = 15;
 const CORROSION_HEAL_MULT = 0.5;
-function corrosionResPenalty(statuses){ return hasStatus(statuses, 'Corrosion') ? CORROSION_RES_PENALTY : 0; }
+function corrosionResPenalty(statuses){
+  // Armadura Rota (jefes del 40 y del 70 contra el frente): resta resistencia física igual que la Corrosión, y se suman.
+  const rota = hasStatus(statuses, 'Armadura Rota');
+  return (hasStatus(statuses, 'Corrosion') ? CORROSION_RES_PENALTY : 0) + (rota ? (rota.resPenalty||0) : 0);
+}
 // Bonificación de Frente (2026-09-25, pedido explícito): quien ocupa el
 // puesto de tanque —el jugador con playerPos==='frente', o un aliado
 // frontline con pos==='frente' (hoy solo Aldric)— recibe un -10% de daño
 // plano adicional, siempre, se suma multiplicativamente con cualquier otra
 // reducción (Armadura/Maza/Furioso/Bendición/Tier S, etc.) — no la
 // reemplaza. No aplica a Retaguardia.
-const FRONTLINE_DAMAGE_REDUCTION = 0.10;
+const FRONTLINE_DAMAGE_REDUCTION = 0; // era 0.10; retirada por decisión de ariochbu (2026-10-08): el frente ya no recibe menos daño por estar al frente
 // Crítico de enemigo (pedido explícito 2026-09-28) — antes NINGÚN enemigo
 // criteaba. Multiplicador conservador a propósito (el jugador usa 1.5x+
 // bono): mejor que arranque sobrio y lo subamos si en la práctica se siente
@@ -11011,6 +11019,7 @@ const STATUS_INFO = {
   Mermado:      {buff:false, desc:'Su daño cae un poco mientras dura (armas de Paladín, Hechicero o Sacerdote).'},
   Ruina:        {buff:false, desc:'Pierde puntos en todas sus resistencias mientras dura (Vara de la Ruina).'},
   Paralisis:    {buff:false, desc:'Evasión a 0: no puede esquivar nada, ni defendiéndose.'},
+  'Armadura Rota': {buff:false, desc:'-15 de resistencia física mientras dura. La causan El Usurpador y El Sin Forma a quien esté en primera línea.'},
   Quebranto:    {buff:false, desc:'-15 a todas sus resistencias y la mitad de su resistencia a estados (Drenaje de Esencia del Hechicero).'},
   Ceguera:      {buff:false, desc:'Probabilidad de que sus golpes fallen por completo.'},
   Miedo:        {buff:false, desc:'Probabilidad de perder el turno por pánico.'},
@@ -13340,7 +13349,7 @@ function resolveNewStyleEnemyMove(enemy, target, enemyCrit){
     const frontOnly = !enemy.tpl.boss && frontAlive;
     // Área de guardianes y jefes: alcanza a todos, pero con alguien vivo al
     // frente la retaguardia solo recibe una parte (BOSS_AOE_REAR_FACTOR).
-    const rearFactor = (enemy.tpl.boss && frontAlive) ? BOSS_AOE_REAR_FACTOR : 1;
+    const rearFactor = ((enemy.tpl.boss && frontAlive) ? BOSS_AOE_REAR_FACTOR : 1) * (ability.rearMult != null ? ability.rearMult : 1); // rearMult: parte del área que llega a la retaguardia
     const hitsPlayer = !frontOnly || combat.playerPos==='frente';
     let pDmg = 0;
     if(hitsPlayer){
@@ -13380,6 +13389,13 @@ function resolveNewStyleEnemyMove(enemy, target, enemyCrit){
   // "+X% si el objetivo está por debajo del Y% de vida" (PDFs de décadas
   // 3 y 4 — auditoría 2026-10-02: antes solo existía como condición de uso
   // y el +X% se perdía).
+  if(tpl.vsFront && (onPlayer ? combat.playerPos==='frente' : target.ally.pos==='frente')){
+    dmg = Math.round(dmg*tpl.vsFront.dmgMult);
+    if(tpl.vsFront.armorBreak){
+      if(onPlayer) applyStatus(null, Object.assign({}, tpl.vsFront.armorBreak), true);
+      else applyStatus(target.ally, Object.assign({}, tpl.vsFront.armorBreak), false);
+    }
+  }
   if(ability.bonusVsLowHp && ctx.targetHpPct < ability.bonusVsLowHp.below){
     dmg = Math.round(dmg*ability.bonusVsLowHp.mult);
   }
