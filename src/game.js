@@ -507,7 +507,7 @@ const LEVEL30_SKILL_BONUS = {
   golpe_bruto:      {tambaleoChance: 0.85},                 // era 0.70
   machacar:         {comboBonusMult: 2.1},                  // era 1.8
   grito_guerra:     {healPct: 0.10, allyDmgMult: 1.10},      // nuevo: cura 10% y +10% daño a aliados 2 turnos
-  corte_rapido:     {maxStack: 5, duration: 4},              // maxStack era 3, duration era 3
+  corte_rapido:     {maxStack: 4, duration: 4},              // maxStack era 3, duration era 3
   golpe_gracia:     {perStackMult: 0.32},                    // era 0.25
   marca_cazador:    {duration: 4},                           // era 3
   explosion_arcana: {bonusMult: 0.75, penaltyIfNone: 0.20},  // era 0.60 / 0.30
@@ -587,9 +587,9 @@ const SKILLS = {
   danza_cuchillas: {
     id:'danza_cuchillas', name:'Danza de cuchillas', cost:{tipo:'estamina', valor:22}, dmgType:'fisico', mult:0.5, hits:2,
     scalesWithStack:{name:'Sangrado', perStackMult:0.15},
-    // Rebote (pedido de ariochbu, 2026-10-08): el resto de enemigos recibe la mitad del daño hecho al objetivo.
+    // Rebote (pedido de ariochbu, 2026-10-08): UN enemigo más recibe la mitad del daño hecho al objetivo — uno del frente; si no queda nadie ahí, uno de retaguardia.
     splashPct:0.5,
-    desc: ()=> `Golpea dos veces. +${Math.round(skillBonus('danza_cuchillas','perStackMult',0.15)*100)}% de daño por cada carga de Sangrado en el objetivo. Las cuchillas rebotan: los demás enemigos reciben el 50% de ese daño.`, targetMode:'front'
+    desc: ()=> `Golpea dos veces. +${Math.round(skillBonus('danza_cuchillas','perStackMult',0.15)*100)}% de daño por cada carga de Sangrado en el objetivo. Las cuchillas rebotan en un enemigo más (del frente; si no queda ninguno, de la retaguardia), que recibe el 50% de ese daño.`, targetMode:'front'
   },
   golpe_gracia: {
     id:'golpe_gracia', name:'Golpe de gracia', cost:{tipo:'estamina', valor:18}, dmgType:'fisico', mult:0.9,
@@ -11830,7 +11830,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
       if(fe) splashHits.push({dmg: Math.max(1, Math.round(dmg*fe.pct)), exclude: target, single:true, label:'Flecha Expansiva'});
     }
     if(lunaLlenaSp) splashHits.push({dmg: Math.max(1, Math.round(dmg*lunaLlenaSp.splash)), exclude: target, single:false, label:'Lluvia de Artemisa'});
-    if(skill.splashPct) splashHits.push({dmg: Math.max(1, Math.round(dmg*skill.splashPct)), exclude: target, single:false, label:`El rebote de ${skill.name}`});
+    if(skill.splashPct) splashHits.push({dmg: Math.max(1, Math.round(dmg*skill.splashPct)), exclude: target, single:true, frontFirst:true, label:`El rebote de ${skill.name}`});
 
     // Efectos al golpear de las armas de Paladín/Hechicero (2026-10-02).
     if(skillId==='golpe_consagrado'){
@@ -11901,7 +11901,8 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
   });
   if(combat.critNextUsed){ combat.critNext = false; combat.critNextUsed = false; }
   splashHits.forEach(sh=>{
-    const pool = livingEnemies().filter(e=>e!==sh.exclude);
+    let pool = livingEnemies().filter(e=>e!==sh.exclude);
+    if(sh.frontFirst){ const front = livingFrontlineEnemyIndices().map(i=> combat.enemies[i]).filter(e=> e!==sh.exclude && e.hp>0); if(front.length) pool = front; }
     const hit = sh.single ? (pool.length ? [pick(pool)] : []) : pool;
     hit.forEach(e=>{ e.hp = Math.max(0, e.hp - sh.dmg); turnEffects.push({targetKind:'enemy', key: combat.enemies.indexOf(e), amount:sh.dmg, kind:'dmg'}); });
     if(hit.length) log(`<b>${sh.label}</b> alcanza a ${hit.map(e=>e.name).join(', ')}: ${sh.dmg} de daño.`);
