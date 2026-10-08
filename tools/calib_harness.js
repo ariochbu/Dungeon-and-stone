@@ -179,3 +179,29 @@ W.calibFloors3 = async (nPer)=>{
   }
   W.calibDone = true;
 };
+
+// ---- Cuarta vuelta (2026-10-08): pisos 3-20 y jefes del 10 y del 20 ----
+W.calibLow = async (nPer)=>{
+  W.calibDone = false; W.calibLowR = {};
+  const BASE = {0: {regular:[1, 1], elite:[1, 1], guardian:[0.60, 0.70]}, 1: {regular:[1.08, 1.16], elite:[1.08, 1.16], guardian:[1.08, 1.16]}};
+  const setF = (dec, s)=> ['regular', 'elite', 'guardian'].forEach(k=>{ const b = BASE[dec][k]; W.__simScaleBeta(dec, k, +(b[0]*s).toFixed(3), +(b[1]*s).toFixed(3)); });
+  const meas = async (dec, n)=>{ const a = await W.measure(W.clearLevel, dec*10 + 4, n), b = await W.measure(W.clearLevel, dec*10 + 8, n); const per = {}; W.CLS.forEach(c=> per[c] = Math.round((a.per[c] + b.per[c]) / 2)); return {mean: Math.round((a.mean + b.mean) / 2), per}; };
+  for(const dec of [0, 1]){
+    let lo = 0.6, hi = 3.2, s = 1, last = null; const log = [];
+    for(let i = 0; i < 6; i++){
+      setF(dec, s); last = await meas(dec, nPer); log.push(`${s.toFixed(2)}→${last.mean}`);
+      if(Math.abs(last.mean - 90) <= 4) break;
+      if(last.mean > 90) lo = s; else hi = s;
+      s = Math.sqrt(lo * hi);
+    }
+    setF(dec, s);
+    W.calibLowR['f' + dec] = {s: +s.toFixed(2), log: log.join(' '), fin: await meas(dec, nPer + 2), vals: ['regular', 'elite', 'guardian'].map(k=> BASE[dec][k].map(v=> +(v*s).toFixed(2)))};
+    W.calibStep = 'low-f' + dec;
+  }
+  for(const lv of [10, 20]){
+    const rec = await W.search(W.fight, lv, 65, W.BOSS_BASE[lv], W.setBoss(lv), 30, 6);
+    rec.final = await W.measure(W.fight, lv, 40);
+    W.calibLowR['b' + lv] = rec; W.calibStep = 'low-b' + lv;
+  }
+  W.calibDone = true;
+};
