@@ -1558,10 +1558,10 @@ const DECADE_BESTIARY = [
         ritual_lluvia_2:{label:'Ritual de Lluvia', utility:'self_buff', oncePerCombat:true, condition:(ctx)=>ctx.selfHpPct<0.4, selfBuff:{name:'Lluvia', duration:4, dmgMult:1.15, regenPct:0.03}, debuffTarget:{name:'Empapado', duration:4, evasionDelta:-10}},
         llamado_tormenta:{label:'Llamado de la Tormenta', utility:'self_heal', cooldown:4, healPct:0.08, requiresStatus:'Lluvia', condition:(ctx)=>ctx.selfHpPct<0.4 && ctx.selfHpPct>=0.1, debuffTarget:{name:'Empapado', duration:2, evasionDelta:-10}},
         sangre_tormenta:{label:'Sangre de la Tormenta', utility:'self_buff', cooldown:5, condition:(ctx)=>ctx.selfHpPct>=0.7, selfBuff:{name:'Sangre de la Tormenta', duration:2, dmgMult:1.10}},
-        rugido_tiranico:{label:'Rugido Tiránico', utility:'aoe', mult:0.55, cooldown:4, condition:(ctx)=>ctx.selfHpPct>=0.1, applies:{name:'Miedo', chance:0.15, duration:2, procChance:0.4}}, // onda que golpea a todo el grupo (lámina de Storm Gush)
+        rugido_tiranico:{label:'Rugido Tiránico', utility:'aoe', mult:0.41, cooldown:4, condition:(ctx)=>ctx.selfHpPct>=0.1, applies:{name:'Miedo', chance:0.15, duration:2, procChance:0.4}}, // onda que golpea a todo el grupo (lámina de Storm Gush)
         vena_dragon:{label:'Vena del Dragón', mult:0.60, cooldown:4, mpDrain:0.10, condition:(ctx)=>ctx.selfHpPct>=0.1, applies:{name:'Ralentizado', chance:0.20, duration:2}},
         ojo_tormenta:{label:'Ojo de la Tormenta', mult:0.80, cooldown:3, applies:{name:'Ralentizado', chance:0.20, duration:2}},
-        golpe_cola_sg:{label:'Golpe de Cola', utility:'aoe', mult:0.70, cooldown:3}, // barrido de cola en área
+        golpe_cola_sg:{label:'Golpe de Cola', utility:'aoe', mult:0.52, cooldown:3}, // barrido de cola en área. Las dos áreas bajaron un 25% (2026-10-08): eran lo que hacía el jefe inviable desde la retaguardia (sin ellas ganan todos; ver nota de calibración)
         tridente_sg:{label:'Tridente', mult:1.00}},
       aiPriority:['sacerdote_tormenta','ritual_lluvia_2','ritual_lluvia','llamado_tormenta','sangre_tormenta','rugido_tiranico','vena_dragon','ojo_tormenta','golpe_cola_sg','tridente_sg']}
   },
@@ -9962,7 +9962,7 @@ const DECADE_BOSS_TUNING = {
   // una, 4 aliados y todo rango A. Metas: 50 → 60%, 60 → 50%, 70 → 40%, 80 → 30%.
   // 2026-10-08, quinta vuelta (rama clases-x1): daño x1, vida nueva, kit y rotación del Hechicero, dos tanques para la retaguardia.
   50: {hp:1.68, atk:1.72},  // Custodio: 56%
-  60: {hp:2.42, atk:2.68},  // Storm Gush: 45%
+  60: {hp:2.42, atk:2.68},  // Storm Gush: 59% con sus áreas al 75% (Arquero 30, Mago 43; antes 10 y 3)
   70: {hp:2.08, atk:2.30},  // El Sin Forma: 33-36%
   80: {hp:2.06, atk:2.23},  // El Corazón Marchito: 29-30%
 };
@@ -10239,6 +10239,7 @@ function livingAllies(){ return (combat.allies||[]).filter(a=>a.hp>0); }
 // en Retaguardia, cae en cualquier otro aliado vivo (aunque sea de
 // retaguardia) antes que en el jugador — la Retaguardia lo saca de ser
 // blanco directo salvo que de verdad no quede nadie más vivo al lado.
+let BOSS_AOE_REAR_FACTOR = 1; // 1 = sin cambio (en pruebas, ver __rearAoe)
 let SIM_REAR_LAST = false; // variante en pruebas (solo localhost): con aliados vivos, al jugador de retaguardia no lo eligen
 function frontlineTarget(){
   // Pisos 1-60 (pedido explícito 2026-09-28): IA propia de los enemigos —
@@ -13330,18 +13331,21 @@ function resolveNewStyleEnemyMove(enemy, target, enemyCrit){
     // de década sigue pegando a todo el grupo.
     const frontAlive = combat.playerPos==='frente' || livingAllies().some(a=> a.pos==='frente');
     const frontOnly = !enemy.tpl.boss && frontAlive;
+    // Área de guardianes y jefes: alcanza a todos, pero con alguien vivo al
+    // frente la retaguardia solo recibe una parte (BOSS_AOE_REAR_FACTOR).
+    const rearFactor = (enemy.tpl.boss && frontAlive) ? BOSS_AOE_REAR_FACTOR : 1;
     const hitsPlayer = !frontOnly || combat.playerPos==='frente';
     let pDmg = 0;
     if(hitsPlayer){
       const pRes = totalRes('fisico') - corrosionResPenalty(combat.playerStatuses);
-      pDmg = Math.max(1, Math.round(base*(1-pRes/100)));
+      pDmg = Math.max(1, Math.round(base*(1-pRes/100)*(combat.playerPos==='frente' ? 1 : rearFactor)));
       dealDamageToPlayer(pDmg);
       effects.push({targetKind:'player', amount:pDmg, kind:'dmg'});
       if(ability.applies) applyStatus(null, Object.assign({}, ability.applies), true);
     }
     livingAllies().filter(a=> !frontOnly || a.pos==='frente').forEach(ally=>{
       const aRes = ((ally.res && ally.res.fisico)||0) - corrosionResPenalty(ally.statuses);
-      const aDmg = Math.max(1, Math.round(base*(1-aRes/100)));
+      const aDmg = Math.max(1, Math.round(base*(1-aRes/100)*(ally.pos==='frente' ? 1 : rearFactor)));
       dealDamageToAlly(ally, aDmg);
       if(ability.applies) applyStatus(ally, Object.assign({}, ability.applies), false);
       effects.push({targetKind:'ally', key:ally.id, amount:aDmg, kind:'dmg'});
@@ -13711,6 +13715,7 @@ if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
   window.__alter = (on)=>{ if(on !== undefined) SIM_NO_ALTERATIONS = !on; return !SIM_NO_ALTERATIONS; };
   window.__rearLast = (on)=>{ if(on !== undefined) SIM_REAR_LAST = !!on; return SIM_REAR_LAST; };
   window.__skills = SKILLS; // para forzar al simulador a usar una habilidad concreta al probarla
+  window.__rearAoe = (v)=>{ if(v !== undefined) BOSS_AOE_REAR_FACTOR = v; return BOSS_AOE_REAR_FACTOR; };
   window.__combat = ()=> combat; // inspección del combate en curso (simulaciones que no terminan)
   window.__simDot = DOT_ENEMY;
   window.__bestiary = DECADE_BESTIARY; // para probar ajustes de un enemigo en las simulaciones sin tocar el código // para comparar el daño por turno de Sangrado/Veneno en las simulaciones
