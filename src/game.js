@@ -12598,20 +12598,6 @@ function tickStatuses(list, ownerName, target){
       const dmg = Math.max(1, Math.round(baseDamageFromStat(derived().hab)*(onEnemy ? DOT_ENEMY.Veneno : 0.06)*(st.stacks||1)));
       if(target){
         target.hp = Math.max(0, target.hp-dmg); log(`${ownerName} sufre el veneno por ${dmg}.`);
-        // Contagio (pedido de ariochbu, 2026-10-08): si el Veneno de un Hechicero
-        // mata a un enemigo, pasa con todas sus cargas al de al lado — uno de su
-        // misma línea; si no queda nadie ahí, uno de la otra.
-        if(onEnemy && target.hp===0 && state.char.style==='hechicero'){
-          const alive = combat.enemies.filter(e=> e!==target && e.hp>0);
-          const sameLine = alive.filter(e=> !!(e.tpl && e.tpl.frontline) === !!(target.tpl && target.tpl.frontline));
-          const heir = sameLine.length ? pick(sameLine) : (alive.length ? pick(alive) : null);
-          if(heir){
-            const ex = hasStatus(heir.statuses, 'Veneno');
-            if(ex){ ex.stacks = Math.max(ex.stacks||1, st.stacks||1); ex.duration = Math.max(ex.duration||0, 3); }
-            else heir.statuses.push({name:'Veneno', duration:3, stack:true, stacks: st.stacks||1, maxStack: st.maxStack||3});
-            log(`El veneno salta de ${ownerName} a <b>${heir.name}</b> con ${st.stacks||1} carga(s).`);
-          }
-        }
       }
       else { dealDamageToPlayer(dmg); log(`El veneno te quita ${dmg} de vida.`); }
     }
@@ -13823,7 +13809,29 @@ if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
   // ídem para la curva de una senda en un punto de nivel (índice 5 = nivel 50, 6 = nivel 60)
   window.__simCurve = (styleId, idx, hp, dmg)=>{ CLASS_CURVE[styleId].hp[idx] = hp; CLASS_CURVE[styleId].dmg[idx] = dmg; return CLASS_CURVE[styleId]; };
 }
+// Contagio (pedido de ariochbu, 2026-10-08): cuando muere un enemigo envenenado
+// —por golpe o por el propio Veneno— y el jugador es Hechicero, el Veneno pasa
+// con todas sus cargas a otro enemigo de su misma línea; si no queda nadie
+// ahí, a uno de la otra. Se revisa cada vez que se comprueba el fin del combate.
+function spreadVenenoFromDead(){
+  if(!combat || state.char.style!=='hechicero') return;
+  combat.enemies.forEach(dead=>{
+    if(dead.hp>0 || dead.venenoSpread) return;
+    const st = hasStatus(dead.statuses||[], 'Veneno');
+    if(!st) return;
+    dead.venenoSpread = true;
+    const alive = combat.enemies.filter(e=> e.hp>0);
+    const sameLine = alive.filter(e=> !!(e.tpl && e.tpl.frontline) === !!(dead.tpl && dead.tpl.frontline));
+    const heir = sameLine.length ? pick(sameLine) : (alive.length ? pick(alive) : null);
+    if(!heir) return;
+    const ex = hasStatus(heir.statuses, 'Veneno');
+    if(ex){ ex.stacks = Math.max(ex.stacks||1, st.stacks||1); ex.duration = Math.max(ex.duration||0, 3); }
+    else heir.statuses.push({name:'Veneno', duration:3, stack:true, stacks: st.stacks||1, maxStack: st.maxStack||3});
+    log(`El veneno salta de ${dead.name} a <b>${heir.name}</b> con ${st.stacks||1} carga(s).`);
+  });
+}
 function checkCombatEnd(){
+  spreadVenenoFromDead();
   if(!combat || combat.over) return;
   if(state.char.curHP<=0){
     combat.over = true;
