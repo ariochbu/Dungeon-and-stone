@@ -2,9 +2,9 @@
 
 import { supabase } from './supabaseClient.js';
 import * as auth from './auth.js';
-import { syncBattleStage, playBattleAnim } from './battleStage.js?v=97';
-import { mountLabyrinth } from './labyrinthMap.js?v=3';
-import { CLASS_SPRITES, ENEMY_SPRITES, playerSpriteFor, enemySpriteFor, ALLY_TEMPLATE_SPRITES } from './battleSprites.js?v=85';
+import { syncBattleStage, playBattleAnim } from './battleStage.js?v=98';
+import { mountLabyrinth } from './labyrinthMap.js?v=4';
+import { CLASS_SPRITES, ENEMY_SPRITES, playerSpriteFor, playerIllustrationFor, enemySpriteFor, ALLY_TEMPLATE_SPRITES } from './battleSprites.js?v=86';
 
 /* ============================================================
    DATA
@@ -292,6 +292,14 @@ const STORY_SCENES = {
   60: {title:'El foso', pages:[
     'Tetrasea, el Señor de las Lágrimas, se hunde y el mar se retira con él. No era un océano: era un foso. En el fondo seco hay una puerta redonda de piedra, del tamaño de una ciudad.',
     '«Lloré mil años para mantenerla cerrada», dice la última ola. La puerta cruje. Una grieta la recorre de lado a lado y algo, al otro lado, respira por primera vez. El sello está roto. Lo rompiste tú.',
+  ]},
+  70: {title:'La cicatriz', pages:[
+    'El Sin Forma prueba una silueta más, y otra, y ninguna le sirve. Se deshace sin hacer ruido, como una idea que nadie termina de pensar. La Grieta se queda quieta por primera vez.',
+    'Pero algo no desaparece con él: en el muro de la prisión queda una cicatriz que no cierra. Por ella se cuela un olor a tierra mojada y a flores viejas. Lo que estaba contenido aquí ya salió… y abajo había un jardín.',
+  ]},
+  80: {title:'El jardín', pages:[
+    'El Corazón Marchito deja caer sus raíces. No se defiende: late una vez, despacio. «Pódame». Cuando el último latido se apaga, las flores se cierran, los jardineros dejan de moverse y la luz verde se va. Por primera vez desde que entraste, el bosque está muerto de verdad.',
+    'Entonces, desde abajo, sube una luz naranja. Calor. Ceniza. El jardín no era una amenaza: era un filtro. Absorbía lo que subía de las capas de más abajo… y acabas de arrancarlo.',
   ]},
 };
 // Crónicas (ciudad): tres apartados. Historia — las escenas ya desbloqueadas
@@ -719,7 +727,7 @@ function decadeIndexForLevel(level){ return Math.min(DECADE_BESTIARY.length-1, M
 // Tema visual de fondo por década para la escena de combate (battleStage.js)
 // — mismo mapeo que prototype-2d/combat.html: forest (Bosque Goblin/Arañas),
 // cave (Riakis/bestias), cult (Usurpador), sea (Isla Paraíso/El Mar).
-const DECADE_BG_THEME = ['forest','forest','cave','cult','sea','sea'];
+const DECADE_BG_THEME = ['forest','forest','cave','cult','sea','sea','cult','forest'];
 
 // Plantillas de invocación (2026-10-02). Señuelo: 1 de vida (se fija al
 // invocar), no actúa, va al Frente y absorbe el golpe dirigido al frente.
@@ -727,6 +735,21 @@ function decoyTpl(id, name, icon){
   return {id, name, icon, hp:0.1, atk:0.1, res:{fisico:0,fuego:0,hielo:0,veneno:0,aturdimiento:0}, frontline:true, decoy:true,
     abilities:{nada:{label:'—', mult:0}}, aiPriority:['nada']};
 }
+// Resistencias en una línea (décadas 61+): físico, fuego, hielo, veneno, aturdimiento.
+function rs(fisico, fuego, hielo, veneno, aturdimiento){ return {fisico, fuego, hielo, veneno, aturdimiento}; }
+// Corrupción (Bosque muerto, 71-80): estado acumulable sobre el jugador y sus
+// aliados. Por cada carga: +3% al daño que hacen y +4% al que reciben. Dura el
+// combate entero. Lo leen statusStackDealtMult / statusStackTakenMult.
+const CORRUPCION_STATUS = {name:'Corrupción', duration:99, stack:true, maxStack:10, perStackDmg:0.03, perStackTaken:0.04};
+function CORRUPCION(chance){ return Object.assign({chance}, CORRUPCION_STATUS); }
+const DECOY_CIERVO = decoyTpl('senuelo_ciervo', 'Copia Falsa', '🦌');
+// Invocaciones de las décadas 61-80.
+const LARVA_ERRANTE_TPL = {id:'larva_errante', name:'Larva Errante', icon:'🐛', hp:0.3, atk:0.45, res:rs(0,-10,0,10,0), frontline:true,
+  abilities:{mordisco_le:{label:'Mordisco', mult:1.0, applies:{name:'Ralentizado', chance:0.15, duration:2}}}, aiPriority:['mordisco_le']};
+const REFLEJO_FALLIDO_TPL = {id:'reflejo_fallido', name:'Reflejo Fallido', icon:'🕳️', hp:0.3, atk:0.45, res:rs(0,0,0,0,0), frontline:true, mentalResist:0.5,
+  abilities:{golpe_rf:{label:'Golpe', mult:1.0, applies:{name:'Confusion', chance:0.15, duration:1}}}, aiPriority:['golpe_rf']};
+const BROTE_MENOR_TPL = {id:'brote_menor', name:'Brote Menor', icon:'🌱', hp:0.3, atk:0.45, res:rs(0,-15,0,15,0), frontline:true,
+  abilities:{mordida_bm:{label:'Mordida', mult:1.0, applies:Object.assign({chance:0.20}, CORRUPCION_STATUS)}}, aiPriority:['mordida_bm']};
 const DECOY_CLON_SOMBRA = decoyTpl('senuelo_clon', 'Clon de Sombra', '👤');
 const DECOY_REPLICA = decoyTpl('senuelo_replica', 'Réplica', '🪞');
 const DECOY_DUPLICADO = decoyTpl('senuelo_duplicado', 'Duplicado', '🪞');
@@ -1527,6 +1550,424 @@ const DECADE_BESTIARY = [
         golpe_cola_sg:{label:'Golpe de Cola', utility:'aoe', mult:0.70, cooldown:3}, // barrido de cola en área
         tridente_sg:{label:'Tridente', mult:1.00}},
       aiPriority:['sacerdote_tormenta','ritual_lluvia_2','ritual_lluvia','llamado_tormenta','sangre_tormenta','rugido_tiranico','vena_dragon','ojo_tormenta','golpe_cola_sg','tridente_sg']}
+  },
+  // Década 6 — pisos 61-70 — La Grieta (2026-10-08, pedido explícito; diseño de
+  // ariochbu: aberraciones del caos). Primera versión: cada mecánica del
+  // documento se aproxima con lo que el motor ya sabe hacer —
+  //   saltos espaciales / fases  -> auto-buff de evasión unos turnos
+  //   resistencia que cambia     -> auto-buff de reducción de daño por cooldown
+  //   copias falsas              -> señuelos (decoy) de 1 de vida
+  //   bloquear/devorar habilidades y beneficios -> Silencio y Debilitado
+  //   distorsión, voces, gravedad -> Confusión, Miedo, Ralentizado, Ceguera
+  // Solo entran los monstruos que ya tienen arte chibi (faltan Mordedor de
+  // Grieta, Medusa de Vidrio Negro, Esquirla Viva, Polilla de Ruido y el
+  // élite Devoranombres). La "Ley del Caos" de cada combate va aparte: ver
+  // CHAOS_LAWS.
+  {
+    regular: [
+      {id:'larva_fase', name:'Larva de Fase', icon:'🐛', hp:0.95, atk:0.95, res:rs(10,-10,0,10,0), frontline:true,
+        abilities:{
+          mordisco_lf:{label:'Mordisco', mult:1.00},
+          desfase:{label:'Desfase', utility:'self_buff', selfBuff:{name:'Desfasada', duration:2, incomingDmgReduction:0.25}, cooldown:4},
+          baba_inestable:{label:'Baba Inestable', mult:0.75, applies:{name:'Ralentizado', chance:0.25, duration:2}, cooldown:3},
+        },
+        aiPriority:['desfase','baba_inestable','mordisco_lf']},
+      {id:'ojo_reflujo', name:'Ojo de Reflujo', icon:'👁️', hp:0.75, atk:1.10, res:rs(-10,5,5,0,-5),
+        abilities:{
+          mirada_ro:{label:'Mirada', mult:1.00},
+          reflujo:{label:'Reflujo', mult:0.85, applies:{name:'Confusion', chance:0.20, duration:1}, cooldown:4},
+          pupila_ciega:{label:'Pupila Ciega', mult:0.70, applies:{name:'Ceguera', chance:0.25, duration:2, procChance:0.35}, cooldown:4},
+        },
+        aiPriority:['pupila_ciega','reflujo','mirada_ro']},
+      {id:'sabueso_invertido', name:'Sabueso Invertido', icon:'🐕', hp:1.05, atk:1.10, res:rs(5,0,0,0,5), frontline:true,
+        abilities:{
+          dentellada_si:{label:'Dentellada', mult:1.00, applies:{name:'Sangrado', chance:0.15, duration:2, stack:true, maxStack:3}},
+          piel_invertida:{label:'Piel Invertida', utility:'self_buff', selfBuff:{name:'Piel Invertida', duration:2, incomingDmgReduction:0.20}, cooldown:5},
+          presa_torcida:{label:'Presa Torcida', mult:1.25, cooldown:3, bonusVsTargetStatus:{name:'Sangrado', mult:1.15}},
+        },
+        aiPriority:['piel_invertida','presa_torcida','dentellada_si']},
+      {id:'acaro_umbral', name:'Ácaro del Umbral', icon:'🕷️', hp:0.80, atk:0.90, res:rs(15,-10,0,10,0),
+        abilities:{
+          pinchazo_au:{label:'Pinchazo', mult:0.90},
+          injerto_caos:{label:'Injerto de Caos', utility:'buff_allies', cooldown:4, buffAllies:{name:'Fortalecido', duration:3, stacks:3, single:true}},
+          esquirla_au:{label:'Esquirla', mult:0.75, applies:{name:'Marcado', chance:0.25, duration:2}, cooldown:3},
+        },
+        aiPriority:['injerto_caos','esquirla_au','pinchazo_au']},
+      {id:'vigilante_descosido', name:'Vigilante Descosido', icon:'🧍', hp:1.15, atk:1.10, res:rs(10,0,0,0,10), frontline:true,
+        abilities:{
+          brazo_largo:{label:'Brazo Largo', mult:1.00},
+          brazos_cruzados:{label:'Brazos Cruzados', mult:1.30, cooldown:3},
+          costura_floja:{label:'Costura Floja', mult:0.80, applies:{name:'Debilitado', chance:0.25, duration:2}, cooldown:4},
+        },
+        aiPriority:['brazos_cruzados','costura_floja','brazo_largo']},
+      {id:'ciervo_torcido', name:'Ciervo Torcido', icon:'🦌', hp:1.10, atk:1.15, res:rs(5,0,5,0,0), frontline:true,
+        abilities:{
+          cornada_ct:{label:'Cornada', mult:1.00},
+          embestida_fractal:{label:'Embestida Fractal', mult:1.25, cooldown:4},
+          copia_falsa:{label:'Copia Falsa', utility:'summon', cooldown:6, summon:{tpl:DECOY_CIERVO, count:1, maxAlive:1, oneHp:true}},
+        },
+        aiPriority:['copia_falsa','embestida_fractal','cornada_ct']},
+      {id:'boca_peregrina', name:'Boca Peregrina', icon:'👄', hp:1.00, atk:1.05, res:rs(0,-5,0,15,0), frontline:true,
+        abilities:{
+          mordisco_bp:{label:'Mordisco', mult:1.05},
+          devorar_beneficio:{label:'Devorar Beneficio', mult:0.80, applies:{name:'Debilitado', chance:0.35, duration:2}, cooldown:4, mpDrain:0.08},
+          tragar:{label:'Tragar', mult:1.20, cooldown:3, bonusVsLowHp:{below:0.5, mult:1.15}},
+        },
+        aiPriority:['devorar_beneficio','tragar','mordisco_bp']},
+      {id:'ciempies_especular', name:'Ciempiés Especular', icon:'🐛', hp:1.00, atk:1.00, res:rs(15,0,-5,5,0), frontline:true,
+        abilities:{
+          pinza_ce:{label:'Pinza', mult:1.00},
+          reflejo_tardio:{label:'Reflejo Tardío', utility:'self_buff', selfBuff:{name:'Reflejo Tardío', duration:2, evasionDelta:12}, cooldown:5},
+          latigo_espejo:{label:'Látigo de Espejo', mult:0.85, applies:{name:'Ralentizado', chance:0.25, duration:2}, cooldown:3},
+        },
+        aiPriority:['reflejo_tardio','latigo_espejo','pinza_ce']},
+    ],
+    elite: [
+      {id:'quimera_disonante', name:'Quimera Disonante', icon:'🐲', hp:2.10, atk:1.38, res:rs(10,5,5,5,10), elite:true, frontline:true,
+        abilities:{
+          zarpa_qd:{label:'Zarpa', mult:1.05, applies:{name:'Sangrado', chance:0.20, duration:2, stack:true, maxStack:3}},
+          rasgo_robado:{label:'Rasgo Robado', utility:'self_buff', selfBuff:{name:'Rasgo Robado', duration:3, dmgMult:1.15, evasionDelta:8}, cooldown:5},
+          rugido_disonante:{label:'Rugido Disonante', mult:0.85, applies:{name:'Confusion', chance:0.25, duration:1}, cooldown:4},
+          doble_fauce:{label:'Doble Fauce', mult:1.40, cooldown:3},
+        },
+        aiPriority:['rasgo_robado','doble_fauce','rugido_disonante','zarpa_qd']},
+      {id:'ancla_vacio', immuneRetroceso:true, passiveReduction:0.10, name:'Ancla del Vacío', icon:'⚓', hp:2.30, atk:1.20, res:rs(20,5,5,10,25), elite:true, frontline:true,
+        abilities:{
+          pulso_av:{label:'Pulso', mult:0.95},
+          gravedad_torcida:{label:'Gravedad Torcida', utility:'aoe', mult:0.45, cooldown:4, applies:{name:'Ralentizado', chance:0.6, duration:2}},
+          atraccion:{label:'Atracción', mult:1.10, applies:{name:'Paralisis', chance:0.25, duration:1}, cooldown:4},
+        },
+        aiPriority:['gravedad_torcida','atraccion','pulso_av']},
+      {id:'pastor_errores', name:'Pastor de Errores', icon:'🧙', hp:1.80, atk:1.20, res:rs(0,5,5,5,5), elite:true,
+        abilities:{
+          baculo_pe:{label:'Báculo', mult:0.90},
+          mutacion_forzada:{label:'Mutación Forzada', utility:'buff_allies', cooldown:4, buffAllies:{name:'Fortalecido', duration:3, stacks:4}},
+          llamar_rebano:{label:'Llamar al Rebaño', utility:'summon', cooldown:6, summon:{tpl:LARVA_ERRANTE_TPL, count:1, maxAlive:2, hpPct:0.20, atkPct:0.45}},
+          orden_errada:{label:'Orden Errada', mult:0.75, applies:{name:'Silencio', chance:0.25, duration:1}, cooldown:4},
+        },
+        aiPriority:['mutacion_forzada','llamar_rebano','orden_errada','baculo_pe']},
+      {id:'eco_heredado', name:'Eco Heredado', icon:'👻', hp:1.95, atk:1.32, res:rs(5,0,0,10,5), elite:true,
+        abilities:{
+          golpe_eh:{label:'Golpe de Eco', mult:1.00},
+          veneno_heredado:{label:'Veneno Heredado', mult:0.85, applies:{name:'Veneno', chance:0.40, duration:3, stack:true, maxStack:3}, cooldown:3},
+          caos_heredado:{label:'Caos Heredado', utility:'self_buff', selfBuff:{name:'Caos Heredado', duration:3, dmgMult:1.15}, cooldown:5},
+          lluvia_heredada:{label:'Lluvia Heredada', mult:1.25, cooldown:4, applies:{name:'Debilitado', chance:0.25, duration:2}},
+        },
+        aiPriority:['caos_heredado','lluvia_heredada','veneno_heredado','golpe_eh']},
+    ],
+    guardians: [],
+    guardianByFloor: {
+      1: {id:'la_costura', name:'La Costura', icon:'🪡', hp:3.00, atk:1.30, res:rs(15,0,0,10,10), boss:true, frontline:true,
+        abilities:{
+          mordisco_cs:{label:'Mordisco', mult:1.05},
+          atravesar_costura:{label:'Atravesar la Costura', mult:1.35, cooldown:3, selfBuff:{name:'Tras la Costura', duration:2, evasionDelta:10}},
+          hilo_tenso:{label:'Hilo Tenso', mult:0.85, applies:{name:'Paralisis', chance:0.30, duration:1}, cooldown:4},
+        },
+        aiPriority:['hilo_tenso','atravesar_costura','mordisco_cs']},
+      2: {id:'el_inversor', name:'El Inversor', icon:'🔄', hp:2.90, atk:1.35, res:rs(10,5,5,5,10), boss:true, frontline:true,
+        abilities:{
+          golpe_inv:{label:'Golpe', mult:1.05},
+          giro_ofensivo:{label:'Giro Ofensivo', utility:'self_buff', selfBuff:{name:'Mitad Ofensiva', duration:2, dmgMult:1.25, incomingDmgReduction:-0.15}, cooldown:5, condition:(ctx)=>ctx.selfHpPct>=0.5},
+          giro_defensivo:{label:'Giro Defensivo', utility:'self_buff', selfBuff:{name:'Mitad Defensiva', duration:2, incomingDmgReduction:0.30}, cooldown:5, condition:(ctx)=>ctx.selfHpPct<0.5},
+          doble_cara:{label:'Doble Cara', mult:1.35, cooldown:3},
+        },
+        aiPriority:['giro_defensivo','giro_ofensivo','doble_cara','golpe_inv']},
+      3: {id:'coro_hueco', name:'El Coro Hueco', icon:'🗣️', hp:3.10, atk:1.25, res:rs(5,0,0,10,15), boss:true, frontline:true,
+        abilities:{
+          grito_ch:{label:'Grito', mult:0.95},
+          voz_del_miedo:{label:'Voz del Miedo', mult:0.80, applies:{name:'Miedo', chance:0.30, duration:2, procChance:0.35}, cooldown:4},
+          voz_del_silencio:{label:'Voz del Silencio', mult:0.80, applies:{name:'Silencio', chance:0.30, duration:1}, cooldown:4},
+          coro_entero:{label:'Coro Entero', utility:'aoe', mult:0.50, cooldown:5, applies:{name:'Debilitado', chance:0.5, duration:2}},
+        },
+        aiPriority:['coro_entero','voz_del_miedo','voz_del_silencio','grito_ch']},
+      4: {id:'geometra_ciega', name:'La Geómetra Ciega', icon:'🕸️', hp:3.00, atk:1.30, res:rs(15,5,-5,10,10), boss:true, frontline:true,
+        abilities:{
+          pata_cristal:{label:'Pata de Cristal', mult:1.05},
+          zona_imposible:{label:'Zona Imposible', mult:0.90, applies:{name:'Paralisis', chance:0.35, duration:1}, cooldown:3},
+          figura_cerrada:{label:'Figura Cerrada', utility:'self_buff', selfBuff:{name:'Figura Cerrada', duration:2, incomingDmgReduction:0.25}, cooldown:5},
+          trazo_cortante:{label:'Trazo Cortante', mult:1.30, cooldown:4, ignoreResist:0.25},
+        },
+        aiPriority:['figura_cerrada','trazo_cortante','zona_imposible','pata_cristal']},
+      5: {id:'hambre_colores', name:'El Hambre de Colores', icon:'🌈', hp:3.20, atk:1.35, res:rs(10,25,25,25,10), boss:true, frontline:true,
+        abilities:{
+          zarpazo_hc:{label:'Zarpazo', mult:1.05},
+          tragar_color:{label:'Tragar Color', utility:'self_heal', healPct:0.06, cooldown:5, condition:(ctx)=>ctx.selfHpPct<0.7},
+          piel_cambiante:{label:'Piel Cambiante', utility:'self_buff', selfBuff:{name:'Piel Cambiante', duration:3, dmgMult:1.15, incomingDmgReduction:0.10}, cooldown:5},
+          dentellada_prismatica:{label:'Dentellada Prismática', mult:1.35, cooldown:3, applies:{name:'Quemadura', chance:0.30, duration:2}},
+        },
+        aiPriority:['piel_cambiante','tragar_color','dentellada_prismatica','zarpazo_hc']},
+      6: {id:'recuerdo_mal_nacido', name:'El Recuerdo Mal Nacido', icon:'🧟', hp:3.30, atk:1.35, res:rs(15,0,0,15,10), boss:true, frontline:true,
+        abilities:{
+          golpe_rm:{label:'Golpe', mult:1.05},
+          garrote_del_ogro:{label:'Garrote del Ogro', mult:1.40, cooldown:4, applies:{name:'Aturdido', chance:0.20, duration:1}},
+          veneno_de_la_matriarca:{label:'Veneno de la Matriarca', mult:0.85, applies:{name:'Veneno', chance:0.50, duration:3, stack:true, maxStack:3}, cooldown:3},
+          tridente_de_tetrasea:{label:'Tridente de Tetrasea', mult:1.20, cooldown:4, applies:{name:'Ralentizado', chance:0.30, duration:2}},
+        },
+        hpThresholdBuff:{threshold:0.4, buff:{name:'Memoria Rota', duration:99, dmgMult:1.15}},
+        aiPriority:['garrote_del_ogro','tridente_de_tetrasea','veneno_de_la_matriarca','golpe_rm']},
+      7: {id:'rey_articulaciones', name:'Rey de las Articulaciones', icon:'🦴', hp:3.20, atk:1.42, res:rs(10,0,0,5,15), boss:true, frontline:true,
+        abilities:{
+          brazo_lanza:{label:'Brazo Lanza', mult:1.10, ignoreResist:0.20},
+          brazo_maza:{label:'Brazo Maza', mult:1.35, cooldown:3, applies:{name:'Aturdido', chance:0.15, duration:1}},
+          brazo_latigo:{label:'Brazo Látigo', mult:0.90, cooldown:3, applies:{name:'Sangrado', chance:0.40, duration:3, stack:true, maxStack:3}},
+          mil_codos:{label:'Mil Codos', utility:'aoe', mult:0.50, cooldown:5},
+        },
+        aiPriority:['mil_codos','brazo_maza','brazo_latigo','brazo_lanza']},
+      8: {id:'marea_seca', immuneRetroceso:true, name:'La Marea Seca', icon:'🐋', hp:3.70, atk:1.40, res:rs(20,5,5,5,15), boss:true, frontline:true,
+        abilities:{
+          coletazo_ms:{label:'Coletazo', mult:1.05},
+          gravedad_lateral:{label:'Gravedad Lateral', utility:'aoe', mult:0.50, cooldown:4, applies:{name:'Ralentizado', chance:0.6, duration:2}},
+          corriente_invisible:{label:'Corriente Invisible', utility:'self_buff', selfBuff:{name:'Corriente Invisible', duration:2, evasionDelta:12, incomingDmgReduction:0.10}, cooldown:5},
+          embestida_seca:{label:'Embestida Seca', mult:1.45, cooldown:4},
+        },
+        aiPriority:['corriente_invisible','gravedad_lateral','embestida_seca','coletazo_ms']},
+      9: {id:'puerta_camina', reductionWhileSummonsAlive:0.20, name:'La Puerta que Camina', icon:'🚪', hp:3.60, atk:1.35, res:rs(15,5,5,10,15), boss:true, frontline:true,
+        abilities:{
+          pisoton_pc:{label:'Pisotón', mult:1.05},
+          abrir_portal:{label:'Abrir Portal', utility:'summon', cooldown:5, summon:{tpl:LARVA_ERRANTE_TPL, count:2, maxAlive:2, hpPct:0.07, atkPct:0.35}},
+          umbral_voraz:{label:'Umbral Voraz', mult:1.35, cooldown:3, applies:{name:'Miedo', chance:0.25, duration:2, procChance:0.35}},
+          portazo:{label:'Portazo', mult:1.20, cooldown:4, applies:{name:'Aturdido', chance:0.20, duration:1}},
+        },
+        aiPriority:['abrir_portal','umbral_voraz','portazo','pisoton_pc']},
+    },
+    // El Sin Forma: tres configuraciones según su vida (el sprite cambia con
+    // ellas, ver enemyFormId en battleSprites.js). Carne = golpes físicos
+    // enormes; Idea = ataques mentales; Reflejo/Fallida = todo a la vez.
+    decadeBoss: {id:'sin_forma', name:'El Sin Forma', icon:'🕳️', hp:5.6, atk:1.90, res:rs(20,10,10,15,20), boss:true, frontline:true,
+      phases:[{below:0.66, msg:'pierde partes del cuerpo: <b>Forma de Idea</b>, ataca la mente (fase 2).'},{below:0.33, msg:'ya no sostiene ninguna silueta: <b>Forma Fallida</b> (fase 3).'}],
+      abilities:{
+        golpe_de_carne:{label:'Golpe de Carne', mult:1.05},
+        aplastar_sf:{label:'Aplastar', mult:1.40, cooldown:3, condition:(ctx)=>ctx.selfHpPct>=0.66, applies:{name:'Aturdido', chance:0.15, duration:1}},
+        masa_viva:{label:'Masa Viva', utility:'self_buff', oncePerCombat:true, condition:(ctx)=>ctx.selfHpPct>=0.66 && ctx.selfHpPct<0.9, selfBuff:{name:'Masa Viva', duration:3, incomingDmgReduction:0.20}},
+        idea_cortante:{label:'Idea Cortante', mult:0.95, cooldown:3, condition:(ctx)=>ctx.selfHpPct<0.66, applies:{name:'Confusion', chance:0.35, duration:1}, ignoreResist:0.25},
+        olvido:{label:'Olvido', mult:0.80, cooldown:4, condition:(ctx)=>ctx.selfHpPct<0.66, applies:{name:'Silencio', chance:0.40, duration:1}, mpDrain:0.10},
+        pliegue_espacial:{label:'Pliegue Espacial', utility:'aoe', mult:0.50, cooldown:5, condition:(ctx)=>ctx.selfHpPct<0.66, applies:{name:'Miedo', chance:0.4, duration:2, procChance:0.35}},
+        reflejo_imperfecto:{label:'Reflejo Imperfecto', utility:'summon', cooldown:6, condition:(ctx)=>ctx.selfHpPct<0.33, summon:{tpl:REFLEJO_FALLIDO_TPL, count:2, maxAlive:2, hpPct:0.05, atkPct:0.35}},
+        forma_fallida:{label:'Forma Fallida', utility:'self_buff', oncePerCombat:true, instant:true, condition:(ctx)=>ctx.selfHpPct<0.33, selfBuff:{name:'Forma Fallida', duration:99, dmgMult:1.20, evasionDelta:8}},
+        colapso:{label:'Colapso', mult:1.45, cooldown:4, condition:(ctx)=>ctx.selfHpPct<0.33},
+      },
+      aiPriority:['forma_fallida','masa_viva','reflejo_imperfecto','pliegue_espacial','colapso','aplastar_sf','olvido','idea_cortante','golpe_de_carne']}
+  },
+  // Década 7 — pisos 71-80 — Bosque muerto (2026-10-08, pedido explícito). Su
+  // identidad es la CORRUPCIÓN: un estado acumulable (hasta x10) sobre el
+  // jugador y sus aliados que les sube el daño que hacen y, más todavía, el
+  // que reciben (ver CORRUPCION_STATUS). Dura lo que el combate. El resto de
+  // mecánicas del documento se aproxima igual que en La Grieta: enterrarse =
+  // evasión, podar beneficios = Debilitado/Silencio, robar vida = curarse,
+  // resucitar/plantar = invocar brotes. Aún sin animaciones: se dibujan con su
+  // imagen fija. Falta el élite Podador Negro (sin arte).
+  {
+    regular: [
+      {id:'raiz_desenterrada', name:'Raíz Desenterrada', icon:'🖐️', hp:1.10, atk:1.10, res:rs(15,-15,0,10,5), frontline:true,
+        abilities:{
+          zarpazo_rd:{label:'Zarpazo', mult:1.00},
+          enterrarse:{label:'Enterrarse', utility:'self_buff', selfBuff:{name:'Enterrada', duration:2, evasionDelta:15}, cooldown:5},
+          emerger:{label:'Emerger', mult:1.30, cooldown:3, applies:{name:'Paralisis', chance:0.20, duration:1}},
+        },
+        aiPriority:['enterrarse','emerger','zarpazo_rd']},
+      {id:'jardinero_hueco', name:'Jardinero Hueco', icon:'🧑‍🌾', hp:1.00, atk:1.05, res:rs(5,-10,0,10,0), frontline:true,
+        abilities:{
+          tijeretazo:{label:'Tijeretazo', mult:1.00},
+          podar_beneficios:{label:'Podar Beneficios', mult:0.75, applies:{name:'Debilitado', chance:0.30, duration:2}, cooldown:4},
+          abono_ajeno:{label:'Abono Ajeno', utility:'heal_ally', healPct:0.08, cooldown:5, condition:(ctx)=>combat.enemies.some(e=>e.hp>0 && e.hp<e.maxHP)},
+        },
+        aiPriority:['abono_ajeno','podar_beneficios','tijeretazo']},
+      {id:'ciervo_sepulcral', name:'Ciervo Sepulcral', icon:'🦌', hp:1.05, atk:1.12, res:rs(5,-10,5,5,0), frontline:true,
+        abilities:{
+          cornada_cs:{label:'Cornada', mult:1.00},
+          semilla_explosiva:{label:'Semilla Explosiva', mult:1.25, cooldown:4, applies:CORRUPCION(0.30)},
+          embestida_cs:{label:'Embestida', mult:1.15, cooldown:3},
+        },
+        aiPriority:['semilla_explosiva','embestida_cs','cornada_cs']},
+      {id:'polilla_funeraria', name:'Polilla Funeraria', icon:'🦋', hp:0.75, atk:0.95, res:rs(-10,-15,0,10,-5),
+        abilities:{
+          aleteo_pf:{label:'Aleteo', mult:0.90},
+          esporas_luminosas:{label:'Esporas Luminosas', mult:0.70, applies:CORRUPCION(0.60), cooldown:3},
+          polvo_gris:{label:'Polvo Gris', mult:0.65, applies:{name:'Ceguera', chance:0.25, duration:2, procChance:0.35}, cooldown:4},
+        },
+        aiPriority:['esporas_luminosas','polvo_gris','aleteo_pf']},
+      {id:'hongo_osario', name:'Hongo de Osario', icon:'🍄', hp:1.00, atk:0.90, res:rs(10,-15,0,25,10),
+        abilities:{
+          golpe_ho:{label:'Golpe', mult:0.90},
+          nube_de_osario:{label:'Nube de Osario', utility:'summon', cooldown:6, summon:{tpl:BROTE_MENOR_TPL, count:1, maxAlive:2, hpPct:0.30, atkPct:0.45}},
+          esporas_ho:{label:'Esporas', mult:0.70, applies:{name:'Veneno', chance:0.35, duration:3, stack:true, maxStack:3}, cooldown:3},
+        },
+        aiPriority:['nube_de_osario','esporas_ho','golpe_ho']},
+      {id:'enredadera_viuda', name:'Enredadera Viuda', icon:'🌿', hp:0.95, atk:1.00, res:rs(5,-15,0,15,5),
+        abilities:{
+          latigazo_ev:{label:'Latigazo', mult:0.95},
+          atrapar:{label:'Atrapar', mult:0.80, applies:{name:'Paralisis', chance:0.30, duration:1}, cooldown:3},
+          arrastrar:{label:'Arrastrar', mult:1.10, cooldown:4, applies:{name:'Marcado', chance:0.35, duration:2}},
+        },
+        aiPriority:['atrapar','arrastrar','latigazo_ev']},
+      {id:'cuervo_savia', name:'Cuervo de Savia', icon:'🐦‍⬛', hp:0.80, atk:1.10, res:rs(-5,-10,0,5,0),
+        abilities:{
+          picotazo_cv:{label:'Picotazo', mult:1.00},
+          robar_savia:{label:'Robar Savia', mult:0.85, cooldown:3, mpDrain:0.08},
+          depositar_savia:{label:'Depositar Savia', utility:'heal_ally', healPct:0.07, cooldown:4, condition:(ctx)=>combat.enemies.some(e=>e.hp>0 && e.hp<e.maxHP)},
+        },
+        aiPriority:['depositar_savia','robar_savia','picotazo_cv']},
+      {id:'brote_carronero', name:'Brote Carroñero', icon:'🌺', hp:1.05, atk:1.05, res:rs(5,-15,0,15,5), frontline:true,
+        abilities:{
+          mordida_bc:{label:'Mordida', mult:1.00},
+          devorar_restos:{label:'Devorar Restos', utility:'self_buff', selfBuff:{name:'Bien Alimentado', duration:3, dmgMult:1.20, regenPct:0.03}, cooldown:5},
+          corona_dentada:{label:'Corona Dentada', mult:1.25, cooldown:3, applies:{name:'Sangrado', chance:0.30, duration:3, stack:true, maxStack:3}},
+        },
+        aiPriority:['devorar_restos','corona_dentada','mordida_bc']},
+      {id:'caracol_tumba', immuneRetroceso:true, name:'Caracol de Tumba', icon:'🐌', hp:1.35, atk:0.95, res:rs(25,-5,0,15,15), frontline:true,
+        abilities:{
+          embestida_ct:{label:'Embestida', mult:0.95},
+          rastro_viscoso:{label:'Rastro Viscoso', mult:0.70, applies:{name:'Ralentizado', chance:0.40, duration:2}, cooldown:3},
+          lapida:{label:'Lápida', utility:'self_buff', selfBuff:{name:'Lápida', duration:2, incomingDmgReduction:0.30}, cooldown:5},
+          liquen_corrupto:{label:'Liquen Corrupto', mult:0.70, applies:CORRUPCION(0.35), cooldown:4},
+        },
+        aiPriority:['lapida','liquen_corrupto','rastro_viscoso','embestida_ct']},
+      {id:'espantapajaros_raigal', name:'Espantapájaros Raigal', icon:'🎃', hp:1.10, atk:1.05, res:rs(10,-20,0,10,10), frontline:true,
+        abilities:{
+          golpe_er:{label:'Golpe', mult:1.00},
+          imitar_postura:{label:'Imitar Postura', utility:'self_buff', selfBuff:{name:'Postura Imitada', duration:3, incomingDmgReduction:0.20}, cooldown:5},
+          espantar:{label:'Espantar', mult:0.75, applies:{name:'Miedo', chance:0.25, duration:2, procChance:0.35}, cooldown:4},
+        },
+        aiPriority:['imitar_postura','espantar','golpe_er']},
+      {id:'mantis_poda', name:'Mantis de Poda', icon:'🦗', hp:0.90, atk:1.18, res:rs(0,-15,0,10,0), frontline:true,
+        abilities:{
+          tijera_mp:{label:'Tijera', mult:1.05},
+          poda_doble:{label:'Poda Doble', mult:1.30, cooldown:3, applies:{name:'Sangrado', chance:0.30, duration:2, stack:true, maxStack:3}},
+          recortar:{label:'Recortar', mult:0.80, applies:{name:'Debilitado', chance:0.30, duration:2}, cooldown:4},
+        },
+        aiPriority:['poda_doble','recortar','tijera_mp']},
+      {id:'semilla_doliente', name:'Semilla Doliente', icon:'🌰', hp:0.60, atk:0.80, res:rs(0,-15,0,10,0),
+        abilities:{
+          pinchar_sd:{label:'Pinchar', mult:0.85},
+          germinar:{label:'Germinar', utility:'buff_allies', cooldown:4, buffAllies:{name:'Fortalecido', duration:3, stacks:4, single:true}},
+          escabullirse:{label:'Escabullirse', utility:'self_buff', selfBuff:{name:'Escurridiza', duration:2, evasionDelta:20}, cooldown:4},
+        },
+        aiPriority:['germinar','escabullirse','pinchar_sd']},
+    ],
+    elite: [
+      {id:'madre_micelio', reductionWithAllies:{min:1, value:0.15}, name:'Madre Micelio', icon:'🍄', hp:2.20, atk:1.25, res:rs(10,-15,0,25,15), elite:true,
+        abilities:{
+          golpe_mm:{label:'Golpe', mult:0.95},
+          red_micelial:{label:'Red Micelial', utility:'heal_ally', healPct:0.10, cooldown:4, condition:(ctx)=>combat.enemies.some(e=>e.hp>0 && e.hp<e.maxHP)},
+          esporas_mm:{label:'Esporas', mult:0.80, applies:CORRUPCION(0.50), cooldown:3},
+          brotar:{label:'Brotar', utility:'summon', cooldown:6, summon:{tpl:BROTE_MENOR_TPL, count:1, maxAlive:2, hpPct:0.20, atkPct:0.40}},
+        },
+        aiPriority:['brotar','red_micelial','esporas_mm','golpe_mm']},
+      {id:'injerto_profano', name:'Injerto Profano', icon:'🌵', hp:2.10, atk:1.40, res:rs(10,-15,0,15,10), elite:true, frontline:true,
+        abilities:{
+          brazo_espino:{label:'Brazo de Espino', mult:1.05, applies:{name:'Sangrado', chance:0.25, duration:2, stack:true, maxStack:3}},
+          brazo_liana:{label:'Brazo de Liana', mult:0.90, applies:{name:'Paralisis', chance:0.30, duration:1}, cooldown:3},
+          brazo_flor:{label:'Brazo de Flor', mult:0.85, applies:CORRUPCION(0.50), cooldown:4},
+          injerto_nuevo:{label:'Injerto Nuevo', utility:'self_buff', selfBuff:{name:'Injerto Nuevo', duration:3, dmgMult:1.20}, cooldown:5},
+        },
+        aiPriority:['injerto_nuevo','brazo_liana','brazo_flor','brazo_espino']},
+      {id:'custodio_invernadero', passiveReduction:0.10, name:'Custodio del Invernadero', icon:'🤖', hp:2.30, atk:1.20, res:rs(25,0,5,20,20), elite:true, frontline:true,
+        abilities:{
+          golpe_ci:{label:'Golpe', mult:1.00},
+          regar:{label:'Regar', utility:'heal_ally', healPct:0.10, cooldown:4, condition:(ctx)=>combat.enemies.some(e=>e.hp>0 && e.hp<e.maxHP)},
+          cristal_protector:{label:'Cristal Protector', utility:'buff_allies', cooldown:5, buffAllies:{name:'Fortalecido', duration:3, stacks:3}},
+          farol_verde:{label:'Farol Verde', mult:1.20, cooldown:3, applies:{name:'Ceguera', chance:0.25, duration:2, procChance:0.35}},
+        },
+        aiPriority:['cristal_protector','regar','farol_verde','golpe_ci']},
+      {id:'heraldo_flor_negra', name:'Heraldo de la Flor Negra', icon:'🥀', hp:1.90, atk:1.30, res:rs(5,-10,0,15,10), elite:true,
+        abilities:{
+          toque_marchito:{label:'Toque Marchito', mult:0.95, applies:CORRUPCION(0.35)},
+          flor_negra:{label:'Flor Negra', utility:'aoe', mult:0.45, cooldown:4, applies:CORRUPCION(1)},
+          cosecha:{label:'Cosecha', mult:1.20, cooldown:3, bonusVsTargetStatus:{name:'Corrupción', minStacks:3, mult:1.30}},
+        },
+        aiPriority:['flor_negra','cosecha','toque_marchito']},
+    ],
+    guardians: [],
+    guardianByFloor: {
+      1: {id:'jardinero_enterrado', immuneRetroceso:true, name:'El Jardinero Enterrado', icon:'⛏️', hp:3.30, atk:1.35, res:rs(20,-10,0,15,15), boss:true, frontline:true,
+        abilities:{
+          palazo:{label:'Palazo', mult:1.10},
+          plantar_muertos:{label:'Plantar Muertos', utility:'summon', cooldown:6, summon:{tpl:BROTE_MENOR_TPL, count:2, maxAlive:2, hpPct:0.06, atkPct:0.35}},
+          tierra_removida:{label:'Tierra Removida', mult:1.35, cooldown:3, applies:{name:'Ralentizado', chance:0.35, duration:2}},
+        },
+        aiPriority:['plantar_muertos','tierra_removida','palazo']},
+      2: {id:'gran_madre_micelio', reductionWhileSummonsAlive:0.25, name:'La Madre Micelio', icon:'🍄', hp:3.40, atk:1.25, res:rs(10,-15,0,30,15), boss:true, frontline:true,
+        abilities:{
+          pisoton_gm:{label:'Pisotón', mult:1.05},
+          cuerpos_secundarios:{label:'Cuerpos Secundarios', utility:'summon', cooldown:5, summon:{tpl:BROTE_MENOR_TPL, count:2, maxAlive:3, hpPct:0.07, atkPct:0.35}},
+          nube_madre:{label:'Nube Madre', utility:'aoe', mult:0.45, cooldown:4, applies:CORRUPCION(0.7)},
+          esporas_gm:{label:'Esporas', mult:0.90, applies:{name:'Veneno', chance:0.45, duration:3, stack:true, maxStack:3}, cooldown:3},
+        },
+        aiPriority:['cuerpos_secundarios','nube_madre','esporas_gm','pisoton_gm']},
+      3: {id:'ciervo_cementerio', name:'El Ciervo Cementerio', icon:'🦌', hp:3.30, atk:1.40, res:rs(15,-10,5,10,10), boss:true, frontline:true,
+        abilities:{
+          cornada_cc:{label:'Cornada', mult:1.10},
+          asta_rota:{label:'Asta Rota', utility:'self_buff', oncePerCombat:true, instant:true, condition:(ctx)=>ctx.selfHpPct<0.5, selfBuff:{name:'Asta Rota', duration:99, dmgMult:1.20}},
+          estampida:{label:'Estampida', mult:1.40, cooldown:3},
+          flores_funerarias:{label:'Flores Funerarias', mult:0.85, applies:CORRUPCION(0.6), cooldown:4},
+        },
+        aiPriority:['asta_rota','estampida','flores_funerarias','cornada_cc']},
+      4: {id:'novia_raices', name:'La Novia de las Raíces', icon:'👰', hp:3.20, atk:1.35, res:rs(5,-15,0,15,10), boss:true,
+        abilities:{
+          liana_nr:{label:'Liana', mult:1.00},
+          lazo_nupcial:{label:'Lazo Nupcial', utility:'aoe', mult:0.50, cooldown:4, applies:{name:'Marcado', chance:0.6, duration:2}},
+          velo_marchito:{label:'Velo Marchito', mult:0.85, applies:{name:'Miedo', chance:0.30, duration:2, procChance:0.35}, cooldown:4},
+          abrazo_de_raices:{label:'Abrazo de Raíces', mult:1.35, cooldown:3, applies:{name:'Paralisis', chance:0.30, duration:1}},
+        },
+        aiPriority:['lazo_nupcial','abrazo_de_raices','velo_marchito','liana_nr']},
+      5: {id:'arbol_juramentos', immuneRetroceso:true, passiveReduction:0.10, name:'El Árbol de los Juramentos', icon:'🌳', hp:3.80, atk:1.35, res:rs(25,-20,0,15,25), boss:true, frontline:true,
+        abilities:{
+          rama_aj:{label:'Rama', mult:1.05},
+          juramento_de_silencio:{label:'Juramento de Silencio', mult:0.80, applies:{name:'Silencio', chance:0.45, duration:1}, cooldown:4},
+          juramento_de_quietud:{label:'Juramento de Quietud', mult:0.80, applies:{name:'Paralisis', chance:0.40, duration:1}, cooldown:4},
+          cadenas_antiguas:{label:'Cadenas Antiguas', utility:'aoe', mult:0.55, cooldown:5, applies:{name:'Ralentizado', chance:0.6, duration:2}},
+        },
+        aiPriority:['cadenas_antiguas','juramento_de_silencio','juramento_de_quietud','rama_aj']},
+      6: {id:'bestia_invernadero', name:'La Bestia del Invernadero', icon:'🐆', hp:3.40, atk:1.45, res:rs(15,-10,0,20,10), boss:true, frontline:true,
+        abilities:{
+          zarpazo_bi:{label:'Zarpazo', mult:1.10, applies:{name:'Sangrado', chance:0.25, duration:2, stack:true, maxStack:3}},
+          comer_corrupcion:{label:'Comer Corrupción', mult:1.20, cooldown:3, bonusVsTargetStatus:{name:'Corrupción', minStacks:2, mult:1.35}, selfBuff:{name:'Evolución', duration:3, dmgMult:1.10, regenPct:0.02}},
+          salto_bi:{label:'Salto', mult:1.40, cooldown:4},
+          aliento_bi:{label:'Aliento Podrido', mult:0.80, applies:CORRUPCION(0.6), cooldown:4},
+        },
+        aiPriority:['aliento_bi','comer_corrupcion','salto_bi','zarpazo_bi']},
+      7: {id:'sepulturero_savia', immuneRetroceso:true, name:'El Sepulturero de Savia', icon:'⚰️', hp:3.60, atk:1.42, res:rs(20,-10,0,15,20), boss:true, frontline:true,
+        abilities:{
+          pala_hacha:{label:'Pala-Hacha', mult:1.10},
+          enterrar_arena:{label:'Enterrar', mult:1.30, cooldown:3, applies:{name:'Paralisis', chance:0.30, duration:1}},
+          tumbas_de_raices:{label:'Tumbas de Raíces', utility:'aoe', mult:0.55, cooldown:5, applies:{name:'Sangrado', chance:0.5, duration:3, stack:true, maxStack:3}},
+          beber_savia:{label:'Beber Savia', utility:'self_heal', healPct:0.06, cooldown:6, condition:(ctx)=>ctx.selfHpPct<0.6},
+        },
+        aiPriority:['beber_savia','tumbas_de_raices','enterrar_arena','pala_hacha']},
+      8: {id:'flor_mil_voces', name:'La Flor de las Mil Voces', icon:'🌸', hp:3.50, atk:1.35, res:rs(10,-20,0,20,15), boss:true,
+        abilities:{
+          petalo:{label:'Pétalo', mult:1.00},
+          voz_que_riega:{label:'Voz que Riega', utility:'self_heal', healPct:0.05, cooldown:6, condition:(ctx)=>ctx.selfHpPct<0.7},
+          voz_que_poda:{label:'Voz que Poda', mult:1.25, cooldown:3, applies:{name:'Debilitado', chance:0.40, duration:2}},
+          voz_que_siembra:{label:'Voz que Siembra', utility:'aoe', mult:0.45, cooldown:4, applies:CORRUPCION(0.8)},
+          voz_que_calla:{label:'Voz que Calla', mult:0.85, applies:{name:'Silencio', chance:0.40, duration:1}, cooldown:4},
+        },
+        aiPriority:['voz_que_siembra','voz_que_riega','voz_que_poda','voz_que_calla','petalo']},
+      9: {id:'ultimo_jardinero', name:'El Último Jardinero', icon:'🧑‍🌾', hp:3.80, atk:1.50, res:rs(15,-10,0,20,20), boss:true, frontline:true,
+        abilities:{
+          guadana_uj:{label:'Guadaña', mult:1.10, applies:{name:'Sangrado', chance:0.25, duration:2, stack:true, maxStack:3}},
+          sembrar_uj:{label:'Sembrar', utility:'summon', cooldown:6, summon:{tpl:BROTE_MENOR_TPL, count:2, maxAlive:2, hpPct:0.06, atkPct:0.35}},
+          podar_uj:{label:'Podar', mult:1.40, cooldown:3, applies:{name:'Debilitado', chance:0.35, duration:2}},
+          regadera_negra:{label:'Regadera Negra', utility:'aoe', mult:0.50, cooldown:4, applies:CORRUPCION(0.8)},
+        },
+        hpThresholdBuff:{threshold:0.4, buff:{name:'Último Turno', duration:99, dmgMult:1.15}},
+        aiPriority:['sembrar_uj','regadera_negra','podar_uj','guadana_uj']},
+    },
+    // El Corazón Marchito: 1) el Jardín lo protege (invoca, casi no ataca);
+    // 2) el Corazón se defiende (ataca y corrompe); 3) "Pódame": deja de
+    // luchar y solo late — Último Latido corrompe a todo el grupo cada pocos
+    // turnos. El sprite cambia con las fases (enemyFormId).
+    decadeBoss: {id:'corazon_marchito', immuneRetroceso:true, reductionWhileSummonsAlive:0.30, name:'El Corazón Marchito', icon:'🫀', hp:6.0, atk:1.80, res:rs(20,-10,5,25,30), boss:true, frontline:true,
+      phases:[{below:0.65, msg:'empieza a reaccionar: <b>el Corazón se defiende</b> (fase 2).'},{below:0.25, msg:'deja caer sus defensas. «<b>Pódame</b>». Ya no puede contener la Corrupción (fase 3).'}],
+      abilities:{
+        latido:{label:'Latido', mult:0.60},
+        el_jardin_protege:{label:'El Jardín Protege', utility:'summon', cooldown:4, condition:(ctx)=>ctx.selfHpPct>=0.25, summon:{tpl:BROTE_MENOR_TPL, count:2, maxAlive:3, hpPct:0.05, atkPct:0.35}},
+        raices_negras:{label:'Raíces Negras', mult:1.30, cooldown:3, condition:(ctx)=>ctx.selfHpPct<0.65 && ctx.selfHpPct>=0.25, applies:{name:'Paralisis', chance:0.30, duration:1}},
+        savia_corrupta:{label:'Savia Corrupta', utility:'aoe', mult:0.55, cooldown:4, condition:(ctx)=>ctx.selfHpPct<0.65 && ctx.selfHpPct>=0.25, applies:CORRUPCION(0.8)},
+        espinas:{label:'Espinas', mult:1.15, cooldown:3, condition:(ctx)=>ctx.selfHpPct<0.65 && ctx.selfHpPct>=0.25, applies:{name:'Sangrado', chance:0.40, duration:3, stack:true, maxStack:3}},
+        ultimo_latido:{label:'Último Latido', utility:'aoe', mult:0.35, cooldown:2, condition:(ctx)=>ctx.selfHpPct<0.25, applies:CORRUPCION(1)},
+      },
+      aiPriority:['ultimo_latido','el_jardin_protege','savia_corrupta','raices_negras','espinas','latido']}
   }
 ];
 
@@ -1822,7 +2263,7 @@ function petTpl(id){ return PET_CATALOG.find(p=>p.id===Number(id)); }
 // HUMANOS) y 5 El Mar/Storm Gush (criaturas marinas). Se calcula una sola
 // vez recorriendo todas las formas que puede tomar una década (regular/
 // elite/guardianByFloor objeto-o-array/decadeBoss).
-const DECADE_RACE_TAG = ['goblin','arana','bestia',null,'humano','criatura_marina'];
+const DECADE_RACE_TAG = ['goblin','arana','bestia',null,'humano','criatura_marina',null,null];
 const ENEMY_RACE_TAG = {};
 (function buildEnemyRaceTags(){
   DECADE_BESTIARY.forEach((decade, di)=>{
@@ -4578,8 +5019,8 @@ async function fetchProfile(userId){
 /* ============================================================
    DUNGEON LEVELS (1-60)
    ============================================================ */
-const LEVEL_CAP = 60;
-const CHAR_LEVEL_CAP = 60; // tope de nivel de personaje pedido
+const LEVEL_CAP = 80;      // 2026-10-08: La Grieta (61-70) y Bosque muerto (71-80). Requiere la migración 0039.
+const CHAR_LEVEL_CAP = 80; // tope de nivel de personaje pedido
 function mobXP(level){ return level; }        // mobs normales: 1 en piso 1, 2 en piso 2...
 // 2026-09-25, pedido explícito: recalibrados para que el élite y el
 // guardián/jefe de década den más en piso 1 (7 y 12 respectivamente, antes
@@ -5960,7 +6401,7 @@ function renderInventory(){
     ].map(([k,sub,v])=>`<div class="pj-attr"><div><b>${k}</b><small>${sub}</small></div><span>${v}</span></div>`).join('');
   } else {
     const d = derived();
-    portraitHTML = `<img class="pj-sprite" src="${playerSpriteFor(state.char.style, state.char.race)||''}" alt="">`;
+    portraitHTML = `<img class="pj-sprite" src="${playerIllustrationFor(state.char.style, state.char.race)||''}" alt="">`;
     plateSub = `${race().name} · ${style().name} · Nivel ${state.char.level}`;
     attrsHTML = [
       ['Físico','Daño físico', d.fis], ['Espíritu','Espíritu y curación', d.esp], ['Habilidad','MP y magia', d.hab],
@@ -6674,7 +7115,7 @@ window.addEventListener('resize', ()=>{
   if(mobile !== cityMapMobile) renderCityMap();
 });
 // Nombres de cada década para las puertas de la entrada.
-const DECADE_GATE_NAMES = {1:'Bosque Goblin', 11:'Nido de Arañas', 21:'Tierra de Bestias', 31:'Salón del Usurpador', 41:'Isla Paraíso', 51:'El Mar'};
+const DECADE_GATE_NAMES = {1:'Bosque Goblin', 11:'Nido de Arañas', 21:'Tierra de Bestias', 31:'Salón del Usurpador', 41:'Isla Paraíso', 51:'El Mar', 61:'La Grieta', 71:'Bosque Muerto'};
 function renderCityDungeonEntry(){
   // Entrada al laberinto (rediseño 2026-10-04, pedido explícito: "algo más
   // real y que dé miedo"): boca oscura con niebla, cada checkpoint es una
@@ -9428,7 +9869,10 @@ const DECADE_BOSS_TUNING = {
   30: {hp:1.49, atk:1.20},
   40: {hp:1.32, atk:1.16},
   50: {hp:1.42, atk:1.45},  // 2026-10-04: Custodio ~61% con la referencia nueva (rango A + piedras A + Caídos épicos)
-  60: {hp:1.85, atk:2.05},  // 2026-10-04: Storm Gush ~50% con esa referencia (antes 94%: se había calibrado sin Caídos)
+  60: {hp:1.85, atk:2.05},  // 2026-10-04: Storm Gush ~50% con esa referencia (antes 94%: se había calibrado sin Caídos)  // 2026-10-08, primera calibración (16 combates por senda, 4 sendas, misma
+  // referencia a nivel 70/80): meta 40% y 30%.
+  70: {hp:1.90, atk:2.10},  // El Sin Forma (~35% con 4 sendas; 1.8/2.0 daba 56% con las seis)
+  80: {hp:1.75, atk:1.90},  // El Corazón Marchito (1.6/1.75 daba 48% con las seis sendas; 1.9/2.1, 11% con cuatro)
 };
 // BETA (con BETA_ALLY_UNLOCKS): en las décadas 0-3 el jugador lleva menos
 // aliados (0 hasta el Ogro, 1 hasta la Matriarca, 2 hasta Riakis, 3 hasta
@@ -9470,7 +9914,11 @@ const DECADE_ENEMY_TUNING = {
   //   51-59 duro (~75%): antes 100%. Referencia: rango A + piedras A + Caídos épicos.
   2: {regular:{hp:1.3, atk:1.5}, elite:{hp:1.2, atk:1.4}, guardian:{hp:1.1,  atk:1.15}},
   3: {regular:{hp:1.4, atk:1.8}, elite:{hp:1.3, atk:1.6}, guardian:{hp:1.2,  atk:1.3}},
-  5: {regular:{hp:1.8, atk:2.6}, elite:{hp:1.7, atk:2.4}, guardian:{hp:1.5,  atk:1.75}},
+  5: {regular:{hp:1.8, atk:2.6}, elite:{hp:1.7, atk:2.4}, guardian:{hp:1.5,  atk:1.75}},  // 61-69 y 71-79 (2026-10-08, primera pasada con pocas muestras): perfil duro,
+  // ~70-80% de niveles completados con la referencia (rango A + piedras A +
+  // Caídos épicos + 4 aliados, personaje al nivel del piso). Con x2.2/3.3 salía ~96-100%.
+  6: {regular:{hp:2.5, atk:3.8}, elite:{hp:2.5, atk:3.8}, guardian:{hp:1.9,  atk:2.4}},
+  7: {regular:{hp:2.8, atk:4.3}, elite:{hp:2.8, atk:4.3}, guardian:{hp:2.1,  atk:2.65}},
 };
 function makeEnemy(tpl, floorIdx, level){
   const lvlMult = levelMult(level||1);
@@ -9589,6 +10037,44 @@ function makeEnemy(tpl, floorIdx, level){
 /* ============================================================
    COMBAT
    ============================================================ */
+// LEY DEL CAOS (La Grieta, pisos 61-70 — diseño de ariochbu: "el caos cambia
+// las reglas, pero nunca las oculta"). Cada combate de esa década recibe una
+// ley al azar que afecta a TODOS por igual, dura el combate entero y se
+// anuncia al empezar; queda a la vista como un estado en cada combatiente.
+const CHAOS_LAWS = [
+  {name:'Ley: Gravedad Reducida', text:'todos esquivan más (+10% de evasión)', status:{evasionDelta:10}},
+  {name:'Ley: Eco Violento', text:'todos golpean más fuerte (+15% de daño)', status:{dmgMult:1.15}},
+  {name:'Ley: Piel de Vidrio', text:'todos reciben más daño (+15%)', status:{incomingDmgReduction:-0.15}},
+  {name:'Ley: Sangre Espesa', text:'todos resisten más (−12% de daño recibido)', status:{incomingDmgReduction:0.12}},
+];
+function applyChaosLaw(){
+  const lvl = (state.dungeon && state.dungeon.level) || 1;
+  if(lvl < 61 || lvl > 70 || !combat) return;
+  const law = pick(CHAOS_LAWS);
+  const st = ()=> Object.assign({name: law.name, duration:99, chaosLaw:true}, law.status);
+  combat.playerStatuses.push(st());
+  (combat.allies||[]).forEach(a=> a.statuses.push(st()));
+  combat.enemies.forEach(e=> e.statuses.push(st()));
+  combat.chaosLaw = law;
+  STATUS_INFO[law.name] = {buff: !(law.status.incomingDmgReduction < 0), desc: `Ley del Caos de este combate: ${law.text}. Afecta a todos por igual.`};
+  log(`⚠ <b>${law.name.replace('Ley: ', 'Ley del Caos — ')}</b>: ${law.text}.`);
+}
+// Estados genéricos sobre el jugador y sus aliados: dmgMult (p. ej. una Ley
+// del Caos) y los que escalan por carga (Corrupción). Furioso/Inspirado
+// tienen su propia lógica y no pasan por acá.
+function statusStackDealtMult(statuses){
+  let m = 1;
+  (statuses||[]).forEach(st=>{
+    if(st.perStackDmg) m *= 1 + st.perStackDmg*(st.stacks||1);
+    if(st.dmgMult && st.name!=='Furioso' && st.name!=='Inspirado') m *= st.dmgMult;
+  });
+  return m;
+}
+function statusStackTakenMult(statuses){
+  let m = 1;
+  (statuses||[]).forEach(st=>{ if(st.perStackTaken) m *= 1 + st.perStackTaken*(st.stacks||1); });
+  return m;
+}
 function startCombat(enemyGroup, node){
   // makeCombatAlly recupera la vida con la que cada aliado terminó su último
   // combate en este mismo nivel (ver syncAllyHPToDungeon) - un aliado
@@ -9634,6 +10120,7 @@ function startCombat(enemyGroup, node){
   invOpen = false;
   const allyText = allies.length ? ` A tu lado: ${allies.map(a=>a.name).join(', ')}.` : '';
   log(`¡Emboscada! Te enfrentas a: ${enemyGroup.map(e=>e.name).join(', ')}.${allyText}`);
+  applyChaosLaw();
   if(node.type==='jefe' && state.dungeon.level % 10 === 0){ stopDungeonAudio(); playBossAudio(); }
   renderAll();
 }
@@ -9670,6 +10157,11 @@ function frontlineTarget(){
 }
 function dealDamageToAlly(ally, amount){
   if(amount<=0) return;
+  // Corrupción y Leyes del Caos sobre el aliado (los estados con nombre propio
+  // — Bastión, Égida… — ya se aplicaron antes de llegar acá).
+  let extra = statusStackTakenMult(ally.statuses);
+  (ally.statuses||[]).forEach(st=>{ if(st.chaosLaw && st.incomingDmgReduction) extra *= (1 - st.incomingDmgReduction); });
+  if(extra !== 1) amount = Math.max(1, Math.round(amount*extra));
   let shieldBroke = false;
   if(ally.shield>0){
     const absorbed = Math.min(ally.shield, amount);
@@ -9888,6 +10380,7 @@ function equipNameWithSpecial(type){
 function playerStatusIncomingMult(){
   let m = 1;
   (combat.playerStatuses||[]).forEach(st=>{ if(st.name!=='Furioso' && st.incomingDmgReduction) m *= (1 - st.incomingDmgReduction); });
+  m *= statusStackTakenMult(combat.playerStatuses);
   m *= setProtectorMult((combat.playerShield||0)>0, specialsFromEquip(state.char.equip));
   stoneSpecials('reduccion_dano').forEach(sp=>{ m *= (1 - sp.value); }); // Baluarte
   if(combat.vigiliaGuardPending){
@@ -10397,6 +10890,7 @@ const STATUS_INFO = {
   'Bastión':    {buff:true,  desc:'-20% de daño recibido (Muralla Viviente de Brann el Bastión).'},
   'Égida':      {buff:true,  desc:'-10% de daño recibido mientras dure (Égida Sagrada de Seraphina).'},
   'Frenesí':    {buff:true,  desc:'Matriarca escarlata: +20% de daño hasta el final del combate.'},
+  'Corrupción': {buff:false, desc:'Bosque muerto: por cada carga haces +3% de daño y recibes +4%. Se acumula hasta x10 y dura todo el combate.'},
   'Furia del Ogro': {buff:true, desc:'Ogro: +15% de daño hasta el final del combate.'}
 };
 // Muchos enemigos se ponen bonificaciones propias con nombre único (Furia de
@@ -10408,10 +10902,11 @@ const STATUS_INFO = {
 function statusEffectText(st){
   const parts = [], pct = v=> Math.round(Math.abs(v)*100);
   if(st.dmgMult && st.dmgMult !== 1) parts.push(`${st.dmgMult > 1 ? '+' : '-'}${pct(st.dmgMult - 1)}% de daño`);
-  if(st.incomingDmgReduction) parts.push(st.incomingDmgReduction >= 1 ? 'inmune al daño' : `-${pct(st.incomingDmgReduction)}% de daño recibido`);
+  if(st.incomingDmgReduction > 0) parts.push(st.incomingDmgReduction >= 1 ? 'inmune al daño' : `-${pct(st.incomingDmgReduction)}% de daño recibido`);
   if(st.regenPct) parts.push(`recupera ${+(st.regenPct*100).toFixed(1)}% de su vida cada turno`);
   if(st.evasionDelta) parts.push(`${st.evasionDelta > 0 ? '+' : ''}${st.evasionDelta}% de evasión`);
   if(st.resBonus) parts.push(`${st.resBonus > 0 ? '+' : ''}${st.resBonus}% de resistencias`);
+  if(st.incomingDmgReduction < 0 && !parts.some(x=> /recibido/.test(x))) parts.push(`+${pct(st.incomingDmgReduction)}% de daño recibido`);
   return parts.join(', ');
 }
 function statusInfoFor(st){
@@ -10969,6 +11464,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
     // acá si en la práctica queda muy arriba o muy abajo del resto del kit.
     if(state.char.style==='tirador' && skillId==='ataque_basico') base *= 1.6;
     if(furioso) base *= (furioso.dmgMult||1);
+    base *= statusStackDealtMult(combat.playerStatuses.filter(st=> st!==furioso));
     if(hasStatus(combat.playerStatuses,'Debilitado')) base *= 0.85; // te drenaron la fuerza: -15% de daño mientras dure
     // Furia Contenida ya no vive acá (era un multiplicador pasivo por golpe,
     // sin límite de usos) — ver el REWORK 2026-09-24 en SOUL_STONES.furia_*
@@ -11770,6 +12266,7 @@ function resolveOneAllyTurn(ally){
     // jugador, mismo campo dmgMult.
     const allyFurioso = hasStatus(ally.statuses,'Furioso');
     if(allyFurioso) dmg *= (allyFurioso.dmgMult||1);
+    dmg *= statusStackDealtMult((ally.statuses||[]).filter(st=> st!==allyFurioso));
     (ally.specials||[]).forEach(sp=>{ if(sp.type==='aumento_dano') dmg *= (1+sp.value); });
     const blessedDebuff = hasStatus(enemyTarget.statuses,'Bendecido');
     if(blessedDebuff && blessedDebuff.incomingDmgMult) dmg *= blessedDebuff.incomingDmgMult;
@@ -13015,7 +13512,7 @@ if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
     const {st, petPool} = simBuildState({style:'pesada', level:30, dungeonLevel:22});
     state = st; state.log = state.log || [];
     petPool.slice(0, 6).forEach((t, i)=>{ state.char.pets.owned[t.id] = 1; if(i < 2) state.char.pets.equipped.push(t.id); });
-    state.char.bossesBeaten = 1; state.char.bestiary = ['tarantula_cazadora','viuda_alfa','reina_telaranha','loba_acantilado','alfa_manada'];
+    state.char.bossesBeaten = 1; state.char.bestiary = ['larva_fase','la_costura','quimera_disonante','sin_forma','raiz_desenterrada','madre_micelio','tarantula_cazadora','viuda_alfa','reina_telaranha','loba_acantilado','alfa_manada'];
     showScreen('screen-game');
     if(view === 'cronicas'){ cronTab = tab || 'historia'; renderCronicas(); }
     else if(view === 'inv'){ invOpen = true; invTab = tab || 'mochila'; renderInventory(); }
@@ -13778,11 +14275,11 @@ let creationChibiIndex = null;
 async function mountCreationChibi(hero, styleId, raceId){
   const key = styleId + '_' + raceId, img0 = hero.querySelector('.cr-sprite');
   try{
-    if(!creationChibiIndex) creationChibiIndex = await fetch('src/assets/chibi/index.json?v=4').then(r=> r.json());
+    if(!creationChibiIndex) creationChibiIndex = await fetch('src/assets/chibi/index.json?v=5').then(r=> r.json());
     const meta = creationChibiIndex[key];
     if(!meta || !img0 || !img0.isConnected) return;
     const sheet = new Image();
-    await new Promise((res, rej)=>{ sheet.onload = res; sheet.onerror = rej; sheet.src = `src/assets/chibi/${key}.png?v=4`; });
+    await new Promise((res, rej)=>{ sheet.onload = res; sheet.onerror = rej; sheet.src = `src/assets/chibi/${key}.png?v=5`; });
     if(!img0.isConnected) return;
     const cv = document.createElement('canvas');
     cv.className = 'cr-sprite cr-chibi';
@@ -14078,6 +14575,9 @@ const DUNGEON_MUSIC_RANGES = [
   {max:40, src:'./src/assets/audio/dungeon-31-40.mp4'},
   {max:50, src:'./src/assets/audio/dungeon-41-50.mp4'},
   {max:60, src:'./src/assets/audio/dungeon-51-60.mp4'},
+  // 61-80 aún sin pista propia: reusan las de un tramo anterior de ambiente parecido.
+  {max:70, src:'./src/assets/audio/dungeon-31-40.mp4'},
+  {max:80, src:'./src/assets/audio/dungeon-11-20.mp4'},
 ];
 function dungeonTrackFor(level){
   const range = DUNGEON_MUSIC_RANGES.find(r=>level<=r.max);

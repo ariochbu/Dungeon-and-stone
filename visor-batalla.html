@@ -43,7 +43,7 @@
     <button data-f="45">Piso 45 · Isla</button>
     <button data-f="50">Piso 50 · Custodio</button>
     <button data-f="55">Piso 55 · Mar</button>
-    <button data-f="60">Piso 60 · Storm Gush</button>
+    <button data-f="60">Piso 60 · Storm Gush</button><button data-f="65">Piso 65 · La Grieta</button><button data-f="70">Piso 70 · El Sin Forma</button><button data-f="75">Piso 75 · Bosque muerto</button><button data-f="80">Piso 80 · Corazón Marchito</button>
     <button data-f="n">Pisos 31-40 · Normales</button>
     <button data-f="e">Pisos 31-40 · Élites</button>
     <button data-f="g">Guardianes 31-38</button>
@@ -66,7 +66,7 @@
   </div>
 </div>
 <script type="module">
-import { syncBattleStage, playBattleAnim } from './src/battleStage.js?v=97';
+import { syncBattleStage, playBattleAnim } from './src/battleStage.js?v=98';
 import { ENEMY_SPRITES, enemySpriteFor } from './src/battleSprites.js';
 
 const E = (id, name, o={}) => ({ tpl:Object.assign({id, name, frontline:true}, o), name, icon:'👤', hp:1000, maxHP:1000, statuses:[] });
@@ -82,6 +82,10 @@ const FLOORS = {
   '50': { theme:'sea', decade:4, enemies:()=>[E('custodio_isla','Custodio de la isla',{boss:true}),E('asesino_isla','Asesino de la isla'),E('asesino_elite_isla','Asesino de élite',{elite:true,frontline:false})] },
   '55': { theme:'sea', decade:5, enemies:()=>[E('triton_guerrero','Tritón guerrero'),E('cangrejo_gigante','Cangrejo gigante'),E('triton_hechicero','Tritón hechicero',{frontline:false}),E('naga_arquero','Naga arquero',{frontline:false}),E('sirena_corrupta','Sirena corrupta',{frontline:false})] },
   '60': { theme:'sea', decade:5, enemies:()=>[E('storm_gush','Storm Gush',{boss:true}),E('heraldo_tormenta','Heraldo de la tormenta'),E('sacerdotisa_mareas','Sacerdotisa de las mareas',{frontline:false})] },
+  '65': { theme:'cult', decade:6, enemies:()=>[E('vigilante_descosido','Vigilante Descosido'),E('sabueso_invertido','Sabueso Invertido'),E('ojo_reflujo','Ojo de Reflujo',{frontline:false}),E('quimera_disonante','Quimera Disonante',{elite:true}),E('la_costura','La Costura',{boss:true})] },
+  '70': { theme:'cult', decade:6, enemies:()=>[E('sin_forma','El Sin Forma',{boss:true}),E('larva_errante','Larva Errante'),E('pastor_errores','Pastor de Errores',{elite:true,frontline:false})] },
+  '75': { theme:'forest', decade:7, enemies:()=>[E('raiz_desenterrada','Raíz Desenterrada'),E('caracol_tumba','Caracol de Tumba'),E('polilla_funeraria','Polilla Funeraria',{frontline:false}),E('injerto_profano','Injerto Profano',{elite:true}),E('arbol_juramentos','El Árbol de los Juramentos',{boss:true,frontline:false})] },
+  '80': { theme:'forest', decade:7, enemies:()=>[E('corazon_marchito','El Corazón Marchito',{boss:true}),E('brote_menor','Brote Menor'),E('brote_menor','Brote Menor')] },
   '10': { theme:'forest', enemies:()=>[E('ogro','Ogro',{boss:true}), E('goblin_guerrero','Goblin guerrero'), E('goblin_arquero','Goblin arquero',{frontline:false}), E('goblin_chaman','Chamán goblin',{frontline:false})] },
   '20': { theme:'forest', enemies:()=>[E('matriarca_escarlata','Matriarca escarlata',{boss:true}), Object.assign(E('cria_arana','Cría de araña'),{summoned:true}), Object.assign(E('cria_arana','Cría de araña'),{summoned:true})] },
   '30': { theme:'cave',  boss:'riakis', enemies:()=>[E('riakis','Señor del Caos Riakis',{boss:true})] },
@@ -103,14 +107,14 @@ function build(){
     combat.enemies.forEach(give); combat.allies.forEach((a, i)=> give(a, i + 2));
     combat.playerStatuses = [{name:'Furioso', duration:3},{name:'Veneno', duration:2, stacks:2}];
   }
-  document.getElementById('hpwrap').style.display = (floor==='40') ? 'flex' : 'none';
+  document.getElementById('hpwrap').style.display = ['40','70','80'].includes(floor) ? 'flex' : 'none';
   render();
 }
 function render(){
   const f = FLOORS[floor];
   const pct = +document.getElementById('hp').value;
   document.getElementById('hpv').textContent = pct+'%';
-  if(floor==='40'){ const b = combat.enemies[0]; b.hp = Math.round(b.maxHP*pct/100); }
+  if(['40','70','80'].includes(floor)){ const b = combat.enemies[0]; b.hp = Math.round(b.maxHP*pct/100); }
   const race = document.getElementById('race').value, cls = document.getElementById('cls').value;
   syncBattleStage(document.getElementById('battle-stage-mount'), combat, {
     name:'Tú', icon:'🧝', style:cls, race, hp:800, maxHP:1000, mp:60, maxMP:100, spirit:40, maxSpirit:60,

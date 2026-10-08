@@ -94,6 +94,31 @@ ENEMIGO_POR_NOMBRE = {
     'guardian del abismo': 'guardian_abismo', 'heraldo de la tormenta': 'heraldo_tormenta', 'heraldo de la tormental': 'heraldo_tormenta',
     'leviatan abisal': 'leviatan_abisal', 'sacerdotisa de las mareas': 'sacerdotisa_mareas', 'serpiente de palpus': 'serpiente_palpus',
     'sirena matriarcal': 'sirena_matriarca', 'triton guerrero': 'triton_guerrero', 'triton hechicero': 'triton_hechicero',
+    # La Grieta (61-70)
+    'boca peregrina': 'boca_peregrina', 'ciempies especular': 'ciempies_especular', 'ciervo torcido': 'ciervo_torcido',
+    'vigilante descosido': 'vigilante_descosido', 'acaro del vacio': 'acaro_umbral', 'larva de fase': 'larva_fase',
+    'ojo de reflujo': 'ojo_reflujo', 'sabueso invertido': 'sabueso_invertido',
+    'anca del vacio': 'ancla_vacio', 'eco heredado': 'eco_heredado', 'pastor de errores': 'pastor_errores',
+    'quimera disonante': 'quimera_disonante',
+    'la costura': 'la_costura', 'el inversor': 'el_inversor', 'el coro hueco': 'coro_hueco', 'arana del vacio': 'geometra_ciega',
+    'hambre de colores': 'hambre_colores', 'el recuerdo mal nacido': 'recuerdo_mal_nacido',
+    'rey de las articulaciones': 'rey_articulaciones', 'leviatan, la marea seca': 'marea_seca',
+    'la puerta que camina': 'puerta_camina',
+    'el sin forma primera fase': 'sin_forma', 'el sin forma segunda fase': 'sin_forma_f2', 'el sin forma tercera fase': 'sin_forma_f3',
+    # Bosque muerto (71-80): por ahora solo una imagen por criatura (sin animación)
+    'raiz desenterrada': 'raiz_desenterrada', 'jardinero hueco': 'jardinero_hueco', 'ciervo sepulcrall': 'ciervo_sepulcral',
+    'polilla funeraria': 'polilla_funeraria', 'hongo de osario': 'hongo_osario', 'enredadera viuda': 'enredadera_viuda',
+    'cuervo de savia': 'cuervo_savia', 'brote carronero': 'brote_carronero', 'caracol de tumba': 'caracol_tumba',
+    'espantapajaros raigal': 'espantapajaros_raigal', 'mantis de poda': 'mantis_poda', 'semilla doliente': 'semilla_doliente',
+    'madre micelio': 'madre_micelio', 'injerto profano': 'injerto_profano', 'custodio del invernador': 'custodio_invernadero',
+    'heraldo de la flor negra': 'heraldo_flor_negra',
+    'el jardinero enterrado': 'jardinero_enterrado', 'la gran madre micelio': 'gran_madre_micelio',
+    'el ciervo cementerio': 'ciervo_cementerio', 'la novia de las raices': 'novia_raices',
+    'el arbol de los juramentos': 'arbol_juramentos', 'la bestia del invernadero': 'bestia_invernadero',
+    'el sepultero de savia': 'sepulturero_savia', 'la flor de las mil voces': 'flor_mil_voces',
+    'el ultimo jardinero': 'ultimo_jardinero',
+    'corazon marchito primera fase': 'corazon_marchito', 'corazon marchito segunda fase': 'corazon_marchito_f2',
+    'corazon marchito tercera fase': 'corazon_marchito_f3',
 }
 # Sin nombre (identificados a ojo, comparando con el sprite que ya tenía cada uno).
 ENEMIGO_POR_ARCHIVO = {
@@ -128,6 +153,11 @@ MIRA_IZQUIERDA = {'enemigo_' + n for n in (
     'serpiente_palpus', 'sirena_corrupta', 'storm_gush', 'storm_gush_final', 'tarantula_cazadora',
     'tarantula_saltarina', 'tarantula_tejedora', 'tigre_sable', 'triton_guerrero', 'triton_hechicero', 'usurpador_f2',
     'usurpador_f3', 'usurpador_f4', 'viuda_alfa', 'viuda_carmesi', 'viuda_venenosa',
+    # La Grieta (61-70): todo el lote vino mirando a la izquierda
+    'acaro_umbral', 'ancla_vacio', 'boca_peregrina', 'ciempies_especular', 'ciervo_torcido', 'coro_hueco',
+    'eco_heredado', 'el_inversor', 'geometra_ciega', 'la_costura', 'larva_fase', 'marea_seca', 'ojo_reflujo',
+    'pastor_errores', 'puerta_camina', 'quimera_disonante', 'recuerdo_mal_nacido', 'rey_articulaciones',
+    'sabueso_invertido', 'sin_forma', 'sin_forma_f2', 'sin_forma_f3', 'vigilante_descosido',
 )} | {
     # jugadores y aliados: se mira hacia dónde lanzan el ataque
     'doblefilo_barbaro', 'paladin_barbaro', 'tirador_barbaro', 'hechicero_bestia', 'paladin_bestia', 'pesada_bestia',

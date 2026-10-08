@@ -235,10 +235,32 @@
    4
   ]
  },
+ "enemigo_acaro_umbral": {
+  "bh": 128,
+  "ch": 158,
+  "cw": 164,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
  "enemigo_alfa_manada": {
   "bh": 128,
   "ch": 133,
   "cw": 162,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_ancla_vacio": {
+  "bh": 128,
+  "ch": 130,
+  "cw": 166,
   "frames": [
    4,
    6,
@@ -288,6 +310,17 @@
    6,
    2,
    5
+  ]
+ },
+ "enemigo_boca_peregrina": {
+  "bh": 128,
+  "ch": 132,
+  "cw": 188,
+  "frames": [
+   4,
+   6,
+   2,
+   4
   ]
  },
  "enemigo_buitre_corrupto": {
@@ -367,6 +400,39 @@
    4
   ]
  },
+ "enemigo_ciempies_especular": {
+  "bh": 128,
+  "ch": 136,
+  "cw": 192,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_ciervo_torcido": {
+  "bh": 128,
+  "ch": 131,
+  "cw": 204,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_coro_hueco": {
+  "bh": 128,
+  "ch": 130,
+  "cw": 138,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
  "enemigo_custodio_isla": {
   "bh": 128,
   "ch": 130,
@@ -426,6 +492,28 @@
   "bh": 128,
   "ch": 130,
   "cw": 134,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_eco_heredado": {
+  "bh": 128,
+  "ch": 143,
+  "cw": 124,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_el_inversor": {
+  "bh": 128,
+  "ch": 130,
+  "cw": 186,
   "frames": [
    4,
    6,
@@ -497,6 +585,17 @@
    6,
    2,
    5
+  ]
+ },
+ "enemigo_geometra_ciega": {
+  "bh": 128,
+  "ch": 133,
+  "cw": 168,
+  "frames": [
+   4,
+   6,
+   2,
+   4
   ]
  },
  "enemigo_gilgoblin": {
@@ -686,6 +785,28 @@
    5
   ]
  },
+ "enemigo_la_costura": {
+  "bh": 128,
+  "ch": 149,
+  "cw": 238,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_larva_fase": {
+  "bh": 128,
+  "ch": 138,
+  "cw": 226,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
  "enemigo_leviatan_abisal": {
   "bh": 128,
   "ch": 148,
@@ -750,6 +871,17 @@
    6,
    2,
    6
+  ]
+ },
+ "enemigo_marea_seca": {
+  "bh": 128,
+  "ch": 131,
+  "cw": 186,
+  "frames": [
+   4,
+   6,
+   2,
+   4
   ]
  },
  "enemigo_mascara_viviente_g": {
@@ -862,6 +994,17 @@
    5
   ]
  },
+ "enemigo_ojo_reflujo": {
+  "bh": 128,
+  "ch": 130,
+  "cw": 156,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
  "enemigo_oso_acorazado": {
   "bh": 128,
   "ch": 130,
@@ -893,6 +1036,50 @@
    6,
    2,
    5
+  ]
+ },
+ "enemigo_pastor_errores": {
+  "bh": 128,
+  "ch": 150,
+  "cw": 188,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_puerta_camina": {
+  "bh": 128,
+  "ch": 138,
+  "cw": 178,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_quimera_disonante": {
+  "bh": 128,
+  "ch": 135,
+  "cw": 174,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_recuerdo_mal_nacido": {
+  "bh": 128,
+  "ch": 136,
+  "cw": 212,
+  "frames": [
+   4,
+   6,
+   2,
+   4
   ]
  },
  "enemigo_reflejo_perfecto_g": {
@@ -928,6 +1115,17 @@
    4
   ]
  },
+ "enemigo_rey_articulaciones": {
+  "bh": 128,
+  "ch": 131,
+  "cw": 176,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
  "enemigo_rey_manada": {
   "bh": 128,
   "ch": 138,
@@ -948,6 +1146,17 @@
    6,
    2,
    5
+  ]
+ },
+ "enemigo_sabueso_invertido": {
+  "bh": 128,
+  "ch": 136,
+  "cw": 182,
+  "frames": [
+   4,
+   6,
+   2,
+   4
   ]
  },
  "enemigo_sacerdotisa_mareas": {
@@ -976,6 +1185,39 @@
   "bh": 128,
   "ch": 145,
   "cw": 184,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_sin_forma": {
+  "bh": 128,
+  "ch": 130,
+  "cw": 182,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_sin_forma_f2": {
+  "bh": 128,
+  "ch": 131,
+  "cw": 152,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_sin_forma_f3": {
+  "bh": 128,
+  "ch": 135,
+  "cw": 202,
   "frames": [
    4,
    6,
@@ -1174,6 +1416,17 @@
   "bh": 128,
   "ch": 130,
   "cw": 144,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_vigilante_descosido": {
+  "bh": 128,
+  "ch": 132,
+  "cw": 210,
   "frames": [
    4,
    6,

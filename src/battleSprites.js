@@ -46,6 +46,13 @@ export const RACE_SIZE = { barbaro:1.12, bestia:1.06, enano:0.92 };
 // (src/assets/jugador/<clase>_<raza>.png). Los de pixel art quedan de respaldo.
 const HD_PLAYER_STYLES = ['pesada','tirador','doblefilo','mago','paladin','hechicero'];
 const HD_PLAYER_RACES = ['barbaro','enano','hada','humano','draconido','bestia'];
+// Ilustración "normal" (no chibi) del jugador, para el inventario (pedido
+// explícito 2026-10-08: ahí la prefieren a la forma chibi). Sale de
+// Assets/Jugador/<Raza> <clase>.png a src/assets/jugador/hd/.
+export function playerIllustrationFor(style, race){
+  if(HD_PLAYER_STYLES.includes(style) && HD_PLAYER_RACES.includes(race)) return `src/assets/jugador/hd/${style}_${race}.png?v=1`;
+  return playerSpriteFor(style, race);
+}
 export function playerSpriteFor(style, race){
   if(HD_PLAYER_STYLES.includes(style) && HD_PLAYER_RACES.includes(race)) return `src/assets/jugador/${style}_${race}.png?v=2`;
   return (RACE_SPRITES[style] && RACE_SPRITES[style][race]) || CLASS_SPRITES[style] || null;
@@ -159,11 +166,26 @@ const HD_ENEMY_IDS = [
   'sacerdotisa_mareas', 'saltadora_alfa', 'serpiente_palpus', 'sirena_corrupta', 'sirena_matriarca', 'sombra_mimetica',
   'storm_gush', 'storm_gush_final', 'superviviente_curtido', 'superviviente_despiadado', 'tarantula_cazadora', 'tarantula_saltarina', 'tarantula_tejedora',
   'tigre_sable', 'triton_guerrero', 'triton_hechicero', 'usurpador', 'usurpador_f2',
-  'usurpador_f3', 'usurpador_f4', 'usurpador_fragmentado', 'viuda_alfa', 'viuda_carmesi', 'viuda_venenosa'];
-HD_ENEMY_IDS.forEach(id=>{ ENEMY_SPRITES[id] = `src/assets/enemigos/${id}.png?v=14`; });
+  'usurpador_f3', 'usurpador_f4', 'usurpador_fragmentado', 'viuda_alfa', 'viuda_carmesi', 'viuda_venenosa',
+  // La Grieta (61-70) y Bosque muerto (71-80), 2026-10-08
+  'larva_fase', 'ojo_reflujo', 'sabueso_invertido', 'acaro_umbral', 'vigilante_descosido', 'ciervo_torcido', 'boca_peregrina',
+  'ciempies_especular', 'quimera_disonante', 'ancla_vacio', 'pastor_errores', 'eco_heredado', 'la_costura', 'el_inversor',
+  'coro_hueco', 'geometra_ciega', 'hambre_colores', 'recuerdo_mal_nacido', 'rey_articulaciones', 'marea_seca', 'puerta_camina',
+  'sin_forma', 'sin_forma_f2', 'sin_forma_f3',
+  'raiz_desenterrada', 'jardinero_hueco', 'ciervo_sepulcral', 'polilla_funeraria', 'hongo_osario', 'enredadera_viuda', 'cuervo_savia',
+  'brote_carronero', 'caracol_tumba', 'espantapajaros_raigal', 'mantis_poda', 'semilla_doliente', 'madre_micelio', 'injerto_profano',
+  'custodio_invernadero', 'heraldo_flor_negra', 'jardinero_enterrado', 'gran_madre_micelio', 'ciervo_cementerio', 'novia_raices',
+  'arbol_juramentos', 'bestia_invernadero', 'sepulturero_savia', 'flor_mil_voces', 'ultimo_jardinero',
+  'corazon_marchito', 'corazon_marchito_f2', 'corazon_marchito_f3',
+];
+HD_ENEMY_IDS.forEach(id=>{ ENEMY_SPRITES[id] = `src/assets/enemigos/${id}.png?v=15`; });
 // Invocaciones de las fases de jefe (2026-10-02): reusan sprites existentes.
 ENEMY_SPRITES.cria_arana = ENEMY_SPRITES.tarantula_cazadora;
 ENEMY_SPRITES.cangrejo_isla = ENEMY_SPRITES.cangrejo_gigante;
+ENEMY_SPRITES.senuelo_ciervo = ENEMY_SPRITES.ciervo_torcido;
+ENEMY_SPRITES.larva_errante = ENEMY_SPRITES.larva_fase;
+ENEMY_SPRITES.reflejo_fallido = ENEMY_SPRITES.sin_forma;
+ENEMY_SPRITES.brote_menor = ENEMY_SPRITES.brote_carronero;
 
 // Sprites HD de aliados por personaje (2026-10-02): verticales (2:3), el
 // escenario los dibuja respetando su proporción. Vex y Kael se sumaron el 2026-10-03.
@@ -183,6 +205,10 @@ function enemyFormId(en){
     if(pct < 0.5) return 'usurpador_f3';
     if(pct < 0.75 || has('Forma Robada')) return 'usurpador_f2';
   }
+  // El Sin Forma (70): Carne → Idea (66%) → Fallida (33%). El Corazón Marchito
+  // (80): el Jardín protege → se defiende (65%) → "Pódame" (25%).
+  if(id==='sin_forma') return pct < 0.33 ? 'sin_forma_f3' : pct < 0.66 ? 'sin_forma_f2' : 'sin_forma';
+  if(id==='corazon_marchito') return pct < 0.25 ? 'corazon_marchito_f3' : pct < 0.65 ? 'corazon_marchito_f2' : 'corazon_marchito';
   // Tetrasea: su fase final (Sacerdote de la Tormenta, bajo 10% de vida).
   if(id==='storm_gush' && (pct < 0.1 || has('Sacerdote de la Tormenta'))) return 'storm_gush_final';
   return id;
@@ -196,6 +222,7 @@ export function enemySpriteFor(en){
 const CHIBI_ALIAS = {
   cria_arana:'tarantula_cazadora', cangrejo_isla:'cangrejo_gigante', garvel_pequeno:'garvel', copia_usurpador:'usurpador_f3',
   senuelo_clon:'sombra_mimetica', senuelo_replica:'espejo_viviente', senuelo_duplicado:'doble_perfecto',
+  senuelo_ciervo:'ciervo_torcido', larva_errante:'larva_fase', reflejo_fallido:'sin_forma',
 };
 export function enemyChibiKey(en){
   const id = enemyFormId(en);
