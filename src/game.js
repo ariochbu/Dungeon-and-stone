@@ -585,7 +585,7 @@ const SKILLS = {
     targetMode:'front'
   },
   danza_cuchillas: {
-    id:'danza_cuchillas', name:'Danza de cuchillas', cost:{tipo:'estamina', valor:22}, dmgType:'fisico', mult:0.5, hits:2,
+    id:'danza_cuchillas', name:'Danza de cuchillas', cost:{tipo:'estamina', valor:22}, dmgType:'fisico', mult:0.35, hits:2,
     scalesWithStack:{name:'Sangrado', perStackMult:0.13},
     // Rebote (pedido de ariochbu, 2026-10-08): UN enemigo más recibe la mitad del daño hecho al objetivo — uno del frente; si no queda nadie ahí, uno de retaguardia.
     splashPct:0.5,
@@ -1977,7 +1977,7 @@ const DECADE_BESTIARY = [
     // 2) el Corazón se defiende (ataca y corrompe); 3) "Pódame": deja de
     // luchar y solo late — Último Latido corrompe a todo el grupo cada pocos
     // turnos. El sprite cambia con las fases (enemyFormId).
-    decadeBoss: {id:'corazon_marchito', immuneRetroceso:true, reductionWhileSummonsAlive:0.30, name:'El Corazón Marchito', icon:'🫀', hp:6.0, atk:1.80, res:rs(20,-10,5,25,30), boss:true, frontline:true,
+    decadeBoss: {id:'corazon_marchito', immuneRetroceso:true, reductionWhileSummonsAlive:0.30, name:'El Corazón Marchito', icon:'🫀', hp:6.0, atk:1.80, res:rs(20,-5,5,25,30), boss:true, frontline:true,
       phases:[{below:0.65, msg:'empieza a reaccionar: <b>el Corazón se defiende</b> (fase 2).'},{below:0.25, msg:'deja caer sus defensas. «<b>Pódame</b>». Ya no puede contener la Corrupción (fase 3).'}],
       abilities:{
         latido:{label:'Latido', mult:0.60},
