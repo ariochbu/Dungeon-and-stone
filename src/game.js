@@ -4666,7 +4666,9 @@ function migrateState(){
   if(state.char.checkpointLevel===undefined) state.char.checkpointLevel = 1;
   // Con el tope viejo (60), vencer a Storm Gush dejaba el checkpoint en 60. Al
   // abrirse La Grieta le corresponde el del piso 61 (y el laberinto hasta ahí).
-  if((state.char.bossesBeaten||0) >= 6 && state.char.checkpointLevel < 61){
+  // Partida guardada dentro de un piso cerrado: se descarta, el personaje vuelve a la ciudad.
+  if(state.dungeon && (state.dungeon.level||0) > OPEN_LEVEL_CAP) state.dungeon = null;
+  if(OPEN_LEVEL_CAP >= 61 && (state.char.bossesBeaten||0) >= 6 && state.char.checkpointLevel < 61){
     state.char.checkpointLevel = 61;
     state.char.maxLevelUnlocked = Math.max(state.char.maxLevelUnlocked||1, 61);
   }
@@ -5120,6 +5122,17 @@ async function fetchProfile(userId){
    ============================================================ */
 const LEVEL_CAP = 80;      // 2026-10-08: La Grieta (61-70) y Bosque muerto (71-80). Requiere la migración 0039.
 const CHAR_LEVEL_CAP = 80; // tope de nivel de personaje pedido
+// CIERRE TEMPORAL de los pisos 61-80 (decisión de ariochbu, 2026-10-08 noche):
+// la gente empezó a jugarlos mientras se estaban rehaciendo. Hasta nuevo aviso
+// el laberinto y el nivel de personaje topan en 60 para los jugadores. Para
+// reabrir: FLOORS_61_80_OPEN = true. LEVEL_CAP y CHAR_LEVEL_CAP NO se tocan:
+// entran en fórmulas de balance (crítico de jefes, nivel esperado por piso).
+// En localhost siguen abiertos, para simular y calibrar.
+const FLOORS_61_80_OPEN = false;
+// (?cerrado=1 en localhost fuerza el modo cerrado, para probar lo que verá el jugador)
+const FLOORS_OPEN_HERE = FLOORS_61_80_OPEN || (/^(localhost|127\.0\.0\.1)$/.test(location.hostname) && !/[?&]cerrado=1/.test(location.search));
+const OPEN_LEVEL_CAP = FLOORS_OPEN_HERE ? LEVEL_CAP : 60;
+const OPEN_CHAR_LEVEL_CAP = FLOORS_OPEN_HERE ? CHAR_LEVEL_CAP : 60;
 function mobXP(level){ return level; }        // mobs normales: 1 en piso 1, 2 en piso 2...
 // 2026-09-25, pedido explícito: recalibrados para que el élite y el
 // guardián/jefe de década den más en piso 1 (7 y 12 respectivamente, antes
@@ -5170,7 +5183,7 @@ function xpNeededForLevel(level){
   // conseguir (nivel 20→21 exigiría más de 2 millones de exp, con guardianes que dan
   // como máximo 22 por combate), así que después del corte crece de forma más suave
   // y constante en vez de seguir duplicando.
-  if(level >= CHAR_LEVEL_CAP) return Infinity;
+  if(level >= OPEN_CHAR_LEVEL_CAP) return Infinity;
   const DOUBLE_UNTIL = 7;
   if(level <= DOUBLE_UNTIL) return Math.round(5 * Math.pow(2, level-1));
   const cutoffValue = 5 * Math.pow(2, DOUBLE_UNTIL-1); // 320, el valor justo en el corte
@@ -5210,7 +5223,7 @@ function describeRecord(){
 // con ese valor guardado de antes del fix.
 function checkpointLevelsUnlocked(){
   const levels = [];
-  const cap = Math.min(LEVEL_CAP, state.char.checkpointLevel||1);
+  const cap = Math.min(OPEN_LEVEL_CAP, state.char.checkpointLevel||1);
   for(let lvl=1; lvl<=cap; lvl+=10) levels.push(lvl);
   return levels;
 }
@@ -5218,7 +5231,7 @@ function checkpointLevelsUnlocked(){
 // último piso abierto deja el checkpoint en el piso siguiente (81) como
 // mención honorífica. Aún no hay nada ahí, así que no es una puerta: se
 // muestra aparte y no se puede entrar (checkpointLevelsUnlocked topa en LEVEL_CAP).
-function honorCheckpoint(){ return (state.char.checkpointLevel||1) > LEVEL_CAP ? state.char.checkpointLevel : 0; }
+function honorCheckpoint(){ return (state.char.checkpointLevel||1) > OPEN_LEVEL_CAP ? Math.min(state.char.checkpointLevel, OPEN_LEVEL_CAP+1) : 0; }
 
 // real (mechanical) difficulty multiplier: compounds ~14% per level, as requested
 // La curva original (1.14 compuesto) se pensó para 10 pisos; compuesta hasta
@@ -8159,13 +8172,13 @@ async function advanceAllyXp(xpGain){
     row.xp = (row.xp||0) + xpGain;
     let needed = xpNeededForLevel(row.level);
     let leveled = false;
-    while(row.level < CHAR_LEVEL_CAP && row.xp >= needed){
+    while(row.level < OPEN_CHAR_LEVEL_CAP && row.xp >= needed){
       row.xp -= needed;
       row.level += 1;
       leveled = true;
       needed = xpNeededForLevel(row.level);
     }
-    if(row.level >= CHAR_LEVEL_CAP) row.xp = 0;
+    if(row.level >= OPEN_CHAR_LEVEL_CAP) row.xp = 0;
     if(leveled) log(`<b>${row.name}</b> sube a nivel ${row.level}.`);
     const { error } = await supabase.from('character_allies').update({level: row.level, xp: row.xp}).eq('id', row.id);
     if(error) console.error('No se pudo guardar el progreso del aliado:', error.message);
@@ -8318,8 +8331,8 @@ function renderTaberna(){
   const hiredCardHTML = (a)=>{
     const tpl = ALLY_ROSTER.find(t=>t.templateId===a.template_id) || {};
     const needed = xpNeededForLevel(a.level);
-    const xpPct = a.level>=CHAR_LEVEL_CAP ? 100 : clamp((a.xp||0)/needed*100, 0, 100);
-    const xpText = a.level>=CHAR_LEVEL_CAP ? 'Nivel máximo' : `${a.xp||0} / ${needed} exp`;
+    const xpPct = a.level>=OPEN_CHAR_LEVEL_CAP ? 100 : clamp((a.xp||0)/needed*100, 0, 100);
+    const xpText = a.level>=OPEN_CHAR_LEVEL_CAP ? 'Nivel máximo' : `${a.xp||0} / ${needed} exp`;
     const satisfaction = a.satisfaction===undefined || a.satisfaction===null ? ALLY_SATISFACTION_DEFAULT : a.satisfaction;
     const satColor = satisfaction>=70 ? 'var(--good)' : satisfaction>=40 ? 'var(--bronze-light)' : 'var(--blood-light)';
     // Elección de arma2 pendiente (progresión automática de equipo del
@@ -13892,13 +13905,13 @@ function applyCharLevelUps(){
   // curva pedida: nivel 1→2 necesita 5 exp, 2→3 necesita 10, 3→4 necesita 20 (se duplica cada nivel).
   // Tope de nivel de personaje: 60.
   let xpNeeded = xpNeededForLevel(state.char.level);
-  while(state.char.level < CHAR_LEVEL_CAP && state.char.xp >= xpNeeded){
+  while(state.char.level < OPEN_CHAR_LEVEL_CAP && state.char.xp >= xpNeeded){
     state.char.xp -= xpNeeded;
     state.char.level += 1;
     leveled = true;
     xpNeeded = xpNeededForLevel(state.char.level);
   }
-  if(state.char.level >= CHAR_LEVEL_CAP) state.char.xp = 0;
+  if(state.char.level >= OPEN_CHAR_LEVEL_CAP) state.char.xp = 0;
   if(leveled){
     const d = derived();
     state.char.curHP = d.maxHP; state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi;
@@ -14052,7 +14065,7 @@ function handleVictory(){
   if(isBoss){
     const clearedLevel = level;
     const wasFrontier = clearedLevel === maxLevelUnlocked();
-    if(wasFrontier) state.char.maxLevelUnlocked = Math.min(LEVEL_CAP, clearedLevel+1);
+    if(wasFrontier) state.char.maxLevelUnlocked = Math.max(state.char.maxLevelUnlocked||1, Math.min(OPEN_LEVEL_CAP, clearedLevel+1));
     // Checkpoints: solo los jefes de década (piso 10, 20, 30...) habilitan un
     // punto de entrada nuevo, en el piso siguiente (11, 21, 31...). Si mueres
     // en el 15, tu próxima entrada igual arranca en el 11 - no hay checkpoint
@@ -14062,7 +14075,7 @@ function handleVictory(){
     // quien lo usaba quedaba atrapado en un bucle. Mismo Math.min que ya usa
     // maxLevelUnlocked justo arriba.
     if(isDecadeFinal){
-      state.char.checkpointLevel = Math.min(LEVEL_CAP+1, Math.max(state.char.checkpointLevel||1, clearedLevel+1));
+      state.char.checkpointLevel = Math.max(state.char.checkpointLevel||1, Math.min(OPEN_LEVEL_CAP+1, clearedLevel+1));
       noteDecadeBossBeaten(clearedLevel);
       // "El primer retornado": lo concede la base al guardar el jefe del piso
       // 100 (trigger de la migración 0032), así que se relee tras el guardado.
@@ -14088,7 +14101,7 @@ function handleVictory(){
     }
     log(`Derrotas al guardián del nivel ${clearedLevel}.`);
 
-    const canContinue = clearedLevel < LEVEL_CAP;
+    const canContinue = clearedLevel < OPEN_LEVEL_CAP;
     const bodyText = (canContinue
       ? `Has vencido al guardián del nivel ${clearedLevel}. Puedes seguir adentrándote al nivel ${clearedLevel+1}, o retirarte a la ciudad conservando todo tu botín.`
       : `Has vencido al guardián del nivel ${clearedLevel}, el último conocido del laberinto. Retírate a la ciudad conservando todo tu botín.`) + lootText;
