@@ -521,7 +521,7 @@ const LEVEL30_SKILL_BONUS = {
   danza_cuchillas:  {perStackMult: 0.20},                     // era 0.15
   disparo_certero:  {ignoreResist: 0.65},                     // era 0.50
   lluvia_flechas:   {bonusVsMarked: 0.35},                    // era 0.25 (sin subir el daño en área)
-  bola_fuego:       {applyChance: 1.0, maxStack: 5},                     // era 0.8
+  bola_fuego:       {applyChance: 1.0},                       // era 0.8
   lanza_hielo:      {duration: 3},                            // era 2
   toque_venenoso:   {maxStack: 5}                             // era 3 (4 hasta el rediseño del Hechicero, 2026-10-08)
 };
@@ -12568,7 +12568,7 @@ function applyAllySpecials(ally, target, dmgDealt, isSkill){
 
 // Daño por turno y por carga de los estados que tu grupo pone a un enemigo,
 // como fracción del daño base (antes 0.08 y 0.06).
-const DOT_ENEMY = { Sangrado: 0.18, Veneno: 0.13, Quemadura: 0.15 }; // Quemadura por carga desde 2026-10-08 (antes 22% fijo, sin apilar)
+const DOT_ENEMY = { Sangrado: 0.18, Veneno: 0.13, Quemadura: 0.10 }; // Quemadura por carga desde 2026-10-08 (antes 22% fijo, sin apilar)
 function tickStatuses(list, ownerName, target){
   // target = the enemy object being ticked, or null/undefined for the player.
   // Applies damage-over-time and reports whether the owner is stunned this turn.
@@ -13597,12 +13597,16 @@ function simPickSkill(usable){
   // Asesino (2026-10-08): por multiplicador elegía siempre Golpe de gracia y
   // nunca apilaba Sangrado. Rotación: apilar con Corte rápido, mantener con
   // Danza de cuchillas, refrescar antes de que caiga; Vals de sangre para
-  // curarse o cuando hay varios enemigos. __simAsesinoTonto la apaga.
+  // curarse. __simAsesinoTonto la apaga.
   if(state.char.style === 'doblefilo' && target && !window.__simAsesinoTonto){
-    const sg = hasStatus(target.statuses, 'Sangrado');
+    // Sus habilidades son de primera línea: mirar al enemigo que de verdad va a golpear, no al más débil.
+    const front = combat.enemies[playerFrontTargetIndices()[0]] || target;
+    const sg = hasStatus(front.statuses, 'Sangrado');
     const stacks = sg ? (sg.stacks||1) : 0, max = skillBonus('corte_rapido','maxStack',3);
     const hpPct = state.char.curHP / (derived().maxHP || 1);
-    if(can('vals_sangre') && (hpPct < 0.5 || livingEnemies().length >= 3)) return 'vals_sangre';
+    // Vals de sangre consume las cargas: solo para curarse. Antes saltaba con 3+
+    // enemigos y vaciaba el Sangrado justo al llegar a x5, sin llegar nunca a Danza.
+    if(can('vals_sangre') && hpPct < 0.5) return 'vals_sangre';
     if(can('corte_rapido') && (stacks < max || (sg.duration||0) <= 1)) return 'corte_rapido';
     if(can('danza_cuchillas')) return 'danza_cuchillas';
     return byDmg();
