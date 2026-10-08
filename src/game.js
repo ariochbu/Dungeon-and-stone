@@ -4354,8 +4354,9 @@ const CLASS_GROWTH = {
   paladin:   {fis:0.9, hab:0.6, esp:1.4, agi:0.5, vig:1.6},
   doblefilo: {fis:1.4, hab:0.8, esp:0.5, agi:1.6, vig:0.7},
   tirador:   {fis:1.3, hab:0.9, esp:0.6, agi:1.5, vig:0.7},
-  mago:      {fis:0.4, hab:1.8, esp:1.1, agi:0.9, vig:0.8},
-  hechicero: {fis:0.4, hab:1.6, esp:1.4, agi:0.8, vig:0.8},
+  // Mago y Hechicero: Vigor 0.7 y Agilidad 0.4 por decisión de ariochbu (2026-10-08); suman menos de 5 a propósito.
+  mago:      {fis:0.4, hab:1.8, esp:1.1, agi:0.4, vig:0.7},
+  hechicero: {fis:0.4, hab:1.6, esp:1.4, agi:0.4, vig:0.7},
 };
 function statGrowth(key){
   const g = CLASS_REDESIGN && state.char && CLASS_GROWTH[state.char.style];
@@ -4571,11 +4572,28 @@ const CLASS_CURVE_BETA = {
   // jefes del 70 y 80. Medido con 50 combates: 70 → 40%, 80 → 30%; el 60 queda cerca del 50% (1.35/1.18 daba 34%, 1.5/1.25 daba 63%).
   hechicero: {hp:[1.00,1.25,1.37,1.23,1.21,0.85,1.43,1.65,1.88], dmg:[1.00,1.10,1.16,0.85,1.11,0.92,1.22,1.30,1.39]},
 };
-// Multiplicador de DAÑO por senda con el rediseño (la vida queda en 1). Margen
-// estrecho a propósito: el equilibrio contra jefes va en el jefe, no acá.
-const CLASS_DMG_REDESIGN = {pesada:0.85, paladin:0.85, doblefilo:1.10, tirador:1.15, mago:1.0, hechicero:1.15}; // segunda pasada de simulación (2026-10-08), sin recalibrar jefes todavía
+// Multiplicador de DAÑO por senda y nivel con el rediseño (la vida queda en 1):
+// un valor por cada nivel de CLASS_CURVE_LEVELS, interpolado entre medio.
+const CLASS_DMG_REDESIGN = {
+  // Calibrado senda a senda contra cada jefe y luego suavizado a mano (2026-10-08).
+  // El tanque pega bastante menos de lo que dice la fórmula; el Hechicero, más.
+  pesada:    [1, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.70],
+  paladin:   [1, 0.80, 0.85, 0.90, 0.85, 0.90, 0.80, 0.85, 0.95],
+  doblefilo: [1, 1.10, 1.15, 1.10, 1.05, 1.00, 1.00, 1.05, 1.20],
+  tirador:   [1, 1.12, 1.10, 1.10, 1.12, 1.10, 1.20, 1.15, 1.15],
+  mago:      [1, 1.15, 0.85, 0.85, 1.00, 0.95, 1.20, 1.20, 1.00],
+  hechicero: [1, 1.30, 1.30, 1.40, 1.30, 1.30, 1.60, 1.67, 1.67],
+};
+function curveAt(v){
+  const L = CLASS_CURVE_LEVELS, lvl = state.char.level||1;
+  if(lvl <= L[0]) return v[0];
+  for(let i=1;i<L.length;i++){
+    if(lvl <= L[i]) return v[i-1] + (v[i]-v[i-1]) * (lvl-L[i-1])/(L[i]-L[i-1]);
+  }
+  return v[v.length-1];
+}
 function classCurve(kind){
-  if(CLASS_REDESIGN) return kind === 'dmg' ? (CLASS_DMG_REDESIGN[state.char.style] || 1) : 1;
+  if(CLASS_REDESIGN) return kind === 'dmg' ? curveAt(CLASS_DMG_REDESIGN[state.char.style] || [1]) : 1;
   const c = (BETA_BALANCE ? CLASS_CURVE_BETA : CLASS_CURVE)[state.char.style];
   if(!c) return 1;
   const v = c[kind], L = CLASS_CURVE_LEVELS, lvl = state.char.level||1;
@@ -9910,12 +9928,13 @@ const DECADE_BOSS_TUNING = {
   20: {hp:1.68, atk:1.28},
   30: {hp:1.49, atk:1.20},
   40: {hp:1.32, atk:1.16},
-  50: {hp:1.42, atk:1.45},  // 2026-10-04: Custodio ~61% con la referencia nueva (rango A + piedras A + Caídos épicos)
-  60: {hp:1.85, atk:2.05},  // 2026-10-04: Storm Gush ~50% con esa referencia (antes 94%: se había calibrado sin Caídos)  // 2026-10-08, calibrado con las seis sendas (40 combates cada una) y la misma
-  // referencia a nivel del jefe. Metas fijadas por ariochbu con equipo Rango A:
-  // 70 → 40%, 80 → 30%, 90 → 20%, 100 → 10%.
-  70: {hp:1.90, atk:2.10},  // El Sin Forma: 39% (dos mediciones: 47% y 39%)
-  80: {hp:1.89, atk:2.04},  // El Corazón Marchito: 30%
+  // REDISEÑO DE CLASES (2026-10-08, rama rediseno-clases): recalibrados con el
+  // arnés tools/calib_harness.js — media de las seis sendas, 40 combates cada
+  // una, 4 aliados y todo rango A. Metas: 50 → 60%, 60 → 50%, 70 → 40%, 80 → 30%.
+  50: {hp:1.64, atk:1.67},  // Custodio: 60%
+  60: {hp:2.12, atk:2.35},  // Storm Gush: 53%
+  70: {hp:2.08, atk:2.30},  // El Sin Forma: 47% con 2.03/2.24
+  80: {hp:2.06, atk:2.23},  // El Corazón Marchito: 28%
 };
 // BETA (con BETA_ALLY_UNLOCKS): en las décadas 0-3 el jugador lleva menos
 // aliados (0 hasta el Ogro, 1 hasta la Matriarca, 2 hasta Riakis, 3 hasta
@@ -9923,16 +9942,13 @@ const DECADE_BOSS_TUNING = {
 // que la dificultad sea equivalente a la de la alfa con 4 aliados.
 // Calibrado con simulaciones (mismo método que DECADE_BOSS_TUNING).
 const BETA_DECADE_BOSS_TUNING = {
-  // 2026-10-04: medido con la referencia de cada tramo (ver CLASS_CURVE_BETA);
-  // media de las seis sendas entre paréntesis.
-  10: {hp:0.24, atk:0.50},  // Ogro en solitario, equipo raro (68%)
-  // 2026-10-08, pedido explícito ("casi imposible de pasar"): antes hp 0.89 /
-  // atk 0.96. Con 1 aliado, equipo Raro, piedras C y Caídos raros ganaba el 3%
-  // de las veces; ahora ~34% (y ~97% con equipo Rango B). No tenía ninguna
-  // "anticuración": era puro daño y vida.
-  20: {hp:0.80, atk:0.80},  // Matriarca con 1 aliado
-  30: {hp:1.05, atk:1.00},  // Riakis con 2 aliados, rango B (69%)
-  40: {hp:0.87, atk:0.82},  // Usurpador con 3 aliados, rango B (65%)
+  // REDISEÑO DE CLASES (2026-10-08): referencia fijada por ariochbu — piso 10
+  // sin aliados y rango B; 20 con 1 aliado y rango B; 30 con 2 y rango A; 40
+  // con 3 y rango A. Meta ~65%. (Antes: .24/.50, .80/.80, 1.05/1.00, .87/.82.)
+  10: {hp:0.51, atk:1.06},  // Ogro: 71%
+  20: {hp:1.02, atk:1.02},  // Matriarca: 65%
+  30: {hp:2.02, atk:1.92},  // Riakis: 73% con 1.96/1.86
+  40: {hp:1.64, atk:1.54},  // Usurpador: 70% con 1.60/1.50
 };
 // Enemigos que NO son jefe de década, por índice de década (1 = pisos 11-19...).
 // Medido: con 2-3 aliados los combates normales/élite/guardián rinden igual
@@ -9940,9 +9956,14 @@ const BETA_DECADE_BOSS_TUNING = {
 // 2026-10-04: por tipo. Pisos despejados enteros con la referencia del tramo:
 // 5-9 ≈ 85-99%, 15-19 ≈ 97-100%, 25-29 ≈ 86%, 35-39 ≈ 86-89%.
 const BETA_ENEMY_SCALE = {
-  0: {guardian:{hp:0.60, atk:0.70}},   // en solitario el guardián del 8-9 era un muro (14% de pisos despejados)
-  1: {regular:{hp:1.08, atk:1.16}, elite:{hp:1.08, atk:1.16}, guardian:{hp:1.08, atk:1.16}},
-  3: {regular:{hp:1.30, atk:1.50}, elite:{hp:1.30, atk:1.50}, guardian:{hp:1.20, atk:1.35}},
+  // Década 0 SIN recalibrar a propósito: con la referencia de rango B salía
+  // x2.28 y un personaje nuevo con equipo común no pasaba del nivel 1 (20% /
+  // 0% / 0% de niveles 1, 3 y 6 completados). Pendiente de decisión de ariochbu.
+  0: {guardian:{hp:0.60, atk:0.70}},
+  // REDISEÑO DE CLASES (2026-10-08): 11-19 ~90% (x1.19), 21-29 ~90% (x1.73), 31-39 ~90% (x1.67).
+  1: {regular:{hp:1.28, atk:1.38}, elite:{hp:1.28, atk:1.38}, guardian:{hp:1.28, atk:1.38}},
+  2: {regular:{hp:1.73, atk:1.73}, elite:{hp:1.73, atk:1.73}, guardian:{hp:1.73, atk:1.73}},
+  3: {regular:{hp:2.18, atk:2.51}, elite:{hp:2.18, atk:2.51}, guardian:{hp:2.01, atk:2.26}},
 };
 // Normales, élites y guardianes por década (índice 4 = pisos 41-50, 5 = 51-60).
 // Calibrado con el simulador de balance (simLevels) contra la misma referencia
@@ -9957,11 +9978,12 @@ const DECADE_ENEMY_TUNING = {
   //   51-59 duro (~75%): antes 100%. Referencia: rango A + piedras A + Caídos épicos.
   2: {regular:{hp:1.3, atk:1.5}, elite:{hp:1.2, atk:1.4}, guardian:{hp:1.1,  atk:1.15}},
   3: {regular:{hp:1.4, atk:1.8}, elite:{hp:1.3, atk:1.6}, guardian:{hp:1.2,  atk:1.3}},
-  5: {regular:{hp:1.8, atk:2.6}, elite:{hp:1.7, atk:2.4}, guardian:{hp:1.5,  atk:1.75}},  // 61-69 y 71-79 (2026-10-08, primera pasada con pocas muestras): perfil duro,
-  // ~70-80% de niveles completados con la referencia (rango A + piedras A +
-  // Caídos épicos + 4 aliados, personaje al nivel del piso). Con x2.2/3.3 salía ~96-100%.
+  // REDISEÑO DE CLASES (2026-10-08): 41-49 ~78% (x1.23), 51-59 ~75% (x1.15),
+  // 61-69 ~75% (sin cambio), 71-79 ~75% (x1.15). Pocas muestras: 5 niveles por senda.
+  4: {regular:{hp:1.23, atk:1.23}, elite:{hp:1.23, atk:1.23}, guardian:{hp:1.23, atk:1.23}},
+  5: {regular:{hp:2.06, atk:2.98}, elite:{hp:1.95, atk:2.75}, guardian:{hp:1.72, atk:2.01}},
   6: {regular:{hp:2.5, atk:3.8}, elite:{hp:2.5, atk:3.8}, guardian:{hp:1.9,  atk:2.4}},
-  7: {regular:{hp:2.8, atk:4.3}, elite:{hp:2.8, atk:4.3}, guardian:{hp:2.1,  atk:2.65}},
+  7: {regular:{hp:3.21, atk:4.93}, elite:{hp:3.21, atk:4.93}, guardian:{hp:2.41, atk:3.04}},
 };
 function makeEnemy(tpl, floorIdx, level){
   const lvlMult = levelMult(level||1);
