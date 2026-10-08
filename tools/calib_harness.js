@@ -145,3 +145,37 @@ W.calibFloors = async ()=>{
   }
 };
 W.calibAll2 = async (start)=>{ W.calibDone = false; await W.calibBosses2(start); await W.calibFloors(); W.calibDone = true; };
+
+// ---- Tercera vuelta (2026-10-08): pisos 21-80 con los objetivos de ariochbu ----
+// 1-20: 90% (no se tocan), 21-40: 80%, 41-60: 70%, 61-80: 60%. Se mide SIN
+// Ley del Caos ni Corrupción (__alter(false)). base = escala vigente en el código.
+W.FLOOR_BASE3 = {
+  2: {regular:[1.73, 1.73], elite:[1.73, 1.73], guardian:[1.73, 1.73]},
+  3: {regular:[2.18, 2.51], elite:[2.18, 2.51], guardian:[2.01, 2.26]},
+  4: {regular:[1.23, 1.23], elite:[1.23, 1.23], guardian:[1.23, 1.23]},
+  5: {regular:[2.06, 2.98], elite:[1.95, 2.75], guardian:[1.72, 2.01]},
+  6: {regular:[2.5, 3.8], elite:[2.5, 3.8], guardian:[1.9, 2.4]},
+  7: {regular:[3.21, 4.93], elite:[3.21, 4.93], guardian:[2.41, 3.04]},
+};
+W.FLOOR_TARGET3 = {2: 80, 3: 80, 4: 70, 5: 70, 6: 60, 7: 60};
+W.calibFloors3 = async (nPer)=>{
+  W.__alter(false); W.calibDone = false; W.calibF3 = {};
+  const setF = (dec, s)=> ['regular', 'elite', 'guardian'].forEach(k=>{ const b = W.FLOOR_BASE3[dec][k]; (dec <= 3 ? W.__simScaleBeta : W.__simScale)(dec, k, +(b[0]*s).toFixed(3), +(b[1]*s).toFixed(3)); });
+  // dos niveles por década (el 3 y el 7) para no calibrar contra un solo guardián
+  const meas = async (dec, n)=>{ const a = await W.measure(W.clearLevel, dec*10 + 3, n), b = await W.measure(W.clearLevel, dec*10 + 7, n); const per = {}; W.CLS.forEach(c=> per[c] = Math.round((a.per[c] + b.per[c]) / 2)); return {mean: Math.round((a.mean + b.mean) / 2), per}; };
+  W.calibF3.base = {5: await W.measure(W.clearLevel, 5, nPer), 15: await W.measure(W.clearLevel, 15, nPer)};
+  for(const dec of [2, 3, 4, 5, 6, 7]){
+    const t = W.FLOOR_TARGET3[dec]; let lo = 0.5, hi = 2.2, s = 1, last = null; const log = [];
+    for(let i = 0; i < 5; i++){
+      setF(dec, s); last = await meas(dec, nPer); log.push(`${s.toFixed(2)}→${last.mean}`);
+      if(Math.abs(last.mean - t) <= 5) break;
+      if(last.mean > t) lo = s; else hi = s;
+      s = Math.sqrt(lo * hi);
+    }
+    setF(dec, s);
+    const fin = await meas(dec, nPer + 2), b = W.FLOOR_BASE3[dec];
+    W.calibF3[dec] = {s: +s.toFixed(2), log: log.join(' '), fin, vals: ['regular', 'elite', 'guardian'].map(k=> b[k].map(v=> +(v*s).toFixed(2)))};
+    W.calibStep = 'f3-' + dec;
+  }
+  W.calibDone = true;
+};

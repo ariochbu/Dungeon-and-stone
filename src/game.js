@@ -9945,8 +9945,9 @@ const BETA_DECADE_BOSS_TUNING = {
   // REDISEÑO DE CLASES (2026-10-08): referencia fijada por ariochbu — piso 10
   // sin aliados y rango B; 20 con 1 aliado y rango B; 30 con 2 y rango A; 40
   // con 3 y rango A. Meta ~65%. (Antes: .24/.50, .80/.80, 1.05/1.00, .87/.82.)
-  10: {hp:0.51, atk:1.06},  // Ogro: 71%
-  20: {hp:1.02, atk:1.02},  // Matriarca: 65%
+  // Pisos 1-20 se dejan como están en producción (decisión de ariochbu, 2026-10-08).
+  10: {hp:0.24, atk:0.50},  // Ogro
+  20: {hp:0.80, atk:0.80},  // Matriarca
   30: {hp:2.02, atk:1.92},  // Riakis: 73% con 1.96/1.86
   40: {hp:1.64, atk:1.54},  // Usurpador: 70% con 1.60/1.50
 };
@@ -9960,10 +9961,12 @@ const BETA_ENEMY_SCALE = {
   // x2.28 y un personaje nuevo con equipo común no pasaba del nivel 1 (20% /
   // 0% / 0% de niveles 1, 3 y 6 completados). Pendiente de decisión de ariochbu.
   0: {guardian:{hp:0.60, atk:0.70}},
-  // REDISEÑO DE CLASES (2026-10-08): 11-19 ~90% (x1.19), 21-29 ~90% (x1.73), 31-39 ~90% (x1.67).
-  1: {regular:{hp:1.28, atk:1.38}, elite:{hp:1.28, atk:1.38}, guardian:{hp:1.28, atk:1.38}},
+  // REDISEÑO DE CLASES (2026-10-08). Objetivos de ariochbu (niveles completados,
+  // medidos SIN Ley del Caos ni Corrupción): 1-20 90% (no se tocan), 21-40 80%,
+  // 41-60 70%, 61-80 60%. Medido: 21-29 → 81%, 31-39 → 85%.
+  1: {regular:{hp:1.08, atk:1.16}, elite:{hp:1.08, atk:1.16}, guardian:{hp:1.08, atk:1.16}},   // sin cambios (pisos 1-20 como en producción)
   2: {regular:{hp:1.73, atk:1.73}, elite:{hp:1.73, atk:1.73}, guardian:{hp:1.73, atk:1.73}},
-  3: {regular:{hp:2.18, atk:2.51}, elite:{hp:2.18, atk:2.51}, guardian:{hp:2.01, atk:2.26}},
+  3: {regular:{hp:2.29, atk:2.64}, elite:{hp:2.29, atk:2.64}, guardian:{hp:2.11, atk:2.37}},
 };
 // Normales, élites y guardianes por década (índice 4 = pisos 41-50, 5 = 51-60).
 // Calibrado con el simulador de balance (simLevels) contra la misma referencia
@@ -9978,12 +9981,13 @@ const DECADE_ENEMY_TUNING = {
   //   51-59 duro (~75%): antes 100%. Referencia: rango A + piedras A + Caídos épicos.
   2: {regular:{hp:1.3, atk:1.5}, elite:{hp:1.2, atk:1.4}, guardian:{hp:1.1,  atk:1.15}},
   3: {regular:{hp:1.4, atk:1.8}, elite:{hp:1.3, atk:1.6}, guardian:{hp:1.2,  atk:1.3}},
-  // REDISEÑO DE CLASES (2026-10-08): 41-49 ~78% (x1.23), 51-59 ~75% (x1.15),
-  // 61-69 ~75% (sin cambio), 71-79 ~75% (x1.15). Pocas muestras: 5 niveles por senda.
+  // REDISEÑO DE CLASES (2026-10-08), mismos objetivos que arriba. Medido (dos
+  // niveles por década, 8 intentos por senda): 41-49 → 73%, 51-59 → 75% antes
+  // del último retoque, 61-69 → 69% y 71-79 → 65% antes del último retoque.
   4: {regular:{hp:1.23, atk:1.23}, elite:{hp:1.23, atk:1.23}, guardian:{hp:1.23, atk:1.23}},
-  5: {regular:{hp:2.06, atk:2.98}, elite:{hp:1.95, atk:2.75}, guardian:{hp:1.72, atk:2.01}},
-  6: {regular:{hp:2.5, atk:3.8}, elite:{hp:2.5, atk:3.8}, guardian:{hp:1.9,  atk:2.4}},
-  7: {regular:{hp:3.21, atk:4.93}, elite:{hp:3.21, atk:4.93}, guardian:{hp:2.41, atk:3.04}},
+  5: {regular:{hp:2.14, atk:3.10}, elite:{hp:2.03, atk:2.86}, guardian:{hp:1.79, atk:2.09}},
+  6: {regular:{hp:3.13, atk:4.75}, elite:{hp:3.13, atk:4.75}, guardian:{hp:2.38, atk:3.00}},
+  7: {regular:{hp:3.63, atk:5.57}, elite:{hp:3.63, atk:5.57}, guardian:{hp:2.72, atk:3.44}},
 };
 function makeEnemy(tpl, floorIdx, level){
   const lvlMult = levelMult(level||1);
@@ -10117,7 +10121,11 @@ const CHAOS_LAWS = [
   {name:'Ley: Silencio Arcano', text:'es inmune a los ataques mágicos', status:{immune:'magico'}, noBoss:true},
 ];
 function lawImmune(statuses, kind){ return (statuses||[]).some(st=> st.immune===kind); }
+// Solo simulaciones (localhost): medir sin las alteraciones de década (Ley del
+// Caos y Corrupción), como pide la referencia de calibración de ariochbu.
+let SIM_NO_ALTERATIONS = false;
 function applyChaosLaw(){
+  if(SIM_NO_ALTERATIONS) return;
   const lvl = (state.dungeon && state.dungeon.level) || 1;
   if(lvl < 61 || lvl > 70 || !combat) return;
   const candidates = combat.enemies.filter(e=> e.hp > 0 && !e.summoned && !(e.tpl && e.tpl.decoy));
@@ -10857,6 +10865,7 @@ function fireTierSBuff(procId, isPlayer, target, statusDef){
 // resistió — las armas del Hechicero reaccionan a "aplicar un estado".
 function applyStatus(target, statusDef, isPlayer){
   if(!statusDef) return false;
+  if(SIM_NO_ALTERATIONS && statusDef.name === 'Corrupción') return false;
   if(statusDef.chance!==undefined){
     let effChance = statusDef.chance;
     const isMental = MENTAL_STATUSES.has(statusDef.name);
@@ -13607,6 +13616,7 @@ if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
   };
   window.__redesign = (on)=>{ if(on !== undefined) CLASS_REDESIGN = !!on; return CLASS_REDESIGN; };
   window.__classDmg = CLASS_DMG_REDESIGN;
+  window.__alter = (on)=>{ if(on !== undefined) SIM_NO_ALTERATIONS = !on; return !SIM_NO_ALTERATIONS; };
   window.__combat = ()=> combat; // inspección del combate en curso (simulaciones que no terminan)
   window.__simDot = DOT_ENEMY;
   window.__bestiary = DECADE_BESTIARY; // para probar ajustes de un enemigo en las simulaciones sin tocar el código // para comparar el daño por turno de Sangrado/Veneno en las simulaciones
