@@ -14018,6 +14018,7 @@ if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
         conjunto: SIM_SET[styleId], arma: state.char.equip.arma && state.char.equip.arma.name, arma2: state.char.equip.arma2 && state.char.equip.arma2.name};
     } finally { state = saved.state; combat = saved.combat; simMode = saved.sim; }
   };
+  window.__campamento = (rows)=>{ showScreen('screen-select'); renderCharacterSelect(rows); };
   window.__simDot = DOT_ENEMY;
   window.__bestiary = DECADE_BESTIARY; // para probar ajustes de un enemigo en las simulaciones sin tocar el código // para comparar el daño por turno de Sangrado/Veneno en las simulaciones
   window.__creation = (step, st, r)=>{ crStep = step || 2; if(st) selStyle = st; if(r) selRace = r; showScreen('screen-create'); renderCreation(); };
@@ -15140,26 +15141,41 @@ function stopDungeonAudio(){
   if(dungeonAudio) dungeonAudio.pause();
 }
 
+// Brasas que suben (portada y campamento). Son elementos con una animación
+// CSS; se crean una sola vez por contenedor y no corren si el usuario pidió
+// menos movimiento.
+function mountEmbers(host, count){
+  if(!host || host.dataset.ready) return;
+  host.dataset.ready = '1';
+  if(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  for(let i = 0; i < (count || 26); i++){
+    const e = document.createElement('i');
+    const size = 2 + Math.random()*3;
+    e.style.cssText = `left:${(Math.random()*100).toFixed(1)}%; width:${size.toFixed(1)}px; height:${size.toFixed(1)}px; animation-duration:${(7 + Math.random()*9).toFixed(1)}s; animation-delay:${(-Math.random()*16).toFixed(1)}s; --drift:${(Math.random()*90 - 45).toFixed(0)}px; opacity:${(0.35 + Math.random()*0.6).toFixed(2)};`;
+    host.appendChild(e);
+  }
+}
 function renderAuthScreen(message){
   const wrap = document.getElementById('auth-box');
   let mode = 'login';
   wrap.innerHTML = `
-    <div class="pick-card" style="max-width:380px; margin:0 auto; text-align:left;">
-      <div style="display:flex; justify-content:flex-end; margin-bottom:10px;">
-        <button class="reset-btn" id="auth-audio-toggle" style="padding:4px 10px; font-size:0.8em;">${getLoginAudioMuted() ? '🔇 Música' : '🔊 Música'}</button>
-      </div>
-      <div style="display:flex; gap:8px; margin-bottom:14px;">
-        <button class="inv-btn" id="auth-tab-login" style="flex:1;">Iniciar sesión</button>
-        <button class="inv-btn" id="auth-tab-register" style="flex:1;">Crear cuenta</button>
+    <div class="auth-panel">
+      <button class="auth-audio" id="auth-audio-toggle">${getLoginAudioMuted() ? '🔇 Música' : '🔊 Música'}</button>
+      <div class="auth-tabs" role="tablist">
+        <button class="auth-tab on" id="auth-tab-login" role="tab">Iniciar sesión</button>
+        <button class="auth-tab" id="auth-tab-register" role="tab">Crear cuenta</button>
       </div>
       <div id="auth-form"></div>
-      <div style="margin:14px 0; text-align:center; color:var(--text-dim); font-size:0.8em;">— o —</div>
-      <button class="btn-main secondary-choice" id="auth-google" style="width:100%;">Continuar con Google</button>
-      <p id="auth-msg" style="color:var(--blood-light); font-size:0.85em; min-height:1.2em; margin-top:12px;">${message||''}</p>
+      <div class="auth-or"><span>o</span></div>
+      <button class="auth-google" id="auth-google">Continuar con Google</button>
+      <p id="auth-msg" class="auth-msg">${message||''}</p>
     </div>
   `;
   document.getElementById('auth-audio-toggle').onclick = toggleLoginAudioMuted;
+  mountEmbers(document.getElementById('auth-embers'));
   function renderForm(){
+    document.getElementById('auth-tab-login').classList.toggle('on', mode==='login');
+    document.getElementById('auth-tab-register').classList.toggle('on', mode==='register');
     const form = document.getElementById('auth-form');
     form.innerHTML = `
       <input id="auth-email" class="auth-input" type="email" placeholder="Email" autocomplete="email">
@@ -15237,51 +15253,113 @@ function renderUsernameScreen(){
 /* ============================================================
    RENDER: SELECCIÓN DE PERSONAJE (hasta 6 por cuenta)
    ============================================================ */
+// Campamento (2026-10-09, idea de Diablo II pedida por ariochbu): cada
+// personaje espera de pie alrededor de la hoguera, con su sprite de combate en
+// reposo. Se elige tocándolo; abajo sale su ficha con Jugar y Eliminar. Las
+// plazas libres son siluetas, y la primera sirve para crear un personaje.
+const CAMP_SPOTS = [ // % del escenario: x, y de los pies. Los de la derecha miran hacia el fuego.
+  {x:33, y:62}, {x:67, y:62, flip:true}, {x:17, y:74}, {x:83, y:74, flip:true}, {x:30, y:90}, {x:70, y:90, flip:true},
+];
+let campSelectedId = null;
 function renderCharacterSelect(rows){
   const box = document.getElementById('select-box');
-  const rowsHTML = rows.map(row=>{
-    const r = RACES[row.race], s = STYLES[row.style];
-    return `<div class="inv-item-row">
-      <div style="display:flex; align-items:center; gap:10px; min-width:0; flex:1;">
-        <div class="sheet-emblem" style="width:40px; height:40px; font-size:1.3em;"><img src="src/assets/razas/${r.id}.png" alt="" onerror="this.replaceWith('${r.icon}')"></div>
-        <div style="min-width:0; flex:1;">
-          <b>${row.nickname}</b>${renownBadge(titleFromChoice(row.title_choice, decadeBossesBeaten(row.checkpoint_level, row.record_level, row.bosses_beaten), !!row.first_retornado))}${mythicBadge(ownsMythic(row.pets && row.pets.owned))} <span class="slot-tag">${r.name} · ${s.name}</span>${row.role==='admin' ? ' <span class="slot-tag">admin</span>' : ''}
-          <div class="inv-item-bonus neutral">Nivel ${row.level} · Récord: Nivel ${row.record_level} · Piso ${row.record_floor_idx}</div>
-        </div>
-      </div>
-      <div style="display:flex; gap:8px; flex-shrink:0;">
-        <button class="inv-btn" data-play="${row.id}">Jugar</button>
-        <button class="inv-btn danger" data-delete="${row.id}">Eliminar</button>
-      </div>
-    </div>`;
-  }).join('');
+  if(!rows.some(r=> r.id === campSelectedId)) campSelectedId = rows.length ? rows[0].id : null;
   const canCreateMore = rows.length < 6;
+  const spots = CAMP_SPOTS.map((sp, i)=>{
+    const row = rows[i];
+    const pos = `left:${sp.x}%; top:${sp.y}%; z-index:${Math.round(sp.y)};`;
+    if(row){
+      const s = STYLES[row.style];
+      return `<button class="camp-hero ${row.id===campSelectedId?'on':''} ${sp.flip?'flip':''}" data-hero="${row.id}" style="${pos}" aria-label="${row.nickname}">
+        <span class="camp-fig"><img src="${playerSpriteFor(row.style, row.race)||''}" alt=""></span>
+        <span class="camp-name">${row.nickname}<small>Nv ${row.level} · ${s.name}</small></span>
+      </button>`;
+    }
+    const first = i === rows.length;
+    return `<button class="camp-hero empty ${first?'next':''}" ${first?'id="btn-new-character"':'disabled'} style="${pos}" aria-label="${first?'Crear personaje':'Plaza libre'}">
+      <span class="camp-fig"><span class="camp-ghost">${first?'+':''}</span></span>
+      ${first?'<span class="camp-name">Nuevo personaje</span>':''}
+    </button>`;
+  }).join('');
   box.innerHTML = `
-    <div style="max-width:640px; margin:0 auto;">
-      ${rowsHTML}
-      ${canCreateMore
-        ? `<div class="begin-row"><button class="btn-main" id="btn-new-character">Crear personaje nuevo (${rows.length}/6)</button></div>`
-        : `<p class="inv-empty-msg" style="text-align:center;">Ya tienes el máximo de 6 personajes.</p>`}
-    </div>
-  `;
-  box.querySelectorAll('[data-play]').forEach(btn=>{
-    btn.onclick = ()=>{
-      const row = rows.find(r=>r.id===btn.dataset.play);
-      enterCharacter(row);
-    };
-  });
-  box.querySelectorAll('[data-delete]').forEach(btn=>{
-    btn.onclick = async ()=>{
-      const row = rows.find(r=>r.id===btn.dataset.delete);
+    <div class="camp">
+      <div class="camp-stage">
+        <div class="camp-embers" id="camp-embers" aria-hidden="true"></div>
+        <div class="camp-fire" aria-hidden="true"><img src="src/assets/ciudad/hoguera.png?v=1" alt=""></div>
+        ${spots}
+      </div>
+      <div class="camp-panel" id="camp-panel"></div>
+    </div>`;
+  mountEmbers(document.getElementById('camp-embers'), 16);
+  const panel = document.getElementById('camp-panel');
+  const renderPanel = ()=>{
+    const row = rows.find(r=> r.id === campSelectedId);
+    if(!row){
+      panel.innerHTML = `<div class="camp-empty"><p>El fuego está encendido y no hay nadie junto a él.</p><button class="btn-main" id="camp-create">Crear tu primer personaje</button></div>`;
+      document.getElementById('camp-create').onclick = ()=> goToCreation(true);
+      return;
+    }
+    const r = RACES[row.race], s = STYLES[row.style];
+    panel.innerHTML = `
+      <div class="camp-who">
+        <h2>${row.nickname}${renownBadge(titleFromChoice(row.title_choice, decadeBossesBeaten(row.checkpoint_level, row.record_level, row.bosses_beaten), !!row.first_retornado))}${mythicBadge(ownsMythic(row.pets && row.pets.owned))}</h2>
+        <div class="camp-tags"><span class="slot-tag">${r.name} · ${s.name}</span>${row.role==='admin'?'<span class="slot-tag">admin</span>':''}</div>
+      </div>
+      <div class="camp-stats">
+        <div><b>${row.level}</b><small>Nivel</small></div>
+        <div><b>${row.record_level}</b><small>Récord</small></div>
+        <div><b>${row.record_floor_idx}</b><small>Piso</small></div>
+      </div>
+      <div class="camp-actions">
+        <button class="btn-main" id="camp-play">Bajar al laberinto</button>
+        <button class="camp-delete" id="camp-delete">Eliminar</button>
+      </div>`;
+    document.getElementById('camp-play').onclick = ()=> enterCharacter(row);
+    document.getElementById('camp-delete').onclick = async (ev)=>{
       if(!confirm(`¿Eliminar a "${row.nickname}"? Perderás todo su progreso. Esta acción no se puede deshacer.`)) return;
-      btn.disabled = true;
+      ev.currentTarget.disabled = true;
       await deleteCharacterById(row.id);
       await enterGame();
     };
+  };
+  box.querySelectorAll('[data-hero]').forEach(btn=>{
+    const row = rows.find(r=> r.id === btn.dataset.hero);
+    mountCampChibi(btn.querySelector('.camp-fig'), row.style, row.race);
+    btn.onclick = ()=>{
+      campSelectedId = row.id;
+      box.querySelectorAll('.camp-hero').forEach(b=> b.classList.toggle('on', b === btn));
+      renderPanel();
+    };
+    btn.ondblclick = ()=> enterCharacter(row);
   });
-  if(canCreateMore){
-    document.getElementById('btn-new-character').onclick = ()=> goToCreation(true);
-  }
+  if(canCreateMore && document.getElementById('btn-new-character')) document.getElementById('btn-new-character').onclick = ()=> goToCreation(true);
+  renderPanel();
+}
+// Sprite de combate en reposo dentro de una figura del campamento. Si no hay
+// tira para esa senda y raza, queda la ilustración que ya puso el HTML.
+async function mountCampChibi(fig, styleId, raceId){
+  const key = styleId + '_' + raceId, img0 = fig && fig.querySelector('img');
+  try{
+    if(!creationChibiIndex) creationChibiIndex = await fetch('src/assets/chibi/index.json?v=6').then(r=> r.json());
+    const meta = creationChibiIndex[key];
+    if(!meta || !img0 || !img0.isConnected) return;
+    const sheet = new Image();
+    await new Promise((res, rej)=>{ sheet.onload = res; sheet.onerror = rej; sheet.src = `src/assets/chibi/${key}.png?v=5`; });
+    if(!img0.isConnected) return;
+    const cv = document.createElement('canvas');
+    cv.width = meta.cw; cv.height = meta.ch;
+    img0.replaceWith(cv);
+    const ctx = cv.getContext('2d'), idleN = meta.frames[0], t0 = performance.now() - Math.random()*900;
+    const still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const tick = ()=>{
+      if(!cv.isConnected) return;
+      const frame = still ? 0 : Math.floor((performance.now() - t0)/1000*6) % idleN;
+      ctx.clearRect(0, 0, cv.width, cv.height);
+      ctx.drawImage(sheet, frame*meta.cw, 0, meta.cw, meta.ch, 0, 0, meta.cw, meta.ch);
+      if(!still) requestAnimationFrame(tick);
+    };
+    tick();
+  }catch(e){ /* sin tira chibi: queda la ilustración */ }
 }
 
 async function enterCharacter(row){

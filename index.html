@@ -7,7 +7,7 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%9A%94%EF%B8%8F%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./src/styles.css?v=134">
+<link rel="stylesheet" href="./src/styles.css?v=136">
 </head>
 <body>
 <div class="app">
@@ -46,13 +46,21 @@
   </nav>
 
   <!-- ============ AUTH SCREEN ============ -->
+  <!-- Portada (2026-10-09): ilustración a pantalla completa, logo y acceso a un lado.
+       Referencias pedidas por ariochbu: Darkest Dungeon (arte fijo, menú discreto) y Hades (brasas, brillo). -->
   <div class="screen active" id="screen-auth">
-    <div class="intro">
-      <h1>Dungeon &amp; Stone</h1>
-      <p>Inicia sesión o crea una cuenta para guardar tu progreso en el servidor. Tu personaje te espera en cualquier dispositivo.</p>
-      <p class="alfa-note"><span class="alfa-tag">Alfa</span> El laberinto sigue en construcción. Si te animas a explorarlo y contarnos qué encuentras, cada prueba nos ayuda.</p>
+    <div class="auth-bg" aria-hidden="true"></div>
+    <div class="auth-embers" id="auth-embers" aria-hidden="true"></div>
+    <div class="auth-layout">
+      <div class="auth-title">
+        <span class="alfa-tag">Alfa</span>
+        <h1 class="auth-logo">Dungeon <i>&amp;</i> Stone</h1>
+        <p class="auth-tagline">El juego que nadie ha superado</p>
+        <p class="auth-lead">Baja al laberinto. Tu progreso se guarda en tu cuenta y te espera en cualquier dispositivo.</p>
+        <p class="alfa-note">El laberinto sigue en construcción. Si te animas a explorarlo y contarnos qué encuentras, cada prueba nos ayuda.</p>
+      </div>
+      <div id="auth-box"></div>
     </div>
-    <div id="auth-box"></div>
   </div>
 
   <!-- ============ CHOOSE USERNAME (first login only) ============ -->
@@ -65,10 +73,11 @@
   </div>
 
   <!-- ============ CHARACTER SELECT SCREEN ============ -->
+  <!-- Campamento (2026-10-09, idea de Diablo II pedida por ariochbu): los personajes esperan alrededor de la hoguera. -->
   <div class="screen" id="screen-select">
-    <div class="intro">
-      <h1>Tus personajes</h1>
-      <p>Hasta 6 personajes por cuenta, cada uno independiente: sin equipo ni nivel compartido entre ellos.</p>
+    <div class="intro camp-intro">
+      <h1>El campamento</h1>
+      <p>Elige quién baja hoy. Hasta 6 personajes por cuenta, cada uno con su propio equipo y nivel.</p>
     </div>
     <div id="select-box"></div>
   </div>
@@ -111,6 +120,6 @@
   <div class="footer-note">Dungeon &amp; Stone — proyecto de fans sin fines de lucro, de inspiración libre en la novela «Sobreviviendo al juego siendo un bárbaro». No está afiliado a sus autores ni editores. Tu progreso se guarda automáticamente en tu cuenta.</div>
 </div>
 
-<script type="module" src="./src/game.js?v=296"></script>
+<script type="module" src="./src/game.js?v=297"></script>
 </body>
 </html>
