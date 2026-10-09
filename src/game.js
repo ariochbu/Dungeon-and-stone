@@ -3604,7 +3604,7 @@ function buySelloGear(slot, rarity, name){
 // FORJA LEGENDARIA (Tier S) — pedido explícito 2026-09-24. Único camino para
 // conseguir armas Tier S (WEAPON_CATALOG rango 'legendario') y piedras de
 // alma de rango S: se compran, no caen al azar (el drop al azar de
-// legendario/S sigue apagado — ver LEGENDARY_TIERS_ENABLED). Exige haber
+// legendario/S estuvo apagado hasta el 2026-10-09 — ver SS_DROP_ENABLED). Exige haber
 // llegado alguna vez al piso 40 (state.char.maxLevelUnlocked, no el piso de
 // la partida en curso) — "debe ser mucho más difícil de conseguir, atención
 // principal en esto" fue el pedido explícito, así que además de Sellos pide
@@ -8013,7 +8013,10 @@ const MISSION_RANK_REWARD = {
 // de objeto que sí puede tocar sigue limitado a A (ver refresh_and_insert_missions/
 // reroll_mission en Supabase, que ya rechazan tier S/SS del lado del servidor).
 function makeMissionItemReward(){
-  return generateLoot(rnd(1,4), state.char.maxLevelUnlocked||1);
+  // Tier S ya cae al azar desde el piso 71: se repite la tirada si toca uno
+  let item;
+  do { item = generateLoot(rnd(1,4), state.char.maxLevelUnlocked||1); } while(item && item.rarity==='legendario');
+  return item;
 }
 
 // Elige un objetivo que no repita un contrato (mismo rango + mismo objetivo)
@@ -9869,7 +9872,9 @@ function enterNode(f,n){
 // Legendario/SS (equipo y piedras) todavía no están habilitados para caer —
 // el contenido, las fórmulas y los niveles mínimos ya existen, listos para
 // cuando se activen. Cambiar a true los habilita sin tocar nada más.
-const LEGENDARY_TIERS_ENABLED = false;
+// 2026-10-09 (pedido explícito): Tier S ya cae al azar, desde el piso 71
+// (ver GEAR_TIER_MIN_LEVEL/STONE_TIER_MIN_LEVEL). SS sigue apagado.
+const SS_DROP_ENABLED = false;
 const FLAT_GEAR_TABLE = [
   {rarity:'ss',         chance:0.00001},  // SS  0.001%
   {rarity:'legendario', chance:0.00005},  // S   0.005%
@@ -9878,7 +9883,7 @@ const FLAT_GEAR_TABLE = [
   {rarity:'raro',       chance:0.02},     // C   2% (bajado de 3%)
   {rarity:'poco_comun', chance:0.10},     // F   10% (fusionado en Común, ver E)
   {rarity:'comun',      chance:0.20}      // E   20%
-].filter(e => LEGENDARY_TIERS_ENABLED || !['ss','legendario'].includes(e.rarity));
+].filter(e => SS_DROP_ENABLED || e.rarity !== 'ss');
 const FLAT_STONE_TABLE = [
   {tier:'SS', chance:0.00001},
   {tier:'S',  chance:0.00005},
@@ -9888,7 +9893,7 @@ const FLAT_STONE_TABLE = [
   {tier:'D',  chance:0.05},
   {tier:'F',  chance:0.10},
   {tier:'E',  chance:0.20}
-].filter(e => LEGENDARY_TIERS_ENABLED || !['S','SS'].includes(e.tier));
+].filter(e => SS_DROP_ENABLED || e.tier !== 'SS');
 // Piso más profundo (state.char.maxLevelUnlocked) que ya debiste alcanzar de
 // verdad para que un rango pueda caer — Épico y superior necesitan haber
 // avanzado de verdad; C/B piden haber pasado la primera década (piso 11+);
@@ -9899,7 +9904,7 @@ const FLAT_STONE_TABLE = [
 // 2026-09-24, pedido explícito: Rango A baja a piso 20 (antes 21) para que
 // coincida con el cierre de década correspondiente. legendario/ss (Tier S/SS)
 // se dejan re-calibrados por si algún día se habilita también su drop al
-// azar (ver LEGENDARY_TIERS_ENABLED) — hoy Tier S se consigue solo con la
+// azar (ver SS_DROP_ENABLED) — hasta el 2026-10-09 Tier S se consigue solo con la
 // Forja Legendaria (ver TIER_S_RECIPE/buyTierSWeapon/buyTierSStone), que
 // tiene su propio candado de piso 40+ independiente de esta tabla.
 // 2026-09-25, fix explícito (ariochbu preguntó si esto ya gateaba por piso):
@@ -9917,8 +9922,8 @@ const FLAT_STONE_TABLE = [
 // maxLevelUnlocked. La única excepción real es makeMissionItemReward(): una
 // misión no tiene "el piso de ahora" (se completa desde el Gremio, no desde
 // un piso concreto), así que ese sigue usando maxLevelUnlocked a propósito.
-const GEAR_TIER_MIN_LEVEL = {rango_a:20, legendario:40, ss:50, rango_b:11, raro:11};
-const STONE_TIER_MIN_LEVEL = {A:20, S:40, SS:50, B:11, C:11};
+const GEAR_TIER_MIN_LEVEL = {rango_a:20, legendario:71, ss:50, rango_b:11, raro:11};
+const STONE_TIER_MIN_LEVEL = {A:20, S:71, SS:50, B:11, C:11};
 // Requisito de NIVEL PARA EQUIPAR (pedido explícito 2026-09-27) — distinto y
 // aparte del gate de arriba, que es sobre qué rango puede CAER según el piso
 // del laberinto. Este es sobre qué rango puede USARSE según el nivel de
@@ -9933,8 +9938,10 @@ const STONE_TIER_MIN_LEVEL = {A:20, S:40, SS:50, B:11, C:11};
 // se desequipa solo, de vuelta a la mochila (las piedras NO se destruyen en
 // este caso — esa regla de "se pierden para siempre" es solo para cuando el
 // jugador elige retirarlas a mano, no para esta migración automática).
-const GEAR_EQUIP_MIN_LEVEL = {rango_b:20, rango_a:40, legendario:60, ss:60};
-const STONE_EQUIP_MIN_LEVEL = {B:20, A:40, S:60, SS:60};
+// 2026-10-09 (pedido explícito): Rango B sin límite, A nivel 20, S nivel 40, SS nivel 60
+// (antes B 20, A 40, S y SS 60).
+const GEAR_EQUIP_MIN_LEVEL = {rango_a:20, legendario:40, ss:60};
+const STONE_EQUIP_MIN_LEVEL = {A:20, S:40, SS:60};
 function gearEquipMinLevel(rarity){ return GEAR_EQUIP_MIN_LEVEL[rarity]||0; }
 function stoneEquipMinLevel(tier){ return STONE_EQUIP_MIN_LEVEL[tier]||0; }
 // El equipo automático de Sacerdote (armadura/casco/botas/guantes/amuleto y
@@ -9992,19 +9999,22 @@ function stripUnmetLevelStones(slotsArray, level, ownerName){
 // piedras, Común/Poco común en equipo) dejan de poder caer del todo — pedido
 // explícito, 2026-09-18: de ahí en adelante lo peor que puede tocar ya es un
 // escalón mejor que basura pura.
-const HIGH_FLOOR_LOOT_CUTOFF = 40;
-const LOW_LOOT_TIERS = new Set(['E','F','comun','poco_comun']);
+// 2026-10-09 (pedido explícito, reemplaza el corte único del piso 40): Común
+// deja de caer desde el piso 10, Poco común desde el 20 y Raro desde el 60,
+// igual para equipo, armas y piedras. En piedras E = Común, F = Poco común y
+// C = Raro (mismos colores); D no tiene escalón de equipo y queda entre F y
+// C: se corta en el 40 (elección propia, a confirmar con ariochbu).
+const LOOT_TIER_CUTOFF = {comun:10, E:10, poco_comun:20, F:20, D:40, raro:60, C:60};
 // Mientras más profundo el piso actual, un poco más de peso relativo ganan
 // los rangos altos frente a los bajos dentro de la misma tabla plana de
 // arriba — no cambia CUÁLES rangos existen (eso ya lo hace el filtro de
 // arriba + STONE/GEAR_TIER_MIN_LEVEL), solo inclina la balanza entre los que
 // sí pueden caer. boost va de 0 (piso 1) a 1 (piso 60); +15% de peso por
 // escalón de rareza de distancia al más común, multiplicado por boost.
-function scaleLootTableForDungeon(table){
-  const level = (state.dungeon && state.dungeon.level) || 1;
-  const filtered = level < HIGH_FLOOR_LOOT_CUTOFF
-    ? table
-    : table.filter(e => !LOW_LOOT_TIERS.has(e.rarity || e.tier));
+function scaleLootTableForDungeon(table, lootLevel){
+  // lootLevel: el piso de la tirada (una misión no tiene state.dungeon y pasa el piso más profundo alcanzado)
+  const level = lootLevel || (state.dungeon && state.dungeon.level) || 1;
+  const filtered = table.filter(e =>{ const cut = LOOT_TIER_CUTOFF[e.rarity || e.tier]; return !cut || level < cut; });
   const boost = Math.min(1, level/60);
   const n = filtered.length;
   return filtered.map((e,i)=> ({...e, chance: e.chance * (1 + boost*(n-1-i)*0.15)}));
@@ -10044,7 +10054,8 @@ function rollFlatRarity(table, minLevelMap, level, bypassTiers, pityCounter, pit
 // ahora su equipo nunca caía en el laberinto (solo se podía comprar).
 const WEAPON_STYLE_IDS = ['pesada','doblefilo','tirador','mago','paladin','hechicero'];
 function generateEquipOfRarity(rarity, floorIdx){
-  const slot = pick(['arma','armadura','amuleto','casco','botas','guantes']);
+  // arma2 (2026-10-09, pedido explícito): las armas secundarias caen igual que el resto
+  const slot = pick(['arma','arma2','armadura','amuleto','casco','botas','guantes']);
   // El botín (arma Y equipo general) ahora sale del mismo catálogo fijo por
   // rango que la tienda — ya no escala con el piso ni tira un stat al azar,
   // para que un cofre nunca pueda dar más (ni distinto) de lo que ese rango
@@ -10053,7 +10064,7 @@ function generateEquipOfRarity(rarity, floorIdx){
   // altos"). Sacerdote queda fuera del pool aleatorio (ver WEAPON_STYLE_IDS
   // más abajo): un jugador nunca puede equiparse esa senda.
   const styleId = pick(WEAPON_STYLE_IDS);
-  if(slot==='arma') return makeWeaponItem('arma', styleId, rarity);
+  if(slot==='arma' || slot==='arma2') return makeWeaponItem(slot, styleId, rarity);
   // Conjuntos (2026-10-02, "drop como los anteriores equipamientos"): una
   // parte del equipo general que cae es una pieza de conjunto al azar.
   // Bug de reparto (2026-10-04, reportado por ariochbu): solo el 40% del equipo
@@ -10067,12 +10078,12 @@ const SET_DROP_SHARE = 0.4;
 // tanto por cofres/misiones (generateLoot) como por cada victoria en combate.
 // Puede devolver null: no todo combate suelta algo, así es el grindeo.
 function rollGearDropForLevel(level, floorIdx, bypassTiers){
-  const rarity = rollFlatRarity(scaleLootTableForDungeon(FLAT_GEAR_TABLE), GEAR_TIER_MIN_LEVEL, level, bypassTiers, state.char.pityGear||0, GEAR_PITY_TIERS);
+  const rarity = rollFlatRarity(scaleLootTableForDungeon(FLAT_GEAR_TABLE, level), GEAR_TIER_MIN_LEVEL, level, bypassTiers, state.char.pityGear||0, GEAR_PITY_TIERS);
   if(!rarity) return null;
   return generateEquipOfRarity(rarity, floorIdx);
 }
 function rollStoneDropForLevel(level, bypassTiers){
-  const tier = rollFlatRarity(scaleLootTableForDungeon(FLAT_STONE_TABLE), STONE_TIER_MIN_LEVEL, level, bypassTiers, state.char.pityStone||0, STONE_PITY_TIERS);
+  const tier = rollFlatRarity(scaleLootTableForDungeon(FLAT_STONE_TABLE, level), STONE_TIER_MIN_LEVEL, level, bypassTiers, state.char.pityStone||0, STONE_PITY_TIERS);
   if(!tier) return null;
   const pool = Object.values(SOUL_STONES).filter(s=>s.tier===tier);
   const tpl = pick(pool);
@@ -10083,7 +10094,8 @@ function rollStoneDropForLevel(level, bypassTiers){
 // entre rangos que cualquier otra tirada: simplemente se reintenta la misma
 // tabla hasta que salga alguna, nunca "nada" (a diferencia de un cofre o un
 // mob normal, que sí pueden no soltar ninguna). Termina siempre porque D
-// (piedras) no tiene nivel mínimo ni queda excluido por HIGH_FLOOR_LOOT_CUTOFF.
+// (piedras) no tiene nivel mínimo hasta el piso 40, y de ahí en adelante B y A
+// siempre pueden caer (ver LOOT_TIER_CUTOFF).
 function rollGuaranteedStoneDropForLevel(level, bypassTiers){
   let stone = null;
   while(!stone) stone = rollStoneDropForLevel(level, bypassTiers);
