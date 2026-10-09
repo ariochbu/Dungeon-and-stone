@@ -154,6 +154,8 @@ Object.assign(ENEMY_SPRITES, MONSTER_SPRITES);
 // base64. Para sumar más: guardar el PNG en src/assets/enemigos/<id>.png y
 // agregar el id acá.
 const HD_ENEMY_IDS = [
+  // guardianes de 1-9 (2026-10-09): retrato sacado del primer cuadro de su lámina, hasta tener imagen fija propia
+  'goblin_centinela', 'goblin_trampero', 'goblin_carnicero', 'bruja_pantano', 'tamborilero_guerra', 'campeon_hobgoblin', 'capataz_ogro',
   'alfa_manada', 'arana_caparazon', 'asesino_elite_isla', 'asesino_isla', 'bestia_carmesi', 'buitre_corrupto',
   'campeon_triton', 'cangrejo_gigante', 'capitan_mercenario', 'cazador_veterano', 'cazarrecompensas', 'centinela_coral_g',
   'copia_usurpador', 'custodio_isla', 'devoradora_nido', 'doble_corrupto', 'doble_perfecto', 'doble_traicionero',
@@ -185,7 +187,7 @@ const HD_ENEMY_IDS = [
   'sabuesa_tres_collares', 'el_fundidor', 'dama_grillete', 'testigo_ciego', 'horno_camina', 'portallaves', 'segundo_carcelero',
   'carcelero', 'carcelero_f2', 'carcelero_f3',
 ];
-HD_ENEMY_IDS.forEach(id=>{ ENEMY_SPRITES[id] = `src/assets/enemigos/${id}.png?v=15`; });
+HD_ENEMY_IDS.forEach(id=>{ ENEMY_SPRITES[id] = `src/assets/enemigos/${id}.png?v=16`; });
 // Invocaciones de las fases de jefe (2026-10-02): reusan sprites existentes.
 ENEMY_SPRITES.cria_arana = ENEMY_SPRITES.tarantula_cazadora;
 ENEMY_SPRITES.cangrejo_isla = ENEMY_SPRITES.cangrejo_gigante;

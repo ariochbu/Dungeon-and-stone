@@ -2,9 +2,9 @@
 
 import { supabase } from './supabaseClient.js';
 import * as auth from './auth.js';
-import { syncBattleStage, playBattleAnim } from './battleStage.js?v=106';
+import { syncBattleStage, playBattleAnim } from './battleStage.js?v=108';
 import { mountLabyrinth } from './labyrinthMap.js?v=8';
-import { CLASS_SPRITES, ENEMY_SPRITES, playerSpriteFor, playerIllustrationFor, enemySpriteFor, ALLY_TEMPLATE_SPRITES } from './battleSprites.js?v=90';
+import { CLASS_SPRITES, ENEMY_SPRITES, playerSpriteFor, playerIllustrationFor, enemySpriteFor, ALLY_TEMPLATE_SPRITES } from './battleSprites.js?v=92';
 
 /* ============================================================
    DATA
@@ -873,10 +873,23 @@ const DECADE_BESTIARY = [
       {id:'goblin_chaman', name:'Chamán goblin', icon:'💀', role:'mago', hp:0.85, atk:0.95, res:{fisico:-10,fuego:15,hielo:15,veneno:25,aturdimiento:-10}, moves:['maldicion_venenosa','curar_aliado','debilitar']}
     ],
     elite: [{id:'jefe_goblin', name:'Jefe goblin', icon:'👹', role:'melee', hp:1.9, atk:1.4, res:{fisico:20,fuego:-10,hielo:5,veneno:15,aturdimiento:25}, moves:['pegar','aplastar'], elite:true, frontline:true}],
-    guardians: [
-      {id:'hobgoblin', name:'Hobgoblin', icon:'🛡️', role:'melee', hp:1.8, atk:1.15, res:{fisico:15,fuego:5,hielo:5,veneno:15,aturdimiento:30}, moves:['pegar','aplastar','debilitar'], boss:true, frontline:true},
-      {id:'gilgoblin', name:'Gilgoblin', icon:'🔱', role:'melee', hp:1.7, atk:1.2, res:{fisico:10,fuego:10,hielo:10,veneno:20,aturdimiento:20}, moves:['pegar','aplastar','debilitar'], boss:true, frontline:true}
-    ],
+    guardians: [],
+    // Guardián único por piso (1 a 9), como en el resto de décadas (pedido de
+    // ariochbu, 2026-10-09). La dificultad NO cambia: antes se sorteaba entre
+    // Hobgoblin y Gilgoblin, y los nueve usan esos mismos números (o su media) y
+    // los mismos tres movimientos. Solo cambian el nombre, el arte y un poco el
+    // reparto de resistencias.
+    guardianByFloor: {
+      1: {id:'goblin_centinela', name:'Goblin Centinela', icon:'📯', role:'melee', hp:1.75, atk:1.175, res:{fisico:12,fuego:5,hielo:5,veneno:15,aturdimiento:25}, moves:['pegar','aplastar','debilitar'], boss:true, frontline:true},
+      2: {id:'goblin_trampero', name:'Goblin Trampero', icon:'🪤', role:'melee', hp:1.75, atk:1.175, res:{fisico:10,fuego:5,hielo:5,veneno:20,aturdimiento:25}, moves:['pegar','aplastar','debilitar'], boss:true, frontline:true},
+      3: {id:'goblin_carnicero', name:'Goblin Carnicero', icon:'🔪', role:'melee', hp:1.75, atk:1.175, res:{fisico:12,fuego:5,hielo:5,veneno:15,aturdimiento:25}, moves:['pegar','aplastar','debilitar'], boss:true, frontline:true},
+      4: {id:'hobgoblin', name:'Hobgoblin', icon:'🛡️', role:'melee', hp:1.8, atk:1.15, res:{fisico:15,fuego:5,hielo:5,veneno:15,aturdimiento:30}, moves:['pegar','aplastar','debilitar'], boss:true, frontline:true},
+      5: {id:'bruja_pantano', name:'Bruja del Pantano', icon:'🧪', role:'melee', hp:1.75, atk:1.175, res:{fisico:10,fuego:10,hielo:10,veneno:20,aturdimiento:20}, moves:['pegar','aplastar','debilitar'], boss:true, frontline:true},
+      6: {id:'gilgoblin', name:'Gilgoblin', icon:'🔱', role:'melee', hp:1.7, atk:1.2, res:{fisico:10,fuego:10,hielo:10,veneno:20,aturdimiento:20}, moves:['pegar','aplastar','debilitar'], boss:true, frontline:true},
+      7: {id:'tamborilero_guerra', name:'Tamborilero de Guerra', icon:'🥁', role:'melee', hp:1.75, atk:1.175, res:{fisico:12,fuego:5,hielo:5,veneno:15,aturdimiento:25}, moves:['pegar','aplastar','debilitar'], boss:true, frontline:true},
+      8: {id:'campeon_hobgoblin', name:'Campeón Hobgoblin', icon:'⚔️', role:'melee', hp:1.8, atk:1.15, res:{fisico:15,fuego:5,hielo:5,veneno:15,aturdimiento:30}, moves:['pegar','aplastar','debilitar'], boss:true, frontline:true},
+      9: {id:'capataz_ogro', name:'Capataz del Ogro', icon:'⛓️', role:'melee', hp:1.7, atk:1.2, res:{fisico:10,fuego:10,hielo:10,veneno:20,aturdimiento:20}, moves:['pegar','aplastar','debilitar'], boss:true, frontline:true},
+    },
     // Fases (2026-10-02): 60% Furia, 30% lanza rocas.
     decadeBoss: {id:'ogro', name:'Ogro', icon:'👺', role:'melee', hp:4.2, atk:1.9, res:{fisico:25,fuego:0,hielo:0,veneno:10,aturdimiento:35}, boss:true, frontline:true,
       phases:[{below:0.6, msg:'ruge y entra en <b>Furia</b> (fase 2).'},{below:0.3, msg:'arranca una roca del suelo: <b>golpes devastadores</b> (fase 3).'}],
