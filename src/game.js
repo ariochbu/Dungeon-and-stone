@@ -4834,6 +4834,7 @@ function characterToRow(){
     dungeon: state.dungeon,
     ...(state.char.titleColumn ? {title_choice: state.char.titleChoice===undefined ? null : state.char.titleChoice} : {}),
     ...(state.char.bossesColumn ? {bosses_beaten: myBossesBeaten()} : {}),
+    ...(state.char.sacerdoteSColumn ? {sacerdote_s_granted: !!state.char.sacerdoteSGranted} : {}),
     ...(state.char.bestiaryColumn ? {bestiary: state.char.bestiary || []} : {}),
     ...(state.char.recordTurnsColumn ? {record_turns: state.char.recordTurns || null, record_turns_level: state.char.recordTurnsLevel || null} : {}),
     ...(sessionEnforced ? {last_session: SESSION_ID} : {})
@@ -4919,6 +4920,7 @@ function rowToState(row){
       role: row.role, hiddenFromLeaderboard: row.hidden_from_leaderboard,
       titleChoice: row.title_choice===undefined ? null : row.title_choice, titleColumn: row.title_choice !== undefined,
       bossesBeaten: row.bosses_beaten || 0, bossesColumn: row.bosses_beaten !== undefined, firstRetornado: !!row.first_retornado,
+      sacerdoteSGranted: !!row.sacerdote_s_granted, sacerdoteSColumn: row.sacerdote_s_granted !== undefined,
       race: row.race, style: row.style,
       level: row.level, xp: row.xp, gold: row.gold, missionCurrency: row.mission_currency || 0,
       missionRerollCycle: row.mission_reroll_cycle || null, missionRerollCount: row.mission_reroll_count || 0,
@@ -8263,9 +8265,10 @@ async function refreshAlliesState(){
     let want = 0;
     if(row.level>=AUTO_GEAR_LEVEL.rango_b) want = 2; else if(row.level>=AUTO_GEAR_LEVEL.raro) want = 1;
     if((state.char.checkpointLevel||1) > 30) want = Math.max(want, 3);
-    // Storm Gush vencido (6 jefes de década): set Tier S. También repone el
-    // de quienes lo ganaron antes de la migración 0035 y lo perdieron al recargar.
-    if((state.char.bossesBeaten||0) >= 6 || (state.char.checkpointLevel||1) > 60) want = 4;
+    // El set Tier S ya NO se reparte al cargar (2026-10-09, decisión de ariochbu):
+    // solo se entrega la primera vez que el personaje vence a Storm Gush (ver
+    // handleVictory). Repartirlo acá permitía repetirlo sin límite: quitarle el
+    // set al Sacerdote, despedirlo, reclutarlo de nuevo y recargar.
     if(want > cur) await grantAllyAutoGear(row, tierOrder[want]);
     // Retroactivo (2026-10-02): Sacerdotes que ya pasaron hitos antes de que
     // el Arma 1 formara parte de la recompensa.
@@ -10014,8 +10017,12 @@ const LOOT_TIER_CUTOFF = {comun:10, E:10, poco_comun:20, F:20, D:40, raro:81, C:
 // Piedra B 8% desde el 61 es elección propia: ocupa el lugar de la C, que ya
 // no cae ahí ("reacomoda").
 const LOOT_FLOOR_RATES = [
-  {from:81, rates:{rango_a:0.10, A:0.10, legendario:0.002, S:0.01, B:0.08}},
-  {from:71, rates:{rango_a:0.04, A:0.04, legendario:0.001, S:0.001, B:0.08}},
+  // 2026-10-09 (más tarde, "baja tasa de S, que sea difícil y trabaje la suerte,
+  // casi como los Caídos"): equipo S de 0,1% a 0,02% (71-80) y de 0,2% a 0,05%
+  // (81+); piedra S de cofre en 71-80 de 0,1% a 0,02%. Los números son míos.
+  // La piedra S del 81+ (1%) y la del jefe son de ariochbu y no se tocan.
+  {from:81, rates:{rango_a:0.10, A:0.10, legendario:0.0005, S:0.01, B:0.08}},
+  {from:71, rates:{rango_a:0.04, A:0.04, legendario:0.0002, S:0.0002, B:0.08}},
   {from:61, rates:{rango_a:0.03, A:0.03, B:0.08}},
 ];
 // Mientras más profundo el piso actual, un poco más de peso relativo ganan
@@ -14388,6 +14395,11 @@ function handleVictory(){
     // implementada) escribía un checkpoint "61" sin bestiario real detrás —
     // quien lo usaba quedaba atrapado en un bucle. Mismo Math.min que ya usa
     // maxLevelUnlocked justo arriba.
+    // Primera victoria sobre Storm Gush de este personaje (2026-10-09): con la
+    // columna sacerdote_s_granted (migración 0041) manda esa marca; sin ella, que
+    // todavía no existiera el punto de control del piso 61.
+    const firstStormKill = isDecadeFinal && clearedLevel===60 && !state.char.sacerdoteSGranted
+      && (state.char.sacerdoteSColumn || (state.char.checkpointLevel||1) <= 60);
     if(isDecadeFinal){
       // Sin checkpoint en el piso 91, a propósito (decisión de ariochbu, 2026-10-09):
       // vencer al jefe del 90 no abre punto de entrada; La Celda se hace desde el 81.
@@ -14411,9 +14423,16 @@ function handleVictory(){
     // Jefe de la década 60 (Storm Gush): el Sacerdote desbloquea su set
     // Tier S completo — pedido explícito 2026-09-24, mismo criterio que el
     // Épico de arriba (no depende de su propio nivel de aliado).
-    if(isDecadeFinal && clearedLevel===60){
-      (state.char.allies||[]).filter(a=>a.role==='sacerdote' && (a.auto_gear_tier||'none')!=='legendario')
-        .forEach(a=> grantAllyAutoGear(a,'legendario'));
+    // Solo la PRIMERA vez que el personaje vence a Storm Gush (decisión de
+    // ariochbu, 2026-10-09): lo reciben los Sacerdotes que estén en el grupo en
+    // ese momento. Si no hay ninguno, la recompensa se pierde igual. La marca
+    // solo queda puesta si todos los guardados salieron bien, para poder
+    // reintentar en la siguiente victoria si la base rechazó alguno.
+    if(firstStormKill){
+      const sacerdotes = (state.char.allies||[]).filter(a=>a.role==='sacerdote' && (a.auto_gear_tier||'none')!=='legendario');
+      Promise.all(sacerdotes.map(a=> grantAllyAutoGear(a,'legendario'))).then(results=>{
+        if(results.every(ok=> ok !== false)){ state.char.sacerdoteSGranted = true; save(); }
+      });
     }
     log(`Derrotas al guardián del nivel ${clearedLevel}.`);
 
