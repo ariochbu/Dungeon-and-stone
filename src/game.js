@@ -10004,16 +10004,19 @@ function stripUnmetLevelStones(slotsArray, level, ownerName){
 // igual para equipo, armas y piedras. En piedras E = Común, F = Poco común y
 // C = Raro (mismos colores); D no tiene escalón de equipo y queda entre F y
 // C: se corta en el 40 (elección propia, a confirmar con ariochbu).
-const LOOT_TIER_CUTOFF = {comun:10, E:10, poco_comun:20, F:20, D:40, raro:81, C:81};
+// 2026-10-09 (más tarde): las piedras C dejan de caer desde el piso 61 (el equipo Raro sigue hasta el 80).
+const LOOT_TIER_CUTOFF = {comun:10, E:10, poco_comun:20, F:20, D:40, raro:81, C:61};
 // Tasas fijas por tramo de piso para los rangos altos (2026-10-09). Se aplican
 // tal cual, sin el peso por profundidad de abajo, y valen para equipo, armas
 // y piedras. 81+: Rango A 10% y Tier S 0,2% (números de ariochbu). 71+: Tier S
 // 0,1% (ariochbu). Rango A 3% en 61-70 y 4% en 71-80 es mi propuesta, que
-// ariochbu no confirmó de forma explícita.
+// ariochbu no confirmó de forma explícita. Piedra S 1% desde el 81 (ariochbu).
+// Piedra B 8% desde el 61 es elección propia: ocupa el lugar de la C, que ya
+// no cae ahí ("reacomoda").
 const LOOT_FLOOR_RATES = [
-  {from:81, rates:{rango_a:0.10, A:0.10, legendario:0.002, S:0.002}},
-  {from:71, rates:{rango_a:0.04, A:0.04, legendario:0.001, S:0.001}},
-  {from:61, rates:{rango_a:0.03, A:0.03}},
+  {from:81, rates:{rango_a:0.10, A:0.10, legendario:0.002, S:0.01, B:0.08}},
+  {from:71, rates:{rango_a:0.04, A:0.04, legendario:0.001, S:0.001, B:0.08}},
+  {from:61, rates:{rango_a:0.03, A:0.03, B:0.08}},
 ];
 // Mientras más profundo el piso actual, un poco más de peso relativo ganan
 // los rangos altos frente a los bajos dentro de la misma tabla plana de
