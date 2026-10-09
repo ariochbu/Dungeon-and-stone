@@ -5475,7 +5475,8 @@ function xpGapMultiplier(){
   const gap = Math.max(0, maxLevelUnlocked() - state.dungeon.level);
   return Math.max(0.1, 1 - gap*0.15);
 }
-const XP_STEP_60 = {from:60, mult:5}; // ver xpNeededForLevel
+// Escalones de experiencia (ver xpNeededForLevel). Se multiplican entre sí: 60→61 es x5 y 80→81 es x3 sobre eso.
+const XP_STEPS = [{from:60, mult:5}, {from:80, mult:3}];
 function xpNeededForLevel(level){
   // Se duplica tal cual pediste (5,10,20,40,80,160,320) hasta el nivel 7→8.
   // A partir de ahí, duplicar cada nivel hasta el 60 pedía cantidades imposibles de
@@ -5490,7 +5491,9 @@ function xpNeededForLevel(level){
   // Escalón del nivel 60 (pedido explícito 2026-10-09): pasar de 60 a 61 pide un
   // salto brusco y de ahí en adelante vuelve a crecer suave, sobre el escalón.
   // x5 fijado por ariochbu ("para el 61 debe ser mínimo 10 mil"): 60→61 pasa de 2.864 a 14.320.
-  return Math.round(base * (level >= XP_STEP_60.from ? XP_STEP_60.mult : 1));
+  // 80→81 (ariochbu, 2026-10-09): otro escalón, x3 sobre lo anterior (18.880 → 57.360), y luego leve.
+  // Solo cuenta cuando se abran los pisos 81+: con el tope en 80 esta función devuelve Infinity arriba.
+  return Math.round(XP_STEPS.reduce((v, st)=> level >= st.from ? v * st.mult : v, base));
 }
 const BASE_FLOORS = 5; // floors on level 1, last floor = guardian
 const MAX_FLOORS = 9; // cap so high levels don't become endless
