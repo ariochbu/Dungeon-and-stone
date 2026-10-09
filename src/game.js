@@ -14283,7 +14283,10 @@ function handleVictory(){
   // construidas - cuando existan, el jefe de una Grieta debe activar esto
   // también. Por ahora solo el jefe de década cuenta.
   const isRiftBoss = false;
-  const stonesAllowedThisFight = isDecadeFinal || isRiftBoss;
+  // 2026-10-09 (pedido explícito): del piso 91 al 99 cada guardián también
+  // suelta su piedra de alma garantizada (los "despertados" de La Celda).
+  const isCeldaGuardian = isBoss && !isDecadeFinal && level >= 91 && level <= 99;
+  const stonesAllowedThisFight = isDecadeFinal || isRiftBoss || isCeldaGuardian;
   const rollCount = rewardEnemyCount * (isDecadeFinal ? 2 : 1);
   // El jefe de década del piso 10 es la única excepción al piso mínimo de
   // Raro/Único (C/B): es el primer vistazo real a esos rangos, incluso para
