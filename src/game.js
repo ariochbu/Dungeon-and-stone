@@ -630,12 +630,14 @@ const SKILLS = {
   lanza_hielo: {
     id:'lanza_hielo', name:'Lanza de hielo', cost:{tipo:'estamina', valor:15}, dmgType:'hielo', mult:0.9,
     applies:{name:'Ralentizado', chance:0.8, duration:2},
-    desc: ()=> `Daño de hielo. Aplica Ralentizado (-20% evasión, actúa después) durante ${skillBonus('lanza_hielo','duration',2)} turnos.`, targetMode:'any'
+    controlLine:true, // el Ralentizado cae sobre toda la línea del objetivo (2026-10-09)
+    desc: ()=> `Daño de hielo al objetivo. Aplica Ralentizado (-20% evasión, actúa después) durante ${skillBonus('lanza_hielo','duration',2)} turnos a toda su línea (frente o retaguardia), cada enemigo con su propia tirada.`, targetMode:'any'
   },
   explosion_arcana: {
     id:'explosion_arcana', name:'Explosión arcana', cost:{tipo:'estamina', valor:25}, dmgType:'arcano', mult:0.75,
     consumesEither:[{name:'Quemadura', bonusMult:0.6},{name:'Ralentizado', bonusMult:0.6}], penaltyIfNone:0.3,
-    desc: ()=> `Consume Quemadura o Ralentizado del objetivo para +${Math.round(skillBonus('explosion_arcana','bonusMult',0.6)*100)}% de daño.`,
+    comboLineSplash:0.5, // al detonar un estado, el resto de la línea del objetivo recibe este % del daño (2026-10-09)
+    desc: ()=> `Consume Quemadura o Ralentizado del objetivo para +${Math.round(skillBonus('explosion_arcana','bonusMult',0.6)*100)}% de daño; la detonación alcanza al resto de su línea con el ${Math.round((SKILLS.explosion_arcana.comboLineSplash||0)*100)}% de ese daño.`,
     targetMode:'any'
   },
 
@@ -11936,6 +11938,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
       if(fe) splashHits.push({dmg: Math.max(1, Math.round(dmg*fe.pct)), exclude: target, single:true, label:'Flecha Expansiva'});
     }
     if(lunaLlenaSp) splashHits.push({dmg: Math.max(1, Math.round(dmg*lunaLlenaSp.splash)), exclude: target, single:false, label:'Lluvia de Artemisa'});
+    if(skill.comboLineSplash && comboText.includes('Combo elemental')) splashHits.push({dmg: Math.max(1, Math.round(dmg*skill.comboLineSplash)), exclude: target, line:true, label:`La detonación de ${skill.name}`});
     if(skill.splashPct) splashHits.push({dmg: Math.max(1, Math.round(dmg*skill.splashPct)), exclude: target, single:true, frontFirst:true, label:`El rebote de ${skill.name}`});
 
     // Efectos al golpear de las armas de Paladín/Hechicero (2026-10-02).
@@ -12024,6 +12027,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
   if(combat.critNextUsed){ combat.critNext = false; combat.critNextUsed = false; }
   splashHits.forEach(sh=>{
     let pool = livingEnemies().filter(e=>e!==sh.exclude);
+    if(sh.line) pool = lluviaLineIndices(combat.enemies.indexOf(sh.exclude)).map(i=> combat.enemies[i]).filter(e=> e!==sh.exclude && e.hp>0);
     if(sh.frontFirst){ const front = livingFrontlineEnemyIndices().map(i=> combat.enemies[i]).filter(e=> e!==sh.exclude && e.hp>0); if(front.length) pool = front; }
     const hit = sh.single ? (pool.length ? [pick(pool)] : []) : pool;
     hit.forEach(e=>{ e.hp = Math.max(0, e.hp - sh.dmg); turnEffects.push({targetKind:'enemy', key: combat.enemies.indexOf(e), amount:sh.dmg, kind:'dmg'}); });
@@ -13803,10 +13807,23 @@ function simPickSkill(usable){
     if(can('disparo_certero') && state.char.curSta - effectiveSkillCost('disparo_certero', SKILLS.disparo_certero) >= reserva && combat.turnCount % 2 === 0) return 'disparo_certero';
     return 'ataque_basico';
   }
-  // Mago (2026-10-09): Cataclismo contra grupos; Quemadura al tope y después
-  // hielo (Ralentizado + Choque Térmico). Explosión arcana solo si no hay
-  // Quemadura que perder: la consumiría entera.
+  // Mago (2026-10-09): contra un grupo, frena la línea con Lanza de hielo y
+  // detona con Explosión arcana sobre un enemigo Ralentizado o con Quemadura
+  // (la detonación alcanza a toda la línea). Contra uno solo: Quemadura al
+  // tope y hielo. Cataclismo cuando hay varios.
   if(state.char.style === 'mago' && target && !window.__simDistanciaTonto){
+    const front = lluviaLineIndices(null), rear = [];
+    combat.enemies.forEach((e,i)=>{ if(e.hp>0 && !front.includes(i)) rear.push(i); });
+    const line = rear.length > front.length ? rear : front;
+    const grupo = line.length >= 3 && (SKILLS.explosion_arcana.comboLineSplash || SKILLS.lanza_hielo.controlLine);
+    if(can('cataclismo_elemental') && livingEnemies().length >= 3) return 'cataclismo_elemental';
+    if(grupo){
+      const st = (i, n)=> hasStatus(combat.enemies[i].statuses, n);
+      const listo = line.filter(i=> st(i,'Ralentizado') || st(i,'Quemadura')).sort((x, y)=> combat.enemies[x].hp - combat.enemies[y].hp)[0];
+      if(can('explosion_arcana') && SKILLS.explosion_arcana.comboLineSplash && listo != null){ simTargetOverride = listo; return 'explosion_arcana'; }
+      if(can('lanza_hielo') && SKILLS.lanza_hielo.controlLine && line.filter(i=> !st(i,'Ralentizado')).length >= 2){ simTargetOverride = line.slice().sort((x, y)=> combat.enemies[x].hp - combat.enemies[y].hp)[0]; return 'lanza_hielo'; }
+      if(can('bola_fuego')){ simTargetOverride = line.slice().sort((x, y)=> combat.enemies[x].hp - combat.enemies[y].hp)[0]; return 'bola_fuego'; }
+    }
     const q = hasStatus(target.statuses, 'Quemadura'), lento = !!hasStatus(target.statuses, 'Ralentizado');
     const qMax = q && (q.stacks||1) >= skillBonus('bola_fuego','maxStack',3) && (q.duration||0) > 1;
     if(can('cataclismo_elemental') && livingEnemies().length >= 2) return 'cataclismo_elemental';
