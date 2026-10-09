@@ -13,7 +13,7 @@
 // combat.enemies/combat.allies/combat.lastActor/combat.lastAction y dibuja.
 // No aplica daño, no decide turnos, no cambia HP.
 
-import { CLASS_SPRITES, ALLY_SPRITES, ENEMY_SPRITES, playerSpriteFor, RACE_SIZE, ALLY_TEMPLATE_SPRITES, enemySpriteFor, enemyChibiKey } from './battleSprites.js?v=88';
+import { CLASS_SPRITES, ALLY_SPRITES, ENEMY_SPRITES, playerSpriteFor, RACE_SIZE, ALLY_TEMPLATE_SPRITES, enemySpriteFor, enemyChibiKey } from './battleSprites.js?v=89';
 
 import { SpriteAnim, sheetFromMeta } from './spriteAnim.js?v=2';
 

@@ -41,7 +41,9 @@ export const RACE_SPRITES = {
 };
 // Tamaño relativo por raza al dibujar en el escenario (2026-10-02): el
 // Bárbaro es el más grande, luego el Hombre bestia.
-export const RACE_SIZE = { barbaro:1.12, bestia:1.06, enano:0.92 };
+// 2026-10-09 (ariochbu): el bárbaro se veía igual o más bajo que el hombre bestia, que abulta más
+// (cola, orejas, melena) aunque midan lo mismo. Bárbaro 1.12 → 1.24 y bestia 1.06 → 1.04.
+export const RACE_SIZE = { barbaro:1.24, bestia:1.04, enano:0.92 };
 // Sprites HD del jugador (2026-10-02): una ilustración por raza×clase
 // (src/assets/jugador/<clase>_<raza>.png). Los de pixel art quedan de respaldo.
 const HD_PLAYER_STYLES = ['pesada','tirador','doblefilo','mago','paladin','hechicero'];

@@ -2,9 +2,9 @@
 
 import { supabase } from './supabaseClient.js';
 import * as auth from './auth.js';
-import { syncBattleStage, playBattleAnim } from './battleStage.js?v=104';
+import { syncBattleStage, playBattleAnim } from './battleStage.js?v=105';
 import { mountLabyrinth } from './labyrinthMap.js?v=7';
-import { CLASS_SPRITES, ENEMY_SPRITES, playerSpriteFor, playerIllustrationFor, enemySpriteFor, ALLY_TEMPLATE_SPRITES } from './battleSprites.js?v=88';
+import { CLASS_SPRITES, ENEMY_SPRITES, playerSpriteFor, playerIllustrationFor, enemySpriteFor, ALLY_TEMPLATE_SPRITES } from './battleSprites.js?v=89';
 
 /* ============================================================
    DATA
@@ -10542,7 +10542,7 @@ const DECADE_ENEMY_TUNING = {
   4: {regular:{hp:1.36, atk:1.36}, elite:{hp:1.36, atk:1.36}, guardian:{hp:1.36, atk:1.36}},   // 74% (quinta vuelta)
   5: {regular:{hp:2.36, atk:3.42}, elite:{hp:2.24, atk:3.16}, guardian:{hp:1.98, atk:2.31}},   // 75%
   6: {regular:{hp:3.29, atk:4.99}, elite:{hp:3.29, atk:4.99}, guardian:{hp:1.95, atk:2.46}},   // 2026-10-09: guardian correcto por nivel + castigo al frente; media 61-69 ~60%
-  7: {regular:{hp:3.63, atk:5.57}, elite:{hp:3.63, atk:5.57}, guardian:{hp:1.78, atk:2.25}},   // 2026-10-09: idem; media 71-79 ~63%
+  7: {regular:{hp:3.63, atk:5.57}, elite:{hp:3.63, atk:5.57}, guardian:{hp:1.78, atk:2.25}},   // 2026-10-09: idem; media 71-79 ~63%
   8: {regular:{hp:4.90, atk:7.52}, elite:{hp:3.60, atk:5.60}, guardian:{hp:2.40, atk:3.04}},   // 2026-10-09, segunda pasada: más duro en general y el reparto por senda en ENEMY_VS_CLASS_81 (objetivo de ariochbu: ~50% de niveles completados por senda). Élites algo por debajo: el simulador casi nunca les ganaba
 };
 function makeEnemy(tpl, floorIdx, level){
