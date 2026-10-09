@@ -9880,7 +9880,7 @@ const FLAT_GEAR_TABLE = [
   {rarity:'legendario', chance:0.00005},  // S   0.005%
   {rarity:'rango_a',    chance:0.01},     // A   1%
   {rarity:'rango_b',    chance:0.01},     // B   1% (bajado de 2%)
-  {rarity:'raro',       chance:0.02},     // C   2% (bajado de 3%)
+  {rarity:'raro',       chance:0.08},     // C   8% (2026-10-09, pedido explícito "que se sienta la recompensa"; era 2%. El número es elección propia)
   {rarity:'poco_comun', chance:0.10},     // F   10% (fusionado en Común, ver E)
   {rarity:'comun',      chance:0.20}      // E   20%
 ].filter(e => SS_DROP_ENABLED || e.rarity !== 'ss');
@@ -9889,8 +9889,8 @@ const FLAT_STONE_TABLE = [
   {tier:'S',  chance:0.00005},
   {tier:'A',  chance:0.01},
   {tier:'B',  chance:0.01},   // bajado de 2%
-  {tier:'C',  chance:0.02},   // bajado de 3%
-  {tier:'D',  chance:0.05},
+  {tier:'C',  chance:0.08},   // 2026-10-09: sube igual que Raro (era 2%)
+  {tier:'D',  chance:0.10},   // 2026-10-09: "aumenta el drop de piedras" (era 5%)
   {tier:'F',  chance:0.10},
   {tier:'E',  chance:0.20}
 ].filter(e => SS_DROP_ENABLED || e.tier !== 'SS');
@@ -10000,11 +10000,21 @@ function stripUnmetLevelStones(slotsArray, level, ownerName){
 // explícito, 2026-09-18: de ahí en adelante lo peor que puede tocar ya es un
 // escalón mejor que basura pura.
 // 2026-10-09 (pedido explícito, reemplaza el corte único del piso 40): Común
-// deja de caer desde el piso 10, Poco común desde el 20 y Raro desde el 60,
+// deja de caer desde el piso 10, Poco común desde el 20 y Raro desde el 81,
 // igual para equipo, armas y piedras. En piedras E = Común, F = Poco común y
 // C = Raro (mismos colores); D no tiene escalón de equipo y queda entre F y
 // C: se corta en el 40 (elección propia, a confirmar con ariochbu).
-const LOOT_TIER_CUTOFF = {comun:10, E:10, poco_comun:20, F:20, D:40, raro:60, C:60};
+const LOOT_TIER_CUTOFF = {comun:10, E:10, poco_comun:20, F:20, D:40, raro:81, C:81};
+// Tasas fijas por tramo de piso para los rangos altos (2026-10-09). Se aplican
+// tal cual, sin el peso por profundidad de abajo, y valen para equipo, armas
+// y piedras. 81+: Rango A 10% y Tier S 0,2% (números de ariochbu). 71+: Tier S
+// 0,1% (ariochbu). Rango A 3% en 61-70 y 4% en 71-80 es mi propuesta, que
+// ariochbu no confirmó de forma explícita.
+const LOOT_FLOOR_RATES = [
+  {from:81, rates:{rango_a:0.10, A:0.10, legendario:0.002, S:0.002}},
+  {from:71, rates:{rango_a:0.04, A:0.04, legendario:0.001, S:0.001}},
+  {from:61, rates:{rango_a:0.03, A:0.03}},
+];
 // Mientras más profundo el piso actual, un poco más de peso relativo ganan
 // los rangos altos frente a los bajos dentro de la misma tabla plana de
 // arriba — no cambia CUÁLES rangos existen (eso ya lo hace el filtro de
@@ -10017,7 +10027,11 @@ function scaleLootTableForDungeon(table, lootLevel){
   const filtered = table.filter(e =>{ const cut = LOOT_TIER_CUTOFF[e.rarity || e.tier]; return !cut || level < cut; });
   const boost = Math.min(1, level/60);
   const n = filtered.length;
-  return filtered.map((e,i)=> ({...e, chance: e.chance * (1 + boost*(n-1-i)*0.15)}));
+  const band = LOOT_FLOOR_RATES.find(b=> level >= b.from);
+  return filtered.map((e,i)=>{
+    const fixed = band && band.rates[e.rarity || e.tier];
+    return {...e, chance: fixed !== undefined ? fixed : e.chance * (1 + boost*(n-1-i)*0.15)};
+  });
 }
 // Contador de pity: combates sin un drop de rango A o mejor. Pity suave desde
 // PITY_SOFT (la chance de ese rango sube gradualmente en cada intento
