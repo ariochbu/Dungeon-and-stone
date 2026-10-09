@@ -2,9 +2,9 @@
 
 import { supabase } from './supabaseClient.js';
 import * as auth from './auth.js';
-import { syncBattleStage, playBattleAnim } from './battleStage.js?v=102';
-import { mountLabyrinth } from './labyrinthMap.js?v=6';
-import { CLASS_SPRITES, ENEMY_SPRITES, playerSpriteFor, playerIllustrationFor, enemySpriteFor, ALLY_TEMPLATE_SPRITES } from './battleSprites.js?v=86';
+import { syncBattleStage, playBattleAnim } from './battleStage.js?v=103';
+import { mountLabyrinth } from './labyrinthMap.js?v=7';
+import { CLASS_SPRITES, ENEMY_SPRITES, playerSpriteFor, playerIllustrationFor, enemySpriteFor, ALLY_TEMPLATE_SPRITES } from './battleSprites.js?v=87';
 
 /* ============================================================
    DATA
@@ -14850,7 +14850,7 @@ let creationChibiIndex = null;
 async function mountCreationChibi(hero, styleId, raceId){
   const key = styleId + '_' + raceId, img0 = hero.querySelector('.cr-sprite');
   try{
-    if(!creationChibiIndex) creationChibiIndex = await fetch('src/assets/chibi/index.json?v=6').then(r=> r.json());
+    if(!creationChibiIndex) creationChibiIndex = await fetch('src/assets/chibi/index.json?v=7').then(r=> r.json());
     const meta = creationChibiIndex[key];
     if(!meta || !img0 || !img0.isConnected) return;
     const sheet = new Image();
@@ -15377,7 +15377,7 @@ function renderCharacterSelect(rows){
 async function mountCampChibi(fig, styleId, raceId){
   const key = styleId + '_' + raceId, img0 = fig && fig.querySelector('img');
   try{
-    if(!creationChibiIndex) creationChibiIndex = await fetch('src/assets/chibi/index.json?v=6').then(r=> r.json());
+    if(!creationChibiIndex) creationChibiIndex = await fetch('src/assets/chibi/index.json?v=7').then(r=> r.json());
     const meta = creationChibiIndex[key];
     if(!meta || !img0 || !img0.isConnected) return;
     const sheet = new Image();

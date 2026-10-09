@@ -222,7 +222,7 @@ export function enemySpriteFor(en){
 const CHIBI_ALIAS = {
   cria_arana:'tarantula_cazadora', cangrejo_isla:'cangrejo_gigante', garvel_pequeno:'garvel', copia_usurpador:'usurpador_f3',
   senuelo_clon:'sombra_mimetica', senuelo_replica:'espejo_viviente', senuelo_duplicado:'doble_perfecto',
-  senuelo_ciervo:'ciervo_torcido', larva_errante:'larva_fase', reflejo_fallido:'sin_forma',
+  senuelo_ciervo:'ciervo_torcido', larva_errante:'larva_fase', reflejo_fallido:'sin_forma', brote_menor:'brote_carronero',
 };
 export function enemyChibiKey(en){
   const id = enemyFormId(en);

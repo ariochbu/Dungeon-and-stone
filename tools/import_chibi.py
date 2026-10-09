@@ -158,6 +158,13 @@ MIRA_IZQUIERDA = {'enemigo_' + n for n in (
     'eco_heredado', 'el_inversor', 'geometra_ciega', 'la_costura', 'larva_fase', 'marea_seca', 'ojo_reflujo',
     'pastor_errores', 'puerta_camina', 'quimera_disonante', 'recuerdo_mal_nacido', 'rey_articulaciones',
     'sabueso_invertido', 'sin_forma', 'sin_forma_f2', 'sin_forma_f3', 'vigilante_descosido',
+    # Bosque muerto (71-80), revisado a ojo el 2026-10-08. Miran a la derecha y no van acá:
+    # raiz_desenterrada, semilla_doliente, jardinero_enterrado, corazon_marchito (fase 1)
+    'jardinero_hueco', 'ciervo_sepulcral', 'polilla_funeraria', 'hongo_osario', 'enredadera_viuda', 'cuervo_savia',
+    'brote_carronero', 'caracol_tumba', 'espantapajaros_raigal', 'mantis_poda', 'madre_micelio', 'injerto_profano',
+    'custodio_invernadero', 'heraldo_flor_negra', 'gran_madre_micelio', 'ciervo_cementerio', 'novia_raices',
+    'arbol_juramentos', 'bestia_invernadero', 'sepulturero_savia', 'flor_mil_voces', 'ultimo_jardinero',
+    'corazon_marchito_f2', 'corazon_marchito_f3',
 )} | {
     # jugadores y aliados: se mira hacia dónde lanzan el ataque
     'doblefilo_barbaro', 'paladin_barbaro', 'tirador_barbaro', 'hechicero_bestia', 'paladin_bestia', 'pesada_bestia',

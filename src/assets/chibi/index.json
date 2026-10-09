@@ -279,6 +279,17 @@
    4
   ]
  },
+ "enemigo_arbol_juramentos": {
+  "bh": 128,
+  "ch": 132,
+  "cw": 182,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
  "enemigo_asesino_elite_isla": {
   "bh": 128,
   "ch": 130,
@@ -312,10 +323,32 @@
    5
   ]
  },
+ "enemigo_bestia_invernadero": {
+  "bh": 128,
+  "ch": 135,
+  "cw": 202,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
  "enemigo_boca_peregrina": {
   "bh": 128,
   "ch": 132,
   "cw": 188,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_brote_carronero": {
+  "bh": 128,
+  "ch": 132,
+  "cw": 180,
   "frames": [
    4,
    6,
@@ -367,6 +400,17 @@
    5
   ]
  },
+ "enemigo_caracol_tumba": {
+  "bh": 128,
+  "ch": 140,
+  "cw": 242,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
  "enemigo_cazador_veterano": {
   "bh": 128,
   "ch": 132,
@@ -411,6 +455,28 @@
    4
   ]
  },
+ "enemigo_ciervo_cementerio": {
+  "bh": 128,
+  "ch": 134,
+  "cw": 188,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_ciervo_sepulcral": {
+  "bh": 128,
+  "ch": 130,
+  "cw": 174,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
  "enemigo_ciervo_torcido": {
   "bh": 128,
   "ch": 131,
@@ -422,10 +488,65 @@
    4
   ]
  },
+ "enemigo_corazon_marchito": {
+  "bh": 128,
+  "ch": 137,
+  "cw": 138,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_corazon_marchito_f2": {
+  "bh": 128,
+  "ch": 134,
+  "cw": 152,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "enemigo_corazon_marchito_f3": {
+  "bh": 128,
+  "ch": 131,
+  "cw": 180,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
  "enemigo_coro_hueco": {
   "bh": 128,
   "ch": 130,
   "cw": 138,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_cuervo_savia": {
+  "bh": 128,
+  "ch": 131,
+  "cw": 190,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_custodio_invernadero": {
+  "bh": 128,
+  "ch": 152,
+  "cw": 188,
   "frames": [
    4,
    6,
@@ -521,6 +642,28 @@
    4
   ]
  },
+ "enemigo_enredadera_viuda": {
+  "bh": 128,
+  "ch": 137,
+  "cw": 232,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_espantapajaros_raigal": {
+  "bh": 128,
+  "ch": 131,
+  "cw": 196,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
  "enemigo_espejo_sombras": {
   "bh": 128,
   "ch": 130,
@@ -569,6 +712,17 @@
   "bh": 128,
   "ch": 130,
   "cw": 162,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_flor_mil_voces": {
+  "bh": 128,
+  "ch": 136,
+  "cw": 210,
   "frames": [
    4,
    6,
@@ -675,6 +829,17 @@
    5
   ]
  },
+ "enemigo_gran_madre_micelio": {
+  "bh": 128,
+  "ch": 136,
+  "cw": 196,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
  "enemigo_gran_tejedora": {
   "bh": 128,
   "ch": 137,
@@ -730,6 +895,17 @@
    4
   ]
  },
+ "enemigo_heraldo_flor_negra": {
+  "bh": 128,
+  "ch": 135,
+  "cw": 204,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
  "enemigo_heraldo_tormenta": {
   "bh": 128,
   "ch": 147,
@@ -745,6 +921,17 @@
   "bh": 128,
   "ch": 133,
   "cw": 256,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_hongo_osario": {
+  "bh": 128,
+  "ch": 135,
+  "cw": 188,
   "frames": [
    4,
    6,
@@ -774,10 +961,43 @@
    5
   ]
  },
+ "enemigo_injerto_profano": {
+  "bh": 128,
+  "ch": 130,
+  "cw": 196,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
  "enemigo_jabali_hierro": {
   "bh": 128,
   "ch": 130,
   "cw": 146,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_jardinero_enterrado": {
+  "bh": 128,
+  "ch": 164,
+  "cw": 174,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_jardinero_hueco": {
+  "bh": 128,
+  "ch": 134,
+  "cw": 122,
   "frames": [
    4,
    6,
@@ -862,6 +1082,17 @@
    5
   ]
  },
+ "enemigo_madre_micelio": {
+  "bh": 128,
+  "ch": 131,
+  "cw": 200,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
  "enemigo_maestro_reflejo": {
   "bh": 128,
   "ch": 130,
@@ -882,6 +1113,17 @@
    6,
    2,
    6
+  ]
+ },
+ "enemigo_mantis_poda": {
+  "bh": 128,
+  "ch": 132,
+  "cw": 204,
+  "frames": [
+   4,
+   6,
+   2,
+   4
   ]
  },
  "enemigo_marea_seca": {
@@ -994,6 +1236,17 @@
    4
   ]
  },
+ "enemigo_novia_raices": {
+  "bh": 128,
+  "ch": 136,
+  "cw": 230,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
  "enemigo_ogro": {
   "bh": 128,
   "ch": 130,
@@ -1060,6 +1313,17 @@
    4
   ]
  },
+ "enemigo_polilla_funeraria": {
+  "bh": 128,
+  "ch": 133,
+  "cw": 176,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
  "enemigo_puerta_camina": {
   "bh": 128,
   "ch": 138,
@@ -1075,6 +1339,17 @@
   "bh": 128,
   "ch": 135,
   "cw": 174,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_raiz_desenterrada": {
+  "bh": 128,
+  "ch": 135,
+  "cw": 200,
   "frames": [
    4,
    6,
@@ -1185,6 +1460,28 @@
   "bh": 128,
   "ch": 138,
   "cw": 206,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_semilla_doliente": {
+  "bh": 128,
+  "ch": 135,
+  "cw": 152,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_sepulturero_savia": {
+  "bh": 128,
+  "ch": 143,
+  "cw": 174,
   "frames": [
    4,
    6,
@@ -1375,6 +1672,17 @@
   "frames": [
    4,
    6,
+   2,
+   4
+  ]
+ },
+ "enemigo_ultimo_jardinero": {
+  "bh": 128,
+  "ch": 131,
+  "cw": 320,
+  "frames": [
+   4,
+   5,
    2,
    4
   ]
