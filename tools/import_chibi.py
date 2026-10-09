@@ -119,6 +119,17 @@ ENEMIGO_POR_NOMBRE = {
     'el ultimo jardinero': 'ultimo_jardinero',
     'corazon marchito primera fase': 'corazon_marchito', 'corazon marchito segunda fase': 'corazon_marchito_f2',
     'corazon marchito tercera fase': 'corazon_marchito_f3',
+    # Abismo en llamas (81-90): por ahora solo retratos (animaciones pendientes). Nombres tal como los subió ariochbu.
+    'diablillo llavero': 'diablillo_llavero', 'carcelero de ceniza': 'carcelero_ceniza', 'perro de grillete': 'perro_grillete',
+    'marcador': 'marcador', 'fogonero': 'fogonero', 'arpia de hollin': 'arpia_hollin', 'escriba de condenas': 'escriba_condenas',
+    'preso calcinado': 'preso_calcinado', 'verdugo de brasa': 'verdugo_brasa', 'alcaide menor': 'alcaide_menor',
+    'forjador de cadenas': 'forjador_cadenas', 'la puerta de hierro vivo': 'puerta_hierro_vivo',
+    'el contador de cadenas': 'contador_condenas', 'el contador de condenas': 'contador_condenas',
+    'la sabuesa de tres collares': 'sabuesa_tres_collares', 'el fundidor': 'el_fundidor', 'la dama del grillete': 'dama_grillete',
+    'el testigo ciego': 'testigo_ciego', 'el horno que camina': 'horno_camina', 'el porta llaves': 'portallaves', 'el portallaves': 'portallaves',
+    'el segundo carcelero': 'segundo_carcelero',
+    'carcelero primera fase': 'carcelero', 'el carcelero primera fase': 'carcelero', 'el carcelero segunda fase': 'carcelero_f2',
+    'el carcelero tercera forma': 'carcelero_f3', 'el carcelero tercera fase': 'carcelero_f3',
 }
 # Sin nombre (identificados a ojo, comparando con el sprite que ya tenía cada uno).
 ENEMIGO_POR_ARCHIVO = {

@@ -12,7 +12,7 @@ const B = {gear: 'rango_b', stoneTier: 'B', petRarity: 'unico'}, A = {gear: 'ran
 // aliados y rango de equipo por década (índice 0 = pisos 1-10)
 W.REFS = [Object.assign({allies: 0}, B), Object.assign({allies: 1}, B), Object.assign({allies: 2}, A), Object.assign({allies: 3}, A),
   Object.assign({allies: 4}, A), Object.assign({allies: 4}, A), Object.assign({allies: 4}, A), Object.assign({allies: 4}, A)];
-W.refFor = (lv)=> W.REFS[Math.min(7, Math.floor((lv - 1) / 10))];
+W.refFor = (lv)=> W.REFS[Math.min(W.REFS.length - 1, Math.floor((lv - 1) / 10))];
 const race = (p, ms)=> Promise.race([p, new Promise(res=> setTimeout(()=> res(null), ms))]);
 // Cede el hilo cada tanto (sin temporizadores: en una pestaña oculta el
 // navegador los frena a uno por segundo) para que la página siga respondiendo.

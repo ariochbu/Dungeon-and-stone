@@ -177,6 +177,11 @@ const HD_ENEMY_IDS = [
   'custodio_invernadero', 'heraldo_flor_negra', 'jardinero_enterrado', 'gran_madre_micelio', 'ciervo_cementerio', 'novia_raices',
   'arbol_juramentos', 'bestia_invernadero', 'sepulturero_savia', 'flor_mil_voces', 'ultimo_jardinero',
   'corazon_marchito', 'corazon_marchito_f2', 'corazon_marchito_f3',
+  // Abismo en llamas (81-90), 2026-10-09: solo imagen fija por ahora (animaciones pendientes)
+  'diablillo_llavero', 'carcelero_ceniza', 'perro_grillete', 'marcador', 'fogonero', 'arpia_hollin', 'escriba_condenas',
+  'preso_calcinado', 'verdugo_brasa', 'alcaide_menor', 'forjador_cadenas', 'puerta_hierro_vivo', 'contador_condenas',
+  'sabuesa_tres_collares', 'el_fundidor', 'dama_grillete', 'testigo_ciego', 'horno_camina', 'portallaves', 'segundo_carcelero',
+  'carcelero', 'carcelero_f2', 'carcelero_f3',
 ];
 HD_ENEMY_IDS.forEach(id=>{ ENEMY_SPRITES[id] = `src/assets/enemigos/${id}.png?v=15`; });
 // Invocaciones de las fases de jefe (2026-10-02): reusan sprites existentes.
@@ -186,6 +191,7 @@ ENEMY_SPRITES.senuelo_ciervo = ENEMY_SPRITES.ciervo_torcido;
 ENEMY_SPRITES.larva_errante = ENEMY_SPRITES.larva_fase;
 ENEMY_SPRITES.reflejo_fallido = ENEMY_SPRITES.sin_forma;
 ENEMY_SPRITES.brote_menor = ENEMY_SPRITES.brote_carronero;
+ENEMY_SPRITES.preso_menor = ENEMY_SPRITES.preso_calcinado;
 
 // Sprites HD de aliados por personaje (2026-10-02): verticales (2:3), el
 // escenario los dibuja respetando su proporción. Vex y Kael se sumaron el 2026-10-03.
@@ -209,6 +215,8 @@ function enemyFormId(en){
   // (80): el Jardín protege → se defiende (65%) → "Pódame" (25%).
   if(id==='sin_forma') return pct < 0.33 ? 'sin_forma_f3' : pct < 0.66 ? 'sin_forma_f2' : 'sin_forma';
   if(id==='corazon_marchito') return pct < 0.25 ? 'corazon_marchito_f3' : pct < 0.65 ? 'corazon_marchito_f2' : 'corazon_marchito';
+  // El Carcelero (90): sereno → sus llaves arden (60%) → casi apagado (20%).
+  if(id==='carcelero') return pct < 0.20 ? 'carcelero_f3' : pct < 0.60 ? 'carcelero_f2' : 'carcelero';
   // Tetrasea: su fase final (Sacerdote de la Tormenta, bajo 10% de vida).
   if(id==='storm_gush' && (pct < 0.1 || has('Sacerdote de la Tormenta'))) return 'storm_gush_final';
   return id;

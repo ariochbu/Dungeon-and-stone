@@ -2,9 +2,9 @@
 
 import { supabase } from './supabaseClient.js';
 import * as auth from './auth.js';
-import { syncBattleStage, playBattleAnim } from './battleStage.js?v=103';
+import { syncBattleStage, playBattleAnim } from './battleStage.js?v=104';
 import { mountLabyrinth } from './labyrinthMap.js?v=7';
-import { CLASS_SPRITES, ENEMY_SPRITES, playerSpriteFor, playerIllustrationFor, enemySpriteFor, ALLY_TEMPLATE_SPRITES } from './battleSprites.js?v=87';
+import { CLASS_SPRITES, ENEMY_SPRITES, playerSpriteFor, playerIllustrationFor, enemySpriteFor, ALLY_TEMPLATE_SPRITES } from './battleSprites.js?v=88';
 
 /* ============================================================
    DATA
@@ -301,6 +301,10 @@ const STORY_SCENES = {
     'El Corazón Marchito deja caer sus raíces. No se defiende: late una vez, despacio. «Pódame». Cuando el último latido se apaga, las flores se cierran, los jardineros dejan de moverse y la luz verde se va. Por primera vez desde que entraste, el bosque está muerto de verdad.',
     'Entonces, desde abajo, sube una luz naranja. Calor. Ceniza. El jardín no era una amenaza: era un filtro. Absorbía lo que subía de las capas de más abajo… y acabas de arrancarlo.',
   ]},
+  90: {title:'El que cierra', pages:[
+    'El Carcelero suelta la alabarda. De sus nueve llaves solo una sigue encendida. «Nosotros no somos lo que está preso», dice. «Somos los que cierran. Cada jefe que mataste arriba era un cerrojo, y los conté caer uno por uno.»',
+    'Te tiende la última llave, sin fuerza para sostenerla. «Abajo no hay fuego. Hay silencio, y una sola celda. Él bajó como tú, antes que nadie… y fue el primero en volver.» La llave está fría. El abismo entero se apaga detrás de ti.',
+  ]},
 };
 // Crónicas (ciudad): tres apartados. Historia — las escenas ya desbloqueadas
 // se pueden volver a ver; las que faltan aparecen selladas, sin título, para
@@ -320,7 +324,7 @@ function renderCronicas(){
 }
 function storyListHTML(){
   const beaten = myBossesBeaten();
-  const levels = Object.keys(STORY_SCENES).map(Number).sort((a, b)=> a - b);
+  const levels = Object.keys(STORY_SCENES).map(Number).filter(lv=> lv <= OPEN_LEVEL_CAP).sort((a, b)=> a - b); // sin los capítulos de pisos que aún no se liberan
   return `<p class="cr-note">Lo que el Cronista ha contado hasta ahora. Cada jefe de década que derrotes revela un capítulo.</p>
     <div class="cron-grid">${levels.map((lv, i)=>{
       const open = beaten >= lv/10;
@@ -363,7 +367,7 @@ function bestiaryHTML(){
   let total = 0, found = 0;
   const decadesHTML = DECADE_BESTIARY.map((decade, di)=>{
     const groups = bestiaryGroups(decade);
-    if(!groups.length) return '';
+    if(!groups.length || di*10 + 1 > OPEN_LEVEL_CAP) return ''; // década sin liberar
     const first = di*10 + 1, cleared = beaten > di;
     let dTotal = 0, dFound = 0;
     const groupsHTML = groups.map(g=>{
@@ -759,7 +763,7 @@ function decadeIndexForLevel(level){ return Math.min(DECADE_BESTIARY.length-1, M
 // Tema visual de fondo por década para la escena de combate (battleStage.js)
 // — mismo mapeo que prototype-2d/combat.html: forest (Bosque Goblin/Arañas),
 // cave (Riakis/bestias), cult (Usurpador), sea (Isla Paraíso/El Mar).
-const DECADE_BG_THEME = ['forest','forest','cave','cult','sea','sea','cult','forest'];
+const DECADE_BG_THEME = ['forest','forest','cave','cult','sea','sea','cult','forest','cave'];
 
 // Plantillas de invocación (2026-10-02). Señuelo: 1 de vida (se fija al
 // invocar), no actúa, va al Frente y absorbe el golpe dirigido al frente.
@@ -782,6 +786,10 @@ const REFLEJO_FALLIDO_TPL = {id:'reflejo_fallido', name:'Reflejo Fallido', icon:
   abilities:{golpe_rf:{label:'Golpe', mult:1.0, applies:{name:'Confusion', chance:0.15, duration:1}}}, aiPriority:['golpe_rf']};
 const BROTE_MENOR_TPL = {id:'brote_menor', name:'Brote Menor', icon:'🌱', hp:0.3, atk:0.45, res:rs(0,-15,0,15,0), frontline:true,
   abilities:{mordida_bm:{label:'Mordida', mult:1.0, applies:Object.assign({chance:0.20}, CORRUPCION_STATUS)}}, aiPriority:['mordida_bm']};
+// Abismo en llamas (81-90): Quemadura acumulable y la invocación de la década.
+function QUEMADURA(chance){ return {name:'Quemadura', chance, duration:3, stack:true, maxStack:3}; }
+const ASCUA_TPL = {id:'preso_menor', name:'Preso Encadenado', icon:'⛓️', hp:0.3, atk:0.45, res:rs(0,25,-15,10,0), frontline:true,
+  abilities:{cadenazo:{label:'Cadenazo', mult:1.0, applies:QUEMADURA(0.20)}}, aiPriority:['cadenazo']};
 const DECOY_CLON_SOMBRA = decoyTpl('senuelo_clon', 'Clon de Sombra', '👤');
 const DECOY_REPLICA = decoyTpl('senuelo_replica', 'Réplica', '🪞');
 const DECOY_DUPLICADO = decoyTpl('senuelo_duplicado', 'Duplicado', '🪞');
@@ -798,6 +806,9 @@ const CORROSION_STATUS = {name:'Corrosion', duration:2, resPenalty:15, healMult:
 // esté en primera línea y le rompen la armadura (-15 de resistencia física, 3
 // turnos). Eran los dos jefes donde el Guerrero ganaba de sobra.
 const VS_FRONT_BOSS = {dmgMult:1.10, armorBreak:{name:'Armadura Rota', duration:3, resPenalty:15}};
+// El Carcelero (90): mismo castigo, algo más fuerte. Sin él Guerrero y Paladín ganaban 23-27% y los magos 2%;
+// con x1.20 el Paladín caía al 4%. Calibrado el 2026-10-09 junto con su área y su resistencia al veneno.
+const VS_FRONT_CARCELERO = {dmgMult:1.13, armorBreak:{name:'Armadura Rota', duration:3, resPenalty:15}};
 // Crías de la Matriarca Escarlata y cangrejos del Custodio (fases, 2026-10-02).
 const CRIA_ARANA_TPL = {id:'cria_arana', name:'Cría de araña', icon:'🕷️', hp:0.3, atk:0.4, res:{fisico:0,fuego:-10,hielo:0,veneno:30,aturdimiento:0}, frontline:true,
   abilities:{mordida_cria:{label:'Mordida', mult:1.0, applies:{name:'Veneno', chance:0.25, duration:2, stack:true, maxStack:3}}}, aiPriority:['mordida_cria']};
@@ -2026,6 +2037,194 @@ const DECADE_BESTIARY = [
         ultimo_latido:{label:'Último Latido', utility:'aoe', mult:0.35, cooldown:2, condition:(ctx)=>ctx.selfHpPct<0.25, applies:CORRUPCION(1)},
       },
       aiPriority:['ultimo_latido','el_jardin_protege','savia_corrupta','raices_negras','espinas','latido']}
+  },
+  // Década 8 — pisos 81-90 — Abismo en llamas (2026-10-09, primera pasada; NO
+  // abierta a los jugadores: ver FLOORS_81_90_OPEN). Los demonios son los
+  // carceleros del laberinto. Su identidad es la QUEMADURA acumulable (casi
+  // ningún enemigo de 1-80 la usa) y los golpes que rematan a quien ya arde.
+  // Diseño, estadísticas y habilidades propias (no vino hoja de ariochbu),
+  // solo con el vocabulario que el motor ya resuelve. Aún sin animaciones: se
+  // dibujan con su imagen fija. Falta la opción de perdonar al Carcelero: su
+  // fase 3 solo lo deja casi sin fuerzas.
+  {
+    regular: [
+      {id:'diablillo_llavero', name:'Diablillo Llavero', icon:'🗝️', hp:0.80, atk:1.00, res:rs(-5,25,-15,5,-5),
+        abilities:{
+          llavazo:{label:'Llavazo', mult:1.00},
+          llave_al_rojo:{label:'Llave al Rojo', mult:0.80, applies:QUEMADURA(0.35), cooldown:3},
+          robar_beneficio:{label:'Robar Beneficio', mult:0.70, applies:{name:'Debilitado', chance:0.30, duration:2}, cooldown:4},
+        },
+        aiPriority:['llave_al_rojo','robar_beneficio','llavazo']},
+      {id:'carcelero_ceniza', name:'Carcelero de Ceniza', icon:'🛡️', hp:1.35, atk:1.05, res:rs(25,20,-15,15,15), frontline:true, immuneRetroceso:true,
+        abilities:{
+          porrazo:{label:'Porrazo', mult:1.00},
+          guardia_ceniza:{label:'Guardia de Ceniza', utility:'self_buff', selfBuff:{name:'Guardia de Ceniza', duration:2, incomingDmgReduction:0.20}, cooldown:5},
+          golpe_escudo:{label:'Golpe de Escudo', mult:1.20, applies:{name:'Aturdido', chance:0.15, duration:1}, cooldown:4},
+        },
+        aiPriority:['guardia_ceniza','golpe_escudo','porrazo']},
+      {id:'perro_grillete', name:'Perro de Grillete', icon:'🐕', hp:0.95, atk:1.12, res:rs(5,25,-15,5,0), frontline:true,
+        abilities:{
+          dentellada_pg:{label:'Dentellada', mult:1.00, applies:{name:'Sangrado', chance:0.15, duration:2, stack:true, maxStack:3}},
+          fauces_ardientes:{label:'Fauces Ardientes', mult:0.90, applies:QUEMADURA(0.35), cooldown:3},
+          presa_encadenada:{label:'Presa Encadenada', mult:1.25, cooldown:4, bonusVsTargetStatus:{name:'Quemadura', mult:1.20}},
+        },
+        aiPriority:['presa_encadenada','fauces_ardientes','dentellada_pg']},
+      {id:'marcador', name:'Marcador', icon:'♨️', hp:0.95, atk:1.08, res:rs(0,25,-10,10,0), frontline:true,
+        abilities:{
+          estocada_m:{label:'Estocada', mult:1.00},
+          hierro_marcar:{label:'Hierro de Marcar', mult:0.85, applies:{name:'Marcado', chance:0.35, duration:2}, cooldown:4},
+          sello_ardiente:{label:'Sello Ardiente', mult:0.90, applies:QUEMADURA(0.40), cooldown:3},
+        },
+        aiPriority:['hierro_marcar','sello_ardiente','estocada_m']},
+      {id:'fogonero', name:'Fogonero', icon:'🔥', hp:1.15, atk:0.95, res:rs(10,30,-20,10,10),
+        abilities:{
+          palada:{label:'Palada', mult:0.90},
+          avivar_horno:{label:'Avivar el Horno', utility:'buff_allies', cooldown:4, buffAllies:{name:'Fortalecido', duration:3, stacks:3}},
+          brasas_al_vuelo:{label:'Brasas al Vuelo', utility:'aoe', mult:0.40, cooldown:5, applies:QUEMADURA(0.30)},
+        },
+        aiPriority:['avivar_horno','brasas_al_vuelo','palada']},
+      {id:'arpia_hollin', name:'Arpía de Hollín', icon:'🦅', hp:0.75, atk:1.05, res:rs(-10,20,-10,5,-5),
+        abilities:{
+          garra_ah:{label:'Garra', mult:1.00},
+          nube_hollin:{label:'Nube de Hollín', mult:0.65, applies:{name:'Ceguera', chance:0.30, duration:2}, cooldown:4},
+          picado_ardiente:{label:'Picado Ardiente', mult:1.20, cooldown:3},
+        },
+        aiPriority:['nube_hollin','picado_ardiente','garra_ah']},
+      {id:'escriba_condenas', name:'Escriba de Condenas', icon:'📜', hp:0.80, atk:1.00, res:rs(-10,20,-10,10,-5),
+        abilities:{
+          letra_ardiente:{label:'Letra Ardiente', mult:0.90},
+          sentencia_muda:{label:'Sentencia Muda', mult:0.70, applies:{name:'Silencio', chance:0.30, duration:1}, cooldown:4},
+          condena_escrita:{label:'Condena Escrita', mult:0.75, applies:{name:'Debilitado', chance:0.35, duration:2}, cooldown:3},
+        },
+        aiPriority:['sentencia_muda','condena_escrita','letra_ardiente']},
+      {id:'preso_calcinado', name:'Preso Calcinado', icon:'💀', hp:0.90, atk:1.05, res:rs(0,30,-20,20,0), frontline:true, onDeathSpawn:{tpl:ASCUA_TPL, chance:0.30},
+        abilities:{
+          bola_hierro:{label:'Bola de Hierro', mult:1.05},
+          abrazo_calcinado:{label:'Abrazo Calcinado', mult:0.85, applies:QUEMADURA(0.45), cooldown:3},
+          cadena_rota:{label:'Cadena Rota', mult:1.20, applies:{name:'Ralentizado', chance:0.30, duration:2}, cooldown:4},
+        },
+        aiPriority:['abrazo_calcinado','cadena_rota','bola_hierro']},
+    ],
+    elite: [
+      {id:'verdugo_brasa', name:'Verdugo de Brasa', icon:'🪓', hp:2.30, atk:1.30, res:rs(15,25,-15,10,20), elite:true, frontline:true,
+        abilities:{
+          hachazo:{label:'Hachazo', mult:1.05, applies:QUEMADURA(0.20)},
+          filo_fundido:{label:'Filo Fundido', mult:1.20, applies:QUEMADURA(0.50), cooldown:3},
+          ejecucion:{label:'Ejecución', mult:1.45, cooldown:4, bonusVsTargetStatus:{name:'Quemadura', minStacks:2, mult:1.30}},
+          barrido_brasa:{label:'Barrido de Brasa', utility:'aoe', mult:0.50, rearMult:0.75, cooldown:5},
+        },
+        aiPriority:['ejecucion','filo_fundido','barrido_brasa','hachazo']},
+      {id:'alcaide_menor', name:'Alcaide Menor', icon:'⛓️', hp:2.10, atk:1.22, res:rs(10,25,-15,10,15), elite:true, reductionWithAllies:{min:1, value:0.15},
+        abilities:{
+          latigo_fuego:{label:'Látigo de Fuego', mult:1.00, applies:QUEMADURA(0.25)},
+          orden_alcaide:{label:'Orden del Alcaide', utility:'buff_allies', cooldown:5, buffAllies:{name:'Fortalecido', duration:3, stacks:4}},
+          latigazo_largo:{label:'Latigazo Largo', utility:'aoe', mult:0.45, cooldown:4, applies:QUEMADURA(0.30)},
+          castigo:{label:'Castigo', mult:1.25, applies:{name:'Miedo', chance:0.25, duration:2}, cooldown:4},
+        },
+        aiPriority:['orden_alcaide','latigazo_largo','castigo','latigo_fuego']},
+      {id:'forjador_cadenas', name:'Forjador de Cadenas', icon:'⚒️', hp:2.35, atk:1.20, res:rs(20,30,-20,10,25), elite:true, frontline:true, immuneRetroceso:true,
+        abilities:{
+          martillazo_fc:{label:'Martillazo', mult:1.05},
+          cadena_al_rojo:{label:'Cadena al Rojo', mult:0.90, applies:{name:'Paralisis', chance:0.30, duration:1}, cooldown:3},
+          forjar_presos:{label:'Forjar Presos', utility:'summon', cooldown:6, summon:{tpl:ASCUA_TPL, count:2, maxAlive:2, hpPct:0.20, atkPct:0.40}},
+          yunque:{label:'Yunque', mult:1.40, applies:{name:'Aturdido', chance:0.20, duration:1}, cooldown:4},
+        },
+        aiPriority:['forjar_presos','yunque','cadena_al_rojo','martillazo_fc']},
+    ],
+    guardians: [],
+    // Guardián único y determinista por piso (81 a 89).
+    guardianByFloor: {
+      1: {id:'puerta_hierro_vivo', immuneRetroceso:true, passiveReduction:0.10, name:'La Puerta de Hierro Vivo', icon:'🚪', hp:3.60, atk:1.30, res:rs(25,25,-15,15,25), boss:true, frontline:true,
+        abilities:{
+          portazo_ph:{label:'Portazo', mult:1.10},
+          aliento_horno:{label:'Aliento de Horno', utility:'aoe', mult:0.50, rearMult:0.75, cooldown:4, applies:QUEMADURA(0.40)},
+          cerrojo:{label:'Cerrojo', utility:'self_buff', selfBuff:{name:'Cerrojo', duration:2, incomingDmgReduction:0.25}, cooldown:5},
+          embestida_ph:{label:'Embestida de Hierro', mult:1.40, applies:{name:'Aturdido', chance:0.20, duration:1}, cooldown:4},
+        },
+        aiPriority:['cerrojo','aliento_horno','embestida_ph','portazo_ph']},
+      2: {id:'contador_condenas', name:'El Contador de Condenas', icon:'🧮', hp:3.30, atk:1.38, res:rs(10,25,-10,15,15), boss:true,
+        abilities:{
+          cuenta_ardiente:{label:'Cuenta Ardiente', mult:1.05, applies:QUEMADURA(0.25)},
+          sumar_condena:{label:'Sumar Condena', mult:0.85, applies:{name:'Marcado', chance:0.45, duration:2}, cooldown:3},
+          cobrar_deuda:{label:'Cobrar Deuda', mult:1.35, cooldown:4, bonusVsTargetStatus:{name:'Marcado', mult:1.25}},
+          balance_final:{label:'Balance Final', utility:'aoe', mult:0.45, cooldown:5, applies:{name:'Debilitado', chance:0.40, duration:2}},
+        },
+        aiPriority:['sumar_condena','cobrar_deuda','balance_final','cuenta_ardiente']},
+      3: {id:'sabuesa_tres_collares', name:'La Sabuesa de Tres Collares', icon:'🐕', hp:3.50, atk:1.28, res:rs(15,25,-15,10,15), boss:true, frontline:true,
+        abilities:{
+          triple_dentellada:{label:'Triple Dentellada', mult:1.15, applies:{name:'Sangrado', chance:0.30, duration:3, stack:true, maxStack:3}},
+          cabeza_de_fuego:{label:'Cabeza de Fuego', mult:1.00, applies:QUEMADURA(0.55), cooldown:3},
+          aullido_triple:{label:'Aullido Triple', utility:'aoe', mult:0.40, cooldown:5, applies:{name:'Miedo', chance:0.25, duration:2, procChance:0.4}},
+          presa_de_tres:{label:'Presa de Tres', mult:1.45, cooldown:4, bonusVsTargetStatus:{name:'Sangrado', mult:1.20}},
+        },
+        aiPriority:['presa_de_tres','cabeza_de_fuego','aullido_triple','triple_dentellada']},
+      4: {id:'el_fundidor', immuneRetroceso:true, name:'El Fundidor', icon:'🫕', hp:3.70, atk:1.27, res:rs(20,35,-20,15,20), boss:true, frontline:true,
+        abilities:{
+          golpe_crisol:{label:'Golpe de Crisol', mult:1.10},
+          verter_metal:{label:'Verter Metal', utility:'aoe', mult:0.55, rearMult:0.75, cooldown:4, applies:QUEMADURA(0.50)},
+          metal_que_enfria:{label:'Metal que Enfría', mult:0.90, applies:{name:'Paralisis', chance:0.35, duration:1}, cooldown:4},
+          colada:{label:'Colada', mult:1.40, cooldown:3, bonusVsTargetStatus:{name:'Quemadura', minStacks:2, mult:1.25}},
+        },
+        aiPriority:['verter_metal','colada','metal_que_enfria','golpe_crisol']},
+      5: {id:'dama_grillete', name:'La Dama del Grillete', icon:'👑', hp:3.71, atk:1.45, res:rs(10,25,-10,15,15), boss:true,
+        abilities:{
+          eslabon:{label:'Eslabón', mult:1.05},
+          grilletes_voladores:{label:'Grilletes Voladores', mult:0.90, applies:{name:'Paralisis', chance:0.40, duration:1}, cooldown:3},
+          velo_de_cadenas:{label:'Velo de Cadenas', utility:'self_buff', selfBuff:{name:'Velo de Cadenas', duration:2, evasionDelta:20}, cooldown:5},
+          condena_de_la_dama:{label:'Condena de la Dama', utility:'aoe', mult:0.50, cooldown:5, applies:{name:'Silencio', chance:0.35, duration:1}},
+          apretar:{label:'Apretar', mult:1.35, cooldown:4, bonusVsTargetStatus:{name:'Paralisis', mult:1.25}},
+        },
+        aiPriority:['velo_de_cadenas','grilletes_voladores','condena_de_la_dama','apretar','eslabon']},
+      6: {id:'testigo_ciego', name:'El Testigo Ciego', icon:'👁️', hp:3.50, atk:1.36, res:rs(10,25,-10,15,20), boss:true,
+        abilities:{
+          mirada_que_arde:{label:'Mirada que Arde', mult:1.10, applies:QUEMADURA(0.35)},
+          veredicto:{label:'Veredicto', mult:1.45, cooldown:4, ignoreResist:0.30},
+          testimonio_falso:{label:'Testimonio Falso', mult:0.85, applies:{name:'Confusion', chance:0.35, duration:1}, cooldown:4},
+          ceguera_compartida:{label:'Ceguera Compartida', utility:'aoe', mult:0.45, cooldown:5, applies:{name:'Ceguera', chance:0.40, duration:2}},
+        },
+        aiPriority:['ceguera_compartida','veredicto','testimonio_falso','mirada_que_arde']},
+      7: {id:'horno_camina', immuneRetroceso:true, passiveReduction:0.10, name:'El Horno que Camina', icon:'🏭', hp:3.59, atk:1.22, res:rs(25,40,-25,20,25), boss:true, frontline:true,
+        abilities:{
+          brazo_pala:{label:'Brazo Pala', mult:1.10},
+          chorro_de_llama:{label:'Chorro de Llama', utility:'aoe', mult:0.60, rearMult:0.75, cooldown:4, applies:QUEMADURA(0.55)},
+          cargar_carbon:{label:'Cargar Carbón', utility:'self_buff', selfBuff:{name:'Horno Cargado', duration:3, dmgMult:1.20}, cooldown:5},
+          aplastar_hc:{label:'Aplastar', mult:1.45, applies:{name:'Aturdido', chance:0.20, duration:1}, cooldown:4},
+        },
+        aiPriority:['cargar_carbon','chorro_de_llama','aplastar_hc','brazo_pala']},
+      8: {id:'portallaves', name:'El Portallaves', icon:'🔑', hp:3.60, atk:1.27, res:rs(15,25,-15,15,20), boss:true, frontline:true,
+        abilities:{
+          llave_maestra:{label:'Llave Maestra', mult:1.15, ignoreResist:0.20},
+          cerrar_con_llave:{label:'Cerrar con Llave', mult:0.90, applies:{name:'Silencio', chance:0.45, duration:1}, cooldown:4},
+          girar_la_llave:{label:'Girar la Llave', mult:1.45, cooldown:3, applies:{name:'Sangrado', chance:0.40, duration:3, stack:true, maxStack:3}},
+          lluvia_de_llaves:{label:'Lluvia de Llaves', utility:'aoe', mult:0.55, cooldown:5, applies:QUEMADURA(0.35)},
+        },
+        aiPriority:['cerrar_con_llave','girar_la_llave','lluvia_de_llaves','llave_maestra']},
+      9: {id:'segundo_carcelero', immuneRetroceso:true, reductionWhileSummonsAlive:0.20, name:'El Segundo Carcelero', icon:'⚔️', hp:3.80, atk:1.27, res:rs(25,30,-15,15,25), boss:true, frontline:true,
+        abilities:{
+          mangual:{label:'Mangual', mult:1.10, applies:QUEMADURA(0.25)},
+          llamar_guardia:{label:'Llamar a la Guardia', utility:'summon', cooldown:5, summon:{tpl:ASCUA_TPL, count:2, maxAlive:3, hpPct:0.07, atkPct:0.35}},
+          jaula_ardiente:{label:'Jaula Ardiente', mult:1.35, applies:QUEMADURA(0.60), cooldown:3},
+          escudo_cerradura:{label:'Escudo de Cerradura', utility:'self_buff', selfBuff:{name:'Escudo de Cerradura', duration:2, incomingDmgReduction:0.25}, cooldown:5},
+          arco_de_fuego:{label:'Arco de Fuego', utility:'aoe', mult:0.55, rearMult:0.75, cooldown:4},
+        },
+        aiPriority:['llamar_guardia','escudo_cerradura','jaula_ardiente','arco_de_fuego','mangual']},
+    },
+    // Fases: 1) sereno, golpes lentos y pesados; 2) (<60%) se enciende: sus
+    // llaves arden y todo quema; 3) (<20%) casi apagado: ya no invoca ni
+    // castiga, solo golpea sin fuerza. El sprite cambia con las fases.
+    decadeBoss: {id:'carcelero', vsFront:VS_FRONT_CARCELERO, immuneRetroceso:true, reductionWhileSummonsAlive:0.25, name:'El Carcelero', icon:'🗝️', hp:6.2, atk:1.85, res:rs(25,35,-10,0,30), boss:true, frontline:true,
+      phases:[{below:0.60, msg:'se enciende: <b>sus nueve llaves arden</b> (fase 2).'},{below:0.20, msg:'cae sobre una rodilla, casi apagado. <b>Ya no quiere pelear</b> (fase 3).'}],
+      abilities:{
+        llaves_al_rojo:{label:'Llaves al Rojo', utility:'self_buff', oncePerCombat:true, instant:true, condition:(ctx)=>ctx.selfHpPct<0.60, selfBuff:{name:'Llaves al Rojo', duration:99, dmgMult:1.15}},
+        llamar_presos:{label:'Llamar a los Presos', utility:'summon', cooldown:5, condition:(ctx)=>ctx.selfHpPct>=0.20, summon:{tpl:ASCUA_TPL, count:2, maxAlive:3, hpPct:0.05, atkPct:0.35}},
+        nueve_llaves:{label:'Nueve Llaves', utility:'aoe', mult:0.50, rearMult:0.50, cooldown:4, condition:(ctx)=>ctx.selfHpPct<0.60 && ctx.selfHpPct>=0.20, applies:QUEMADURA(0.35)},
+        sentencia:{label:'Sentencia', mult:1.45, cooldown:4, condition:(ctx)=>ctx.selfHpPct>=0.20, bonusVsTargetStatus:{name:'Quemadura', minStacks:2, mult:1.25}},
+        grillete:{label:'Grillete', mult:0.90, cooldown:4, condition:(ctx)=>ctx.selfHpPct>=0.20, applies:{name:'Paralisis', chance:0.35, duration:1}},
+        alabarda_llave:{label:'Alabarda Llave', mult:1.25, cooldown:3, condition:(ctx)=>ctx.selfHpPct>=0.20, applies:QUEMADURA(0.40)},
+        golpe_cansado:{label:'Golpe Cansado', mult:0.60, condition:(ctx)=>ctx.selfHpPct<0.20},
+        golpe_carcelero:{label:'Golpe de Alabarda', mult:1.00},
+      },
+      aiPriority:['llaves_al_rojo','golpe_cansado','llamar_presos','nueve_llaves','sentencia','alabarda_llave','grillete','golpe_carcelero']}
   }
 ];
 
@@ -2035,7 +2234,7 @@ const DECADE_BESTIARY = [
 // desde el primer turno, no se invocan) y con más vida, para que su combate
 // dure y desgaste al frente como el de los que sí invocan (69 y 79).
 const GUARDIAN_ESCORT = {count:2, hpPct:0.07, atkPct:0.35, hpBoost:1.30, noHpBoost:['rey_articulaciones']};
-[[6, LARVA_ERRANTE_TPL], [7, BROTE_MENOR_TPL]].forEach(([dec, tpl])=>{
+[[6, LARVA_ERRANTE_TPL], [7, BROTE_MENOR_TPL], [8, ASCUA_TPL]].forEach(([dec, tpl])=>{
   Object.values((DECADE_BESTIARY[dec] && DECADE_BESTIARY[dec].guardianByFloor) || {}).forEach(g=>{
     if(Object.values(g.abilities || {}).some(a=> a.utility === 'summon')) return;
     g.escort = {tpl};
@@ -2338,7 +2537,7 @@ function petTpl(id){ return PET_CATALOG.find(p=>p.id===Number(id)); }
 // HUMANOS) y 5 El Mar/Storm Gush (criaturas marinas). Se calcula una sola
 // vez recorriendo todas las formas que puede tomar una década (regular/
 // elite/guardianByFloor objeto-o-array/decadeBoss).
-const DECADE_RACE_TAG = ['goblin','arana','bestia',null,'humano','criatura_marina',null,null];
+const DECADE_RACE_TAG = ['goblin','arana','bestia',null,'humano','criatura_marina',null,null,null];
 const ENEMY_RACE_TAG = {};
 (function buildEnemyRaceTags(){
   DECADE_BESTIARY.forEach((decade, di)=>{
@@ -4478,7 +4677,7 @@ function baseStat(key){
 // pegan +50% a quien está al frente y le rompen la armadura. Es lo único que
 // acercó a los tanques al resto en las pruebas; a cambio los guardianes de
 // esas décadas bajaron un 15% de vida y ataque (ver DECADE_ENEMY_TUNING 6 y 7).
-const GUARDIAN_VS_FRONT = {from:61, to:79, dmgMult:1.50, armorBreak:{name:'Armadura Rota', duration:3, resPenalty:15}};
+const GUARDIAN_VS_FRONT = {from:61, to:89, dmgMult:1.50, armorBreak:{name:'Armadura Rota', duration:3, resPenalty:15}};
 // Élites y enemigos comunes de 61-79: castigo más suave y sin rotura, y solo
 // contra TANQUES (Guerrero o Paladín al frente, o un aliado de primera línea).
 const COMMON_VS_TANK = {dmgMult:1.25, tanksOnly:true};
@@ -4493,7 +4692,7 @@ function guardianVsFront(enemy){
 // una curación de cualquier enemigo, ninguno del grupo puede curar durante
 // `turns` turnos. (Cada curación ya tenía su enfriamiento; el problema eran
 // dos sanadores turnándose sobre una élite.)
-const ENEMY_HEAL_LOCK = {from:61, to:80, turns:4};
+const ENEMY_HEAL_LOCK = {from:61, to:90, turns:4};
 function enemyHealLocked(){
   const lvl = (state.dungeon && state.dungeon.level) || 0;
   return !!combat && lvl >= ENEMY_HEAL_LOCK.from && lvl <= ENEMY_HEAL_LOCK.to && combat.turnCount < (combat.enemyHealReadyAt||0);
@@ -4674,16 +4873,16 @@ function baseDamageFromStat(statVal){
 // linealmente entre medio), calibrados con simulaciones contra los jefes de
 // década (ver DECADE_BOSS_TUNING) para que todas las clases rindan parecido
 // en cada tramo del laberinto.
-const CLASS_CURVE_LEVELS = [1,10,20,30,40,50,60,70,80]; // nivel 1 = neutro (sin ajuste)
+const CLASS_CURVE_LEVELS = [1,10,20,30,40,50,60,70,80,90]; // nivel 1 = neutro (sin ajuste)
 const CLASS_CURVE = {
-  pesada:    {hp:[1.00,0.85,0.77,0.69,0.62,0.55,0.49,0.49,0.49], dmg:[1.00,0.92,0.88,0.83,0.79,0.74,0.70,0.70,0.70]},
-  tirador:   {hp:[1.00,0.69,0.77,0.87,0.98,1.10,1.24,1.24,1.24], dmg:[1.00,0.83,0.88,0.93,0.99,1.05,1.11,1.11,1.11]},
-  doblefilo: {hp:[1.00,1.06,1.02,0.99,0.96,0.93,0.90,0.90,0.90], dmg:[1.00,1.03,1.01,0.99,0.98,0.96,0.95,0.95,0.95]},
-  mago:      {hp:[1.00,1.02,1.40,1.10,1.00,0.95,1.60,1.60,1.60], dmg:[1.00,1.01,1.25,1.03,0.97,0.93,1.14,1.14,1.14]}, // refuerzo vs Matriarca (20) y Storm Gush (60): sin resistencia física, caía ante paralisis/golpes en área
-  paladin:   {hp:[1.00,1.19,1.10,1.02,0.95,0.88,0.81,0.81,0.81], dmg:[1.00,1.09,1.05,1.01,0.97,0.94,0.90,0.90,0.90]},
+  pesada:    {hp:[1.00,0.85,0.77,0.69,0.62,0.55,0.49,0.49,0.49,0.49], dmg:[1.00,0.92,0.88,0.83,0.79,0.74,0.70,0.70,0.70,0.70]},
+  tirador:   {hp:[1.00,0.69,0.77,0.87,0.98,1.10,1.24,1.24,1.24,1.24], dmg:[1.00,0.83,0.88,0.93,0.99,1.05,1.11,1.11,1.11,1.11]},
+  doblefilo: {hp:[1.00,1.06,1.02,0.99,0.96,0.93,0.90,0.90,0.90,0.90], dmg:[1.00,1.03,1.01,0.99,0.98,0.96,0.95,0.95,0.95,0.95]},
+  mago:      {hp:[1.00,1.02,1.40,1.10,1.00,0.95,1.60,1.60,1.60,1.60], dmg:[1.00,1.01,1.25,1.03,0.97,0.93,1.14,1.14,1.14,1.14]}, // refuerzo vs Matriarca (20) y Storm Gush (60): sin resistencia física, caía ante paralisis/golpes en área
+  paladin:   {hp:[1.00,1.19,1.10,1.02,0.95,0.88,0.81,0.81,0.81,0.81], dmg:[1.00,1.09,1.05,1.01,0.97,0.94,0.90,0.90,0.90,0.90]},
   // Hechicero 60/70/80 (2026-10-08, pedido explícito): con 0.95/0.97 ganaba 0% a Storm Gush y ~0-7% a los
   // jefes del 70 y 80. Medido con 50 combates: 70 → 40%, 80 → 30%; el 60 queda cerca del 50% (1.35/1.18 daba 34%, 1.5/1.25 daba 63%).
-  hechicero: {hp:[1.00,0.55,0.60,0.67,0.76,0.85,1.43,1.65,1.88], dmg:[1.00,0.73,0.77,0.82,0.87,0.92,1.22,1.30,1.39]},
+  hechicero: {hp:[1.00,0.55,0.60,0.67,0.76,0.85,1.43,1.65,1.88,1.88], dmg:[1.00,0.73,0.77,0.82,0.87,0.92,1.22,1.30,1.39,1.39]},
 };
 // Curva de la BETA (con BETA_ALLY_UNLOCKS): en las décadas 0-3 se juega con
 // menos aliados (0-3), así que las clases frágiles necesitan otro ajuste;
@@ -4695,14 +4894,14 @@ const CLASS_CURVE_BETA = {
   // El mago gana a Matriarca y Riakis casi siempre aunque se le baje la curva
   // (a distancia y con un tanque delante); no se le recortó más para no
   // hundirlo en los pisos normales.
-  pesada:    {hp:[1.00,0.43,0.58,0.56,0.61,0.55,0.49,0.49,0.49], dmg:[1.00,0.59,0.76,0.74,0.61,0.74,0.70,0.70,0.70]},
-  tirador:   {hp:[1.00,1.15,0.83,0.92,1.69,1.10,1.24,1.24,1.24], dmg:[1.00,1.06,0.91,0.96,1.30,1.05,1.11,1.11,1.11]},
-  doblefilo: {hp:[1.00,1.22,1.27,1.57,1.34,0.93,0.90,0.90,0.90], dmg:[1.00,1.11,1.10,1.25,1.05,0.96,0.95,0.95,0.95]},
-  mago:      {hp:[1.00,0.93,0.70,0.75,0.70,0.95,1.60,1.60,1.60], dmg:[1.00,0.97,0.85,0.85,0.81,0.93,1.14,1.14,1.14]},
-  paladin:   {hp:[1.00,0.58,0.67,0.75,0.64,0.88,0.81,0.81,0.81], dmg:[1.00,0.76,0.82,0.86,0.79,0.94,0.90,0.90,0.90]},
+  pesada:    {hp:[1.00,0.43,0.58,0.56,0.61,0.55,0.49,0.49,0.49,0.49], dmg:[1.00,0.59,0.76,0.74,0.61,0.74,0.70,0.70,0.70,0.70]},
+  tirador:   {hp:[1.00,1.15,0.83,0.92,1.69,1.10,1.24,1.24,1.24,1.24], dmg:[1.00,1.06,0.91,0.96,1.30,1.05,1.11,1.11,1.11,1.11]},
+  doblefilo: {hp:[1.00,1.22,1.27,1.57,1.34,0.93,0.90,0.90,0.90,0.90], dmg:[1.00,1.11,1.10,1.25,1.05,0.96,0.95,0.95,0.95,0.95]},
+  mago:      {hp:[1.00,0.93,0.70,0.75,0.70,0.95,1.60,1.60,1.60,1.60], dmg:[1.00,0.97,0.85,0.85,0.81,0.93,1.14,1.14,1.14,1.14]},
+  paladin:   {hp:[1.00,0.58,0.67,0.75,0.64,0.88,0.81,0.81,0.81,0.81], dmg:[1.00,0.76,0.82,0.86,0.79,0.94,0.90,0.90,0.90,0.90]},
   // Hechicero 60/70/80 (2026-10-08, pedido explícito): con 0.95/0.97 ganaba 0% a Storm Gush y ~0-7% a los
   // jefes del 70 y 80. Medido con 50 combates: 70 → 40%, 80 → 30%; el 60 queda cerca del 50% (1.35/1.18 daba 34%, 1.5/1.25 daba 63%).
-  hechicero: {hp:[1.00,1.25,1.37,1.23,1.21,0.85,1.43,1.65,1.88], dmg:[1.00,1.10,1.16,0.85,1.11,0.92,1.22,1.30,1.39]},
+  hechicero: {hp:[1.00,1.25,1.37,1.23,1.21,0.85,1.43,1.65,1.88,1.88], dmg:[1.00,1.10,1.16,0.85,1.11,0.92,1.22,1.30,1.39,1.39]},
 };
 // Multiplicador de DAÑO por senda y nivel con el rediseño (la vida queda en 1):
 // un valor por cada nivel de CLASS_CURVE_LEVELS, interpolado entre medio.
@@ -4711,18 +4910,21 @@ const CLASS_DMG_REDESIGN = {
   // 2026-10-08): la tabla calibrada jefe a jefe subía y bajaba sin lógica
   // (Guerrero 0.65, Hechicero hasta 1.67). El equilibrio va en atributos,
   // habilidades y en el propio jefe. Se deja la estructura por si hace falta.
-  pesada:    [1,1,1,1,1,1,1,1,1],
-  paladin:   [1,1,1,1,1,1,1,1,1],
-  doblefilo: [1,1,1,1,1,1,1,1,1],
-  tirador:   [1,1,1,1,1,1,1,1,1],
-  mago:      [1,1,1,1,1,1,1,1,1],
-  hechicero: [1,1,1,1,1,1,1,1,1],
+  pesada:    [1,1,1,1,1,1,1,1,1,1],
+  paladin:   [1,1,1,1,1,1,1,1,1,1],
+  doblefilo: [1,1,1,1,1,1,1,1,1,1],
+  tirador:   [1,1,1,1,1,1,1,1,1,1],
+  mago:      [1,1,1,1,1,1,1,1,1,1],
+  hechicero: [1,1,1,1,1,1,1,1,1,1],
 };
 function curveAt(v){
   const L = CLASS_CURVE_LEVELS, lvl = state.char.level||1;
-  if(lvl <= L[0]) return v[0];
+  // Si la tabla trae menos columnas que CLASS_CURVE_LEVELS se repite la última
+  // (al añadir el nivel 90 una tabla corta daba NaN y el daño mataba de un golpe).
+  const at = (i)=> v[Math.min(i, v.length-1)];
+  if(lvl <= L[0]) return at(0);
   for(let i=1;i<L.length;i++){
-    if(lvl <= L[i]) return v[i-1] + (v[i]-v[i-1]) * (lvl-L[i-1])/(L[i]-L[i-1]);
+    if(lvl <= L[i]) return at(i-1) + (at(i)-at(i-1)) * (lvl-L[i-1])/(L[i]-L[i-1]);
   }
   return v[v.length-1];
 }
@@ -5211,8 +5413,8 @@ async function fetchProfile(userId){
 /* ============================================================
    DUNGEON LEVELS (1-60)
    ============================================================ */
-const LEVEL_CAP = 80;      // 2026-10-08: La Grieta (61-70) y Bosque muerto (71-80). Requiere la migración 0039.
-const CHAR_LEVEL_CAP = 80; // tope de nivel de personaje pedido
+const LEVEL_CAP = 90;      // 2026-10-09: Abismo en llamas (81-90), todavía cerrado a los jugadores (FLOORS_81_90_OPEN). La base ya admite hasta 100 (migración 0039).
+const CHAR_LEVEL_CAP = 90; // tope de nivel de personaje pedido
 // CIERRE TEMPORAL de los pisos 61-80 (decisión de ariochbu, 2026-10-08 noche):
 // la gente empezó a jugarlos mientras se estaban rehaciendo. Hasta nuevo aviso
 // el laberinto y el nivel de personaje topan en 60 para los jugadores. Para
@@ -5222,8 +5424,13 @@ const CHAR_LEVEL_CAP = 80; // tope de nivel de personaje pedido
 const FLOORS_61_80_OPEN = true; // reabiertos el 2026-10-09 por orden de ariochbu, con los guardianes y el balance nuevos
 // (?cerrado=1 en localhost fuerza el modo cerrado, para probar lo que verá el jugador)
 const FLOORS_OPEN_HERE = FLOORS_61_80_OPEN || (/^(localhost|127\.0\.0\.1)$/.test(location.hostname) && !/[?&]cerrado=1/.test(location.search));
-const OPEN_LEVEL_CAP = FLOORS_OPEN_HERE ? LEVEL_CAP : 60;
-const OPEN_CHAR_LEVEL_CAP = FLOORS_OPEN_HERE ? CHAR_LEVEL_CAP : 60;
+// Pisos 81-90 (2026-10-09): NO se liberan hasta que ariochbu lo ordene. Los
+// jugadores siguen topando en 80; en localhost están abiertos para simular y
+// calibrar (?cerrado=1 también los cierra ahí). Para abrir: FLOORS_81_90_OPEN = true.
+const FLOORS_81_90_OPEN = false;
+const FLOORS_81_90_HERE = FLOORS_81_90_OPEN || (/^(localhost|127\.0\.0\.1)$/.test(location.hostname) && !/[?&]cerrado=1/.test(location.search));
+const OPEN_LEVEL_CAP = !FLOORS_OPEN_HERE ? 60 : FLOORS_81_90_HERE ? LEVEL_CAP : 80;
+const OPEN_CHAR_LEVEL_CAP = !FLOORS_OPEN_HERE ? 60 : FLOORS_81_90_HERE ? CHAR_LEVEL_CAP : 80;
 function mobXP(level){ return level; }        // mobs normales: 1 en piso 1, 2 en piso 2...
 // 2026-09-25, pedido explícito: recalibrados para que el élite y el
 // guardián/jefe de década den más en piso 1 (7 y 12 respectivamente, antes
@@ -7336,7 +7543,7 @@ window.addEventListener('resize', ()=>{
   if(mobile !== cityMapMobile) renderCityMap();
 });
 // Nombres de cada década para las puertas de la entrada.
-const DECADE_GATE_NAMES = {1:'Bosque Goblin', 11:'Nido de Arañas', 21:'Tierra de Bestias', 31:'Salón del Usurpador', 41:'Isla Paraíso', 51:'El Mar', 61:'La Grieta', 71:'Bosque Muerto'};
+const DECADE_GATE_NAMES = {1:'Bosque Goblin', 11:'Nido de Arañas', 21:'Tierra de Bestias', 31:'Salón del Usurpador', 41:'Isla Paraíso', 51:'El Mar', 61:'La Grieta', 71:'Bosque Muerto', 81:'Abismo en Llamas'};
 function renderCityDungeonEntry(){
   // Entrada al laberinto (rediseño 2026-10-04, pedido explícito: "algo más
   // real y que dé miedo"): boca oscura con niebla, cada checkpoint es una
@@ -10193,6 +10400,11 @@ const DECADE_BOSS_TUNING = {
   // Área (Pliegue Espacial) -25% por decisión de ariochbu (2026-10-08); los Reflejos no se tocan.
   70: {hp:1.93, atk:2.13},  // El Sin Forma: 37% (sin bono de frente, área -25%, castigo al frente; con 2.08/2.30 daba 21%)
   80: {hp:2.06, atk:2.23},  // El Corazón Marchito: 29-30%
+  // 2026-10-09, objetivo de ariochbu: ninguna senda por encima del 20% con la referencia de rango A.
+  // Medido con 200 combates por senda en 2.38/2.55: Asesino 23, Arquero 21, Mago 13, Guerrero 12, Paladín 12, Hechicero 8;
+  // se sube el ataque a 2.60 para bajar a los dos primeros. El reparto entre sendas sale del propio jefe
+  // (castigo al frente x1.13, área a la retaguardia al 50%, sin resistencia al veneno), no de este número.
+  90: {hp:2.38, atk:2.60},  // El Carcelero
 };
 // BETA (con BETA_ALLY_UNLOCKS): en las décadas 0-3 el jugador lleva menos
 // aliados (0 hasta el Ogro, 1 hasta la Matriarca, 2 hasta Riakis, 3 hasta
@@ -10246,6 +10458,7 @@ const DECADE_ENEMY_TUNING = {
   5: {regular:{hp:2.36, atk:3.42}, elite:{hp:2.24, atk:3.16}, guardian:{hp:1.98, atk:2.31}},   // 75%
   6: {regular:{hp:3.29, atk:4.99}, elite:{hp:3.29, atk:4.99}, guardian:{hp:1.95, atk:2.46}},   // 2026-10-09: guardian correcto por nivel + castigo al frente; media 61-69 ~60%
   7: {regular:{hp:3.63, atk:5.57}, elite:{hp:3.63, atk:5.57}, guardian:{hp:1.78, atk:2.25}},   // 2026-10-09: idem; media 71-79 ~63%
+  8: {regular:{hp:4.21, atk:6.46}, elite:{hp:4.21, atk:6.46}, guardian:{hp:2.06, atk:2.61}},   // 2026-10-09: 81-89 ≈ 50% de niveles completados de media (53/60/52/42/65/51/46/38/44, 16 intentos por senda). El 50% es supuesto propio (sigue la escalera 90/80/70/60)
 };
 function makeEnemy(tpl, floorIdx, level){
   const lvlMult = levelMult(level||1);
@@ -10348,8 +10561,11 @@ function makeEnemy(tpl, floorIdx, level){
   // solo cuando el laberinto crezca a 100 pisos.
   const CRIT_PER_FLOOR = 0.001;
   const BOSS_CRIT_BASE = 0.10, BOSS_CRIT_MAX_BONUS = 0.20;
+  // Antes dividía por LEVEL_CAP (80). Al subir el tope a 90 se deja el 80 fijo
+  // para que el crítico de los jefes de 1-80 no cambie; de 81 en adelante queda en el máximo.
+  const BOSS_CRIT_FULL_LEVEL = 80;
   const critChance = tpl.boss
-    ? BOSS_CRIT_BASE + (level/LEVEL_CAP)*BOSS_CRIT_MAX_BONUS
+    ? BOSS_CRIT_BASE + Math.min(1, level/BOSS_CRIT_FULL_LEVEL)*BOSS_CRIT_MAX_BONUS
     : (tpl.elite ? 0.035 : 0.02) + floorIdx*CRIT_PER_FLOOR;
   return {
     tpl, name:tpl.name, icon:tpl.icon,
