@@ -722,13 +722,14 @@ const SKILLS = {
     requiresPos:'frente', targetMode:'all', selfHealPctOfDmg:0.25,
     desc:'Ultimate del Paladín. Golpea a todos los enemigos y te cura el 25% de todo lo infligido.'
   },
+  // (ABISMO_VENENO_STACKS = 3: al tope de cargas dejaba al Hechicero en 73-90% contra todos los jefes.)
   // 2026-10-09 (pedido de ariochbu): el ultimate deja de paralizar. Ahora
   // envenena a todos con el Veneno al tope de cargas y les mete Miedo o
   // Confusión (al azar por enemigo); a cambio el daño baja de 0.65 a 0.50.
   grito_del_abismo: {
     id:'grito_del_abismo', name:'Grito del Abismo', cost:null, dmgType:'arcano', mult:0.50, ultimate:true,
     targetMode:'all', applies:{name:'Veneno', chance:1, duration:3, stack:true, maxStack:3},
-    desc: ()=> `Ultimate del Hechicero. Daño arcano a TODOS los enemigos; los deja con Veneno al máximo (x${skillBonus('toque_venenoso','maxStack',3)}) durante 3 turnos y con Miedo o Confusión durante 2.`
+    desc: ()=> `Ultimate del Hechicero. Daño arcano a TODOS los enemigos; los deja con Veneno x${ABISMO_VENENO_STACKS} durante 3 turnos y con Miedo o Confusión durante 2.`
   }
 };
 
@@ -4474,6 +4475,7 @@ function blockPierceChance(){
   const lvl = (state.dungeon && state.dungeon.level) || 1, B = TANK_TUNE.blockPierce;
   return Math.max(0, Math.min(B.max, (lvl - B.from) * B.perLevel));
 }
+const ABISMO_VENENO_STACKS = 3; // cargas de Veneno que deja Grito del Abismo
 const SAVIA_PODRIDA = {from:71, to:80, witherPct:0.16}; // efecto de campo del Hechicero, ver saviaPodridaActive()
 const PALADIN_ESP_RES = {rate:0.05, cap:10}; // medido 2026-10-08: con 15 o más el Paladín pasa de 67% contra el jefe del 80
 function paladinEspRes(esp){ return state.char.style==='paladin' ? Math.round(Math.min(PALADIN_ESP_RES.cap, esp*PALADIN_ESP_RES.rate)) : 0; }
@@ -11995,7 +11997,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
       // Grito del Abismo: Veneno directo al tope y Miedo o Confusión al azar.
       if(skillId==='grito_del_abismo' && target.hp>0){
         const vn = hasStatus(target.statuses, 'Veneno');
-        if(vn){ vn.stacks = applyDef.maxStack; vn.maxStack = applyDef.maxStack; vn.duration = Math.max(vn.duration||0, 3); }
+        if(vn){ vn.stacks = Math.max(vn.stacks||1, Math.min(ABISMO_VENENO_STACKS, applyDef.maxStack)); vn.maxStack = applyDef.maxStack; vn.duration = Math.max(vn.duration||0, 3); }
         const gl = SKILLS.grito_de_panico;
         const mental = Object.assign({}, chance(0.5) ? gl.appliesAlt : gl.applies, {chance:1});
         if(applyStatus(target, mental, false)) onPlayerAppliedStatus(target, mental.name);
@@ -13818,7 +13820,7 @@ function simPickSkill(usable){
   const has = (n)=> !!hasStatus(target.statuses, n);
   const hpPct = state.char.curHP / (derived().maxHP || 1);
   const vn0 = hasStatus(target.statuses, 'Veneno');
-  if(can('grito_del_abismo') && (livingEnemies().length >= 2 || !vn0 || (vn0.stacks||1) < skillBonus('toque_venenoso','maxStack',3))) return 'grito_del_abismo';
+  if(can('grito_del_abismo') && (livingEnemies().length >= 2 || !vn0 || (vn0.stacks||1) < ABISMO_VENENO_STACKS)) return 'grito_del_abismo';
   // Grito de Locura cae sobre toda una línea: contra grupos, primero a la línea
   // con más enemigos todavía sin Miedo ni Confusión.
   if(can('grito_de_panico') && !window.__simHechiceroSinLinea){
