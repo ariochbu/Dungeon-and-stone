@@ -10113,9 +10113,16 @@ function rollStoneDropForLevel(level, bypassTiers){
 // mob normal, que sí pueden no soltar ninguna). Termina siempre porque D
 // (piedras) no tiene nivel mínimo hasta el piso 40, y de ahí en adelante B y A
 // siempre pueden caer (ver LOOT_TIER_CUTOFF).
+// 2026-10-09 (números de ariochbu): en la piedra garantizada del jefe, la
+// probabilidad FINAL de que sea Tier S es fija desde el piso 81 — 1,2% (81+),
+// 1,5% (91+) y 2,5% (piso 100). Se decide aparte; si no toca S, se reparte
+// entre los demás rangos como siempre.
+const BOSS_STONE_S_CHANCE = [{from:100, chance:0.025}, {from:91, chance:0.015}, {from:81, chance:0.012}];
 function rollGuaranteedStoneDropForLevel(level, bypassTiers){
+  const fixedS = BOSS_STONE_S_CHANCE.find(b=> (level||1) >= b.from);
+  if(fixedS && chance(fixedS.chance)) return makeSoulStoneItem(pick(Object.values(SOUL_STONES).filter(st=>st.tier==='S')));
   let stone = null;
-  while(!stone) stone = rollStoneDropForLevel(level, bypassTiers);
+  while(!stone || (fixedS && stone.tier==='S')) stone = rollStoneDropForLevel(level, bypassTiers);
   return stone;
 }
 function generateLoot(floorIdx, level){
