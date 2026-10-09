@@ -1992,6 +1992,21 @@ const DECADE_BESTIARY = [
   }
 ];
 
+// GUARDIANES "FÁCILES" DE 61-79 (decisión de ariochbu, 2026-10-09). Los
+// guardianes de La Grieta y el Bosque muerto que NO invocan por su cuenta
+// llegan al combate con una escolta de 2 criaturas menores (ya están ahí
+// desde el primer turno, no se invocan) y con más vida, para que su combate
+// dure y desgaste al frente como el de los que sí invocan (69 y 79).
+const GUARDIAN_ESCORT = {count:2, hpPct:0.07, atkPct:0.35, hpBoost:1.30};
+[[6, LARVA_ERRANTE_TPL], [7, BROTE_MENOR_TPL]].forEach(([dec, tpl])=>{
+  Object.values((DECADE_BESTIARY[dec] && DECADE_BESTIARY[dec].guardianByFloor) || {}).forEach(g=>{
+    if(Object.values(g.abilities || {}).some(a=> a.utility === 'summon')) return;
+    g.escort = {tpl};
+    g.baseHp = g.hp; // hp de diseño, por si hay que recalcular el refuerzo en pruebas
+    g.hp = +(g.hp * GUARDIAN_ESCORT.hpBoost).toFixed(2);
+  });
+});
+
 /* ============================================================
    GACHA "CAÍDOS DEL LABERINTO" — mascotas (2026-09-24, pedido explícito)
    ============================================================
@@ -4425,10 +4440,15 @@ function baseStat(key){
 // acercó a los tanques al resto en las pruebas; a cambio los guardianes de
 // esas décadas bajaron un 15% de vida y ataque (ver DECADE_ENEMY_TUNING 6 y 7).
 const GUARDIAN_VS_FRONT = {from:61, to:79, dmgMult:1.50, armorBreak:{name:'Armadura Rota', duration:3, resPenalty:15}};
+// Élites y enemigos comunes de 61-79: castigo más suave y sin rotura, y solo
+// contra TANQUES (Guerrero o Paladín al frente, o un aliado de primera línea).
+const COMMON_VS_TANK = {dmgMult:1.25, tanksOnly:true};
 function guardianVsFront(enemy){
   const lvl = (state.dungeon && state.dungeon.level) || 0;
-  if(lvl < GUARDIAN_VS_FRONT.from || lvl > GUARDIAN_VS_FRONT.to || lvl % 10 === 0) return null;
-  return (enemy.tpl && enemy.tpl.boss && !enemy.summoned) ? GUARDIAN_VS_FRONT : null;
+  if(lvl < GUARDIAN_VS_FRONT.from || lvl > GUARDIAN_VS_FRONT.to || lvl % 10 === 0 || !enemy.tpl) return null;
+  if((enemy.tpl.boss && !enemy.summoned) || enemy.escort) return GUARDIAN_VS_FRONT; // el guardián y su escolta
+  if(enemy.summoned || enemy.tpl.decoy) return null;                                 // invocaciones a mitad de combate: sin castigo
+  return COMMON_VS_TANK;
 }
 // CURACIÓN ENEMIGA COMPARTIDA (pedido de ariochbu, 2026-10-09): en 61-80, tras
 // una curación de cualquier enemigo, ninguno del grupo puede curar durante
@@ -9657,6 +9677,19 @@ function buildEncounterGroup(nodeType, f, level){
       companion.companionRef = elite;
     });
   }
+  // Escolta de los guardianes "fáciles" de 61-79 (ver GUARDIAN_ESCORT).
+  if(nodeType==='jefe' && !isDecadeFinal){
+    group.slice().forEach(g=>{
+      if(!g.tpl.escort) return;
+      for(let i=0; i<GUARDIAN_ESCORT.count && group.length<6; i++){
+        const e = makeEnemy(g.tpl.escort.tpl, f, level);
+        e.maxHP = Math.max(1, Math.round(g.maxHP*GUARDIAN_ESCORT.hpPct)); e.hp = e.maxHP;
+        e.atk = Math.max(1, Math.round(g.atk*GUARDIAN_ESCORT.atkPct));
+        e.summoned = true; e.summoner = g; e.escort = true;
+        group.push(e);
+      }
+    });
+  }
   // los de línea frontal (tanques/melee) van al slot 0, el que reciben los
   // ataques 'front'; a distancia/soporte se acomodan detrás.
   group.sort((a,b)=> (b.tpl.frontline?1:0) - (a.tpl.frontline?1:0));
@@ -13467,7 +13500,7 @@ function resolveNewStyleEnemyMove(enemy, target, enemyCrit){
   // 3 y 4 — auditoría 2026-10-02: antes solo existía como condición de uso
   // y el +X% se perdía).
   const vsFront = tpl.vsFront || guardianVsFront(enemy);
-  if(vsFront && (onPlayer ? combat.playerPos==='frente' : target.ally.pos==='frente')){
+  if(vsFront && (onPlayer ? (combat.playerPos==='frente' && (!vsFront.tanksOnly || state.char.style==='pesada' || state.char.style==='paladin')) : target.ally.pos==='frente')){
     dmg = Math.round(dmg*vsFront.dmgMult);
     if(vsFront.armorBreak){
       if(onPlayer) applyStatus(null, Object.assign({}, vsFront.armorBreak), true);
@@ -13852,7 +13885,7 @@ if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
   window.__rearAoe = (v)=>{ if(v !== undefined) BOSS_AOE_REAR_FACTOR = v; return BOSS_AOE_REAR_FACTOR; };
   window.__hpPerLevel = HP_PER_LEVEL_REDESIGN; window.__growth = CLASS_GROWTH; // palancas de clase para probar en simulación
   window.__combat = ()=> combat; // inspección del combate en curso (simulaciones que no terminan)
-  window.__healLock = ENEMY_HEAL_LOCK; window.__gFrente = GUARDIAN_VS_FRONT;
+  window.__healLock = ENEMY_HEAL_LOCK; window.__gFrente = GUARDIAN_VS_FRONT; window.__cTanque = COMMON_VS_TANK; window.__escolta = GUARDIAN_ESCORT;
   window.__palRes = PALADIN_ESP_RES; window.__savia = SAVIA_PODRIDA;
   window.__simDot = DOT_ENEMY;
   window.__bestiary = DECADE_BESTIARY; // para probar ajustes de un enemigo en las simulaciones sin tocar el código // para comparar el daño por turno de Sangrado/Veneno en las simulaciones
