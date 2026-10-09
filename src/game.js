@@ -2132,7 +2132,7 @@ const DECADE_BESTIARY = [
           picado_ardiente:{label:'Picado Ardiente', mult:1.20, cooldown:3},
         },
         aiPriority:['nube_hollin','picado_ardiente','garra_ah']},
-      {id:'escriba_condenas', name:'Escriba de Condenas', icon:'📜', hp:0.80, atk:1.00, res:rs(-10,35,0,0,-5),
+      {id:'escriba_condenas', name:'Escriba de Condenas', icon:'📜', hp:0.80, atk:1.00, res:rs(-10,35,-25,0,-5),
         abilities:{
           letra_ardiente:{label:'Letra Ardiente', mult:0.90},
           sentencia_muda:{label:'Sentencia Muda', mult:0.70, applies:{name:'Silencio', chance:0.15, duration:1}, cooldown:4},
@@ -2156,7 +2156,7 @@ const DECADE_BESTIARY = [
           barrido_brasa:{label:'Barrido de Brasa', utility:'aoe', mult:0.50, rearMult:0.50, cooldown:5},
         },
         aiPriority:['ejecucion','filo_fundido','barrido_brasa','hachazo']},
-      {id:'alcaide_menor', name:'Alcaide Menor', icon:'⛓️', hp:2.10, atk:1.22, res:rs(10,35,-10,0,15), elite:true, reductionWithAllies:{min:1, value:0.15},
+      {id:'alcaide_menor', name:'Alcaide Menor', icon:'⛓️', hp:2.10, atk:1.22, res:rs(10,35,-30,0,15), elite:true, reductionWithAllies:{min:1, value:0.15},
         abilities:{
           latigo_fuego:{label:'Látigo de Fuego', mult:1.00, applies:QUEMADURA(0.25)},
           orden_alcaide:{label:'Orden del Alcaide', utility:'buff_allies', cooldown:5, buffAllies:{name:'Fortalecido', duration:3, stacks:4}},
@@ -2184,7 +2184,7 @@ const DECADE_BESTIARY = [
           embestida_ph:{label:'Embestida de Hierro', mult:1.40, applies:{name:'Aturdido', chance:0.20, duration:1}, cooldown:4},
         },
         aiPriority:['cerrojo','aliento_horno','embestida_ph','portazo_ph']},
-      2: {id:'contador_condenas', name:'El Contador de Condenas', icon:'🧮', hp:3.30, atk:1.45, res:rs(10,35,-5,5,15), boss:true,
+      2: {id:'contador_condenas', name:'El Contador de Condenas', icon:'🧮', hp:3.30, atk:1.45, res:rs(10,35,-25,5,15), boss:true,
         abilities:{
           cuenta_ardiente:{label:'Cuenta Ardiente', mult:1.05, applies:QUEMADURA(0.25)},
           sumar_condena:{label:'Sumar Condena', mult:0.85, applies:{name:'Marcado', chance:0.45, duration:2}, cooldown:3},
@@ -2208,7 +2208,7 @@ const DECADE_BESTIARY = [
           colada:{label:'Colada', mult:1.40, cooldown:3, bonusVsTargetStatus:{name:'Quemadura', minStacks:2, mult:1.25}},
         },
         aiPriority:['verter_metal','colada','metal_que_enfria','golpe_crisol']},
-      5: {id:'dama_grillete', name:'La Dama del Grillete', icon:'👑', hp:3.71, atk:1.52, res:rs(10,35,-5,5,15), boss:true,
+      5: {id:'dama_grillete', name:'La Dama del Grillete', icon:'👑', hp:3.71, atk:1.52, res:rs(10,35,-25,5,15), boss:true,
         abilities:{
           eslabon:{label:'Eslabón', mult:1.05},
           grilletes_voladores:{label:'Grilletes Voladores', mult:0.90, applies:{name:'Paralisis', chance:0.40, duration:1}, cooldown:3},
@@ -2217,7 +2217,7 @@ const DECADE_BESTIARY = [
           apretar:{label:'Apretar', mult:1.35, cooldown:4, bonusVsTargetStatus:{name:'Paralisis', mult:1.25}},
         },
         aiPriority:['velo_de_cadenas','grilletes_voladores','condena_de_la_dama','apretar','eslabon']},
-      6: {id:'testigo_ciego', name:'El Testigo Ciego', icon:'👁️', hp:3.50, atk:1.36, res:rs(10,35,0,5,20), boss:true,
+      6: {id:'testigo_ciego', name:'El Testigo Ciego', icon:'👁️', hp:3.50, atk:1.36, res:rs(10,35,-25,5,20), boss:true,
         abilities:{
           mirada_que_arde:{label:'Mirada que Arde', mult:1.10, applies:QUEMADURA(0.35)},
           veredicto:{label:'Veredicto', mult:1.45, cooldown:4, ignoreResist:0.30},
@@ -2280,6 +2280,7 @@ const DECADE_BESTIARY = [
 // lógica que la física de arriba pero para las criaturas que lanzan magia (ojos, voces, pastores,
 // heraldos, escribas, jueces): suben fuego y hielo en su plantilla. En el Bosque muerto las plantas
 // conservan su debilidad al fuego (solo sube el hielo, salvo el Heraldo). El veneno no se toca.
+// En 81-90 solo sube el fuego: la debilidad al hielo de esa década NO se toca (orden de ariochbu).
 // GUARDIANES "FÁCILES" DE 61-79 (decisión de ariochbu, 2026-10-09). Los
 // guardianes de La Grieta y el Bosque muerto que NO invocan por su cuenta
 // llegan al combate con una escolta de 2 criaturas menores (ya están ahí
