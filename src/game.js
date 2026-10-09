@@ -1997,12 +1997,14 @@ const DECADE_BESTIARY = [
 // llegan al combate con una escolta de 2 criaturas menores (ya están ahí
 // desde el primer turno, no se invocan) y con más vida, para que su combate
 // dure y desgaste al frente como el de los que sí invocan (69 y 79).
-const GUARDIAN_ESCORT = {count:2, hpPct:0.07, atkPct:0.35, hpBoost:1.30};
+const GUARDIAN_ESCORT = {count:2, hpPct:0.07, atkPct:0.35, hpBoost:1.30, noHpBoost:['rey_articulaciones']};
 [[6, LARVA_ERRANTE_TPL], [7, BROTE_MENOR_TPL]].forEach(([dec, tpl])=>{
   Object.values((DECADE_BESTIARY[dec] && DECADE_BESTIARY[dec].guardianByFloor) || {}).forEach(g=>{
     if(Object.values(g.abilities || {}).some(a=> a.utility === 'summon')) return;
     g.escort = {tpl};
-    g.baseHp = g.hp; // hp de diseño, por si hay que recalcular el refuerzo en pruebas
+    // El Rey de las Articulaciones (67) lleva escolta pero no vida extra: ya pega muy fuerte al frente
+    // y con las dos cosas quedaba en 29% (decisión de ariochbu, 2026-10-09).
+    if(GUARDIAN_ESCORT.noHpBoost.includes(g.id)) return;
     g.hp = +(g.hp * GUARDIAN_ESCORT.hpBoost).toFixed(2);
   });
 });
@@ -13692,8 +13694,12 @@ function simTargetIndex(){
   const boss = living.find(e=> e.tpl && e.tpl.boss && !e.summoned);
   return boss ? combat.enemies.indexOf(boss) : autoPickEnemyIndex();
 }
+// Habilidades sin daño que el simulador sí sabe usar (antes solo elegía las de
+// daño, así que el Paladín nunca levantaba Muro de Fe ni su escudo, y el
+// Guerrero nunca gritaba ni remataba con Machacar).
+const SIM_UTILITY_SKILLS = new Set(['muro_de_fe', 'escudo_del_juramento', 'grito_guerra']);
 function simPickSkill(usable){
-  const byDmg = ()=> usable.slice().sort((a, b)=> (SKILLS[b].mult||0) - (SKILLS[a].mult||0))[0] || 'ataque_basico';
+  const byDmg = ()=> usable.filter(id=> SKILLS[id].mult).sort((a, b)=> (SKILLS[b].mult||0) - (SKILLS[a].mult||0))[0] || 'ataque_basico';
   const can = (id)=> usable.includes(id);
   const target = combat.enemies[simTargetIndex()];
   // Asesino (2026-10-08): por multiplicador elegía siempre Golpe de gracia y
@@ -13712,6 +13718,24 @@ function simPickSkill(usable){
     if(can('corte_rapido') && (stacks < max || (sg.duration||0) <= 1)) return 'corte_rapido';
     if(can('danza_cuchillas')) return 'danza_cuchillas';
     return byDmg();
+  }
+  // Tanques (2026-10-09): usan su kit defensivo. __simTanqueTonto lo apaga.
+  if((state.char.style === 'paladin' || state.char.style === 'pesada') && !window.__simTanqueTonto){
+    const front = combat.enemies[playerFrontTargetIndices()[0]];
+    const hpPct = state.char.curHP / (derived().maxHP || 1);
+    const pst = combat.playerStatuses || [];
+    const fuerte = livingEnemies().some(e=> e.tpl && (e.tpl.boss || e.tpl.elite));
+    const dmgOnly = ()=> usable.filter(id=> SKILLS[id].mult).sort((a, b)=> (SKILLS[b].mult||0) - (SKILLS[a].mult||0))[0] || 'ataque_basico';
+    if(state.char.style === 'paladin'){
+      if(can('juicio_divino') && (hpPct < 0.6 || livingEnemies().length >= 3)) return 'juicio_divino';
+      if(can('escudo_del_juramento') && !(combat.playerShield > 0) && hpPct < 0.75) return 'escudo_del_juramento';
+      if(can('muro_de_fe') && !hasStatus(pst, 'Fe Inquebrantable') && (fuerte || hpPct < 0.6)) return 'muro_de_fe';
+      return can('golpe_consagrado') ? 'golpe_consagrado' : dmgOnly();
+    }
+    if(can('grito_guerra') && !hasStatus(pst, 'Furioso') && (fuerte || hpPct < 0.6)) return 'grito_guerra';
+    if(can('machacar') && front && hasStatus(front.statuses, 'Tambaleo')) return 'machacar';
+    if(can('furia_titan') && (livingEnemies().length >= 3 || (front && hasStatus(front.statuses, 'Tambaleo')))) return 'furia_titan';
+    return can('golpe_bruto') ? 'golpe_bruto' : dmgOnly();
   }
   if(state.char.style !== 'hechicero') return byDmg();
   if(!target) return byDmg();
@@ -13745,7 +13769,7 @@ async function simOneFight(cfg){
     else {
       // la habilidad de daño más fuerte que se pueda pagar y usar desde donde está
       const ok = (id)=>{
-        const sk = SKILLS[id]; if(!sk || !sk.mult) return false;
+        const sk = SKILLS[id]; if(!sk || (!sk.mult && !SIM_UTILITY_SKILLS.has(id))) return false;
         if(sk.ultimate && ((ULTIMATE_MAX_USES - (state.dungeon.ultimateUses||0)) <= 0 || (state.dungeon.ultimateCooldown||0) > 0)) return false;
         if(sk.cost && (sk.cost.tipo === 'estamina' ? state.char.curSta : state.char.curSpi) < effectiveSkillCost(id, sk)) return false;
         if(sk.requiresPos && combat.playerPos !== sk.requiresPos && !sk.penaltyIfFrente) return false;
@@ -13773,7 +13797,7 @@ async function simFightLoop(){
     if(potion && state.char.curHP / d.maxHP < 0.35){ await usePotionInCombat('vida_mayor'); }
     else {
       const ok = (id)=>{
-        const sk = SKILLS[id]; if(!sk || !sk.mult) return false;
+        const sk = SKILLS[id]; if(!sk || (!sk.mult && !SIM_UTILITY_SKILLS.has(id))) return false;
         if(sk.ultimate && ((ULTIMATE_MAX_USES - (state.dungeon.ultimateUses||0)) <= 0 || (state.dungeon.ultimateCooldown||0) > 0)) return false;
         if(sk.cost && (sk.cost.tipo === 'estamina' ? state.char.curSta : state.char.curSpi) < effectiveSkillCost(id, sk)) return false;
         if(sk.requiresPos && combat.playerPos !== sk.requiresPos && !sk.penaltyIfFrente) return false;
@@ -13887,6 +13911,18 @@ if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
   window.__combat = ()=> combat; // inspección del combate en curso (simulaciones que no terminan)
   window.__healLock = ENEMY_HEAL_LOCK; window.__gFrente = GUARDIAN_VS_FRONT; window.__cTanque = COMMON_VS_TANK; window.__escolta = GUARDIAN_ESCORT;
   window.__palRes = PALADIN_ESP_RES; window.__savia = SAVIA_PODRIDA;
+  // Defensa de una senda con el equipo de referencia puesto: __defensa('paladin', 79)
+  window.__defensa = (styleId, level, gear)=>{
+    const saved = {state, combat, sim: simMode};
+    try{
+      simMode = true;
+      state = simBuildState({style: styleId, race:'humano', level, dungeonLevel: Math.min(LEVEL_CAP, level), gear: gear || 'rango_a', stoneTier:'none', petRarity:'none', allies:0}).st;
+      state.char.pets = {owned:{}, equipped:[]}; combat = null;
+      const d = derived(), cs = combatStatsSummary(), r = (v)=> Math.round(v*10)/10;
+      return {vida: Math.round(d.maxHP), resFisica: r(totalRes('fisico')), resMagica: r(d.resMagica), reduccionDano: r(cs.reduccionDano*100), bloqueo: r(cs.bloqueo*100), evasion: r(d.evasionBase*100), esp: r(d.esp), vig: r(d.vig), danoBase: Math.round(skillBaseDamage()),
+        conjunto: SIM_SET[styleId], arma: state.char.equip.arma && state.char.equip.arma.name, arma2: state.char.equip.arma2 && state.char.equip.arma2.name};
+    } finally { state = saved.state; combat = saved.combat; simMode = saved.sim; }
+  };
   window.__simDot = DOT_ENEMY;
   window.__bestiary = DECADE_BESTIARY; // para probar ajustes de un enemigo en las simulaciones sin tocar el código // para comparar el daño por turno de Sangrado/Veneno en las simulaciones
   window.__creation = (step, st, r)=>{ crStep = step || 2; if(st) selStyle = st; if(r) selRace = r; showScreen('screen-create'); renderCreation(); };
