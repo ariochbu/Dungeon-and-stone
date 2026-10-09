@@ -2289,8 +2289,11 @@ const DECADE_BESTIARY = [
 const GUARDIAN_ESCORT = {count:2, hpPct:0.07, atkPct:0.35, hpBoost:1.30, noHpBoost:['rey_articulaciones']};
 [[6, LARVA_ERRANTE_TPL], [7, BROTE_MENOR_TPL], [8, ASCUA_TPL]].forEach(([dec, tpl])=>{
   Object.values((DECADE_BESTIARY[dec] && DECADE_BESTIARY[dec].guardianByFloor) || {}).forEach(g=>{
-    if(Object.values(g.abilities || {}).some(a=> a.utility === 'summon')) return;
+    // En 81-89 todos llevan custodios (pedido de ariochbu, 2026-10-09); los que además invocan no reciben la vida extra.
+    const summons = Object.values(g.abilities || {}).some(a=> a.utility === 'summon');
+    if(summons && dec !== 8) return;
     g.escort = {tpl};
+    if(summons) return;
     // El Rey de las Articulaciones (67) lleva escolta pero no vida extra: ya pega muy fuerte al frente
     // y con las dos cosas quedaba en 29% (decisión de ariochbu, 2026-10-09).
     if(GUARDIAN_ESCORT.noHpBoost.includes(g.id)) return;
@@ -9966,6 +9969,46 @@ function roomPreviewIds(nodeType, dg, f){
   return [];
 }
 
+// COMPOSICIÓN INTELIGENTE DE GRUPOS (pedido de ariochbu, 2026-10-09: "a veces me salen todos a melee
+// o todos a distancia"). En todos los pisos el grupo ya no se sortea criatura por criatura: se llena
+// un plan de puestos según el tamaño (frente / distancia / apoyo) con lo que tenga la década. Si a la
+// década le falta un rol, ese puesto se cubre con otro; y entre las candidatas se prefiere la que
+// menos se repite en el grupo. El rol sale de la plantilla: frontline = frente; sin frontline y con
+// una curación o mejora a aliados = apoyo; el resto = distancia.
+function enemyRole(tpl){
+  if(tpl.frontline) return 'frente';
+  const supports = Object.values(tpl.abilities || {}).some(a=> a.utility === 'heal_ally' || a.utility === 'buff_allies')
+    || (tpl.moves || []).includes('curar_aliado');
+  return supports ? 'apoyo' : 'distancia';
+}
+const GROUP_PLAN = {1:['*'], 2:['frente','atras'], 3:['frente','distancia','*'], 4:['frente','frente','distancia','apoyo'],
+  5:['frente','frente','distancia','distancia','apoyo'], 6:['frente','frente','distancia','distancia','apoyo','*']};
+const GROUP_AI = {on:true, eliteOn:true}; // interruptores para comparar en el simulador (localhost)
+function pickSmartTemplates(pool, count){
+  if(!GROUP_AI.on) return Array.from({length: count}, ()=> pick(pool));
+  const plan = GROUP_PLAN[Math.max(1, Math.min(6, count))], used = {}, out = [];
+  const ofRole = (r)=> pool.filter(t=> r === '*' ? true : r === 'atras' ? enemyRole(t) !== 'frente' : enemyRole(t) === r);
+  plan.forEach(role=>{
+    let c = ofRole(role);
+    if(!c.length && role === 'apoyo') c = ofRole('distancia');
+    if(!c.length) c = pool;
+    const least = Math.min(...c.map(t=> used[t.id] || 0));
+    const t = pick(c.filter(x=> (used[x.id] || 0) === least));
+    used[t.id] = (used[t.id] || 0) + 1;
+    out.push(t);
+  });
+  return out;
+}
+// GUARDIANES DE 81-89 (pedido de ariochbu, 2026-10-09): el guardián llega con 1 élite y sus 2
+// custodios pequeños (la escolta de GUARDIAN_ESCORT). La élite se elige para completarlo: si el
+// guardián va al frente, casi siempre una de retaguardia, y al revés.
+const GUARDIAN_ELITE_81 = {from:81, to:89, complementChance:0.7, hpPct:0.50, atkPct:0.65};
+function guardianEliteFor(guardianTpl, elites){
+  const wantFront = !guardianTpl.frontline;
+  const fit = elites.filter(e=> !!e.frontline === wantFront);
+  return pick(fit.length && chance(GUARDIAN_ELITE_81.complementChance) ? fit : elites);
+}
+
 // Arma el grupo de enemigos de un nodo de combate (extraído de enterNode,
 // 2026-10-02, para que el simulador de balance use la misma lógica).
 function buildEncounterGroup(nodeType, f, level){
@@ -10019,10 +10062,18 @@ function buildEncounterGroup(nodeType, f, level){
   }
   const group = [];
   if(paraisoGuardianFloor){
-    for(let i=0;i<5;i++) group.push(makeEnemy(pick(bestiary.regular), f, level));
+    pickSmartTemplates(bestiary.regular, 5).forEach(t=> group.push(makeEnemy(t, f, level)));
     group.push(makeEnemy(bestiary.elite[0], f, level));
-  } else {
+  } else if(nodeType==='jefe'){
     for(let i=0;i<count;i++) group.push(makeEnemy(pick(templates), f, level));
+  } else {
+    pickSmartTemplates(templates, count).forEach(t=> group.push(makeEnemy(t, f, level)));
+  }
+  if(nodeType==='jefe' && !isDecadeFinal && level >= GUARDIAN_ELITE_81.from && level <= GUARDIAN_ELITE_81.to && GROUP_AI.eliteOn && bestiary.elite && bestiary.elite.length){
+    const e = makeEnemy(guardianEliteFor(group[0].tpl, bestiary.elite), f, level);
+    e.maxHP = Math.max(1, Math.round(e.maxHP * GUARDIAN_ELITE_81.hpPct)); e.hp = e.maxHP;
+    e.atk = Math.max(1, Math.round(e.atk * GUARDIAN_ELITE_81.atkPct));
+    group.push(e);
   }
   if(nodeType==='jefe' && isDecadeFinal && paraiso){
     // el jefe de Isla Paraíso llega escoltado por dos élites en el frente
@@ -14434,7 +14485,7 @@ if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
   window.__rearAoe = (v)=>{ if(v !== undefined) BOSS_AOE_REAR_FACTOR = v; return BOSS_AOE_REAR_FACTOR; };
   window.__hpPerLevel = HP_PER_LEVEL_REDESIGN; window.__growth = CLASS_GROWTH; // palancas de clase para probar en simulación
   window.__combat = ()=> combat; // inspección del combate en curso (simulaciones que no terminan)
-  window.__tanque = TANK_TUNE; window.__lvl30 = LEVEL30_SKILL_BONUS; window.__healLock = ENEMY_HEAL_LOCK; window.__gFrente = GUARDIAN_VS_FRONT; window.__cTanque = COMMON_VS_TANK; window.__escolta = GUARDIAN_ESCORT;
+  window.__tanque = TANK_TUNE; window.__lvl30 = LEVEL30_SKILL_BONUS; window.__healLock = ENEMY_HEAL_LOCK; window.__gFrente = GUARDIAN_VS_FRONT; window.__cTanque = COMMON_VS_TANK; window.__escolta = GUARDIAN_ESCORT; window.__grupo = buildEncounterGroup; window.__rol = enemyRole; window.__grupoIA = GROUP_AI; window.__elite81 = GUARDIAN_ELITE_81;
   window.__palRes = PALADIN_ESP_RES; window.__savia = SAVIA_PODRIDA;
   window.__frente81 = {guardian: GUARDIAN_VS_FRONT_81, comun: COMMON_VS_TANK_81, invocacion: ASCUA_TPL, clase: ENEMY_VS_CLASS_81.mult, clase90: ENEMY_VS_CLASS_81.boss90};
   // Defensa de una senda con el equipo de referencia puesto: __defensa('paladin', 79)

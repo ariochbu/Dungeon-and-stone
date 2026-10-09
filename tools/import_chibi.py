@@ -195,6 +195,52 @@ RETRATO_MIRA_DERECHA = {
 }
 
 
+# LÁMINAS NUEVAS (2026-10-09): ariochbu rehízo las animaciones de 1-80 con el estilo de 81-90 y las
+# dejó en "Assets/Sprites mobs/<década>/chibi/chibi 2". Solo son láminas (los retratos se quedan con
+# los de antes). Las de 1-10 traen nombre; las demás van numeradas en el orden en que se pidieron.
+# Se pidieron mirando a la DERECHA, así que no se espejan salvo las de NUEVA_MIRA_IZQUIERDA.
+LAMINAS_NUEVAS = {
+    '11-20': ['tarantula_cazadora', 'tarantula_saltarina', 'tarantula_tejedora', 'viuda_venenosa', 'matriarca_telaranha',
+              'reina_telaranha', 'viuda_alfa', 'saltadora_alfa', 'gran_tejedora', 'devoradora_nido', 'arana_caparazon',
+              'viuda_carmesi', 'matriarca_abisal', 'reina_devoradora', 'matriarca_escarlata'],
+    '21-30': ['loba_acantilado', 'oso_cuevas', 'buitre_corrupto', 'lince_sombrio', 'alfa_manada', 'gran_lobo_hoja',
+              'oso_roca_lunar', 'halcon_guerra', 'tigre_sable', 'jabali_hierro', 'lobo_quimera', 'oso_acorazado',
+              'bestia_carmesi', 'rey_manada', 'riakis'],
+    '31-40': ['sombra_mimetica', 'espejo_viviente', 'doble_corrupto', 'farsante_menor', 'impostor_mayor', 'doble_perfecto',
+              'reflejo_perfecto_g', 'mascara_viviente_g', 'espejo_sombras', 'doble_traicionero', 'imitador_formacion',
+              'falso_companero', 'maestro_reflejo', 'maestro_rostros', 'usurpador_fragmentado', 'usurpador',
+              'usurpador_f2', 'usurpador_f3', 'usurpador_f4'],
+    '41-50': ['explorador_rival', 'mercenario_desertor', 'cazarrecompensas', 'superviviente_curtido', 'asesino_isla',
+              'medico_campana', 'superviviente_despiadado', 'cazador_veterano', 'duelista_veterano', 'capitan_mercenario',
+              'asesino_elite_isla', 'custodio_isla'],
+    '51-60': ['triton_guerrero', 'triton_hechicero', 'cangrejo_gigante', 'sirena_corrupta', 'naga_arquero', 'garvel',
+              'guardia_profundidades', 'naga_capitan', 'sacerdotisa_mareas', 'campeon_triton', 'naga_maestro',
+              'guardian_abismo', 'sirena_matriarca', 'gran_cangrejo_abisal', 'serpiente_palpus', 'centinela_coral_g',
+              'leviatan_abisal', 'heraldo_tormenta', 'storm_gush', 'storm_gush_final'],
+    '61-70': ['larva_fase', 'ojo_reflujo', 'sabueso_invertido', 'acaro_umbral', 'vigilante_descosido', 'ciervo_torcido',
+              'boca_peregrina', 'ciempies_especular', 'quimera_disonante', 'ancla_vacio', 'pastor_errores', 'eco_heredado',
+              'la_costura', 'el_inversor', 'coro_hueco', 'geometra_ciega', 'hambre_colores', 'recuerdo_mal_nacido',
+              'rey_articulaciones', 'marea_seca', 'puerta_camina', 'sin_forma', 'sin_forma_f2', 'sin_forma_f3'],
+}
+LAMINA_NUEVA_POR_NOMBRE = {
+    'goblin arquero': 'goblin_arquero', 'goblin guerrero': 'goblin_guerrero', 'goblin saqueador': 'goblin_saqueador',
+    'chaman': 'goblin_chaman', 'jefe gobin': 'jefe_goblin', 'centinela': 'goblin_centinela', 'trampero': 'goblin_trampero',
+    'carnicero': 'goblin_carnicero', 'hobgoblin': 'hobgoblin', 'bruja del pantano': 'bruja_pantano', 'gilgoblin': 'gilgoblin',
+    'tambolillero de guerra': 'tamborilero_guerra', 'campeon hobgoblin': 'campeon_hobgoblin',
+    'capataz de ogro': 'capataz_ogro', 'ogro': 'ogro',
+}
+NUEVA_MIRA_IZQUIERDA = set()
+
+
+def new_sheet_id(path):
+    decade = os.path.basename(os.path.dirname(os.path.dirname(os.path.dirname(path))))
+    n = norm_name(path)
+    if n.isdigit():
+        ids = LAMINAS_NUEVAS.get(decade, [])
+        return ids[int(n) - 1] if 0 < int(n) <= len(ids) else None
+    return LAMINA_NUEVA_POR_NOMBRE.get(n)
+
+
 # Sprites de viaje para el laberinto (Assets/Jugador/caminar): uno por raza,
 # 2 filas (quieto, caminando). Salen como caminar_<raza>.png con "walk" en el
 # índice. Se reconocen por el id corto o porque el nombre del archivo trae la raza.
@@ -536,7 +582,7 @@ def find_frames(alpha, relaxed=False, nrows=4):
 # Láminas donde dos cuadros de ataque se tocan tanto (un chorro, un tajo largo) que
 # la detección los deja pegados en uno solo: se cortan por la cuadrícula fija de 6
 # columnas. Revisar la tira después: lo que invade la celda vecina queda recortado.
-REJILLA_FIJA = {'enemigo_el_fundidor'}  # con el Último Jardinero (guadaña muy ancha) la cuadrícula recorta de más: se deja la detección normal
+REJILLA_FIJA = {'enemigo_el_fundidor', 'enemigo_pastor_errores'}  # con el Último Jardinero (guadaña muy ancha) la cuadrícula recorta de más: se deja la detección normal
 
 
 def find_frames_grid(alpha, nrows=4, ncols=6):
@@ -643,6 +689,9 @@ def collect_jobs():
     for f in sorted(glob.glob('Assets/Sprites mobs/*/*/*')):
         if os.path.basename(os.path.dirname(f)).lower() == 'chibi' and enemy_id(f):
             jobs.append((f, 'enemigo_' + enemy_id(f), 'enemigo'))
+    for f in sorted(glob.glob('Assets/Sprites mobs/*/chibi/chibi 2/*')):
+        if new_sheet_id(f):
+            jobs.append((f, 'enemigo_' + new_sheet_id(f), 'enemigo2'))
     for f in sorted(glob.glob('Assets/Jugador/caminar/*')):
         if walk_race(f):
             jobs.append((f, 'caminar_' + walk_race(f), 'caminar'))
@@ -674,7 +723,7 @@ def review(dest):
                 sheet.paste(cell, (x + (tw - cell.width) // 2, y + th - cell.height - 2), cell)
                 draw.text((x + 3, y + 2), name.replace('enemigo_', '').replace('aliado_', ''), fill=(255, 230, 90))
             sheet.save(os.path.join(dest, f'tiras_{g}_{page // 36}.png'))
-    ids = sorted({j[1][8:] for j in collect_jobs() if j[2] == 'enemigo'})
+    ids = sorted({j[1][8:] for j in collect_jobs() if j[2].startswith('enemigo')})
     ids = [i for i in ids if os.path.exists(os.path.join(OUT_ENEMIGOS, i + '.png'))]
     tw = 160
     for page in range(0, len(ids), 48):
@@ -691,13 +740,30 @@ def review(dest):
     print('ok', dest)
 
 
+def split_merged_attack(alpha, rows):
+    """Láminas nuevas: si en la fila de ataque faltan cuadros porque un efecto (telaraña, rayo, látigo)
+    unió dos, el cuadro más ancho se parte por su columna más vacía cerca del centro."""
+    line = rows[1]
+    while 0 < len(line) < 6:
+        widths = [x1 - x0 for (x0, _y0, x1, _y1) in line]
+        i = int(np.argmax(widths))
+        rest = [w for k, w in enumerate(widths) if k != i]
+        if not rest or widths[i] < 1.6 * np.median(rest):
+            break
+        x0, y0, x1, y1 = line[i]
+        a, b = x0 + int(widths[i] * 0.35), x0 + int(widths[i] * 0.65)
+        cut = a + int(np.argmin(alpha[y0:y1, a:b].sum(axis=0)))
+        line[i:i + 1] = [(x0, y0, cut, y1), (cut, y0, x1, y1)]
+    return rows
+
+
 def process(job):
     """Un archivo -> ('tira'|'retrato', nombre, archivo, imagen, meta)."""
     f, name, kind = job
     im = Image.open(f)
     alpha = remove_background(im)
     walk = kind == 'caminar'
-    if not walk and is_portrait(alpha):
+    if not walk and kind != 'enemigo2' and is_portrait(alpha):
         if kind == 'enemigo':
             pic = cut_portrait(im, alpha, 320, flip=name[8:] in RETRATO_MIRA_DERECHA)
             side = max(pic.size)
@@ -705,10 +771,13 @@ def process(job):
             canvas.paste(pic, ((side - pic.width) // 2, side - pic.height))
             return 'retrato', name, f, canvas, None
         return 'retrato', name, f, cut_portrait(im, alpha, 520), None
-    rows = find_frames_grid(alpha) if name in REJILLA_FIJA else find_frames(alpha, relaxed=kind == 'enemigo', nrows=2 if walk else 4)
+    rows = find_frames_grid(alpha) if name in REJILLA_FIJA else find_frames(alpha, relaxed=kind.startswith('enemigo'), nrows=2 if walk else 4)
     if any(not line for line in rows):
         return None, name, f, None, None
-    sheet, meta = build_strip(im, alpha, rows, name in MIRA_IZQUIERDA, walk)
+    if kind == 'enemigo2' and name not in REJILLA_FIJA:
+        rows = split_merged_attack(alpha, rows)
+    flip = name[8:] in NUEVA_MIRA_IZQUIERDA if kind == 'enemigo2' else name in MIRA_IZQUIERDA
+    sheet, meta = build_strip(im, alpha, rows, flip, walk)
     return 'tira', name, f, sheet, meta
 
 
@@ -721,7 +790,8 @@ def main():
         index = json.load(open(os.path.join(OUT, 'index.json'), encoding='utf-8'))
     only = sys.argv[1] if len(sys.argv) > 1 else ''   # prefijos opcionales: solo esas tiras
     jobs = [j for j in collect_jobs() if any(j[1].startswith(o) for o in only.split(','))]
-    jobs.sort(key=lambda j: -os.path.getmtime(j[0]))  # si dos archivos dan lo mismo, gana el más nuevo
+    # si dos archivos dan lo mismo gana el más nuevo; las láminas nuevas (chibi 2) ganan siempre
+    jobs.sort(key=lambda j: (j[2] != 'enemigo2', -os.path.getmtime(j[0])))
     done = set()
     with multiprocessing.Pool(min(4, max(1, (os.cpu_count() or 2) - 1))) as pool:
         for what, name, f, pic, meta in pool.imap(process, jobs):
