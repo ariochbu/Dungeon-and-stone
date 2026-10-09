@@ -4760,7 +4760,10 @@ const COMMON_VS_TANK_81 = {dmgMult:1.00, tanksOnly:true}; // sin castigo extra a
 // 50-75% y Mago/Hechicero en 15-35%, porque su problema es el aguante. Es un
 // multiplicador por senda, igual de directo que COMMON_VS_TANK; no aplica al
 // los aliados; en el jefe del 90 solo hay un valor (boss90). Calibrado con el simulador.
-const ENEMY_VS_CLASS_81 = {from:81, to:89, mult:{pesada:1.00, paladin:1.15, doblefilo:1.00, tirador:1.08, mago:0.67, hechicero:0.66},
+// Reajustado el 2026-10-09 al sumar la élite al guardián y la composición inteligente de grupos. Con estos
+// valores (10 intentos por senda y piso, 81-89): Guerrero 64 (medido con 1.05; se sube a 1.10), Paladín 49,
+// Asesino 46, Arquero 52, Mago 56 (medido con 0.64; se sube a 0.66), Hechicero 49. Antes: 1.00/1.15/1.00/1.08/0.67/0.66.
+const ENEMY_VS_CLASS_81 = {from:81, to:89, mult:{pesada:1.10, paladin:1.10, doblefilo:0.96, tirador:1.10, mago:0.66, hechicero:0.56},
   // Jefe del 90: solo el Arquero, que en tres tandas de 200 combates salía en 17/22/28% (tope pedido: 20%).
   boss90:{tirador:1.12}};
 function enemyVsClassMult(){
@@ -10014,7 +10017,9 @@ function pickSmartTemplates(pool, count){
 }
 // GUARDIANES DE 81-89 (pedido de ariochbu, 2026-10-09): el guardián llega con 1 élite y sus 2
 // custodios pequeños (la escolta de GUARDIAN_ESCORT). La élite se elige para completarlo: si el
-// guardián va al frente, casi siempre una de retaguardia, y al revés.
+// guardián va al frente, casi siempre una de retaguardia, y al revés. La élite llega debilitada (hpPct,
+// atkPct) y el guardián bajó de 2.40/3.04 a 1.69/2.15 (DECADE_ENEMY_TUNING[8]): con la élite entera y el
+// guardián de antes, los niveles se superaban el 7-15% de las veces en vez del ~50% pedido.
 const GUARDIAN_ELITE_81 = {from:81, to:89, complementChance:0.7, hpPct:0.50, atkPct:0.65};
 function guardianEliteFor(guardianTpl, elites){
   const wantFront = !guardianTpl.frontline;
@@ -10607,7 +10612,7 @@ const DECADE_ENEMY_TUNING = {
   5: {regular:{hp:2.36, atk:3.42}, elite:{hp:2.24, atk:3.16}, guardian:{hp:1.98, atk:2.31}},   // 75%
   6: {regular:{hp:3.29, atk:4.99}, elite:{hp:3.29, atk:4.99}, guardian:{hp:1.95, atk:2.46}},   // 2026-10-09: guardian correcto por nivel + castigo al frente; media 61-69 ~60%
   7: {regular:{hp:3.63, atk:5.57}, elite:{hp:3.63, atk:5.57}, guardian:{hp:1.78, atk:2.25}},   // 2026-10-09: idem; media 71-79 ~63%
-  8: {regular:{hp:4.90, atk:7.52}, elite:{hp:3.60, atk:5.60}, guardian:{hp:2.40, atk:3.04}},   // 2026-10-09, segunda pasada: más duro en general y el reparto por senda en ENEMY_VS_CLASS_81 (objetivo de ariochbu: ~50% de niveles completados por senda). Élites algo por debajo: el simulador casi nunca les ganaba
+  8: {regular:{hp:4.90, atk:7.52}, elite:{hp:3.60, atk:5.60}, guardian:{hp:1.69, atk:2.15}},   // guardián: 2.40/3.04 hasta que se le sumó la élite de escolta (GUARDIAN_ELITE_81) // 2026-10-09, segunda pasada: más duro en general y el reparto por senda en ENEMY_VS_CLASS_81 (objetivo de ariochbu: ~50% de niveles completados por senda). Élites algo por debajo: el simulador casi nunca les ganaba
 };
 function makeEnemy(tpl, floorIdx, level){
   const lvlMult = levelMult(level||1);
