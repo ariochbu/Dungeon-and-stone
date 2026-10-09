@@ -2,8 +2,8 @@
 
 import { supabase } from './supabaseClient.js';
 import * as auth from './auth.js';
-import { syncBattleStage, playBattleAnim } from './battleStage.js?v=101';
-import { mountLabyrinth } from './labyrinthMap.js?v=4';
+import { syncBattleStage, playBattleAnim } from './battleStage.js?v=102';
+import { mountLabyrinth } from './labyrinthMap.js?v=5';
 import { CLASS_SPRITES, ENEMY_SPRITES, playerSpriteFor, playerIllustrationFor, enemySpriteFor, ALLY_TEMPLATE_SPRITES } from './battleSprites.js?v=86';
 
 /* ============================================================
@@ -5180,7 +5180,7 @@ const CHAR_LEVEL_CAP = 80; // tope de nivel de personaje pedido
 // reabrir: FLOORS_61_80_OPEN = true. LEVEL_CAP y CHAR_LEVEL_CAP NO se tocan:
 // entran en fórmulas de balance (crítico de jefes, nivel esperado por piso).
 // En localhost siguen abiertos, para simular y calibrar.
-const FLOORS_61_80_OPEN = false;
+const FLOORS_61_80_OPEN = true; // reabiertos el 2026-10-09 por orden de ariochbu, con los guardianes y el balance nuevos
 // (?cerrado=1 en localhost fuerza el modo cerrado, para probar lo que verá el jugador)
 const FLOORS_OPEN_HERE = FLOORS_61_80_OPEN || (/^(localhost|127\.0\.0\.1)$/.test(location.hostname) && !/[?&]cerrado=1/.test(location.search));
 const OPEN_LEVEL_CAP = FLOORS_OPEN_HERE ? LEVEL_CAP : 60;
@@ -14783,7 +14783,7 @@ let creationChibiIndex = null;
 async function mountCreationChibi(hero, styleId, raceId){
   const key = styleId + '_' + raceId, img0 = hero.querySelector('.cr-sprite');
   try{
-    if(!creationChibiIndex) creationChibiIndex = await fetch('src/assets/chibi/index.json?v=5').then(r=> r.json());
+    if(!creationChibiIndex) creationChibiIndex = await fetch('src/assets/chibi/index.json?v=6').then(r=> r.json());
     const meta = creationChibiIndex[key];
     if(!meta || !img0 || !img0.isConnected) return;
     const sheet = new Image();
