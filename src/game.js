@@ -2038,8 +2038,8 @@ const DECADE_BESTIARY = [
       },
       aiPriority:['ultimo_latido','el_jardin_protege','savia_corrupta','raices_negras','espinas','latido']}
   },
-  // Década 8 — pisos 81-90 — Abismo en llamas (2026-10-09, primera pasada; NO
-  // abierta a los jugadores: ver FLOORS_81_90_OPEN). Los demonios son los
+  // Década 8 — pisos 81-90 — Abismo en llamas (2026-10-09; se abre o cierra con
+  // FLOORS_81_90_OPEN). Los demonios son los
   // carceleros del laberinto. Su identidad es la QUEMADURA acumulable (casi
   // ningún enemigo de 1-80 la usa) y los golpes que rematan a quien ya arde.
   // Diseño, estadísticas y habilidades propias (no vino hoja de ariochbu),
@@ -2216,7 +2216,7 @@ const DECADE_BESTIARY = [
     // Fases: 1) sereno, golpes lentos y pesados; 2) (<60%) se enciende: sus
     // llaves arden y todo quema; 3) (<20%) casi apagado: ya no invoca ni
     // castiga, solo golpea sin fuerza. El sprite cambia con las fases.
-    decadeBoss: {id:'carcelero', vsFront:VS_FRONT_CARCELERO, immuneRetroceso:true, reductionWhileSummonsAlive:0.25, name:'El Carcelero', icon:'🗝️', hp:6.2, atk:1.85, res:rs(25,35,-10,0,30), boss:true, frontline:true,
+    decadeBoss: {id:'carcelero', vsFront:VS_FRONT_CARCELERO, immuneRetroceso:true, reductionWhileSummonsAlive:0.25, name:'El Carcelero', icon:'🗝️', hp:6.2, atk:1.85, res:rs(25,35,0,0,30), boss:true, frontline:true,
       phases:[{below:0.60, msg:'se enciende: <b>sus nueve llaves arden</b> (fase 2).'},{below:0.20, msg:'cae sobre una rodilla, casi apagado. <b>Ya no quiere pelear</b> (fase 3).'}],
       abilities:{
         llaves_al_rojo:{label:'Llaves al Rojo', utility:'self_buff', oncePerCombat:true, instant:true, condition:(ctx)=>ctx.selfHpPct<0.60, selfBuff:{name:'Llaves al Rojo', duration:99, dmgMult:1.15}},
@@ -4694,10 +4694,13 @@ const COMMON_VS_TANK_81 = {dmgMult:1.00, tanksOnly:true}; // sin castigo extra a
 // generales (vida/ataque, resistencias, silencios, área) las físicas quedaban en
 // 50-75% y Mago/Hechicero en 15-35%, porque su problema es el aguante. Es un
 // multiplicador por senda, igual de directo que COMMON_VS_TANK; no aplica al
-// jefe del 90 ni a los aliados. Valores calibrados con el simulador.
-const ENEMY_VS_CLASS_81 = {from:81, to:89, mult:{pesada:1.00, paladin:1.15, doblefilo:1.00, tirador:1.08, mago:0.67, hechicero:0.66}};
+// los aliados; en el jefe del 90 solo hay un valor (boss90). Calibrado con el simulador.
+const ENEMY_VS_CLASS_81 = {from:81, to:89, mult:{pesada:1.00, paladin:1.15, doblefilo:1.00, tirador:1.08, mago:0.67, hechicero:0.66},
+  // Jefe del 90: solo el Arquero, que en tres tandas de 200 combates salía en 17/22/28% (tope pedido: 20%).
+  boss90:{tirador:1.12}};
 function enemyVsClassMult(){
   const lvl = (state.dungeon && state.dungeon.level) || 0;
+  if(lvl === 90) return ENEMY_VS_CLASS_81.boss90[state.char.style] || 1;
   if(lvl < ENEMY_VS_CLASS_81.from || lvl > ENEMY_VS_CLASS_81.to) return 1;
   return ENEMY_VS_CLASS_81.mult[state.char.style] || 1;
 }
@@ -5434,7 +5437,7 @@ async function fetchProfile(userId){
 /* ============================================================
    DUNGEON LEVELS (1-60)
    ============================================================ */
-const LEVEL_CAP = 90;      // 2026-10-09: Abismo en llamas (81-90), todavía cerrado a los jugadores (FLOORS_81_90_OPEN). La base ya admite hasta 100 (migración 0039).
+const LEVEL_CAP = 90;      // 2026-10-09: Abismo en llamas (81-90). La base ya admite hasta 100 (migración 0039).
 const CHAR_LEVEL_CAP = 90; // tope de nivel de personaje pedido
 // CIERRE TEMPORAL de los pisos 61-80 (decisión de ariochbu, 2026-10-08 noche):
 // la gente empezó a jugarlos mientras se estaban rehaciendo. Hasta nuevo aviso
@@ -5445,10 +5448,9 @@ const CHAR_LEVEL_CAP = 90; // tope de nivel de personaje pedido
 const FLOORS_61_80_OPEN = true; // reabiertos el 2026-10-09 por orden de ariochbu, con los guardianes y el balance nuevos
 // (?cerrado=1 en localhost fuerza el modo cerrado, para probar lo que verá el jugador)
 const FLOORS_OPEN_HERE = FLOORS_61_80_OPEN || (/^(localhost|127\.0\.0\.1)$/.test(location.hostname) && !/[?&]cerrado=1/.test(location.search));
-// Pisos 81-90 (2026-10-09): NO se liberan hasta que ariochbu lo ordene. Los
-// jugadores siguen topando en 80; en localhost están abiertos para simular y
-// calibrar (?cerrado=1 también los cierra ahí). Para abrir: FLOORS_81_90_OPEN = true.
-const FLOORS_81_90_OPEN = false;
+// Pisos 81-90 (2026-10-09): con FLOORS_81_90_OPEN = false los jugadores topan en
+// 80 y solo localhost los ve (?cerrado=1 también los cierra ahí).
+const FLOORS_81_90_OPEN = true; // liberados el 2026-10-09 por orden de ariochbu, tras las simulaciones por senda
 const FLOORS_81_90_HERE = FLOORS_81_90_OPEN || (/^(localhost|127\.0\.0\.1)$/.test(location.hostname) && !/[?&]cerrado=1/.test(location.search));
 const OPEN_LEVEL_CAP = !FLOORS_OPEN_HERE ? 60 : FLOORS_81_90_HERE ? LEVEL_CAP : 80;
 const OPEN_CHAR_LEVEL_CAP = !FLOORS_OPEN_HERE ? 60 : FLOORS_81_90_HERE ? CHAR_LEVEL_CAP : 80;
@@ -10433,7 +10435,9 @@ const DECADE_BOSS_TUNING = {
   // Medido con 200 combates por senda en 2.38/2.55: Asesino 23, Arquero 21, Mago 13, Guerrero 12, Paladín 12, Hechicero 8;
   // se sube el ataque a 2.60 para bajar a los dos primeros. El reparto entre sendas sale del propio jefe
   // (castigo al frente x1.13, área a la retaguardia al 50%, sin resistencia al veneno), no de este número.
-  90: {hp:2.38, atk:2.60},  // El Carcelero
+  // Control antes de liberar (200 por senda, ya sin debilidad al hielo: el Mago subía a 27%): 2.38/2.64 →
+  // Asesino 16, Mago 17, Hechicero 10, Guerrero 9, Paladín 9, Arquero 28 (se le corrige aparte, ver ENEMY_VS_CLASS_81.boss90).
+  90: {hp:2.38, atk:2.64},  // El Carcelero
 };
 // BETA (con BETA_ALLY_UNLOCKS): en las décadas 0-3 el jugador lleva menos
 // aliados (0 hasta el Ogro, 1 hasta la Matriarca, 2 hasta Riakis, 3 hasta
@@ -14380,7 +14384,7 @@ if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
   window.__combat = ()=> combat; // inspección del combate en curso (simulaciones que no terminan)
   window.__tanque = TANK_TUNE; window.__lvl30 = LEVEL30_SKILL_BONUS; window.__healLock = ENEMY_HEAL_LOCK; window.__gFrente = GUARDIAN_VS_FRONT; window.__cTanque = COMMON_VS_TANK; window.__escolta = GUARDIAN_ESCORT;
   window.__palRes = PALADIN_ESP_RES; window.__savia = SAVIA_PODRIDA;
-  window.__frente81 = {guardian: GUARDIAN_VS_FRONT_81, comun: COMMON_VS_TANK_81, invocacion: ASCUA_TPL, clase: ENEMY_VS_CLASS_81.mult};
+  window.__frente81 = {guardian: GUARDIAN_VS_FRONT_81, comun: COMMON_VS_TANK_81, invocacion: ASCUA_TPL, clase: ENEMY_VS_CLASS_81.mult, clase90: ENEMY_VS_CLASS_81.boss90};
   // Defensa de una senda con el equipo de referencia puesto: __defensa('paladin', 79)
   window.__defensa = (styleId, level, gear)=>{
     const saved = {state, combat, sim: simMode};
@@ -15509,6 +15513,7 @@ const DUNGEON_MUSIC_RANGES = [
   // 61-80 aún sin pista propia: reusan las de un tramo anterior de ambiente parecido.
   {max:70, src:'./src/assets/audio/dungeon-31-40.mp4'},
   {max:80, src:'./src/assets/audio/dungeon-11-20.mp4'},
+  {max:90, src:'./src/assets/audio/dungeon-31-40.mp4'}, // Abismo en llamas: sin pista propia todavía
 ];
 function dungeonTrackFor(level){
   const range = DUNGEON_MUSIC_RANGES.find(r=>level<=r.max);
