@@ -3,7 +3,7 @@
 import { supabase } from './supabaseClient.js';
 import * as auth from './auth.js';
 import { syncBattleStage, playBattleAnim } from './battleStage.js?v=102';
-import { mountLabyrinth } from './labyrinthMap.js?v=5';
+import { mountLabyrinth } from './labyrinthMap.js?v=6';
 import { CLASS_SPRITES, ENEMY_SPRITES, playerSpriteFor, playerIllustrationFor, enemySpriteFor, ALLY_TEMPLATE_SPRITES } from './battleSprites.js?v=86';
 
 /* ============================================================

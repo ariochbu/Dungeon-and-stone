@@ -121,7 +121,7 @@ function roundRect(x, y, w, h, r){
   ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
 }
 function drawBackdrop(){
-  const d = Math.min(5, Math.floor(((opts.level || 1) - 1)/10));
+  const d = Math.min(7, Math.floor(((opts.level || 1) - 1)/10)); // hay fondo ilustrado hasta 71-80
   const bg = img(`src/assets/fondos/${d*10 + 1}-${d*10 + 10}.jpg?v=2`);
   if(bg){
     const k = Math.max(VIEW_W/bg.naturalWidth, VIEW_H/bg.naturalHeight)*1.15, w = bg.naturalWidth*k, h = bg.naturalHeight*k;
