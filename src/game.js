@@ -572,8 +572,8 @@ const SKILLS = {
   },
   grito_guerra: {
     id:'grito_guerra', name:'Grito de guerra', cost:{tipo:'espiritu', valor:10}, utility:'buff_self',
-    applySelf:{name:'Furioso', duration:2, dmgMult:1.3, evasionDelta:-10, incomingDmgReduction:0.1}, // reducción 0.2 → 0.1 (2026-10-09)
-    desc: ()=> `+30% daño físico y -10% daño recibido durante 2 turnos, a cambio de -10% evasión.` +
+    applySelf:{name:'Furioso', duration:2, dmgMult:1.3, evasionDelta:-10}, // sin reducción de daño recibido (era 0.2; decisión de ariochbu, 2026-10-09)
+    desc: ()=> `+30% daño físico durante 2 turnos, a cambio de -10% evasión.` +
       (state && state.char && state.char.level>=LEVEL_30_MILESTONE ? ' Además te cura un 10% de tu vida máxima y da +10% de daño a tus aliados durante 2 turnos.' : ''),
     targetMode:'self'
   },
@@ -698,7 +698,7 @@ const SKILLS = {
     id:'furia_titan', name:'Furia del Titán', cost:null, dmgType:'fisico', mult:1.15, ultimate:true,
     requiresPos:'frente', targetMode:'all',
     consumes:{name:'Tambaleo', bonusMult:1.6, applies:{name:'Aturdido', duration:1}},
-    desc:'Ultimate del Guerrero. Golpea a todos los enemigos; a los que estén Tambaleantes les hace mucho más daño y puede aturdirlos (50%).'
+    desc:'Ultimate del Guerrero. Golpea a todos los enemigos; a los que estén Tambaleantes les hace mucho más daño y puede aturdirlos (35%).'
   },
   vals_sangre: {
     id:'vals_sangre', name:'Vals de sangre', cost:null, dmgType:'fisico', mult:0.5, ultimate:true,
@@ -4466,7 +4466,7 @@ function enemyHealLocked(){
 // blockPierce: cuanto más profundo el piso, más probable que un golpe enemigo
 // ignore el bloqueo: 0 hasta `from`, y +`perLevel` por nivel a partir de ahí.
 // Valores elegidos tras medir el 2026-10-09 (Guerrero 93% → ~66% y Paladín 76% → ~64% en pisos 65-77).
-const TANK_TUNE = {comboStunChance:0.5, blockPierce:{from:1, perLevel:0.0075, max:0.8}};
+const TANK_TUNE = {comboStunChance:0.35, blockPierce:{from:1, perLevel:0.0075, max:0.8}};
 function blockPierceChance(){
   const lvl = (state.dungeon && state.dungeon.level) || 1, B = TANK_TUNE.blockPierce;
   return Math.max(0, Math.min(B.max, (lvl - B.from) * B.perLevel));
@@ -11095,7 +11095,7 @@ function applyStatus(target, statusDef, isPlayer){
 const STATUS_INFO = {
   Tambaleo:     {buff:false, desc:'Tambalea: el próximo Machacar hace mucho más daño y lo aturde.'},
   Aturdido:     {buff:false, desc:'Pierde su próximo turno por completo.'},
-  Furioso:      {buff:true,  desc:'+30% daño físico y -10% daño recibido, a cambio de -10% evasión.'},
+  Furioso:      {buff:true,  desc:'+30% daño físico, a cambio de -10% evasión.'},
   Inspirado:    {buff:true,  desc:'+daño gracias al Grito de guerra de tu compañero.'},
   Sangrado:     {buff:false, desc:'Sufre daño cada turno según el Físico de quien lo causó. Se acumula hasta x3.'},
   Veneno:       {buff:false, desc:'Sufre daño de veneno cada turno según la Habilidad de quien lo causó. Se acumula hasta x3.'},
@@ -13699,7 +13699,7 @@ function simBuildState(cfg){
 // al enemigo más grande (su Veneno necesita apilarse en uno solo; persiguiendo
 // siempre al más débil se pasaba el combate contra las invocaciones del jefe).
 function simTargetIndex(){
-  if(state.char.style !== 'hechicero') return autoPickEnemyIndex();
+  if(!['hechicero', 'tirador', 'mago'].includes(state.char.style)) return autoPickEnemyIndex();
   const living = livingEnemies();
   if(!living.length) return -1;
   // contra un jefe, al jefe; contra un grupo normal, al más débil (menos enemigos pegando y el Veneno se contagia al morir)
@@ -13709,7 +13709,7 @@ function simTargetIndex(){
 // Habilidades sin daño que el simulador sí sabe usar (antes solo elegía las de
 // daño, así que el Paladín nunca levantaba Muro de Fe ni su escudo, y el
 // Guerrero nunca gritaba ni remataba con Machacar).
-const SIM_UTILITY_SKILLS = new Set(['muro_de_fe', 'escudo_del_juramento', 'grito_guerra']);
+const SIM_UTILITY_SKILLS = new Set(['muro_de_fe', 'escudo_del_juramento', 'grito_guerra', 'marca_cazador']);
 function simPickSkill(usable){
   const byDmg = ()=> usable.filter(id=> SKILLS[id].mult).sort((a, b)=> (SKILLS[b].mult||0) - (SKILLS[a].mult||0))[0] || 'ataque_basico';
   const can = (id)=> usable.includes(id);
@@ -13748,6 +13748,27 @@ function simPickSkill(usable){
     if(can('machacar') && front && hasStatus(front.statuses, 'Tambaleo')) return 'machacar';
     if(can('furia_titan') && (livingEnemies().length >= 3 || (front && hasStatus(front.statuses, 'Tambaleo')))) return 'furia_titan';
     return can('golpe_bruto') ? 'golpe_bruto' : dmgOnly();
+  }
+  // Arquero (2026-10-09): marca al enemigo fuerte y descarga sobre la marca.
+  if(state.char.style === 'tirador' && target && !window.__simDistanciaTonto){
+    const marcado = !!hasStatus(target.statuses, 'Marcado');
+    const fuerte = !!(target.tpl && (target.tpl.boss || target.tpl.elite));
+    if(can('marca_cazador') && !marcado && fuerte) return 'marca_cazador';
+    if(can('disparo_cazador_final') && (marcado || !can('marca_cazador'))) return 'disparo_cazador_final';
+    // Sin Lluvia de flechas: a 40 MP por uso lo dejaba seco en dos combates y medía 0-29% (peor que sin rotación).
+    return can('disparo_certero') ? 'disparo_certero' : byDmg();
+  }
+  // Mago (2026-10-09): Cataclismo contra grupos; Quemadura al tope y después
+  // hielo (Ralentizado + Choque Térmico). Explosión arcana solo si no hay
+  // Quemadura que perder: la consumiría entera.
+  if(state.char.style === 'mago' && target && !window.__simDistanciaTonto){
+    const q = hasStatus(target.statuses, 'Quemadura'), lento = !!hasStatus(target.statuses, 'Ralentizado');
+    const qMax = q && (q.stacks||1) >= skillBonus('bola_fuego','maxStack',3) && (q.duration||0) > 1;
+    if(can('cataclismo_elemental') && livingEnemies().length >= 2) return 'cataclismo_elemental';
+    if(can('explosion_arcana') && lento && !q) return 'explosion_arcana';
+    if(can('bola_fuego') && !qMax) return 'bola_fuego';
+    if(can('lanza_hielo')) return 'lanza_hielo';
+    return byDmg();
   }
   if(state.char.style !== 'hechicero') return byDmg();
   if(!target) return byDmg();
@@ -13816,7 +13837,7 @@ async function simFightLoop(){
         return true;
       };
       const best = simPickSkill(skillIds.filter(ok));
-      await playerUseSkill(best, resolvedTargetMode(SKILLS[best]) === 'any' ? autoPickEnemyIndex() : null);
+      await playerUseSkill(best, resolvedTargetMode(SKILLS[best]) === 'any' ? simTargetIndex() : null); // mismo objetivo que evaluó simPickSkill (antes: el más débil)
       if(combat && !combat.over && !simOutcome && combat.turnCount === tc) await playerUseSkill('ataque_basico', resolvedTargetMode(SKILLS.ataque_basico) === 'any' ? autoPickEnemyIndex() : null);
       if(combat && !combat.over && !simOutcome && combat.turnCount === tc){ combat.turnCount++; await endPlayerTurn(); }
     }
