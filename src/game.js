@@ -301,11 +301,43 @@ const STORY_SCENES = {
     'El Corazón Marchito deja caer sus raíces. No se defiende: late una vez, despacio. «Pódame». Cuando el último latido se apaga, las flores se cierran, los jardineros dejan de moverse y la luz verde se va. Por primera vez desde que entraste, el bosque está muerto de verdad.',
     'Entonces, desde abajo, sube una luz naranja. Calor. Ceniza. El jardín no era una amenaza: era un filtro. Absorbía lo que subía de las capas de más abajo… y acabas de arrancarlo.',
   ]},
-  90: {title:'El que cierra', pages:[
-    'El Carcelero suelta la alabarda. De sus nueve llaves solo una sigue encendida. «Nosotros no somos lo que está preso», dice. «Somos los que cierran. Cada jefe que mataste arriba era un cerrojo, y los conté caer uno por uno.»',
-    'Te tiende la última llave, sin fuerza para sostenerla. «Abajo no hay fuego. Hay silencio, y una sola celda. Él bajó como tú, antes que nadie… y fue el primero en volver.» La llave está fría. El abismo entero se apaga detrás de ti.',
-  ]},
+  // Dos desenlaces (pedido explícito 2026-10-09): el jugador decide si perdona al
+  // Carcelero o lo remata. La elección se hace una sola vez, la primera vez que
+  // se abre la escena, y se guarda en characters.story_choices (migración 0042;
+  // sin la columna, en este navegador). `art` es el sufijo de sus ilustraciones:
+  // perdón usa 90_1/90_2 y muerte 90m_1/90m_2. Todavía no cambia nada del juego.
+  90: {title:'El Carcelero',
+    choice:{title:'El Carcelero', text:'El Carcelero cae sobre una rodilla y suelta la alabarda. De sus nueve llaves solo una sigue encendida. No levanta las manos para defenderse. Espera.',
+      options:[{id:'perdon', label:'Bajar el arma'}, {id:'muerte', label:'Rematarlo'}]},
+    variants:{
+      perdon:{title:'El que cierra', art:'', pages:[
+        '«Nosotros no somos lo que está preso», dice el Carcelero cuando bajas el arma. «Somos los que cierran. Cada jefe que mataste arriba era un cerrojo, y los conté caer uno por uno.»',
+        'Te tiende la última llave, sin fuerza para sostenerla. «Abajo no hay fuego. Hay silencio, y una sola celda. Él bajó como tú, antes que nadie… y fue el primero en volver.» La llave está fría. El abismo entero se apaga detrás de ti.',
+      ]},
+      muerte:{title:'El último cerrojo', art:'m', pages:[
+        'No se defiende. El golpe cae y el Carcelero se apaga como una brasa bajo la lluvia. «Nosotros no éramos lo que estaba preso», alcanza a decir. «Éramos los que cerraban.» Las nueve llaves ruedan por el suelo, frías.',
+        'Recoges la última de entre la ceniza. Nadie te la entrega; nadie te dice qué abre. Abajo no hay fuego: hay silencio, y una sola celda. El abismo se apaga detrás de ti y, con él, el último que sabía por qué estaba cerrada.',
+      ]},
+    }},
 };
+// Elecciones de historia por piso ({90:'perdon'|'muerte'}).
+function loadLocalStoryChoices(charId){
+  try{ return JSON.parse(localStorage.getItem('ds_story_' + charId) || '{}'); }catch(e){ return {}; }
+}
+function setStoryChoice(level, id){
+  if(!state.char.storyChoices) state.char.storyChoices = {};
+  state.char.storyChoices[level] = id;
+  if(!state.char.storyColumn){ try{ localStorage.setItem('ds_story_' + state.char.id, JSON.stringify(state.char.storyChoices)); }catch(e){} }
+  save();
+}
+// La escena que le toca a este personaje: la única, o la del desenlace que eligió
+// (null si el piso tiene desenlaces y todavía no eligió).
+function storyFor(level){
+  const st = STORY_SCENES[level];
+  if(!st || !st.variants) return st ? {title: st.title, pages: st.pages, art: String(level)} : null;
+  const v = st.variants[(state.char.storyChoices || {})[level]];
+  return v ? {title: v.title, pages: v.pages, art: level + (v.art || '')} : null;
+}
 // Crónicas (ciudad): tres apartados. Historia — las escenas ya desbloqueadas
 // se pueden volver a ver; las que faltan aparecen selladas, sin título, para
 // no adelantar nada. Bestiario y Música se sumaron el 2026-10-07.
@@ -329,7 +361,7 @@ function storyListHTML(){
     <div class="cron-grid">${levels.map((lv, i)=>{
       const open = beaten >= lv/10;
       return open
-        ? `<button class="cron-card" data-cron="${lv}"><div class="cron-img" style="background-image:url('src/assets/historia/${lv}_1.jpg?v=2'), url('src/assets/fondos/${lv-9}-${lv}.jpg')"></div><div class="cron-txt"><small>Capítulo ${i+1} · Piso ${lv}</small><b>${STORY_SCENES[lv].title}</b></div></button>`
+        ? `<button class="cron-card" data-cron="${lv}"><div class="cron-img" style="background-image:url('src/assets/historia/${(storyFor(lv)||{art:lv}).art}_1.jpg?v=2'), url('src/assets/fondos/${lv-9}-${lv}.jpg')"></div><div class="cron-txt"><small>Capítulo ${i+1} · Piso ${lv}</small><b>${(storyFor(lv)||STORY_SCENES[lv]).title}</b></div></button>`
         : `<div class="cron-card locked"><div class="cron-img"><span>🔒</span></div><div class="cron-txt"><small>Capítulo ${i+1}</small><b>Derrota al jefe del piso ${lv}</b></div></div>`;
     }).join('')}</div>`;
 }
@@ -412,8 +444,14 @@ function soundtrackHTML(){
     <p class="ost-thanks">Toda la música pertenece a sus compositores y a quienes tienen sus derechos. Gracias a cada uno de ellos: sin estas piezas el laberinto no sonaría igual.</p>`;
 }
 function showStoryScenes(level, onDone){
-  const story = STORY_SCENES[level];
-  if(!story){ onDone(); return; }
+  const def = STORY_SCENES[level];
+  if(!def){ onDone(); return; }
+  const story = storyFor(level);
+  if(!story){
+    showChoiceOverlay(def.choice.title, def.choice.text, def.choice.options.map((o, i)=> ({label: o.label, primary: i===0,
+      onClick: ()=>{ setStoryChoice(level, o.id); showStoryScenes(level, onDone); }})));
+    return;
+  }
   const div = document.createElement('div');
   div.className = 'overlay-msg story-ov';
   document.body.appendChild(div);
@@ -423,7 +461,7 @@ function showStoryScenes(level, onDone){
   // página se veía ese otro dibujo por un instante. Ahora las ilustraciones se
   // precargan al abrir, el marco espera en negro y el fondo de la década solo
   // aparece si la ilustración de esa página no existe.
-  const artSrc = (i)=> `src/assets/historia/${level}_${i+1}.jpg?v=2`;
+  const artSrc = (i)=> `src/assets/historia/${story.art}_${i+1}.jpg?v=2`;
   const artReady = new Set();
   story.pages.forEach((_, i)=>{ const im = new Image(); im.onload = ()=> artReady.add(i); im.src = artSrc(i); });
   let step = 0;
@@ -2216,7 +2254,7 @@ const DECADE_BESTIARY = [
     // Fases: 1) sereno, golpes lentos y pesados; 2) (<60%) se enciende: sus
     // llaves arden y todo quema; 3) (<20%) casi apagado: ya no invoca ni
     // castiga, solo golpea sin fuerza. El sprite cambia con las fases.
-    decadeBoss: {id:'carcelero', vsFront:VS_FRONT_CARCELERO, immuneRetroceso:true, reductionWhileSummonsAlive:0.25, name:'El Carcelero', icon:'🗝️', hp:6.2, atk:1.85, res:rs(25,35,0,0,30), boss:true, frontline:true,
+    decadeBoss: {id:'carcelero', vsFront:VS_FRONT_CARCELERO, immuneRetroceso:true, reductionWhileSummonsAlive:0.25, name:'El Carcelero', icon:'🗝️', hp:6.2, atk:1.85, res:rs(25,35,-10,0,30), boss:true, frontline:true,
       phases:[{below:0.60, msg:'se enciende: <b>sus nueve llaves arden</b> (fase 2).'},{below:0.20, msg:'cae sobre una rodilla, casi apagado. <b>Ya no quiere pelear</b> (fase 3).'}],
       abilities:{
         llaves_al_rojo:{label:'Llaves al Rojo', utility:'self_buff', oncePerCombat:true, instant:true, condition:(ctx)=>ctx.selfHpPct<0.60, selfBuff:{name:'Llaves al Rojo', duration:99, dmgMult:1.15}},
@@ -5061,6 +5099,7 @@ function characterToRow(){
     ...(state.char.titleColumn ? {title_choice: state.char.titleChoice===undefined ? null : state.char.titleChoice} : {}),
     ...(state.char.bossesColumn ? {bosses_beaten: myBossesBeaten()} : {}),
     ...(state.char.sacerdoteSColumn ? {sacerdote_s_granted: !!state.char.sacerdoteSGranted} : {}),
+    ...(state.char.storyColumn ? {story_choices: state.char.storyChoices || {}} : {}),
     ...(state.char.bestiaryColumn ? {bestiary: state.char.bestiary || []} : {}),
     ...(state.char.recordTurnsColumn ? {record_turns: state.char.recordTurns || null, record_turns_level: state.char.recordTurnsLevel || null} : {}),
     ...(sessionEnforced ? {last_session: SESSION_ID} : {})
@@ -5147,6 +5186,7 @@ function rowToState(row){
       titleChoice: row.title_choice===undefined ? null : row.title_choice, titleColumn: row.title_choice !== undefined,
       bossesBeaten: row.bosses_beaten || 0, bossesColumn: row.bosses_beaten !== undefined, firstRetornado: !!row.first_retornado,
       sacerdoteSGranted: !!row.sacerdote_s_granted, sacerdoteSColumn: row.sacerdote_s_granted !== undefined,
+      storyChoices: row.story_choices !== undefined ? (row.story_choices || {}) : loadLocalStoryChoices(row.id), storyColumn: row.story_choices !== undefined,
       race: row.race, style: row.style,
       level: row.level, xp: row.xp, gold: row.gold, missionCurrency: row.mission_currency || 0,
       missionRerollCycle: row.mission_reroll_cycle || null, missionRerollCount: row.mission_reroll_count || 0,
@@ -10435,8 +10475,9 @@ const DECADE_BOSS_TUNING = {
   // Medido con 200 combates por senda en 2.38/2.55: Asesino 23, Arquero 21, Mago 13, Guerrero 12, Paladín 12, Hechicero 8;
   // se sube el ataque a 2.60 para bajar a los dos primeros. El reparto entre sendas sale del propio jefe
   // (castigo al frente x1.13, área a la retaguardia al 50%, sin resistencia al veneno), no de este número.
-  // Control antes de liberar (200 por senda, ya sin debilidad al hielo: el Mago subía a 27%): 2.38/2.64 →
-  // Asesino 16, Mago 17, Hechicero 10, Guerrero 9, Paladín 9, Arquero 28 (se le corrige aparte, ver ENEMY_VS_CLASS_81.boss90).
+  // Control antes de liberar (200 por senda): Asesino 16-21, Hechicero 7-10, Guerrero 9-11, Paladín 9, Arquero 22-28
+  // (se le corrige aparte, ver ENEMY_VS_CLASS_81.boss90) y Mago 27 con la debilidad al hielo del jefe. Esa debilidad se
+  // QUEDA por decisión de ariochbu (2026-10-09): es la ventaja de su senda, aunque pase del 20%.
   90: {hp:2.38, atk:2.64},  // El Carcelero
 };
 // BETA (con BETA_ALLY_UNLOCKS): en las décadas 0-3 el jugador lleva menos
