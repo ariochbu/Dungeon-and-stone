@@ -15267,8 +15267,9 @@ function renderUsernameScreen(){
 // personaje espera de pie alrededor de la hoguera, con su sprite de combate en
 // reposo. Se elige tocándolo; abajo sale su ficha con Jugar y Eliminar. Las
 // plazas libres son siluetas, y la primera sirve para crear un personaje.
-const CAMP_SPOTS = [ // % del escenario: x, y de los pies. Los de la derecha miran hacia el fuego.
-  {x:33, y:62}, {x:67, y:62, flip:true}, {x:17, y:74}, {x:83, y:74, flip:true}, {x:30, y:90}, {x:70, y:90, flip:true},
+const CAMP_SPOTS = [ // % del escenario: x, y de los pies (mx, my en móvil, con la ilustración vertical). Los de la derecha miran hacia el fuego.
+  {x:33, y:60, mx:28, my:50}, {x:67, y:60, mx:72, my:50, flip:true}, {x:19, y:73, mx:16, my:66}, {x:81, y:73, mx:84, my:66, flip:true},
+  {x:34, y:92, mx:30, my:83}, {x:66, y:92, mx:70, my:83, flip:true},
 ];
 let campSelectedId = null;
 function renderCharacterSelect(rows){
@@ -15277,7 +15278,7 @@ function renderCharacterSelect(rows){
   const canCreateMore = rows.length < 6;
   const spots = CAMP_SPOTS.map((sp, i)=>{
     const row = rows[i];
-    const pos = `left:${sp.x}%; top:${sp.y}%; z-index:${Math.round(sp.y)};`;
+    const pos = `--x:${sp.x}%; --y:${sp.y}%; --z:${Math.round(sp.y)}; --mx:${sp.mx}%; --my:${sp.my}%; --mz:${Math.round(sp.my)};`;
     if(row){
       const s = STYLES[row.style];
       return `<button class="camp-hero ${row.id===campSelectedId?'on':''} ${sp.flip?'flip':''}" data-hero="${row.id}" style="${pos}" aria-label="${row.nickname}">
