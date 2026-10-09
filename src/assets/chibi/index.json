@@ -246,6 +246,17 @@
    4
   ]
  },
+ "enemigo_alcaide_menor": {
+  "bh": 128,
+  "ch": 130,
+  "cw": 196,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
  "enemigo_alfa_manada": {
   "bh": 128,
   "ch": 133,
@@ -283,6 +294,17 @@
   "bh": 128,
   "ch": 132,
   "cw": 182,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_arpia_hollin": {
+  "bh": 128,
+  "ch": 132,
+  "cw": 238,
   "frames": [
    4,
    6,
@@ -411,6 +433,50 @@
    4
   ]
  },
+ "enemigo_carcelero": {
+  "bh": 128,
+  "ch": 141,
+  "cw": 184,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_carcelero_ceniza": {
+  "bh": 128,
+  "ch": 152,
+  "cw": 206,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_carcelero_f2": {
+  "bh": 128,
+  "ch": 136,
+  "cw": 194,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_carcelero_f3": {
+  "bh": 128,
+  "ch": 132,
+  "cw": 138,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
  "enemigo_cazador_veterano": {
   "bh": 128,
   "ch": 132,
@@ -481,6 +547,17 @@
   "bh": 128,
   "ch": 131,
   "cw": 204,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_contador_condenas": {
+  "bh": 128,
+  "ch": 130,
+  "cw": 172,
   "frames": [
    4,
    6,
@@ -565,10 +642,32 @@
    4
   ]
  },
+ "enemigo_dama_grillete": {
+  "bh": 128,
+  "ch": 132,
+  "cw": 222,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
  "enemigo_devoradora_nido": {
   "bh": 128,
   "ch": 133,
   "cw": 206,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_diablillo_llavero": {
+  "bh": 128,
+  "ch": 131,
+  "cw": 232,
   "frames": [
    4,
    6,
@@ -631,6 +730,17 @@
    4
   ]
  },
+ "enemigo_el_fundidor": {
+  "bh": 128,
+  "ch": 130,
+  "cw": 150,
+  "frames": [
+   5,
+   6,
+   2,
+   5
+  ]
+ },
  "enemigo_el_inversor": {
   "bh": 128,
   "ch": 130,
@@ -645,6 +755,17 @@
  "enemigo_enredadera_viuda": {
   "bh": 128,
   "ch": 137,
+  "cw": 232,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_escriba_condenas": {
+  "bh": 128,
+  "ch": 135,
   "cw": 232,
   "frames": [
    4,
@@ -723,6 +844,28 @@
   "bh": 128,
   "ch": 136,
   "cw": 210,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_fogonero": {
+  "bh": 128,
+  "ch": 130,
+  "cw": 176,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_forjador_cadenas": {
+  "bh": 128,
+  "ch": 139,
+  "cw": 226,
   "frames": [
    4,
    6,
@@ -939,6 +1082,17 @@
    4
   ]
  },
+ "enemigo_horno_camina": {
+  "bh": 128,
+  "ch": 133,
+  "cw": 174,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
  "enemigo_imitador_formacion": {
   "bh": 128,
   "ch": 130,
@@ -1119,6 +1273,17 @@
   "bh": 128,
   "ch": 132,
   "cw": 204,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_marcador": {
+  "bh": 128,
+  "ch": 141,
+  "cw": 270,
   "frames": [
    4,
    6,
@@ -1313,6 +1478,17 @@
    4
   ]
  },
+ "enemigo_perro_grillete": {
+  "bh": 128,
+  "ch": 130,
+  "cw": 190,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
  "enemigo_polilla_funeraria": {
   "bh": 128,
   "ch": 133,
@@ -1324,10 +1500,43 @@
    4
   ]
  },
+ "enemigo_portallaves": {
+  "bh": 128,
+  "ch": 134,
+  "cw": 230,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_preso_calcinado": {
+  "bh": 128,
+  "ch": 130,
+  "cw": 222,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
  "enemigo_puerta_camina": {
   "bh": 128,
   "ch": 138,
   "cw": 178,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_puerta_hierro_vivo": {
+  "bh": 128,
+  "ch": 130,
+  "cw": 148,
   "frames": [
    4,
    6,
@@ -1434,6 +1643,17 @@
    5
   ]
  },
+ "enemigo_sabuesa_tres_collares": {
+  "bh": 128,
+  "ch": 130,
+  "cw": 184,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
  "enemigo_sabueso_invertido": {
   "bh": 128,
   "ch": 136,
@@ -1460,6 +1680,17 @@
   "bh": 128,
   "ch": 138,
   "cw": 206,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_segundo_carcelero": {
+  "bh": 128,
+  "ch": 141,
+  "cw": 200,
   "frames": [
    4,
    6,
@@ -1643,6 +1874,17 @@
    4
   ]
  },
+ "enemigo_testigo_ciego": {
+  "bh": 128,
+  "ch": 142,
+  "cw": 250,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
  "enemigo_tigre_sable": {
   "bh": 128,
   "ch": 138,
@@ -1735,6 +1977,17 @@
   "bh": 128,
   "ch": 130,
   "cw": 144,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_verdugo_brasa": {
+  "bh": 128,
+  "ch": 151,
+  "cw": 248,
   "frames": [
    4,
    6,

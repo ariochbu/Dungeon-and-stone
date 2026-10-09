@@ -13,7 +13,7 @@
 // combat.enemies/combat.allies/combat.lastActor/combat.lastAction y dibuja.
 // No aplica daño, no decide turnos, no cambia HP.
 
-import { CLASS_SPRITES, ALLY_SPRITES, ENEMY_SPRITES, playerSpriteFor, RACE_SIZE, ALLY_TEMPLATE_SPRITES, enemySpriteFor, enemyChibiKey } from './battleSprites.js?v=89';
+import { CLASS_SPRITES, ALLY_SPRITES, ENEMY_SPRITES, playerSpriteFor, RACE_SIZE, ALLY_TEMPLATE_SPRITES, enemySpriteFor, enemyChibiKey } from './battleSprites.js?v=90';
 
 import { SpriteAnim, sheetFromMeta } from './spriteAnim.js?v=2';
 
@@ -26,7 +26,7 @@ const SIZE = TILE * SCALE; // 48px por actor a escala base (sprites fijos sin ve
 // tamaño de celda y los cuadros de cada una. Quien no tenga tira (monstruos de
 // décadas aún sin arte chibi) sigue con su sprite fijo de siempre.
 let CHIBI = {};
-fetch('src/assets/chibi/index.json?v=7').then(r=> r.json()).then(j=>{ CHIBI = j; }).catch(()=>{});
+fetch('src/assets/chibi/index.json?v=8').then(r=> r.json()).then(j=>{ CHIBI = j; }).catch(()=>{});
 const chibiImgs = {}; // key -> Image (cargando o lista)
 function chibiAnimFor(key){
   const meta = CHIBI[key];

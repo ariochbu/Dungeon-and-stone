@@ -533,6 +533,34 @@ def find_frames(alpha, relaxed=False, nrows=4):
     return [[bx[:4] for bx in line if bx[4] >= 0.25 * ref_area] for line in rows]
 
 
+# Láminas donde dos cuadros de ataque se tocan tanto (un chorro, un tajo largo) que
+# la detección los deja pegados en uno solo: se cortan por la cuadrícula fija de 6
+# columnas. Revisar la tira después: lo que invade la celda vecina queda recortado.
+REJILLA_FIJA = {'enemigo_el_fundidor'}  # con el Último Jardinero (guadaña muy ancha) la cuadrícula recorta de más: se deja la detección normal
+
+
+def find_frames_grid(alpha, nrows=4, ncols=6):
+    h, w = alpha.shape
+    bands = row_bands(alpha)
+    if len(bands) != nrows:
+        bands = [(round(i * h / nrows), round((i + 1) * h / nrows)) for i in range(nrows)]
+    rows = []
+    for a, b in bands:
+        line = []
+        for c in range(ncols):
+            x0, x1 = round(c * w / ncols), round((c + 1) * w / ncols)
+            sub = alpha[a:b, x0:x1]
+            ys = np.nonzero(sub.sum(axis=1) > 1)[0]
+            xs = np.nonzero(sub.sum(axis=0) > 1)[0]
+            if ys.size and xs.size:
+                line.append((x0 + int(xs[0]), a + int(ys[0]), x0 + int(xs[-1]) + 1, a + int(ys[-1]) + 1, int(sub.sum())))
+        rows.append(line)
+    if not rows[0]:
+        return [[] for _ in bands]
+    ref_area = float(np.median([bx[4] for bx in rows[0]]))
+    return [[bx[:4] for bx in line if bx[4] >= 0.25 * ref_area] for line in rows]
+
+
 def build_strip(im, alpha, rows, flip=False, walk=False):
     rgba = np.dstack([np.asarray(im.convert('RGB')), (alpha * 255).astype(np.uint8)])
     src = Image.fromarray(rgba, 'RGBA')
@@ -677,7 +705,7 @@ def process(job):
             canvas.paste(pic, ((side - pic.width) // 2, side - pic.height))
             return 'retrato', name, f, canvas, None
         return 'retrato', name, f, cut_portrait(im, alpha, 520), None
-    rows = find_frames(alpha, relaxed=kind == 'enemigo', nrows=2 if walk else 4)
+    rows = find_frames_grid(alpha) if name in REJILLA_FIJA else find_frames(alpha, relaxed=kind == 'enemigo', nrows=2 if walk else 4)
     if any(not line for line in rows):
         return None, name, f, None, None
     sheet, meta = build_strip(im, alpha, rows, name in MIRA_IZQUIERDA, walk)

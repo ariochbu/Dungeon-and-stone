@@ -22,7 +22,7 @@ const BADGE = {
 };
 
 let CHIBI = {};
-fetch('src/assets/chibi/index.json?v=7').then(r=> r.json()).then(j=>{ CHIBI = j; }).catch(()=>{});
+fetch('src/assets/chibi/index.json?v=8').then(r=> r.json()).then(j=>{ CHIBI = j; }).catch(()=>{});
 const imgs = {};
 function img(src){
   if(!imgs[src]){ imgs[src] = new Image(); imgs[src].src = src; }
