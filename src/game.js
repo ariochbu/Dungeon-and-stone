@@ -567,13 +567,13 @@ const SKILLS = {
   machacar: {
     id:'machacar', name:'Machacar', cost:{tipo:'estamina', valor:20}, dmgType:'fisico', mult:0.7,
     requiresPos:'frente', consumes:{name:'Tambaleo', bonusMult:1.8, applies:{name:'Aturdido', duration:1}},
-    desc: ()=> `Si el objetivo está Tambaleante: lo aturde y hace x${skillBonus('machacar','comboBonusMult',1.8)} de daño.`,
+    desc: ()=> `Si el objetivo está Tambaleante: hace x${skillBonus('machacar','comboBonusMult',1.8)} de daño y tiene un ${Math.round(TANK_TUNE.comboStunChance*100)}% de aturdirlo.`,
     targetMode:'front'
   },
   grito_guerra: {
     id:'grito_guerra', name:'Grito de guerra', cost:{tipo:'espiritu', valor:10}, utility:'buff_self',
-    applySelf:{name:'Furioso', duration:2, dmgMult:1.3, evasionDelta:-10, incomingDmgReduction:0.2},
-    desc: ()=> `+30% daño físico y -20% daño recibido durante 2 turnos, a cambio de -10% evasión.` +
+    applySelf:{name:'Furioso', duration:2, dmgMult:1.3, evasionDelta:-10, incomingDmgReduction:0.1}, // reducción 0.2 → 0.1 (2026-10-09)
+    desc: ()=> `+30% daño físico y -10% daño recibido durante 2 turnos, a cambio de -10% evasión.` +
       (state && state.char && state.char.level>=LEVEL_30_MILESTONE ? ' Además te cura un 10% de tu vida máxima y da +10% de daño a tus aliados durante 2 turnos.' : ''),
     targetMode:'self'
   },
@@ -698,7 +698,7 @@ const SKILLS = {
     id:'furia_titan', name:'Furia del Titán', cost:null, dmgType:'fisico', mult:1.15, ultimate:true,
     requiresPos:'frente', targetMode:'all',
     consumes:{name:'Tambaleo', bonusMult:1.6, applies:{name:'Aturdido', duration:1}},
-    desc:'Ultimate del Guerrero. Golpea a todos los enemigos; a los que estén Tambaleantes los aturde y les hace mucho más daño.'
+    desc:'Ultimate del Guerrero. Golpea a todos los enemigos; a los que estén Tambaleantes les hace mucho más daño y puede aturdirlos (50%).'
   },
   vals_sangre: {
     id:'vals_sangre', name:'Vals de sangre', cost:null, dmgType:'fisico', mult:0.5, ultimate:true,
@@ -4460,6 +4460,16 @@ const ENEMY_HEAL_LOCK = {from:61, to:80, turns:4};
 function enemyHealLocked(){
   const lvl = (state.dungeon && state.dungeon.level) || 0;
   return !!combat && lvl >= ENEMY_HEAL_LOCK.from && lvl <= ENEMY_HEAL_LOCK.to && combat.turnCount < (combat.enemyHealReadyAt||0);
+}
+// Ajustes de los tanques en prueba (2026-10-09). comboStunChance: probabilidad
+// de que el combo de Machacar / Furia del Titán aturda (antes siempre).
+// blockPierce: cuanto más profundo el piso, más probable que un golpe enemigo
+// ignore el bloqueo: 0 hasta `from`, y +`perLevel` por nivel a partir de ahí.
+// Valores elegidos tras medir el 2026-10-09 (Guerrero 93% → ~66% y Paladín 76% → ~64% en pisos 65-77).
+const TANK_TUNE = {comboStunChance:0.5, blockPierce:{from:1, perLevel:0.0075, max:0.8}};
+function blockPierceChance(){
+  const lvl = (state.dungeon && state.dungeon.level) || 1, B = TANK_TUNE.blockPierce;
+  return Math.max(0, Math.min(B.max, (lvl - B.from) * B.perLevel));
 }
 const SAVIA_PODRIDA = {from:71, to:80, witherPct:0.16}; // efecto de campo del Hechicero, ver saviaPodridaActive()
 const PALADIN_ESP_RES = {rate:0.05, cap:10}; // medido 2026-10-08: con 15 o más el Paladín pasa de 67% contra el jefe del 80
@@ -11085,7 +11095,7 @@ function applyStatus(target, statusDef, isPlayer){
 const STATUS_INFO = {
   Tambaleo:     {buff:false, desc:'Tambalea: el próximo Machacar hace mucho más daño y lo aturde.'},
   Aturdido:     {buff:false, desc:'Pierde su próximo turno por completo.'},
-  Furioso:      {buff:true,  desc:'+30% daño físico y -20% daño recibido, a cambio de -10% evasión.'},
+  Furioso:      {buff:true,  desc:'+30% daño físico y -10% daño recibido, a cambio de -10% evasión.'},
   Inspirado:    {buff:true,  desc:'+daño gracias al Grito de guerra de tu compañero.'},
   Sangrado:     {buff:false, desc:'Sufre daño cada turno según el Físico de quien lo causó. Se acumula hasta x3.'},
   Veneno:       {buff:false, desc:'Sufre daño de veneno cada turno según la Habilidad de quien lo causó. Se acumula hasta x3.'},
@@ -11762,8 +11772,10 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
         const bonusMult = skillId==='machacar' ? skillBonus('machacar','comboBonusMult', skill.consumes.bonusMult) : skill.consumes.bonusMult;
         base *= bonusMult;
         removeStatus(target.statuses, skill.consumes.name);
-        applyStatus(target, skill.consumes.applies, false);
-        comboText = ` ¡Combo! ${skill.consumes.name} consumido: ${target.name} queda Aturdido.`;
+        // El aturdimiento del combo ya no es seguro (TANK_TUNE.comboStunChance).
+        const stunned = chance(TANK_TUNE.comboStunChance);
+        if(stunned) applyStatus(target, skill.consumes.applies, false);
+        comboText = stunned ? ` ¡Combo! ${skill.consumes.name} consumido: ${target.name} queda Aturdido.` : ` ¡Combo! ${skill.consumes.name} consumido, pero ${target.name} resiste el aturdimiento.`;
       }
     }
     if(skill.scalesWithStack){
@@ -12889,7 +12901,7 @@ function enemyAct(enemy){
   // Bloqueo (Guerrero: Espadón pesado y Escudo de hierro): una segunda capa
   // de "el golpe no llega", igual de incondicional que la esquiva de arriba.
   const defenderSpecials = target.kind==='ally' ? (target.ally.specials||[]) : specialsFromEquip(state.char.equip);
-  let bChance = blockChance(defenderSpecials);
+  let bChance = blockChance(defenderSpecials) * (1 - blockPierceChance());
   // Escudo de hierro Tier S ('defend_bloqueo_bonus'): +10% de bloqueo extra
   // mientras el jugador se está Defendiendo este turno.
   if(target.kind==='player' && combat.playerDefending){
@@ -13909,7 +13921,7 @@ if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
   window.__rearAoe = (v)=>{ if(v !== undefined) BOSS_AOE_REAR_FACTOR = v; return BOSS_AOE_REAR_FACTOR; };
   window.__hpPerLevel = HP_PER_LEVEL_REDESIGN; window.__growth = CLASS_GROWTH; // palancas de clase para probar en simulación
   window.__combat = ()=> combat; // inspección del combate en curso (simulaciones que no terminan)
-  window.__lvl30 = LEVEL30_SKILL_BONUS; window.__healLock = ENEMY_HEAL_LOCK; window.__gFrente = GUARDIAN_VS_FRONT; window.__cTanque = COMMON_VS_TANK; window.__escolta = GUARDIAN_ESCORT;
+  window.__tanque = TANK_TUNE; window.__lvl30 = LEVEL30_SKILL_BONUS; window.__healLock = ENEMY_HEAL_LOCK; window.__gFrente = GUARDIAN_VS_FRONT; window.__cTanque = COMMON_VS_TANK; window.__escolta = GUARDIAN_ESCORT;
   window.__palRes = PALADIN_ESP_RES; window.__savia = SAVIA_PODRIDA;
   // Defensa de una senda con el equipo de referencia puesto: __defensa('paladin', 79)
   window.__defensa = (styleId, level, gear)=>{
