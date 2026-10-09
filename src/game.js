@@ -1721,7 +1721,7 @@ const DECADE_BESTIARY = [
           tragar:{label:'Tragar', mult:1.20, cooldown:3, bonusVsLowHp:{below:0.5, mult:1.15}},
         },
         aiPriority:['devorar_beneficio','tragar','mordisco_bp']},
-      {id:'ciempies_especular', name:'Ciempiés Especular', icon:'🐛', hp:1.00, atk:1.00, res:rs(15,0,-5,5,0), frontline:true,
+      {id:'ciempies_especular', name:'Ciempiés Especular', icon:'🐛', hp:1.00, atk:1.00, res:rs(30,0,-5,5,0), frontline:true,
         abilities:{
           pinza_ce:{label:'Pinza', mult:1.00},
           reflejo_tardio:{label:'Reflejo Tardío', utility:'self_buff', selfBuff:{name:'Reflejo Tardío', duration:2, evasionDelta:12}, cooldown:5},
@@ -1738,7 +1738,7 @@ const DECADE_BESTIARY = [
           doble_fauce:{label:'Doble Fauce', mult:1.40, cooldown:3},
         },
         aiPriority:['rasgo_robado','doble_fauce','rugido_disonante','zarpa_qd']},
-      {id:'ancla_vacio', immuneRetroceso:true, passiveReduction:0.10, name:'Ancla del Vacío', icon:'⚓', hp:2.30, atk:1.20, res:rs(20,5,5,10,25), elite:true, frontline:true,
+      {id:'ancla_vacio', immuneRetroceso:true, passiveReduction:0.10, name:'Ancla del Vacío', icon:'⚓', hp:2.30, atk:1.20, res:rs(35,5,5,10,25), elite:true, frontline:true,
         abilities:{
           pulso_av:{label:'Pulso', mult:0.95},
           gravedad_torcida:{label:'Gravedad Torcida', utility:'aoe', mult:0.45, cooldown:4, applies:{name:'Ralentizado', chance:0.6, duration:2}},
@@ -1787,7 +1787,7 @@ const DECADE_BESTIARY = [
           coro_entero:{label:'Coro Entero', utility:'aoe', mult:0.50, cooldown:5, applies:{name:'Debilitado', chance:0.5, duration:2}},
         },
         aiPriority:['coro_entero','voz_del_miedo','voz_del_silencio','grito_ch']},
-      4: {id:'geometra_ciega', name:'La Geómetra Ciega', icon:'🕸️', hp:3.00, atk:1.30, res:rs(15,5,-5,10,10), boss:true, frontline:true,
+      4: {id:'geometra_ciega', name:'La Geómetra Ciega', icon:'🕸️', hp:3.00, atk:1.30, res:rs(20,5,-5,10,10), boss:true, frontline:true,
         abilities:{
           pata_cristal:{label:'Pata de Cristal', mult:1.05},
           zona_imposible:{label:'Zona Imposible', mult:0.90, applies:{name:'Paralisis', chance:0.35, duration:1}, cooldown:3},
@@ -1828,7 +1828,7 @@ const DECADE_BESTIARY = [
           embestida_seca:{label:'Embestida Seca', mult:1.45, cooldown:4},
         },
         aiPriority:['corriente_invisible','gravedad_lateral','embestida_seca','coletazo_ms']},
-      9: {id:'puerta_camina', reductionWhileSummonsAlive:0.20, name:'La Puerta que Camina', icon:'🚪', hp:3.60, atk:1.35, res:rs(15,5,5,10,15), boss:true, frontline:true,
+      9: {id:'puerta_camina', reductionWhileSummonsAlive:0.20, name:'La Puerta que Camina', icon:'🚪', hp:3.60, atk:1.35, res:rs(20,5,5,10,15), boss:true, frontline:true,
         abilities:{
           pisoton_pc:{label:'Pisotón', mult:1.05},
           abrir_portal:{label:'Abrir Portal', utility:'summon', cooldown:5, summon:{tpl:LARVA_ERRANTE_TPL, count:2, maxAlive:2, hpPct:0.07, atkPct:0.35}},
@@ -1865,7 +1865,7 @@ const DECADE_BESTIARY = [
   // imagen fija. Falta el élite Podador Negro (sin arte).
   {
     regular: [
-      {id:'raiz_desenterrada', name:'Raíz Desenterrada', icon:'🖐️', hp:1.10, atk:1.10, res:rs(15,-15,0,10,5), frontline:true,
+      {id:'raiz_desenterrada', name:'Raíz Desenterrada', icon:'🖐️', hp:1.10, atk:1.10, res:rs(25,-15,0,10,5), frontline:true,
         abilities:{
           zarpazo_rd:{label:'Zarpazo', mult:1.00},
           enterrarse:{label:'Enterrarse', utility:'self_buff', selfBuff:{name:'Enterrada', duration:2, evasionDelta:15}, cooldown:5},
@@ -1921,7 +1921,7 @@ const DECADE_BESTIARY = [
           corona_dentada:{label:'Corona Dentada', mult:1.25, cooldown:3, applies:{name:'Sangrado', chance:0.30, duration:3, stack:true, maxStack:3}},
         },
         aiPriority:['devorar_restos','corona_dentada','mordida_bc']},
-      {id:'caracol_tumba', immuneRetroceso:true, name:'Caracol de Tumba', icon:'🐌', hp:1.35, atk:0.95, res:rs(25,-5,0,15,15), frontline:true,
+      {id:'caracol_tumba', immuneRetroceso:true, name:'Caracol de Tumba', icon:'🐌', hp:1.35, atk:0.95, res:rs(35,-5,0,15,15), frontline:true,
         abilities:{
           embestida_ct:{label:'Embestida', mult:0.95},
           rastro_viscoso:{label:'Rastro Viscoso', mult:0.70, applies:{name:'Ralentizado', chance:0.40, duration:2}, cooldown:3},
@@ -1968,7 +1968,7 @@ const DECADE_BESTIARY = [
           injerto_nuevo:{label:'Injerto Nuevo', utility:'self_buff', selfBuff:{name:'Injerto Nuevo', duration:3, dmgMult:1.20}, cooldown:5},
         },
         aiPriority:['injerto_nuevo','brazo_liana','brazo_flor','brazo_espino']},
-      {id:'custodio_invernadero', passiveReduction:0.10, name:'Custodio del Invernadero', icon:'🤖', hp:2.30, atk:1.20, res:rs(25,0,5,20,20), elite:true, frontline:true,
+      {id:'custodio_invernadero', passiveReduction:0.10, name:'Custodio del Invernadero', icon:'🤖', hp:2.30, atk:1.20, res:rs(35,0,5,20,20), elite:true, frontline:true,
         abilities:{
           golpe_ci:{label:'Golpe', mult:1.00},
           regar:{label:'Regar', utility:'heal_ally', healPct:0.10, cooldown:4, condition:(ctx)=>combat.enemies.some(e=>e.hp>0 && e.hp<e.maxHP)},
@@ -2097,7 +2097,7 @@ const DECADE_BESTIARY = [
           robar_beneficio:{label:'Robar Beneficio', mult:0.70, applies:{name:'Debilitado', chance:0.30, duration:2}, cooldown:4},
         },
         aiPriority:['llave_al_rojo','robar_beneficio','llavazo']},
-      {id:'carcelero_ceniza', name:'Carcelero de Ceniza', icon:'🛡️', hp:1.35, atk:1.05, res:rs(25,20,-30,5,15), frontline:true, immuneRetroceso:true,
+      {id:'carcelero_ceniza', name:'Carcelero de Ceniza', icon:'🛡️', hp:1.35, atk:1.05, res:rs(35,20,-30,5,15), frontline:true, immuneRetroceso:true,
         abilities:{
           porrazo:{label:'Porrazo', mult:1.00},
           guardia_ceniza:{label:'Guardia de Ceniza', utility:'self_buff', selfBuff:{name:'Guardia de Ceniza', duration:2, incomingDmgReduction:0.20}, cooldown:5},
@@ -2139,7 +2139,7 @@ const DECADE_BESTIARY = [
           condena_escrita:{label:'Condena Escrita', mult:0.75, applies:{name:'Debilitado', chance:0.35, duration:2}, cooldown:3},
         },
         aiPriority:['sentencia_muda','condena_escrita','letra_ardiente']},
-      {id:'preso_calcinado', name:'Preso Calcinado', icon:'💀', hp:0.90, atk:1.05, res:rs(0,30,-35,10,0), frontline:true, onDeathSpawn:{tpl:ASCUA_TPL, chance:0.30},
+      {id:'preso_calcinado', name:'Preso Calcinado', icon:'💀', hp:0.90, atk:1.05, res:rs(15,30,-35,10,0), frontline:true, onDeathSpawn:{tpl:ASCUA_TPL, chance:0.30},
         abilities:{
           bola_hierro:{label:'Bola de Hierro', mult:1.05},
           abrazo_calcinado:{label:'Abrazo Calcinado', mult:0.85, applies:QUEMADURA(0.45), cooldown:3},
@@ -2164,7 +2164,7 @@ const DECADE_BESTIARY = [
           castigo:{label:'Castigo', mult:1.25, applies:{name:'Miedo', chance:0.25, duration:2}, cooldown:4},
         },
         aiPriority:['orden_alcaide','latigazo_largo','castigo','latigo_fuego']},
-      {id:'forjador_cadenas', name:'Forjador de Cadenas', icon:'⚒️', hp:2.35, atk:1.20, res:rs(20,30,-35,0,25), elite:true, frontline:true, immuneRetroceso:true,
+      {id:'forjador_cadenas', name:'Forjador de Cadenas', icon:'⚒️', hp:2.35, atk:1.20, res:rs(30,30,-35,0,25), elite:true, frontline:true, immuneRetroceso:true,
         abilities:{
           martillazo_fc:{label:'Martillazo', mult:1.05},
           cadena_al_rojo:{label:'Cadena al Rojo', mult:0.90, applies:{name:'Paralisis', chance:0.30, duration:1}, cooldown:3},
@@ -2270,6 +2270,12 @@ const DECADE_BESTIARY = [
   }
 ];
 
+// RESISTENCIA FÍSICA EN 61-90 (pedido de ariochbu, 2026-10-09: "tipo el gran cangrejo", para que
+// el Guerrero sufra algo más). Solo criaturas de PRIMERA LÍNEA cuya anatomía lo justifica (caparazón,
+// piedra, hierro, madera dura, hueso), valores puestos en cada plantilla: Ciempiés Especular 30, Ancla
+// del Vacío 35, Geómetra Ciega 20, Puerta que Camina 20 (61-70); Caracol de Tumba 35, Raíz Desenterrada
+// 25, Custodio del Invernadero 35 (71-80); Carcelero de Ceniza 35, Preso Calcinado 15, Forjador de
+// Cadenas 30 (81-90). Los guardianes no pasan de la resistencia del jefe de su década.
 // GUARDIANES "FÁCILES" DE 61-79 (decisión de ariochbu, 2026-10-09). Los
 // guardianes de La Grieta y el Bosque muerto que NO invocan por su cuenta
 // llegan al combate con una escolta de 2 criaturas menores (ya están ahí
