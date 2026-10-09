@@ -5465,6 +5465,18 @@ function showScreen(id){
   document.getElementById(id).classList.add('active');
 }
 
+// MP/Espíritu nunca por encima del máximo (informe 2026-10-08: "MP 158/75").
+// Todas las subidas ya se topan, pero el máximo puede BAJAR con el valor
+// guardado intacto: rebalanceo de clase entre sesiones, quitar equipo o
+// piedras con mp_flat/maxsta, cambiar de Caído. Se corrige en el punto común
+// de pintado para cubrir todos esos casos de una vez.
+function clampVitals(){
+  if(!state || !state.char) return;
+  const d = derived();
+  if(state.char.curSta > d.maxSta) state.char.curSta = d.maxSta;
+  if(state.char.curSpi > d.maxSpi) state.char.curSpi = d.maxSpi;
+}
+
 function renderAll(){
   if(simMode) return;
   // Ver el comentario en wirePetZoomEvents: cualquier navegación real
@@ -5474,6 +5486,7 @@ function renderAll(){
   // invalida cualquier zoom de Caído que hubiera quedado abierto.
   hidePetZoom();
   ensureSoulSlots();
+  clampVitals();
   document.getElementById('clock-badge').style.display = 'flex';
   updateClockBadge();
   const musicBtn = document.getElementById('btn-music-toggle');
@@ -7029,7 +7042,7 @@ const CITY_PLACES = {
             intro:['“¿Nuevo? Se nota por cómo agarras esa espada.”','“Vendo armas, armaduras y pociones. Compro lo que traigas de abajo.”','“Vuelve con oro… o con Sellos del Laberinto.”']},
   home:    {name:'Hogar', ic:'🏠', open:()=>{ homeOpen = true; }, img:'hogar', d:[30.4,79.0], m:[18.6,58.0], keeper:'Tu casera',
             intro:['“Tu cuarto está arriba. Guarda aquí lo que no quieras perder.”','“Lo que dejes en el Hogar no se pierde aunque caigas en el laberinto.”']},
-  taberna: {name:'Taberna', ic:'🍺', open:()=>{ tabernaOpen = true; }, img:'taberna', d:[29.6,34.5], m:[23.6,21.3], keeper:'Bruno el tabernero',
+  taberna: {name:'Taberna', ic:'🍺', open:()=>{ tabernaOpen = true; }, img:'taberna', d:[29.6,34.5], m:[23.6,21.3], keeper:'Shaza la tabernera',
             intro:['“¡Otro valiente que viene a morir al laberinto!”','“Aquí se contratan espadas… si tienes fama y oro.”','“Cada aliado cobra su salario al salir del laberinto. No lo olvides.”']},
   missions:{name:'Gremio', ic:'📜', open:()=>{ missionsOpen = true; }, img:'gremio', d:[51.4,32.7], m:[54.4,21.1], keeper:'La maestra del Gremio',
             intro:['“El Gremio paga por trabajo bien hecho.”','“Cada 12 horas hay contratos nuevos en el tablón.”','“Cúmplelos y cobra oro, experiencia y Sellos del Laberinto.”']},
@@ -7576,7 +7589,7 @@ function flipAllOfrendaCards(){
   rare.forEach(i=>{ ofrendaFlipTimers.push(setTimeout(()=>flipOfrendaCard(i), t)); t += 420; });
 }
 // Cinemática de invocación (2026-10-03, pedido explícito): al otorgar una
-// ofrenda se oscurece la pantalla y el Ygdrasil se ilumina; cuando la tirada
+// ofrenda se oscurece la pantalla y el Yggdrasil se ilumina; cuando la tirada
 // ya está resuelta, la luz toma el color del MEJOR rango de la tanda (pista
 // antes de voltear las cartas) y con Épico+ además salen rayos. Se salta con
 // un toque. La ilustración es src/assets/ofrenda/invocacion.jpg (horizontal)
@@ -7671,7 +7684,7 @@ function renderOfrenda(){
       <button class="reset-btn of-hero-close" id="btn-close-ofrenda">Cerrar</button>
       <div class="of-hero-txt">
         <h3>Otorgar ofrenda</h3>
-        <p>El Ygdrasil crece en el corazón de la ciudad. Ofrécele oro o Sellos del Laberinto y te devolverá un Caído para tu colección.</p>
+        <p>El Yggdrasil crece en el corazón de la ciudad. Ofrécele oro o Sellos del Laberinto y te devolverá un Caído para tu colección.</p>
       </div>
     </div>
     <div class="of-collection" id="of-collection">${ofrendaCollectionHTML()}</div>
@@ -7981,6 +7994,17 @@ function makeMissionItemReward(){
   return generateLoot(rnd(1,4), state.char.maxLevelUnlocked||1);
 }
 
+// Elige un objetivo que no repita un contrato (mismo rango + mismo objetivo)
+// ya presente en el tablón — informe 2026-10-08: "contratos idénticos
+// simultáneos". Si el rango ya agotó todos los tipos (con pocos rangos
+// permitidos, 10 misiones no caben en 8 tipos), cae al azar de siempre.
+function pickMissionObjective(rank, taken){
+  const free = MISSION_OBJECTIVE_TYPES.filter(t=>!taken.has(rank+':'+t));
+  const objectiveType = pick(free.length ? free : MISSION_OBJECTIVE_TYPES);
+  taken.add(rank+':'+objectiveType);
+  return objectiveType;
+}
+
 function generateMissionBatch(maxFloor){
   const allowed = missionAllowedRanks(maxFloor);
   const last = allowed.length-1;
@@ -7988,9 +8012,10 @@ function generateMissionBatch(maxFloor){
   for(let i=0;i<2;i++) idxs.push(0);                 // fácil: el rango más bajo permitido ahora mismo
   for(let i=0;i<6;i++) idxs.push(Math.min(1,last));  // núcleo: un escalón arriba si existe
   for(let i=0;i<2;i++) idxs.push(last);              // reto: el rango más alto permitido ahora mismo
+  const taken = new Set();
   return idxs.map((allowedIdx, pos)=>{
     const rank = allowed[allowedIdx];
-    const objectiveType = pick(MISSION_OBJECTIVE_TYPES);
+    const objectiveType = pickMissionObjective(rank, taken);
     const reward = MISSION_RANK_REWARD[rank];
     return {
       rank,
@@ -8014,7 +8039,8 @@ function generateSingleMission(maxFloor){
   const roll = Math.random();
   const idx = roll < 0.2 ? 0 : roll < 0.8 ? Math.min(1,last) : last;
   const rank = allowed[idx];
-  const objectiveType = pick(MISSION_OBJECTIVE_TYPES);
+  const taken = new Set((state.missions||[]).filter(m=>m.status==='active' || m.status==='completed').map(m=>m.rank+':'+m.objective_type));
+  const objectiveType = pickMissionObjective(rank, taken);
   const reward = MISSION_RANK_REWARD[rank];
   return {
     rank,
@@ -14429,7 +14455,7 @@ const TUTORIAL_SLIDES = [
   {title:'El Gremio', body:'Un tablón de 10 misiones que se refresca cada 12 horas. Complétalas para ganar oro, experiencia y Sellos del Laberinto, canjeables por equipo Único y Épico. Si una misión no te gusta, puedes refrescarla hasta 3 veces por tablón.'},
   {title:'La Taberna', body:'Desde nivel 10, recluta aliados — guerrero, arquero, asesino, mago o sacerdote — pagando oro. Pelean junto a ti de forma automática: el que tiene rol de tanque ocupa el Frente y absorbe los golpes por ti. Los sacerdotes solo existen como aliados, nunca como senda de combate propia: cuidan a quien pelea, no bajan a pelear ellos mismos.'},
   {title:'Mantener a tus aliados', body:'Cada aliado te cobra un salario cada vez que sales del laberinto. Pagarlo sube un poco su satisfacción; no poder pagarlo la baja bastante, cada vez más si se repite. Si su satisfacción cae demasiado, deserta y lo pierdes para siempre — no vuelve a estar disponible, ni siquiera despidiéndolo tú antes.'},
-  {title:'Otorgar ofrenda', body:'El Ygdrasil de la ciudad entrega Caídos del Laberinto a cambio de oro, Sellos o una recarga. Cada uno se equipa en un espacio pasivo y aporta su propio don mientras lo lleves — no combaten por su cuenta ni ocupan un puesto de Frente o Retaguardia.'},
+  {title:'Otorgar ofrenda', body:'El Yggdrasil de la ciudad entrega Caídos del Laberinto a cambio de oro, Sellos o una recarga. Cada uno se equipa en un espacio pasivo y aporta su propio don mientras lo lleves — no combaten por su cuenta ni ocupan un puesto de Frente o Retaguardia.'},
   {title:'Ranking', body:'Tu récord personal (el piso más profundo que has alcanzado) y el top 10 de todos los jugadores.'},
   {title:'Combate por turnos', body:'Cada turno eliges una habilidad o acción. Frente y Retaguardia son tus dos posiciones: la mayoría de golpes físicos fuertes exigen estar en el Frente; la Retaguardia favorece las habilidades a distancia.'},
   {title:'MP y Espíritu', body:'El MP (lo alimenta Habilidad) paga casi todas las habilidades de ataque: Guerrero, Asesino, Arquero, Mago y Hechicero. El Espíritu (lo alimenta Espíritu) paga las del Paladín y las de utilidad como Grito de guerra o Marca del cazador. Reposicionarte cambia entre Frente y Retaguardia, y ocupa tu turno.'},
