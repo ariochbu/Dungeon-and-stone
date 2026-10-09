@@ -788,7 +788,7 @@ const BROTE_MENOR_TPL = {id:'brote_menor', name:'Brote Menor', icon:'🌱', hp:0
   abilities:{mordida_bm:{label:'Mordida', mult:1.0, applies:Object.assign({chance:0.20}, CORRUPCION_STATUS)}}, aiPriority:['mordida_bm']};
 // Abismo en llamas (81-90): Quemadura acumulable y la invocación de la década.
 function QUEMADURA(chance){ return {name:'Quemadura', chance, duration:3, stack:true, maxStack:3}; }
-const ASCUA_TPL = {id:'preso_menor', name:'Preso Encadenado', icon:'⛓️', hp:0.3, atk:0.45, res:rs(0,25,-15,10,0), frontline:true,
+const ASCUA_TPL = {id:'preso_menor', name:'Preso Encadenado', icon:'⛓️', hp:0.3, atk:0.45, res:rs(0,25,-30,0,0), frontline:true,
   abilities:{cadenazo:{label:'Cadenazo', mult:1.0, applies:QUEMADURA(0.20)}}, aiPriority:['cadenazo']};
 const DECOY_CLON_SOMBRA = decoyTpl('senuelo_clon', 'Clon de Sombra', '👤');
 const DECOY_REPLICA = decoyTpl('senuelo_replica', 'Réplica', '🪞');
@@ -2046,58 +2046,62 @@ const DECADE_BESTIARY = [
   // solo con el vocabulario que el motor ya resuelve. Aún sin animaciones: se
   // dibujan con su imagen fija. Falta la opción de perdonar al Carcelero: su
   // fase 3 solo lo deja casi sin fuerzas.
+  // Segunda pasada (2026-10-09), para acercar a las seis sendas al 50%: débiles al
+  // hielo (-15) y algo al veneno (-10), todo ataque en área pega la mitad a la
+  // retaguardia y los Silencios bajan de probabilidad. El resto del reparto por
+  // senda va en ENEMY_VS_CLASS_81.
   {
     regular: [
-      {id:'diablillo_llavero', name:'Diablillo Llavero', icon:'🗝️', hp:0.80, atk:1.00, res:rs(-5,25,-15,5,-5),
+      {id:'diablillo_llavero', name:'Diablillo Llavero', icon:'🗝️', hp:0.80, atk:1.00, res:rs(-5,25,-30,-5,-5),
         abilities:{
           llavazo:{label:'Llavazo', mult:1.00},
           llave_al_rojo:{label:'Llave al Rojo', mult:0.80, applies:QUEMADURA(0.35), cooldown:3},
           robar_beneficio:{label:'Robar Beneficio', mult:0.70, applies:{name:'Debilitado', chance:0.30, duration:2}, cooldown:4},
         },
         aiPriority:['llave_al_rojo','robar_beneficio','llavazo']},
-      {id:'carcelero_ceniza', name:'Carcelero de Ceniza', icon:'🛡️', hp:1.35, atk:1.05, res:rs(25,20,-15,15,15), frontline:true, immuneRetroceso:true,
+      {id:'carcelero_ceniza', name:'Carcelero de Ceniza', icon:'🛡️', hp:1.35, atk:1.05, res:rs(25,20,-30,5,15), frontline:true, immuneRetroceso:true,
         abilities:{
           porrazo:{label:'Porrazo', mult:1.00},
           guardia_ceniza:{label:'Guardia de Ceniza', utility:'self_buff', selfBuff:{name:'Guardia de Ceniza', duration:2, incomingDmgReduction:0.20}, cooldown:5},
           golpe_escudo:{label:'Golpe de Escudo', mult:1.20, applies:{name:'Aturdido', chance:0.15, duration:1}, cooldown:4},
         },
         aiPriority:['guardia_ceniza','golpe_escudo','porrazo']},
-      {id:'perro_grillete', name:'Perro de Grillete', icon:'🐕', hp:0.95, atk:1.12, res:rs(5,25,-15,5,0), frontline:true,
+      {id:'perro_grillete', name:'Perro de Grillete', icon:'🐕', hp:0.95, atk:1.12, res:rs(5,25,-30,-5,0), frontline:true,
         abilities:{
           dentellada_pg:{label:'Dentellada', mult:1.00, applies:{name:'Sangrado', chance:0.15, duration:2, stack:true, maxStack:3}},
           fauces_ardientes:{label:'Fauces Ardientes', mult:0.90, applies:QUEMADURA(0.35), cooldown:3},
           presa_encadenada:{label:'Presa Encadenada', mult:1.25, cooldown:4, bonusVsTargetStatus:{name:'Quemadura', mult:1.20}},
         },
         aiPriority:['presa_encadenada','fauces_ardientes','dentellada_pg']},
-      {id:'marcador', name:'Marcador', icon:'♨️', hp:0.95, atk:1.08, res:rs(0,25,-10,10,0), frontline:true,
+      {id:'marcador', name:'Marcador', icon:'♨️', hp:0.95, atk:1.08, res:rs(0,25,-25,0,0), frontline:true,
         abilities:{
           estocada_m:{label:'Estocada', mult:1.00},
           hierro_marcar:{label:'Hierro de Marcar', mult:0.85, applies:{name:'Marcado', chance:0.35, duration:2}, cooldown:4},
           sello_ardiente:{label:'Sello Ardiente', mult:0.90, applies:QUEMADURA(0.40), cooldown:3},
         },
         aiPriority:['hierro_marcar','sello_ardiente','estocada_m']},
-      {id:'fogonero', name:'Fogonero', icon:'🔥', hp:1.15, atk:0.95, res:rs(10,30,-20,10,10),
+      {id:'fogonero', name:'Fogonero', icon:'🔥', hp:1.15, atk:0.95, res:rs(10,30,-35,0,10),
         abilities:{
           palada:{label:'Palada', mult:0.90},
           avivar_horno:{label:'Avivar el Horno', utility:'buff_allies', cooldown:4, buffAllies:{name:'Fortalecido', duration:3, stacks:3}},
-          brasas_al_vuelo:{label:'Brasas al Vuelo', utility:'aoe', mult:0.40, cooldown:5, applies:QUEMADURA(0.30)},
+          brasas_al_vuelo:{label:'Brasas al Vuelo', utility:'aoe', mult:0.40, rearMult:0.50, cooldown:5, applies:QUEMADURA(0.30)},
         },
         aiPriority:['avivar_horno','brasas_al_vuelo','palada']},
-      {id:'arpia_hollin', name:'Arpía de Hollín', icon:'🦅', hp:0.75, atk:1.05, res:rs(-10,20,-10,5,-5),
+      {id:'arpia_hollin', name:'Arpía de Hollín', icon:'🦅', hp:0.75, atk:1.05, res:rs(-10,20,-25,-5,-5),
         abilities:{
           garra_ah:{label:'Garra', mult:1.00},
           nube_hollin:{label:'Nube de Hollín', mult:0.65, applies:{name:'Ceguera', chance:0.30, duration:2}, cooldown:4},
           picado_ardiente:{label:'Picado Ardiente', mult:1.20, cooldown:3},
         },
         aiPriority:['nube_hollin','picado_ardiente','garra_ah']},
-      {id:'escriba_condenas', name:'Escriba de Condenas', icon:'📜', hp:0.80, atk:1.00, res:rs(-10,20,-10,10,-5),
+      {id:'escriba_condenas', name:'Escriba de Condenas', icon:'📜', hp:0.80, atk:1.00, res:rs(-10,20,-25,0,-5),
         abilities:{
           letra_ardiente:{label:'Letra Ardiente', mult:0.90},
-          sentencia_muda:{label:'Sentencia Muda', mult:0.70, applies:{name:'Silencio', chance:0.30, duration:1}, cooldown:4},
+          sentencia_muda:{label:'Sentencia Muda', mult:0.70, applies:{name:'Silencio', chance:0.15, duration:1}, cooldown:4},
           condena_escrita:{label:'Condena Escrita', mult:0.75, applies:{name:'Debilitado', chance:0.35, duration:2}, cooldown:3},
         },
         aiPriority:['sentencia_muda','condena_escrita','letra_ardiente']},
-      {id:'preso_calcinado', name:'Preso Calcinado', icon:'💀', hp:0.90, atk:1.05, res:rs(0,30,-20,20,0), frontline:true, onDeathSpawn:{tpl:ASCUA_TPL, chance:0.30},
+      {id:'preso_calcinado', name:'Preso Calcinado', icon:'💀', hp:0.90, atk:1.05, res:rs(0,30,-35,10,0), frontline:true, onDeathSpawn:{tpl:ASCUA_TPL, chance:0.30},
         abilities:{
           bola_hierro:{label:'Bola de Hierro', mult:1.05},
           abrazo_calcinado:{label:'Abrazo Calcinado', mult:0.85, applies:QUEMADURA(0.45), cooldown:3},
@@ -2106,23 +2110,23 @@ const DECADE_BESTIARY = [
         aiPriority:['abrazo_calcinado','cadena_rota','bola_hierro']},
     ],
     elite: [
-      {id:'verdugo_brasa', name:'Verdugo de Brasa', icon:'🪓', hp:2.30, atk:1.30, res:rs(15,25,-15,10,20), elite:true, frontline:true,
+      {id:'verdugo_brasa', name:'Verdugo de Brasa', icon:'🪓', hp:2.30, atk:1.30, res:rs(15,25,-30,0,20), elite:true, frontline:true,
         abilities:{
           hachazo:{label:'Hachazo', mult:1.05, applies:QUEMADURA(0.20)},
           filo_fundido:{label:'Filo Fundido', mult:1.20, applies:QUEMADURA(0.50), cooldown:3},
           ejecucion:{label:'Ejecución', mult:1.45, cooldown:4, bonusVsTargetStatus:{name:'Quemadura', minStacks:2, mult:1.30}},
-          barrido_brasa:{label:'Barrido de Brasa', utility:'aoe', mult:0.50, rearMult:0.75, cooldown:5},
+          barrido_brasa:{label:'Barrido de Brasa', utility:'aoe', mult:0.50, rearMult:0.50, cooldown:5},
         },
         aiPriority:['ejecucion','filo_fundido','barrido_brasa','hachazo']},
-      {id:'alcaide_menor', name:'Alcaide Menor', icon:'⛓️', hp:2.10, atk:1.22, res:rs(10,25,-15,10,15), elite:true, reductionWithAllies:{min:1, value:0.15},
+      {id:'alcaide_menor', name:'Alcaide Menor', icon:'⛓️', hp:2.10, atk:1.22, res:rs(10,25,-30,0,15), elite:true, reductionWithAllies:{min:1, value:0.15},
         abilities:{
           latigo_fuego:{label:'Látigo de Fuego', mult:1.00, applies:QUEMADURA(0.25)},
           orden_alcaide:{label:'Orden del Alcaide', utility:'buff_allies', cooldown:5, buffAllies:{name:'Fortalecido', duration:3, stacks:4}},
-          latigazo_largo:{label:'Latigazo Largo', utility:'aoe', mult:0.45, cooldown:4, applies:QUEMADURA(0.30)},
+          latigazo_largo:{label:'Latigazo Largo', utility:'aoe', mult:0.45, rearMult:0.50, cooldown:4, applies:QUEMADURA(0.30)},
           castigo:{label:'Castigo', mult:1.25, applies:{name:'Miedo', chance:0.25, duration:2}, cooldown:4},
         },
         aiPriority:['orden_alcaide','latigazo_largo','castigo','latigo_fuego']},
-      {id:'forjador_cadenas', name:'Forjador de Cadenas', icon:'⚒️', hp:2.35, atk:1.20, res:rs(20,30,-20,10,25), elite:true, frontline:true, immuneRetroceso:true,
+      {id:'forjador_cadenas', name:'Forjador de Cadenas', icon:'⚒️', hp:2.35, atk:1.20, res:rs(20,30,-35,0,25), elite:true, frontline:true, immuneRetroceso:true,
         abilities:{
           martillazo_fc:{label:'Martillazo', mult:1.05},
           cadena_al_rojo:{label:'Cadena al Rojo', mult:0.90, applies:{name:'Paralisis', chance:0.30, duration:1}, cooldown:3},
@@ -2134,78 +2138,78 @@ const DECADE_BESTIARY = [
     guardians: [],
     // Guardián único y determinista por piso (81 a 89).
     guardianByFloor: {
-      1: {id:'puerta_hierro_vivo', immuneRetroceso:true, passiveReduction:0.10, name:'La Puerta de Hierro Vivo', icon:'🚪', hp:3.60, atk:1.30, res:rs(25,25,-15,15,25), boss:true, frontline:true,
+      1: {id:'puerta_hierro_vivo', immuneRetroceso:true, passiveReduction:0.10, name:'La Puerta de Hierro Vivo', icon:'🚪', hp:3.60, atk:1.30, res:rs(25,25,-30,5,25), boss:true, frontline:true,
         abilities:{
           portazo_ph:{label:'Portazo', mult:1.10},
-          aliento_horno:{label:'Aliento de Horno', utility:'aoe', mult:0.50, rearMult:0.75, cooldown:4, applies:QUEMADURA(0.40)},
+          aliento_horno:{label:'Aliento de Horno', utility:'aoe', mult:0.50, rearMult:0.50, cooldown:4, applies:QUEMADURA(0.40)},
           cerrojo:{label:'Cerrojo', utility:'self_buff', selfBuff:{name:'Cerrojo', duration:2, incomingDmgReduction:0.25}, cooldown:5},
           embestida_ph:{label:'Embestida de Hierro', mult:1.40, applies:{name:'Aturdido', chance:0.20, duration:1}, cooldown:4},
         },
         aiPriority:['cerrojo','aliento_horno','embestida_ph','portazo_ph']},
-      2: {id:'contador_condenas', name:'El Contador de Condenas', icon:'🧮', hp:3.30, atk:1.38, res:rs(10,25,-10,15,15), boss:true,
+      2: {id:'contador_condenas', name:'El Contador de Condenas', icon:'🧮', hp:3.30, atk:1.45, res:rs(10,25,-25,5,15), boss:true,
         abilities:{
           cuenta_ardiente:{label:'Cuenta Ardiente', mult:1.05, applies:QUEMADURA(0.25)},
           sumar_condena:{label:'Sumar Condena', mult:0.85, applies:{name:'Marcado', chance:0.45, duration:2}, cooldown:3},
           cobrar_deuda:{label:'Cobrar Deuda', mult:1.35, cooldown:4, bonusVsTargetStatus:{name:'Marcado', mult:1.25}},
-          balance_final:{label:'Balance Final', utility:'aoe', mult:0.45, cooldown:5, applies:{name:'Debilitado', chance:0.40, duration:2}},
+          balance_final:{label:'Balance Final', utility:'aoe', mult:0.45, rearMult:0.50, cooldown:5, applies:{name:'Debilitado', chance:0.40, duration:2}},
         },
         aiPriority:['sumar_condena','cobrar_deuda','balance_final','cuenta_ardiente']},
-      3: {id:'sabuesa_tres_collares', name:'La Sabuesa de Tres Collares', icon:'🐕', hp:3.50, atk:1.28, res:rs(15,25,-15,10,15), boss:true, frontline:true,
+      3: {id:'sabuesa_tres_collares', name:'La Sabuesa de Tres Collares', icon:'🐕', hp:3.50, atk:1.22, res:rs(15,25,-30,0,15), boss:true, frontline:true,
         abilities:{
           triple_dentellada:{label:'Triple Dentellada', mult:1.15, applies:{name:'Sangrado', chance:0.30, duration:3, stack:true, maxStack:3}},
           cabeza_de_fuego:{label:'Cabeza de Fuego', mult:1.00, applies:QUEMADURA(0.55), cooldown:3},
-          aullido_triple:{label:'Aullido Triple', utility:'aoe', mult:0.40, cooldown:5, applies:{name:'Miedo', chance:0.25, duration:2, procChance:0.4}},
+          aullido_triple:{label:'Aullido Triple', utility:'aoe', mult:0.40, rearMult:0.50, cooldown:5, applies:{name:'Miedo', chance:0.25, duration:2, procChance:0.4}},
           presa_de_tres:{label:'Presa de Tres', mult:1.45, cooldown:4, bonusVsTargetStatus:{name:'Sangrado', mult:1.20}},
         },
         aiPriority:['presa_de_tres','cabeza_de_fuego','aullido_triple','triple_dentellada']},
-      4: {id:'el_fundidor', immuneRetroceso:true, name:'El Fundidor', icon:'🫕', hp:3.70, atk:1.27, res:rs(20,35,-20,15,20), boss:true, frontline:true,
+      4: {id:'el_fundidor', immuneRetroceso:true, name:'El Fundidor', icon:'🫕', hp:3.70, atk:1.27, res:rs(20,35,-35,5,20), boss:true, frontline:true,
         abilities:{
           golpe_crisol:{label:'Golpe de Crisol', mult:1.10},
-          verter_metal:{label:'Verter Metal', utility:'aoe', mult:0.55, rearMult:0.75, cooldown:4, applies:QUEMADURA(0.50)},
+          verter_metal:{label:'Verter Metal', utility:'aoe', mult:0.55, rearMult:0.50, cooldown:4, applies:QUEMADURA(0.50)},
           metal_que_enfria:{label:'Metal que Enfría', mult:0.90, applies:{name:'Paralisis', chance:0.35, duration:1}, cooldown:4},
           colada:{label:'Colada', mult:1.40, cooldown:3, bonusVsTargetStatus:{name:'Quemadura', minStacks:2, mult:1.25}},
         },
         aiPriority:['verter_metal','colada','metal_que_enfria','golpe_crisol']},
-      5: {id:'dama_grillete', name:'La Dama del Grillete', icon:'👑', hp:3.71, atk:1.45, res:rs(10,25,-10,15,15), boss:true,
+      5: {id:'dama_grillete', name:'La Dama del Grillete', icon:'👑', hp:3.71, atk:1.52, res:rs(10,25,-25,5,15), boss:true,
         abilities:{
           eslabon:{label:'Eslabón', mult:1.05},
           grilletes_voladores:{label:'Grilletes Voladores', mult:0.90, applies:{name:'Paralisis', chance:0.40, duration:1}, cooldown:3},
           velo_de_cadenas:{label:'Velo de Cadenas', utility:'self_buff', selfBuff:{name:'Velo de Cadenas', duration:2, evasionDelta:20}, cooldown:5},
-          condena_de_la_dama:{label:'Condena de la Dama', utility:'aoe', mult:0.50, cooldown:5, applies:{name:'Silencio', chance:0.35, duration:1}},
+          condena_de_la_dama:{label:'Condena de la Dama', utility:'aoe', mult:0.50, rearMult:0.50, cooldown:5, applies:{name:'Silencio', chance:0.20, duration:1}},
           apretar:{label:'Apretar', mult:1.35, cooldown:4, bonusVsTargetStatus:{name:'Paralisis', mult:1.25}},
         },
         aiPriority:['velo_de_cadenas','grilletes_voladores','condena_de_la_dama','apretar','eslabon']},
-      6: {id:'testigo_ciego', name:'El Testigo Ciego', icon:'👁️', hp:3.50, atk:1.36, res:rs(10,25,-10,15,20), boss:true,
+      6: {id:'testigo_ciego', name:'El Testigo Ciego', icon:'👁️', hp:3.50, atk:1.36, res:rs(10,25,-25,5,20), boss:true,
         abilities:{
           mirada_que_arde:{label:'Mirada que Arde', mult:1.10, applies:QUEMADURA(0.35)},
           veredicto:{label:'Veredicto', mult:1.45, cooldown:4, ignoreResist:0.30},
           testimonio_falso:{label:'Testimonio Falso', mult:0.85, applies:{name:'Confusion', chance:0.35, duration:1}, cooldown:4},
-          ceguera_compartida:{label:'Ceguera Compartida', utility:'aoe', mult:0.45, cooldown:5, applies:{name:'Ceguera', chance:0.40, duration:2}},
+          ceguera_compartida:{label:'Ceguera Compartida', utility:'aoe', mult:0.45, rearMult:0.50, cooldown:5, applies:{name:'Ceguera', chance:0.40, duration:2}},
         },
         aiPriority:['ceguera_compartida','veredicto','testimonio_falso','mirada_que_arde']},
-      7: {id:'horno_camina', immuneRetroceso:true, passiveReduction:0.10, name:'El Horno que Camina', icon:'🏭', hp:3.59, atk:1.22, res:rs(25,40,-25,20,25), boss:true, frontline:true,
+      7: {id:'horno_camina', immuneRetroceso:true, passiveReduction:0.10, name:'El Horno que Camina', icon:'🏭', hp:3.59, atk:1.22, res:rs(25,40,-40,10,25), boss:true, frontline:true,
         abilities:{
           brazo_pala:{label:'Brazo Pala', mult:1.10},
-          chorro_de_llama:{label:'Chorro de Llama', utility:'aoe', mult:0.60, rearMult:0.75, cooldown:4, applies:QUEMADURA(0.55)},
+          chorro_de_llama:{label:'Chorro de Llama', utility:'aoe', mult:0.60, rearMult:0.50, cooldown:4, applies:QUEMADURA(0.55)},
           cargar_carbon:{label:'Cargar Carbón', utility:'self_buff', selfBuff:{name:'Horno Cargado', duration:3, dmgMult:1.20}, cooldown:5},
           aplastar_hc:{label:'Aplastar', mult:1.45, applies:{name:'Aturdido', chance:0.20, duration:1}, cooldown:4},
         },
         aiPriority:['cargar_carbon','chorro_de_llama','aplastar_hc','brazo_pala']},
-      8: {id:'portallaves', name:'El Portallaves', icon:'🔑', hp:3.60, atk:1.27, res:rs(15,25,-15,15,20), boss:true, frontline:true,
+      8: {id:'portallaves', name:'El Portallaves', icon:'🔑', hp:3.60, atk:1.18, res:rs(15,25,-30,5,20), boss:true, frontline:true,
         abilities:{
           llave_maestra:{label:'Llave Maestra', mult:1.15, ignoreResist:0.20},
-          cerrar_con_llave:{label:'Cerrar con Llave', mult:0.90, applies:{name:'Silencio', chance:0.45, duration:1}, cooldown:4},
+          cerrar_con_llave:{label:'Cerrar con Llave', mult:0.90, applies:{name:'Silencio', chance:0.25, duration:1}, cooldown:4},
           girar_la_llave:{label:'Girar la Llave', mult:1.45, cooldown:3, applies:{name:'Sangrado', chance:0.40, duration:3, stack:true, maxStack:3}},
-          lluvia_de_llaves:{label:'Lluvia de Llaves', utility:'aoe', mult:0.55, cooldown:5, applies:QUEMADURA(0.35)},
+          lluvia_de_llaves:{label:'Lluvia de Llaves', utility:'aoe', mult:0.55, rearMult:0.50, cooldown:5, applies:QUEMADURA(0.35)},
         },
         aiPriority:['cerrar_con_llave','girar_la_llave','lluvia_de_llaves','llave_maestra']},
-      9: {id:'segundo_carcelero', immuneRetroceso:true, reductionWhileSummonsAlive:0.20, name:'El Segundo Carcelero', icon:'⚔️', hp:3.80, atk:1.27, res:rs(25,30,-15,15,25), boss:true, frontline:true,
+      9: {id:'segundo_carcelero', immuneRetroceso:true, reductionWhileSummonsAlive:0.20, name:'El Segundo Carcelero', icon:'⚔️', hp:3.80, atk:1.12, res:rs(25,30,-30,5,25), boss:true, frontline:true,
         abilities:{
           mangual:{label:'Mangual', mult:1.10, applies:QUEMADURA(0.25)},
           llamar_guardia:{label:'Llamar a la Guardia', utility:'summon', cooldown:5, summon:{tpl:ASCUA_TPL, count:2, maxAlive:3, hpPct:0.07, atkPct:0.35}},
           jaula_ardiente:{label:'Jaula Ardiente', mult:1.35, applies:QUEMADURA(0.60), cooldown:3},
           escudo_cerradura:{label:'Escudo de Cerradura', utility:'self_buff', selfBuff:{name:'Escudo de Cerradura', duration:2, incomingDmgReduction:0.25}, cooldown:5},
-          arco_de_fuego:{label:'Arco de Fuego', utility:'aoe', mult:0.55, rearMult:0.75, cooldown:4},
+          arco_de_fuego:{label:'Arco de Fuego', utility:'aoe', mult:0.55, rearMult:0.50, cooldown:4},
         },
         aiPriority:['llamar_guardia','escudo_cerradura','jaula_ardiente','arco_de_fuego','mangual']},
     },
@@ -4677,16 +4681,33 @@ function baseStat(key){
 // pegan +50% a quien está al frente y le rompen la armadura. Es lo único que
 // acercó a los tanques al resto en las pruebas; a cambio los guardianes de
 // esas décadas bajaron un 15% de vida y ataque (ver DECADE_ENEMY_TUNING 6 y 7).
-const GUARDIAN_VS_FRONT = {from:61, to:89, dmgMult:1.50, armorBreak:{name:'Armadura Rota', duration:3, resPenalty:15}};
+const GUARDIAN_VS_FRONT = {from:61, to:79, dmgMult:1.50, armorBreak:{name:'Armadura Rota', duration:3, resPenalty:15}};
 // Élites y enemigos comunes de 61-79: castigo más suave y sin rotura, y solo
 // contra TANQUES (Guerrero o Paladín al frente, o un aliado de primera línea).
 const COMMON_VS_TANK = {dmgMult:1.25, tanksOnly:true};
+// Abismo en llamas (81-89): mismo mecanismo con sus propios números, calibrados
+// aparte para que cada senda complete cerca del 50% de los niveles.
+const GUARDIAN_VS_FRONT_81 = {from:81, to:89, dmgMult:1.30, armorBreak:{name:'Armadura Rota', duration:3, resPenalty:15}};
+const COMMON_VS_TANK_81 = {dmgMult:1.00, tanksOnly:true}; // sin castigo extra a tanques: va en ENEMY_VS_CLASS_81
+// Daño de los enemigos de 81-89 al jugador según su senda (2026-10-09). ariochbu
+// pidió que cada senda complete cerca del 50% de estos niveles; con los ajustes
+// generales (vida/ataque, resistencias, silencios, área) las físicas quedaban en
+// 50-75% y Mago/Hechicero en 15-35%, porque su problema es el aguante. Es un
+// multiplicador por senda, igual de directo que COMMON_VS_TANK; no aplica al
+// jefe del 90 ni a los aliados. Valores calibrados con el simulador.
+const ENEMY_VS_CLASS_81 = {from:81, to:89, mult:{pesada:1.00, paladin:1.15, doblefilo:1.00, tirador:1.08, mago:0.67, hechicero:0.66}};
+function enemyVsClassMult(){
+  const lvl = (state.dungeon && state.dungeon.level) || 0;
+  if(lvl < ENEMY_VS_CLASS_81.from || lvl > ENEMY_VS_CLASS_81.to) return 1;
+  return ENEMY_VS_CLASS_81.mult[state.char.style] || 1;
+}
 function guardianVsFront(enemy){
   const lvl = (state.dungeon && state.dungeon.level) || 0;
-  if(lvl < GUARDIAN_VS_FRONT.from || lvl > GUARDIAN_VS_FRONT.to || lvl % 10 === 0 || !enemy.tpl) return null;
-  if((enemy.tpl.boss && !enemy.summoned) || enemy.escort) return GUARDIAN_VS_FRONT; // el guardián y su escolta
-  if(enemy.summoned || enemy.tpl.decoy) return null;                                 // invocaciones a mitad de combate: sin castigo
-  return COMMON_VS_TANK;
+  const [G, C] = lvl >= GUARDIAN_VS_FRONT_81.from ? [GUARDIAN_VS_FRONT_81, COMMON_VS_TANK_81] : [GUARDIAN_VS_FRONT, COMMON_VS_TANK];
+  if(lvl < G.from || lvl > G.to || lvl % 10 === 0 || !enemy.tpl) return null;
+  if((enemy.tpl.boss && !enemy.summoned) || enemy.escort) return G; // el guardián y su escolta
+  if(enemy.summoned || enemy.tpl.decoy) return null;                // invocaciones a mitad de combate: sin castigo
+  return C;
 }
 // CURACIÓN ENEMIGA COMPARTIDA (pedido de ariochbu, 2026-10-09): en 61-80, tras
 // una curación de cualquier enemigo, ninguno del grupo puede curar durante
@@ -10465,8 +10486,8 @@ const DECADE_ENEMY_TUNING = {
   4: {regular:{hp:1.36, atk:1.36}, elite:{hp:1.36, atk:1.36}, guardian:{hp:1.36, atk:1.36}},   // 74% (quinta vuelta)
   5: {regular:{hp:2.36, atk:3.42}, elite:{hp:2.24, atk:3.16}, guardian:{hp:1.98, atk:2.31}},   // 75%
   6: {regular:{hp:3.29, atk:4.99}, elite:{hp:3.29, atk:4.99}, guardian:{hp:1.95, atk:2.46}},   // 2026-10-09: guardian correcto por nivel + castigo al frente; media 61-69 ~60%
-  7: {regular:{hp:3.63, atk:5.57}, elite:{hp:3.63, atk:5.57}, guardian:{hp:1.78, atk:2.25}},   // 2026-10-09: idem; media 71-79 ~63%
-  8: {regular:{hp:4.21, atk:6.46}, elite:{hp:4.21, atk:6.46}, guardian:{hp:2.06, atk:2.61}},   // 2026-10-09: 81-89 ≈ 50% de niveles completados de media (53/60/52/42/65/51/46/38/44, 16 intentos por senda). El 50% es supuesto propio (sigue la escalera 90/80/70/60)
+  7: {regular:{hp:3.63, atk:5.57}, elite:{hp:3.63, atk:5.57}, guardian:{hp:1.78, atk:2.25}},   // 2026-10-09: idem; media 71-79 ~63%
+  8: {regular:{hp:4.90, atk:7.52}, elite:{hp:3.60, atk:5.60}, guardian:{hp:2.40, atk:3.04}},   // 2026-10-09, segunda pasada: más duro en general y el reparto por senda en ENEMY_VS_CLASS_81 (objetivo de ariochbu: ~50% de niveles completados por senda). Élites algo por debajo: el simulador casi nunca les ganaba
 };
 function makeEnemy(tpl, floorIdx, level){
   const lvlMult = levelMult(level||1);
@@ -13895,6 +13916,9 @@ function resolveNewStyleEnemyMove(enemy, target, enemyCrit){
       else applyStatus(target.ally, Object.assign({}, vsFront.armorBreak), false);
     }
   }
+  // Abismo en llamas (81-89): ajuste del daño que recibe el JUGADOR según su senda.
+  const clsMult = onPlayer ? enemyVsClassMult() : 1;
+  if(clsMult !== 1) dmg = Math.round(dmg*clsMult);
   if(ability.bonusVsLowHp && ctx.targetHpPct < ability.bonusVsLowHp.below){
     dmg = Math.round(dmg*ability.bonusVsLowHp.mult);
   }
@@ -14356,6 +14380,7 @@ if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
   window.__combat = ()=> combat; // inspección del combate en curso (simulaciones que no terminan)
   window.__tanque = TANK_TUNE; window.__lvl30 = LEVEL30_SKILL_BONUS; window.__healLock = ENEMY_HEAL_LOCK; window.__gFrente = GUARDIAN_VS_FRONT; window.__cTanque = COMMON_VS_TANK; window.__escolta = GUARDIAN_ESCORT;
   window.__palRes = PALADIN_ESP_RES; window.__savia = SAVIA_PODRIDA;
+  window.__frente81 = {guardian: GUARDIAN_VS_FRONT_81, comun: COMMON_VS_TANK_81, invocacion: ASCUA_TPL, clase: ENEMY_VS_CLASS_81.mult};
   // Defensa de una senda con el equipo de referencia puesto: __defensa('paladin', 79)
   window.__defensa = (styleId, level, gear)=>{
     const saved = {state, combat, sim: simMode};
