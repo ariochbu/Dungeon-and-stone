@@ -1969,7 +1969,7 @@ const DECADE_BESTIARY = [
           voz_que_calla:{label:'Voz que Calla', mult:0.85, applies:{name:'Silencio', chance:0.40, duration:1}, cooldown:4},
         },
         aiPriority:['voz_que_siembra','voz_que_riega','voz_que_poda','voz_que_calla','petalo']},
-      9: {id:'ultimo_jardinero', name:'El Último Jardinero', icon:'🧑‍🌾', hp:3.80, atk:1.50, res:rs(15,-10,0,20,20), boss:true, frontline:true,
+      9: {id:'ultimo_jardinero', name:'El Último Jardinero', icon:'🧑‍🌾', hp:3.80, atk:1.45, res:rs(15,-10,0,20,20), boss:true, frontline:true,
         abilities:{
           guadana_uj:{label:'Guadaña', mult:1.10, applies:{name:'Sangrado', chance:0.25, duration:2, stack:true, maxStack:3}},
           sembrar_uj:{label:'Sembrar', utility:'summon', cooldown:6, summon:{tpl:BROTE_MENOR_TPL, count:2, maxAlive:2, hpPct:0.06, atkPct:0.35}},
@@ -1996,6 +1996,17 @@ const DECADE_BESTIARY = [
       aiPriority:['ultimo_latido','el_jardin_protege','savia_corrupta','raices_negras','espinas','latido']}
   }
 ];
+
+// BOSQUE MUERTO (71-79) MENOS RESISTENTE A LA MAGIA (decisión de ariochbu,
+// 2026-10-09): Mago y Hechicero morían en los combates normales de la década.
+// Enemigos comunes y élites pierden `points` de resistencia al fuego, al hielo
+// y al veneno. Guardianes y jefe no cambian (a esos ya les ganaban).
+const BOSQUE_MAGIC_RES_CUT = {points:10};
+[DECADE_BESTIARY[7].regular, DECADE_BESTIARY[7].elite].forEach(list=> (list||[]).forEach(t=>{
+  if(!t.res) return;
+  t.res = Object.assign({}, t.res);
+  ['fuego','hielo','veneno'].forEach(k=>{ t.res[k] = (t.res[k]||0) - BOSQUE_MAGIC_RES_CUT.points; });
+}));
 
 // GUARDIANES "FÁCILES" DE 61-79 (decisión de ariochbu, 2026-10-09). Los
 // guardianes de La Grieta y el Bosque muerto que NO invocan por su cuenta
