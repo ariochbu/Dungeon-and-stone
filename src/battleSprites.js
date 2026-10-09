@@ -194,6 +194,9 @@ ENEMY_SPRITES.larva_errante = ENEMY_SPRITES.larva_fase;
 ENEMY_SPRITES.reflejo_fallido = ENEMY_SPRITES.sin_forma;
 ENEMY_SPRITES.brote_menor = ENEMY_SPRITES.brote_carronero;
 ENEMY_SPRITES.preso_menor = ENEMY_SPRITES.preso_calcinado;
+// Guardianes nuevos de 1-9 (2026-10-09): mientras no llegue su arte usan el de Hobgoblin o Gilgoblin.
+const GOBLIN_GUARDIAN_PLACEHOLDER = {goblin_centinela:'hobgoblin', goblin_trampero:'gilgoblin', goblin_carnicero:'hobgoblin', bruja_pantano:'gilgoblin', tamborilero_guerra:'hobgoblin', campeon_hobgoblin:'hobgoblin', capataz_ogro:'gilgoblin'};
+Object.entries(GOBLIN_GUARDIAN_PLACEHOLDER).forEach(([id, src])=>{ if(!ENEMY_SPRITES[id]) ENEMY_SPRITES[id] = ENEMY_SPRITES[src]; });
 
 // Sprites HD de aliados por personaje (2026-10-02): verticales (2:3), el
 // escenario los dibuja respetando su proporción. Vex y Kael se sumaron el 2026-10-03.
@@ -230,6 +233,7 @@ export function enemySpriteFor(en){
 // invocaciones y los señuelos no tienen lámina propia: usan la de la criatura
 // a la que se parecen, igual que ya hacían con el sprite fijo.
 const CHIBI_ALIAS = {
+  goblin_centinela:'hobgoblin', goblin_trampero:'gilgoblin', goblin_carnicero:'hobgoblin', bruja_pantano:'gilgoblin', tamborilero_guerra:'hobgoblin', campeon_hobgoblin:'hobgoblin', capataz_ogro:'gilgoblin', // provisional, hasta tener su lámina
   cria_arana:'tarantula_cazadora', cangrejo_isla:'cangrejo_gigante', garvel_pequeno:'garvel', copia_usurpador:'usurpador_f3',
   senuelo_clon:'sombra_mimetica', senuelo_replica:'espejo_viviente', senuelo_duplicado:'doble_perfecto',
   senuelo_ciervo:'ciervo_torcido', larva_errante:'larva_fase', reflejo_fallido:'sin_forma', brote_menor:'brote_carronero', preso_menor:'preso_calcinado',
