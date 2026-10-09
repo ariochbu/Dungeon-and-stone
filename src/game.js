@@ -1679,7 +1679,7 @@ const DECADE_BESTIARY = [
           baba_inestable:{label:'Baba Inestable', mult:0.75, applies:{name:'Ralentizado', chance:0.25, duration:2}, cooldown:3},
         },
         aiPriority:['desfase','baba_inestable','mordisco_lf']},
-      {id:'ojo_reflujo', name:'Ojo de Reflujo', icon:'👁️', hp:0.75, atk:1.10, res:rs(-10,5,5,0,-5),
+      {id:'ojo_reflujo', name:'Ojo de Reflujo', icon:'👁️', hp:0.75, atk:1.10, res:rs(-10,25,25,0,-5),
         abilities:{
           mirada_ro:{label:'Mirada', mult:1.00},
           reflujo:{label:'Reflujo', mult:0.85, applies:{name:'Confusion', chance:0.20, duration:1}, cooldown:4},
@@ -1745,7 +1745,7 @@ const DECADE_BESTIARY = [
           atraccion:{label:'Atracción', mult:1.10, applies:{name:'Paralisis', chance:0.25, duration:1}, cooldown:4},
         },
         aiPriority:['gravedad_torcida','atraccion','pulso_av']},
-      {id:'pastor_errores', name:'Pastor de Errores', icon:'🧙', hp:1.80, atk:1.20, res:rs(0,5,5,5,5), elite:true,
+      {id:'pastor_errores', name:'Pastor de Errores', icon:'🧙', hp:1.80, atk:1.20, res:rs(0,30,30,5,5), elite:true,
         abilities:{
           baculo_pe:{label:'Báculo', mult:0.90},
           mutacion_forzada:{label:'Mutación Forzada', utility:'buff_allies', cooldown:4, buffAllies:{name:'Fortalecido', duration:3, stacks:4}},
@@ -1753,7 +1753,7 @@ const DECADE_BESTIARY = [
           orden_errada:{label:'Orden Errada', mult:0.75, applies:{name:'Silencio', chance:0.25, duration:1}, cooldown:4},
         },
         aiPriority:['mutacion_forzada','llamar_rebano','orden_errada','baculo_pe']},
-      {id:'eco_heredado', name:'Eco Heredado', icon:'👻', hp:1.95, atk:1.32, res:rs(5,0,0,10,5), elite:true,
+      {id:'eco_heredado', name:'Eco Heredado', icon:'👻', hp:1.95, atk:1.32, res:rs(5,25,25,10,5), elite:true,
         abilities:{
           golpe_eh:{label:'Golpe de Eco', mult:1.00},
           veneno_heredado:{label:'Veneno Heredado', mult:0.85, applies:{name:'Veneno', chance:0.40, duration:3, stack:true, maxStack:3}, cooldown:3},
@@ -1779,7 +1779,7 @@ const DECADE_BESTIARY = [
           doble_cara:{label:'Doble Cara', mult:1.35, cooldown:3},
         },
         aiPriority:['giro_defensivo','giro_ofensivo','doble_cara','golpe_inv']},
-      3: {id:'coro_hueco', name:'El Coro Hueco', icon:'🗣️', hp:3.10, atk:1.25, res:rs(5,0,0,10,15), boss:true, frontline:true,
+      3: {id:'coro_hueco', name:'El Coro Hueco', icon:'🗣️', hp:3.10, atk:1.25, res:rs(5,20,20,10,15), boss:true, frontline:true,
         abilities:{
           grito_ch:{label:'Grito', mult:0.95},
           voz_del_miedo:{label:'Voz del Miedo', mult:0.80, applies:{name:'Miedo', chance:0.30, duration:2, procChance:0.35}, cooldown:4},
@@ -1886,7 +1886,7 @@ const DECADE_BESTIARY = [
           embestida_cs:{label:'Embestida', mult:1.15, cooldown:3},
         },
         aiPriority:['semilla_explosiva','embestida_cs','cornada_cs']},
-      {id:'polilla_funeraria', name:'Polilla Funeraria', icon:'🦋', hp:0.75, atk:0.95, res:rs(-10,-15,0,10,-5),
+      {id:'polilla_funeraria', name:'Polilla Funeraria', icon:'🦋', hp:0.75, atk:0.95, res:rs(-10,-15,20,10,-5),
         abilities:{
           aleteo_pf:{label:'Aleteo', mult:0.90},
           esporas_luminosas:{label:'Esporas Luminosas', mult:0.70, applies:CORRUPCION(0.60), cooldown:3},
@@ -1976,7 +1976,7 @@ const DECADE_BESTIARY = [
           farol_verde:{label:'Farol Verde', mult:1.20, cooldown:3, applies:{name:'Ceguera', chance:0.25, duration:2, procChance:0.35}},
         },
         aiPriority:['cristal_protector','regar','farol_verde','golpe_ci']},
-      {id:'heraldo_flor_negra', name:'Heraldo de la Flor Negra', icon:'🥀', hp:1.90, atk:1.30, res:rs(5,-10,0,15,10), elite:true,
+      {id:'heraldo_flor_negra', name:'Heraldo de la Flor Negra', icon:'🥀', hp:1.90, atk:1.30, res:rs(5,10,30,15,10), elite:true,
         abilities:{
           toque_marchito:{label:'Toque Marchito', mult:0.95, applies:CORRUPCION(0.35)},
           flor_negra:{label:'Flor Negra', utility:'aoe', mult:0.45, cooldown:4, applies:CORRUPCION(1)},
@@ -2009,7 +2009,7 @@ const DECADE_BESTIARY = [
           flores_funerarias:{label:'Flores Funerarias', mult:0.85, applies:CORRUPCION(0.6), cooldown:4},
         },
         aiPriority:['asta_rota','estampida','flores_funerarias','cornada_cc']},
-      4: {id:'novia_raices', name:'La Novia de las Raíces', icon:'👰', hp:3.20, atk:1.35, res:rs(5,-15,0,15,10), boss:true,
+      4: {id:'novia_raices', name:'La Novia de las Raíces', icon:'👰', hp:3.20, atk:1.35, res:rs(5,-15,20,15,10), boss:true,
         abilities:{
           liana_nr:{label:'Liana', mult:1.00},
           lazo_nupcial:{label:'Lazo Nupcial', utility:'aoe', mult:0.50, cooldown:4, applies:{name:'Marcado', chance:0.6, duration:2}},
@@ -2041,7 +2041,7 @@ const DECADE_BESTIARY = [
           beber_savia:{label:'Beber Savia', utility:'self_heal', healPct:0.06, cooldown:6, condition:(ctx)=>ctx.selfHpPct<0.6},
         },
         aiPriority:['beber_savia','tumbas_de_raices','enterrar_arena','pala_hacha']},
-      8: {id:'flor_mil_voces', name:'La Flor de las Mil Voces', icon:'🌸', hp:3.50, atk:1.35, res:rs(10,-20,0,20,15), boss:true,
+      8: {id:'flor_mil_voces', name:'La Flor de las Mil Voces', icon:'🌸', hp:3.50, atk:1.35, res:rs(10,-20,20,20,15), boss:true,
         abilities:{
           petalo:{label:'Pétalo', mult:1.00},
           voz_que_riega:{label:'Voz que Riega', utility:'self_heal', healPct:0.05, cooldown:6, condition:(ctx)=>ctx.selfHpPct<0.7},
@@ -2132,7 +2132,7 @@ const DECADE_BESTIARY = [
           picado_ardiente:{label:'Picado Ardiente', mult:1.20, cooldown:3},
         },
         aiPriority:['nube_hollin','picado_ardiente','garra_ah']},
-      {id:'escriba_condenas', name:'Escriba de Condenas', icon:'📜', hp:0.80, atk:1.00, res:rs(-10,20,-25,0,-5),
+      {id:'escriba_condenas', name:'Escriba de Condenas', icon:'📜', hp:0.80, atk:1.00, res:rs(-10,35,0,0,-5),
         abilities:{
           letra_ardiente:{label:'Letra Ardiente', mult:0.90},
           sentencia_muda:{label:'Sentencia Muda', mult:0.70, applies:{name:'Silencio', chance:0.15, duration:1}, cooldown:4},
@@ -2156,7 +2156,7 @@ const DECADE_BESTIARY = [
           barrido_brasa:{label:'Barrido de Brasa', utility:'aoe', mult:0.50, rearMult:0.50, cooldown:5},
         },
         aiPriority:['ejecucion','filo_fundido','barrido_brasa','hachazo']},
-      {id:'alcaide_menor', name:'Alcaide Menor', icon:'⛓️', hp:2.10, atk:1.22, res:rs(10,25,-30,0,15), elite:true, reductionWithAllies:{min:1, value:0.15},
+      {id:'alcaide_menor', name:'Alcaide Menor', icon:'⛓️', hp:2.10, atk:1.22, res:rs(10,35,-10,0,15), elite:true, reductionWithAllies:{min:1, value:0.15},
         abilities:{
           latigo_fuego:{label:'Látigo de Fuego', mult:1.00, applies:QUEMADURA(0.25)},
           orden_alcaide:{label:'Orden del Alcaide', utility:'buff_allies', cooldown:5, buffAllies:{name:'Fortalecido', duration:3, stacks:4}},
@@ -2184,7 +2184,7 @@ const DECADE_BESTIARY = [
           embestida_ph:{label:'Embestida de Hierro', mult:1.40, applies:{name:'Aturdido', chance:0.20, duration:1}, cooldown:4},
         },
         aiPriority:['cerrojo','aliento_horno','embestida_ph','portazo_ph']},
-      2: {id:'contador_condenas', name:'El Contador de Condenas', icon:'🧮', hp:3.30, atk:1.45, res:rs(10,25,-25,5,15), boss:true,
+      2: {id:'contador_condenas', name:'El Contador de Condenas', icon:'🧮', hp:3.30, atk:1.45, res:rs(10,35,-5,5,15), boss:true,
         abilities:{
           cuenta_ardiente:{label:'Cuenta Ardiente', mult:1.05, applies:QUEMADURA(0.25)},
           sumar_condena:{label:'Sumar Condena', mult:0.85, applies:{name:'Marcado', chance:0.45, duration:2}, cooldown:3},
@@ -2208,7 +2208,7 @@ const DECADE_BESTIARY = [
           colada:{label:'Colada', mult:1.40, cooldown:3, bonusVsTargetStatus:{name:'Quemadura', minStacks:2, mult:1.25}},
         },
         aiPriority:['verter_metal','colada','metal_que_enfria','golpe_crisol']},
-      5: {id:'dama_grillete', name:'La Dama del Grillete', icon:'👑', hp:3.71, atk:1.52, res:rs(10,25,-25,5,15), boss:true,
+      5: {id:'dama_grillete', name:'La Dama del Grillete', icon:'👑', hp:3.71, atk:1.52, res:rs(10,35,-5,5,15), boss:true,
         abilities:{
           eslabon:{label:'Eslabón', mult:1.05},
           grilletes_voladores:{label:'Grilletes Voladores', mult:0.90, applies:{name:'Paralisis', chance:0.40, duration:1}, cooldown:3},
@@ -2217,7 +2217,7 @@ const DECADE_BESTIARY = [
           apretar:{label:'Apretar', mult:1.35, cooldown:4, bonusVsTargetStatus:{name:'Paralisis', mult:1.25}},
         },
         aiPriority:['velo_de_cadenas','grilletes_voladores','condena_de_la_dama','apretar','eslabon']},
-      6: {id:'testigo_ciego', name:'El Testigo Ciego', icon:'👁️', hp:3.50, atk:1.36, res:rs(10,25,-25,5,20), boss:true,
+      6: {id:'testigo_ciego', name:'El Testigo Ciego', icon:'👁️', hp:3.50, atk:1.36, res:rs(10,35,0,5,20), boss:true,
         abilities:{
           mirada_que_arde:{label:'Mirada que Arde', mult:1.10, applies:QUEMADURA(0.35)},
           veredicto:{label:'Veredicto', mult:1.45, cooldown:4, ignoreResist:0.30},
@@ -2276,6 +2276,10 @@ const DECADE_BESTIARY = [
 // del Vacío 35, Geómetra Ciega 20, Puerta que Camina 20 (61-70); Caracol de Tumba 35, Raíz Desenterrada
 // 25, Custodio del Invernadero 35 (71-80); Carcelero de Ceniza 35, Preso Calcinado 15, Forjador de
 // Cadenas 30 (81-90). Los guardianes no pasan de la resistencia del jefe de su década.
+// RESISTENCIA MÁGICA EN 61-90 (ariochbu, 2026-10-09: "un mago debe aguantar ataques mágicos"). Misma
+// lógica que la física de arriba pero para las criaturas que lanzan magia (ojos, voces, pastores,
+// heraldos, escribas, jueces): suben fuego y hielo en su plantilla. En el Bosque muerto las plantas
+// conservan su debilidad al fuego (solo sube el hielo, salvo el Heraldo). El veneno no se toca.
 // GUARDIANES "FÁCILES" DE 61-79 (decisión de ariochbu, 2026-10-09). Los
 // guardianes de La Grieta y el Bosque muerto que NO invocan por su cuenta
 // llegan al combate con una escolta de 2 criaturas menores (ya están ahí
