@@ -10046,7 +10046,7 @@ const GEAR_PITY_TIERS = new Set(['rango_a']); // legendario/ss se suman aquí si
 const STONE_PITY_TIERS = new Set(['A','S','SS']);
 // 2026-10-09 (pedido explícito): en la década 91-100 el pity de piedras es de
 // Tier S — solo sube la probabilidad de S y solo se reinicia al salir una S.
-// Usa el mismo contador (pityStone) y los mismos umbrales PITY_SOFT/PITY_HARD.
+// Usa el mismo contador (pityStone); la curva es propia, ver STONE_S_PITY.
 const STONE_PITY_S_FROM = 91;
 const STONE_PITY_TIERS_S = new Set(['S','SS']);
 function stonePityTiersFor(level){ return (level||1) >= STONE_PITY_S_FROM ? STONE_PITY_TIERS_S : STONE_PITY_TIERS; }
@@ -10133,10 +10133,18 @@ function rollStoneDropForLevel(level, bypassTiers, noS, usePity){
 // probabilidad FINAL de que sea Tier S es fija desde el piso 81 — 1,2% (81+),
 // 1,5% (91+) y 2,5% (piso 100). Se decide aparte; si no toca S, se reparte
 // entre los demás rangos como siempre.
+// Pity de la piedra S en 91-100 (ariochbu, 2026-10-09: "que se sienta, pero no
+// tan abrupto, quizás en el 1000 tenga un 30% o 40%"): sube en línea recta
+// desde la tasa base hasta 35% con el contador en 1000 y ahí se queda. Sin
+// garantía dura, a diferencia de PITY_SOFT/PITY_HARD.
+const STONE_S_PITY = {full:1000, chance:0.35};
+function stoneSPityChance(counter, base){
+  return base + Math.max(0, STONE_S_PITY.chance - base) * Math.min(1, (counter||0) / STONE_S_PITY.full);
+}
 const BOSS_STONE_S_CHANCE = [{from:100, chance:0.025}, {from:91, chance:0.015}, {from:81, chance:0.012}];
 function rollGuaranteedStoneDropForLevel(level, bypassTiers){
   const fixedS = BOSS_STONE_S_CHANCE.find(b=> (level||1) >= b.from);
-  const sChance = fixedS && (level||1) >= STONE_PITY_S_FROM ? pityBoostedChance(state.char.pityStone||0, fixedS.chance) : (fixedS && fixedS.chance);
+  const sChance = fixedS && (level||1) >= STONE_PITY_S_FROM ? stoneSPityChance(state.char.pityStone||0, fixedS.chance) : (fixedS && fixedS.chance);
   if(fixedS && chance(sChance)) return makeSoulStoneItem(pick(Object.values(SOUL_STONES).filter(st=>st.tier==='S')));
   let stone = null;
   while(!stone) stone = rollStoneDropForLevel(level, bypassTiers, !!fixedS, true);
