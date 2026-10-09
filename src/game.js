@@ -10044,6 +10044,17 @@ function scaleLootTableForDungeon(table, lootLevel){
 const PITY_SOFT = 200, PITY_HARD = 400;
 const GEAR_PITY_TIERS = new Set(['rango_a']); // legendario/ss se suman aquí si alguna vez tienen su propio pity
 const STONE_PITY_TIERS = new Set(['A','S','SS']);
+// 2026-10-09 (pedido explícito): en la década 91-100 el pity de piedras es de
+// Tier S — solo sube la probabilidad de S y solo se reinicia al salir una S.
+// Usa el mismo contador (pityStone) y los mismos umbrales PITY_SOFT/PITY_HARD.
+const STONE_PITY_S_FROM = 91;
+const STONE_PITY_TIERS_S = new Set(['S','SS']);
+function stonePityTiersFor(level){ return (level||1) >= STONE_PITY_S_FROM ? STONE_PITY_TIERS_S : STONE_PITY_TIERS; }
+// Qué rango EMPUJA el pity (distinto de cuáles lo reinician, arriba): antes del
+// 91 solo la A. Con Tier S ya cayendo desde el 71, dejar la S en esta lista
+// hacía que el pity duro la garantizara (va primera en la tabla).
+const STONE_PITY_BOOST_A = new Set(['A']), STONE_PITY_BOOST_S = new Set(['S']);
+function stonePityBoostFor(level){ return (level||1) >= STONE_PITY_S_FROM ? STONE_PITY_BOOST_S : STONE_PITY_BOOST_A; }
 function pityBoostedChance(counter, baseChance){
   if(!counter || counter < PITY_SOFT) return baseChance;
   if(counter >= PITY_HARD) return 1;
@@ -10099,8 +10110,13 @@ function rollGearDropForLevel(level, floorIdx, bypassTiers){
   if(!rarity) return null;
   return generateEquipOfRarity(rarity, floorIdx);
 }
-function rollStoneDropForLevel(level, bypassTiers){
-  const tier = rollFlatRarity(scaleLootTableForDungeon(FLAT_STONE_TABLE, level), STONE_TIER_MIN_LEVEL, level, bypassTiers, state.char.pityStone||0, STONE_PITY_TIERS);
+function rollStoneDropForLevel(level, bypassTiers, noS, usePity){
+  // usePity: solo la piedra garantizada de jefe/guardián empuja con el pity. Un
+  // cofre no reinicia el contador, así que con pity duro daba una piedra alta
+  // en cada cofre hasta el siguiente jefe.
+  // noS: la piedra garantizada del jefe decide la S aparte (ver BOSS_STONE_S_CHANCE)
+  const table = scaleLootTableForDungeon(FLAT_STONE_TABLE, level).filter(e=> !noS || e.tier !== 'S');
+  const tier = rollFlatRarity(table, STONE_TIER_MIN_LEVEL, level, bypassTiers, usePity ? (state.char.pityStone||0) : 0, stonePityBoostFor(level));
   if(!tier) return null;
   const pool = Object.values(SOUL_STONES).filter(s=>s.tier===tier);
   const tpl = pick(pool);
@@ -10120,9 +10136,10 @@ function rollStoneDropForLevel(level, bypassTiers){
 const BOSS_STONE_S_CHANCE = [{from:100, chance:0.025}, {from:91, chance:0.015}, {from:81, chance:0.012}];
 function rollGuaranteedStoneDropForLevel(level, bypassTiers){
   const fixedS = BOSS_STONE_S_CHANCE.find(b=> (level||1) >= b.from);
-  if(fixedS && chance(fixedS.chance)) return makeSoulStoneItem(pick(Object.values(SOUL_STONES).filter(st=>st.tier==='S')));
+  const sChance = fixedS && (level||1) >= STONE_PITY_S_FROM ? pityBoostedChance(state.char.pityStone||0, fixedS.chance) : (fixedS && fixedS.chance);
+  if(fixedS && chance(sChance)) return makeSoulStoneItem(pick(Object.values(SOUL_STONES).filter(st=>st.tier==='S')));
   let stone = null;
-  while(!stone || (fixedS && stone.tier==='S')) stone = rollStoneDropForLevel(level, bypassTiers);
+  while(!stone) stone = rollStoneDropForLevel(level, bypassTiers, !!fixedS, true);
   return stone;
 }
 function generateLoot(floorIdx, level){
@@ -14326,8 +14343,8 @@ function handleVictory(){
     log(line);
     lootText += ' ' + line;
     advanceMissionsFor('find_soul_stones', 1);
+    if(stonePityTiersFor(level).has(stoneDrop.tier)) gotRareStone = true; // 91-100: solo una S reinicia el pity
     if(['A','S','SS'].includes(stoneDrop.tier)){
-      gotRareStone = true;
       flashRareDrop(stoneDrop, stoneDrop.tier);
     }
   }
@@ -14364,7 +14381,9 @@ function handleVictory(){
     // quien lo usaba quedaba atrapado en un bucle. Mismo Math.min que ya usa
     // maxLevelUnlocked justo arriba.
     if(isDecadeFinal){
-      state.char.checkpointLevel = Math.max(state.char.checkpointLevel||1, Math.min(OPEN_LEVEL_CAP+1, clearedLevel+1));
+      // Sin checkpoint en el piso 91, a propósito (decisión de ariochbu, 2026-10-09):
+      // vencer al jefe del 90 no abre punto de entrada; La Celda se hace desde el 81.
+      if(clearedLevel !== 90) state.char.checkpointLevel = Math.max(state.char.checkpointLevel||1, Math.min(OPEN_LEVEL_CAP+1, clearedLevel+1));
       noteDecadeBossBeaten(clearedLevel);
       // "El primer retornado": lo concede la base al guardar el jefe del piso
       // 100 (trigger de la migración 0032), así que se relee tras el guardado.
