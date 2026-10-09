@@ -512,8 +512,8 @@ const LEVEL30_SKILL_BONUS = {
   marca_cazador:    {duration: 4},                           // era 3
   explosion_arcana: {bonusMult: 0.75, penaltyIfNone: 0.20},  // era 0.60 / 0.30
   golpe_consagrado: {healPct: 0.22},                          // era 0.15
-  muro_de_fe:       {reductionPct: 0.25},                     // 0.35 hasta el 2026-10-09 (decisión de ariochbu: queda en el valor base)
-  escudo_del_juramento: {shieldPct: 0.20},                    // 0.30 hasta el 2026-10-09 (ídem)
+  muro_de_fe:       {reductionPct: 0.30},                     // 0.35 hasta el 2026-10-09 (decisión de ariochbu: queda en el valor base)
+  escudo_del_juramento: {shieldPct: 0.25},                    // 0.30 hasta el 2026-10-09 (ídem)
   grito_de_panico:  {applyChance: 0.8},                       // era 0.6
   mirada_de_locura: {applyChance: 0.8},                       // era 0.6
   // 2026-10-02 (pedido explícito): las 6 habilidades que no tenían mejora de
@@ -619,7 +619,7 @@ const SKILLS = {
     // cuando no queda nadie al frente cae sobre la retaguardia (misma regla
     // de línea que playerFrontTargetIndices). Se eligió esto en vez de un
     // enfriamiento para no tener que meter enfriamientos en todas las sendas.
-    desc: ()=> `Daño a toda la línea frontal enemiga (si ya no queda nadie al frente, a toda la retaguardia). +${Math.round(skillBonus('lluvia_flechas','bonusVsMarked',0.25)*100)}% contra los Marcados.`, targetMode:'all'
+    desc: ()=> `Daño a toda una línea enemiga, la que elijas: el frente o la retaguardia (toca a un enemigo de esa línea). +${Math.round(skillBonus('lluvia_flechas','bonusVsMarked',0.25)*100)}% contra los Marcados.`, targetMode:'all'
   },
 
   bola_fuego: {
@@ -10831,6 +10831,22 @@ function frontEnemyIndex(){
 // los del frente (igual que antes). En cuanto se derrota a toda la línea
 // frontal, se desbloquea la elección entre lo que quede vivo — que en ese
 // punto es pura retaguardia — en vez de auto-elegir sin dejar escoger.
+// Lluvia de flechas (2026-10-09, pedido de ariochbu): el Arquero elige a qué
+// línea enemiga le cae. Frente = señuelos y enemigos de primera línea vivos;
+// retaguardia = el resto. aimIdx: índice de un enemigo de la línea elegida;
+// sin él (o si ya no vale) cae donde caía antes: al frente, o atrás si no queda frente.
+function lluviaLineIndices(aimIdx){
+  const front = [...new Set(livingDecoyIndices().concat(livingFrontlineEnemyIndices()))];
+  const rear = [];
+  combat.enemies.forEach((e,i)=>{ if(e.hp>0 && !front.includes(i)) rear.push(i); });
+  if(aimIdx!=null && rear.includes(aimIdx)) return rear;
+  if(aimIdx!=null && front.includes(aimIdx)) return front;
+  return front.length ? front : rear;
+}
+function lluviaHasTwoLines(){
+  const front = lluviaLineIndices(null);
+  return livingEnemies().length > front.length;
+}
 function playerFrontTargetIndices(){
   // Mientras haya señuelos vivos, son lo único alcanzable cuerpo a cuerpo.
   const decoys = livingDecoyIndices();
@@ -11572,7 +11588,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
     }
     targets = [t];
   } else if(skill.targetMode==='all' && skillId==='lluvia_flechas'){
-    targets = playerFrontTargetIndices().map(i=>combat.enemies[i]);
+    targets = lluviaLineIndices(typeof targetIdx==='number' ? targetIdx : null).map(i=>combat.enemies[i]);
   } else if(skill.targetMode==='all'){
     targets = livingEnemies();
   } else if(skill.targetMode==='self'){
@@ -13698,7 +13714,9 @@ function simBuildState(cfg){
 // Objetivo del simulador para habilidades de objetivo libre. El Hechicero va
 // al enemigo más grande (su Veneno necesita apilarse en uno solo; persiguiendo
 // siempre al más débil se pasaba el combate contra las invocaciones del jefe).
+let simTargetOverride = null; // objetivo que fijó simPickSkill para este turno (Arquero)
 function simTargetIndex(){
+  if(simTargetOverride != null && combat.enemies[simTargetOverride] && combat.enemies[simTargetOverride].hp > 0) return simTargetOverride;
   if(!['hechicero', 'tirador', 'mago'].includes(state.char.style)) return autoPickEnemyIndex();
   const living = livingEnemies();
   if(!living.length) return -1;
@@ -13711,6 +13729,7 @@ function simTargetIndex(){
 // Guerrero nunca gritaba ni remataba con Machacar).
 const SIM_UTILITY_SKILLS = new Set(['muro_de_fe', 'escudo_del_juramento', 'grito_guerra', 'marca_cazador']);
 function simPickSkill(usable){
+  simTargetOverride = null;
   const byDmg = ()=> usable.filter(id=> SKILLS[id].mult).sort((a, b)=> (SKILLS[b].mult||0) - (SKILLS[a].mult||0))[0] || 'ataque_basico';
   const can = (id)=> usable.includes(id);
   const target = combat.enemies[simTargetIndex()];
@@ -13749,14 +13768,27 @@ function simPickSkill(usable){
     if(can('furia_titan') && (livingEnemies().length >= 3 || (front && hasStatus(front.statuses, 'Tambaleo')))) return 'furia_titan';
     return can('golpe_bruto') ? 'golpe_bruto' : dmgOnly();
   }
-  // Arquero (2026-10-09): marca al enemigo fuerte y descarga sobre la marca.
+  // Arquero (2026-10-09, rotación indicada por ariochbu): limpia la retaguardia
+  // enemiga con Lluvia de flechas y derriba el frente con Marca + Disparo
+  // certero + ataque básico (el básico es el que le da robo de vida).
   if(state.char.style === 'tirador' && target && !window.__simDistanciaTonto){
-    const marcado = !!hasStatus(target.statuses, 'Marcado');
-    const fuerte = !!(target.tpl && (target.tpl.boss || target.tpl.elite));
-    if(can('marca_cazador') && !marcado && fuerte) return 'marca_cazador';
-    if(can('disparo_cazador_final') && (marcado || !can('marca_cazador'))) return 'disparo_cazador_final';
-    // Sin Lluvia de flechas: a 40 MP por uso lo dejaba seco en dos combates y medía 0-29% (peor que sin rotación).
-    return can('disparo_certero') ? 'disparo_certero' : byDmg();
+    const front = lluviaLineIndices(null), rear = [];
+    combat.enemies.forEach((e,i)=>{ if(e.hp>0 && !front.includes(i)) rear.push(i); });
+    if(can('lluvia_flechas') && rear.length >= 2 && front.length){ simTargetOverride = rear[0]; return 'lluvia_flechas'; }
+    // objetivo del frente: el jefe o guardián si está, si no el más débil de esa línea
+    const line = front.length ? front : rear;
+    const bossIdx = line.find(i=> combat.enemies[i].tpl && combat.enemies[i].tpl.boss && !combat.enemies[i].summoned);
+    const tIdx = bossIdx != null ? bossIdx : line.slice().sort((x, y)=> combat.enemies[x].hp - combat.enemies[y].hp)[0];
+    const t = combat.enemies[tIdx];
+    simTargetOverride = tIdx;
+    const marcado = !!hasStatus(t.statuses, 'Marcado');
+    const fuerte = !!(t.tpl && (t.tpl.boss || t.tpl.elite));
+    if(can('marca_cazador') && !marcado && (fuerte || t.hp > t.maxHP*0.5)) return 'marca_cazador';
+    if(can('disparo_cazador_final') && (marcado || fuerte)) return 'disparo_cazador_final';
+    // guarda MP para la próxima Lluvia si todavía queda retaguardia enemiga
+    const reserva = rear.length >= 2 ? effectiveSkillCost('lluvia_flechas', SKILLS.lluvia_flechas) : 0;
+    if(can('disparo_certero') && state.char.curSta - effectiveSkillCost('disparo_certero', SKILLS.disparo_certero) >= reserva && combat.turnCount % 2 === 0) return 'disparo_certero';
+    return 'ataque_basico';
   }
   // Mago (2026-10-09): Cataclismo contra grupos; Quemadura al tope y después
   // hielo (Ralentizado + Choque Térmico). Explosión arcana solo si no hay
@@ -13809,7 +13841,7 @@ async function simOneFight(cfg){
         return true;
       };
       const best = simPickSkill(skillIds.filter(ok));
-      const idx = resolvedTargetMode(SKILLS[best]) === 'any' ? simTargetIndex() : null;
+      const idx = (resolvedTargetMode(SKILLS[best]) === 'any' || best === 'lluvia_flechas') ? simTargetIndex() : null;
       await playerUseSkill(best, idx);
       // si por lo que sea no consumió el turno, ataque básico para no quedar en bucle
       if(combat && !combat.over && !simOutcome && combat.turnCount === tc) await playerUseSkill('ataque_basico', resolvedTargetMode(SKILLS.ataque_basico) === 'any' ? autoPickEnemyIndex() : null);
@@ -13837,7 +13869,7 @@ async function simFightLoop(){
         return true;
       };
       const best = simPickSkill(skillIds.filter(ok));
-      await playerUseSkill(best, resolvedTargetMode(SKILLS[best]) === 'any' ? simTargetIndex() : null); // mismo objetivo que evaluó simPickSkill (antes: el más débil)
+      await playerUseSkill(best, (resolvedTargetMode(SKILLS[best]) === 'any' || best === 'lluvia_flechas') ? simTargetIndex() : null); // mismo objetivo que evaluó simPickSkill (antes: el más débil)
       if(combat && !combat.over && !simOutcome && combat.turnCount === tc) await playerUseSkill('ataque_basico', resolvedTargetMode(SKILLS.ataque_basico) === 'any' ? autoPickEnemyIndex() : null);
       if(combat && !combat.over && !simOutcome && combat.turnCount === tc){ combat.turnCount++; await endPlayerTurn(); }
     }
@@ -14457,6 +14489,11 @@ function useSkillFromMenu(sid){
       const idx = autoPickEnemyIndex();
       if(idx<0){ log('No hay ningún objetivo disponible.'); return; }
       guardedPlayerUseSkill(sid, idx);
+    } else if(sid==='lluvia_flechas' && lluviaHasTwoLines()){
+      // sin apuntado manual: a la línea con más enemigos vivos
+      const front = lluviaLineIndices(null), rear = [];
+      combat.enemies.forEach((e,i)=>{ if(e.hp>0 && !front.includes(i)) rear.push(i); });
+      guardedPlayerUseSkill(sid, (rear.length > front.length ? rear : front)[0]);
     } else {
       guardedPlayerUseSkill(sid, null);
     }
@@ -14465,6 +14502,9 @@ function useSkillFromMenu(sid){
   if(tMode==='any'){
     combat.pendingSkill = sid;
     log(`Elige un objetivo para ${sk.name}.`);
+  } else if(sid==='lluvia_flechas' && lluviaHasTwoLines()){
+    combat.pendingSkill = sid;
+    log(`Elige dónde cae ${sk.name}: toca a un enemigo del frente o de la retaguardia.`);
   } else if(tMode==='front' && playerFrontTargetIndices().length>1){
     // Dos o más objetivos elegibles a la vez (línea frontal si sigue viva,
     // o toda la retaguardia si ya no queda nadie al frente): se pide el
