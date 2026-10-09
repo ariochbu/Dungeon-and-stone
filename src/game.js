@@ -673,8 +673,8 @@ const SKILLS = {
     id:'grito_de_panico', name:'Grito de Locura', cost:{tipo:'estamina', valor:20}, dmgType:'arcano', mult:0.55,
     applies:{name:'Miedo', chance:0.6, duration:2, procChance:0.4},
     appliesAlt:{name:'Confusion', chance:0.6, duration:2, procChance:0.35},
-    controlTargets:2, // el estado alcanza también a un segundo enemigo (pedido de ariochbu, 2026-10-08)
-    desc: ()=> `Daño arcano menor. ${Math.round(skillBonus('grito_de_panico','applyChance',0.6)*100)}% de aplicar, al azar, Miedo (40% de perder el turno) o Confusión (35% de golpear a otro enemigo, o a sí mismo si está solo) durante 2 turnos. El estado alcanza también a un segundo enemigo.`,
+    controlLine:true, // el estado cae sobre TODA la línea del objetivo elegido, frente o retaguardia (pedido de ariochbu, 2026-10-09; antes: 2 enemigos)
+    desc: ()=> `Daño arcano menor. ${Math.round(skillBonus('grito_de_panico','applyChance',0.6)*100)}% de aplicar, al azar, Miedo (40% de perder el turno) o Confusión (35% de golpear a otro enemigo, o a sí mismo si está solo) durante 2 turnos. El estado alcanza a toda la línea del objetivo que elijas (frente o retaguardia), cada enemigo con su propia tirada.`,
     targetMode:'any'
   },
   // Tercera habilidad nueva: daño moderado que te cura y deja al enemigo
@@ -11989,13 +11989,13 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
         const et = playerSetSp('set_eclipse_total');
         if(et && targetNegStatuses>=2) applyMermado(target, et.reduction, 2);
       }
-      // Control a varios enemigos: el mismo estado, con su propia tirada, sobre
-      // otro(s) enemigo(s) — de la misma línea del objetivo si queda alguno.
-      for(let extra = 1; extra < (skill.controlTargets||1); extra++){
-        const others = livingEnemies().filter(e=> e!==target && !hasStatus(e.statuses, applyDef.name));
-        const sameLine = others.filter(e=> !!(e.tpl && e.tpl.frontline) === !!(target.tpl && target.tpl.frontline));
-        const second = sameLine.length ? pick(sameLine) : (others.length ? pick(others) : null);
-        if(second && applyStatus(second, applyDef, false)){ onPlayerAppliedStatus(second, applyDef.name); log(`${skill.name} alcanza también a ${second.name}.`); }
+      // Control en línea: el mismo estado, con su propia tirada, sobre el resto
+      // de la línea del objetivo (frente o retaguardia, ver lluviaLineIndices).
+      if(skill.controlLine){
+        const line = lluviaLineIndices(combat.enemies.indexOf(target)).map(i=> combat.enemies[i]).filter(e=> e!==target && e.hp>0);
+        const hit = line.filter(e=> applyStatus(e, applyDef, false));
+        hit.forEach(e=> onPlayerAppliedStatus(e, applyDef.name));
+        if(hit.length) log(`${skill.name} alcanza también a ${hit.map(e=>e.name).join(', ')}.`);
       }
     }
     applyEquippedSpecials(target, dmg, skill);
@@ -13807,6 +13807,15 @@ function simPickSkill(usable){
   const has = (n)=> !!hasStatus(target.statuses, n);
   const hpPct = state.char.curHP / (derived().maxHP || 1);
   if(can('grito_del_abismo') && livingEnemies().length >= 2) return 'grito_del_abismo';
+  // Grito de Locura cae sobre toda una línea: contra grupos, primero a la línea
+  // con más enemigos todavía sin Miedo ni Confusión.
+  if(can('grito_de_panico') && !window.__simHechiceroSinLinea){
+    const front = lluviaLineIndices(null), rear = [];
+    combat.enemies.forEach((e,i)=>{ if(e.hp>0 && !front.includes(i)) rear.push(i); });
+    const libres = (line)=> line.filter(i=> !hasStatus(combat.enemies[i].statuses, 'Miedo') && !hasStatus(combat.enemies[i].statuses, 'Confusion'));
+    const lf = libres(front), lr = libres(rear), mejor = lr.length > lf.length ? lr : lf;
+    if(mejor.length >= 2){ simTargetOverride = mejor[0]; return 'grito_de_panico'; }
+  }
   // primero el Veneno al tope (es su daño), después el resto
   const vn = hasStatus(target.statuses, 'Veneno');
   if(can('toque_venenoso') && (!vn || (vn.stacks||1) < skillBonus('toque_venenoso','maxStack',3) || (vn.duration||0) <= 1)) return 'toque_venenoso';
