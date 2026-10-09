@@ -221,6 +221,12 @@ LAMINAS_NUEVAS = {
               'boca_peregrina', 'ciempies_especular', 'quimera_disonante', 'ancla_vacio', 'pastor_errores', 'eco_heredado',
               'la_costura', 'el_inversor', 'coro_hueco', 'geometra_ciega', 'hambre_colores', 'recuerdo_mal_nacido',
               'rey_articulaciones', 'marea_seca', 'puerta_camina', 'sin_forma', 'sin_forma_f2', 'sin_forma_f3'],
+    '71-80': ['raiz_desenterrada', 'jardinero_hueco', 'ciervo_sepulcral', 'polilla_funeraria', 'hongo_osario', 'enredadera_viuda',
+              'cuervo_savia', 'brote_carronero', 'caracol_tumba', 'espantapajaros_raigal', 'mantis_poda', 'semilla_doliente',
+              'madre_micelio', 'injerto_profano', 'custodio_invernadero', 'heraldo_flor_negra', 'jardinero_enterrado',
+              'gran_madre_micelio', 'ciervo_cementerio', 'novia_raices', 'arbol_juramentos', 'bestia_invernadero',
+              'sepulturero_savia', 'flor_mil_voces', 'ultimo_jardinero', 'corazon_marchito', 'corazon_marchito_f2',
+              'corazon_marchito_f3'],
 }
 LAMINA_NUEVA_POR_NOMBRE = {
     'goblin arquero': 'goblin_arquero', 'goblin guerrero': 'goblin_guerrero', 'goblin saqueador': 'goblin_saqueador',

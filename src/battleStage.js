@@ -26,12 +26,12 @@ const SIZE = TILE * SCALE; // 48px por actor a escala base (sprites fijos sin ve
 // tamaño de celda y los cuadros de cada una. Quien no tenga tira (monstruos de
 // décadas aún sin arte chibi) sigue con su sprite fijo de siempre.
 let CHIBI = {};
-fetch('src/assets/chibi/index.json?v=9').then(r=> r.json()).then(j=>{ CHIBI = j; }).catch(()=>{});
+fetch('src/assets/chibi/index.json?v=10').then(r=> r.json()).then(j=>{ CHIBI = j; }).catch(()=>{});
 const chibiImgs = {}; // key -> Image (cargando o lista)
 function chibiAnimFor(key){
   const meta = CHIBI[key];
   if(!meta) return null;
-  if(!chibiImgs[key]){ chibiImgs[key] = new Image(); chibiImgs[key].src = `src/assets/chibi/${key}.png?v=6`; }
+  if(!chibiImgs[key]){ chibiImgs[key] = new Image(); chibiImgs[key].src = `src/assets/chibi/${key}.png?v=7`; }
   const img = chibiImgs[key];
   return img.complete && img.naturalWidth > 0 ? new SpriteAnim(img, sheetFromMeta(meta)) : null;
 }
