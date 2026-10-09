@@ -1973,3 +1973,105 @@ button.cron-card:hover{ transform:translateY(-2px); border-color:var(--bronze); 
   .auth-or{ margin:10px 0; }
 }
 @media (max-width:820px){ .auth-tagline{ white-space:normal; } }
+
+/* ============================================================
+   PORTADA — DISEÑO POR TAMAÑO (2026-10-09, tras ver que en el móvil el
+   nombre del juego casi no se leía). Este bloque manda sobre las reglas de
+   portada de más arriba.
+     · PC (≥1000px):      logo y acceso a la izquierda, la puerta libre a la derecha.
+     · Tablet (600–999):  todo centrado en una columna, ilustración horizontal.
+     · Móvil (<600):      logo arriba, la puerta visible en medio, acceso abajo.
+   ============================================================ */
+#screen-auth.active{ min-height:100vh; min-height:100svh; }
+
+/* El nombre del juego: color sólido con contorno y resplandor. El degradado
+   recortado al texto (background-clip) junto a un filtro animado se pintaba
+   mal en varios navegadores de móvil y dejaba el título casi invisible; ese
+   acabado queda solo para pantallas con ratón. */
+.auth-logo{ background:none; -webkit-background-clip:border-box; background-clip:border-box; -webkit-text-fill-color:currentColor; color:#f3dba2; filter:none; animation:none;
+  text-shadow:0 2px 0 #000, 0 0 3px #000, 0 0 14px rgba(0,0,0,0.9), 0 0 30px rgba(226,132,46,0.55); }
+.auth-logo i{ -webkit-text-fill-color:#c9504a; color:#c9504a; }
+@media (hover:hover) and (pointer:fine) and (min-width:1000px){
+  .auth-logo{ background:linear-gradient(180deg, #fff1c9 0%, #e7c377 42%, #a8782f 100%); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; text-shadow:none;
+    filter:drop-shadow(0 2px 0 rgba(0,0,0,0.85)) drop-shadow(0 0 26px rgba(214,120,40,0.35)); animation:auth-glow 5.5s ease-in-out infinite alternate; }
+  .auth-logo i{ -webkit-text-fill-color:#b24444; }
+}
+
+/* ---------- Tablet: 600–999px ---------- */
+@media (min-width:600px) and (max-width:999px){
+  #screen-auth.active{ align-items:center; }
+  .auth-bg{ background:
+    radial-gradient(ellipse 75% 60% at 50% 48%, rgba(8,6,5,0.62) 0%, rgba(8,6,5,0.30) 70%, rgba(8,6,5,0.12) 100%),
+    linear-gradient(180deg, rgba(8,6,5,0.55) 0%, rgba(8,6,5,0.05) 30%, rgba(8,6,5,0.25) 70%, rgba(8,6,5,0.95) 100%),
+    url('assets/portada/portada.jpg?v=1') 62% center / cover no-repeat; }
+  .auth-layout{ grid-template-columns:minmax(0, 440px); justify-content:center; gap:24px; padding:40px 24px 96px; }
+  .auth-title{ text-align:center; }
+  .auth-logo{ font-size:clamp(3em, 8.4vw, 4.4em); }
+  .auth-tagline{ white-space:nowrap; font-size:clamp(0.86em, 2vw, 1.05em); letter-spacing:0.2em; }
+  .auth-lead{ display:block; margin:16px auto 0; }
+  .auth-title .alfa-note{ margin:8px auto 0; }
+  .auth-audio{ position:absolute; top:auto; bottom:-38px; right:0; display:inline-block; margin:0; }
+}
+/* tablet en vertical: como el móvil — logo arriba, la puerta visible en medio, acceso abajo */
+@media (min-width:600px) and (max-width:999px) and (orientation:portrait){
+  #screen-auth.active{ align-items:stretch; }
+  .auth-bg{ background:
+    linear-gradient(180deg, rgba(8,6,5,0.84) 0%, rgba(8,6,5,0.55) 16%, rgba(8,6,5,0.06) 32%, rgba(8,6,5,0.05) 50%, rgba(8,6,5,0.66) 64%, rgba(8,6,5,0.94) 100%),
+    url('assets/portada/portada_movil.jpg?v=1') center top / cover no-repeat; }
+  .auth-layout{ display:flex; flex-direction:column; justify-content:space-between; align-items:center; gap:24px; min-height:100vh; min-height:100svh; padding:34px 24px 96px; }
+  .auth-lead, .auth-title .alfa-note{ display:none; }
+  #auth-box{ width:min(440px, 100%); }
+}
+
+/* ---------- Móvil: <600px ---------- */
+@media (max-width:599px){
+  #screen-auth.active{ align-items:stretch; }
+  .auth-bg{ inset:0; animation:none; background:
+    linear-gradient(180deg, rgba(8,6,5,0.86) 0%, rgba(8,6,5,0.62) 15%, rgba(8,6,5,0.08) 30%, rgba(8,6,5,0.05) 44%, rgba(8,6,5,0.70) 58%, rgba(8,6,5,0.94) 100%),
+    url('assets/portada/portada_movil.jpg?v=1') center top / cover no-repeat; }
+  .auth-layout{ display:flex; flex-direction:column; justify-content:space-between; gap:18px; min-height:100vh; min-height:100svh; padding:18px 16px 78px; }
+  .auth-title{ text-align:center; }
+  .auth-title .alfa-tag{ margin:0 0 8px; padding:2px 10px; font-size:0.66em; }
+  .auth-logo{ font-size:clamp(2.3em, 12.4vw, 3.3em); line-height:1; }
+  .auth-tagline{ margin-top:8px; white-space:nowrap; font-size:clamp(0.62em, 3.1vw, 0.82em); letter-spacing:0.14em; }
+  .auth-lead{ display:none; }
+  .auth-title .alfa-note{ display:none; }
+  .auth-panel{ padding:16px 16px 10px; background:linear-gradient(180deg, rgba(24,19,14,0.90), rgba(10,8,6,0.95)); }
+  .auth-panel .auth-input{ font-size:16px; } /* 16px evita que iOS haga zoom al enfocar */
+  .auth-tabs{ margin-bottom:14px; }
+  .auth-or{ margin:10px 0; }
+  .auth-audio{ position:absolute; top:-30px; right:0; bottom:auto; display:inline-block; margin:0; padding:3px 9px; font-size:0.72em; }
+  .auth-tab{ font-size:0.8em; letter-spacing:0.02em; white-space:nowrap; padding:6px 2px 9px; }
+  #auth-box{ width:100%; }
+  .app:has(#screen-auth.active) .footer-note{ font-size:0.62em; bottom:8px; line-height:1.3; }
+}
+/* móviles muy bajos (apaisado o pantallas pequeñas): sin hueco central, todo seguido */
+@media (max-width:599px) and (max-height:700px){
+  .auth-layout{ justify-content:flex-start; gap:16px; }
+  .auth-logo{ font-size:clamp(2em, 10vw, 2.6em); }
+  .auth-audio{ top:auto; bottom:-30px; }
+}
+/* ---------- PC grande: ≥1500px. Todo crece para no quedar perdido en la esquina. ---------- */
+@media (min-width:1500px) and (min-height:861px){
+  #screen-auth.active{ align-items:center; }
+  .auth-layout{ grid-template-columns:minmax(0, 520px); gap:34px; padding:56px clamp(48px, 7vw, 140px) 110px; font-size:1.12em; }
+  .auth-logo{ font-size:clamp(4.2em, 4.6vw, 5.6em); }
+  .auth-tagline{ font-size:1.12em; letter-spacing:0.2em; }
+  .auth-lead{ display:block; font-size:1.08em; }
+  .auth-panel{ padding:26px 26px 16px; }
+  .auth-panel .auth-input{ padding:13px 14px; font-size:1.02em; }
+  .auth-panel .btn-main, .auth-google{ padding-top:13px; padding-bottom:13px; font-size:1.05em; }
+}
+/* teléfono apaisado: dos columnas compactas sobre la ilustración horizontal */
+@media (max-height:520px) and (min-width:600px){
+  .auth-bg{ background:
+    linear-gradient(90deg, rgba(8,6,5,0.90) 0%, rgba(8,6,5,0.55) 40%, rgba(8,6,5,0.25) 100%),
+    url('assets/portada/portada.jpg?v=1') center / cover no-repeat; }
+  .auth-layout{ grid-template-columns:minmax(0,1fr) minmax(280px, 360px); align-items:center; justify-content:stretch; gap:22px; padding:14px 20px 44px; }
+  .auth-title{ text-align:left; }
+  .auth-logo{ font-size:clamp(1.9em, 6vw, 2.8em); }
+  .auth-lead, .auth-title .alfa-note{ display:none; }
+  .auth-panel{ padding:12px 16px 8px; }
+  .auth-tabs{ margin-bottom:10px; }
+  .auth-or{ margin:8px 0; }
+}
