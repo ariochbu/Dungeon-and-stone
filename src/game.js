@@ -512,8 +512,8 @@ const LEVEL30_SKILL_BONUS = {
   marca_cazador:    {duration: 4},                           // era 3
   explosion_arcana: {bonusMult: 0.75, penaltyIfNone: 0.20},  // era 0.60 / 0.30
   golpe_consagrado: {healPct: 0.22},                          // era 0.15
-  muro_de_fe:       {reductionPct: 0.35},                     // era 0.25
-  escudo_del_juramento: {shieldPct: 0.30},                    // era 0.20
+  muro_de_fe:       {reductionPct: 0.25},                     // 0.35 hasta el 2026-10-09 (decisión de ariochbu: queda en el valor base)
+  escudo_del_juramento: {shieldPct: 0.20},                    // 0.30 hasta el 2026-10-09 (ídem)
   grito_de_panico:  {applyChance: 0.8},                       // era 0.6
   mirada_de_locura: {applyChance: 0.8},                       // era 0.6
   // 2026-10-02 (pedido explícito): las 6 habilidades que no tenían mejora de
