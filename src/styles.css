@@ -1960,3 +1960,6 @@ button.cron-card:hover{ transform:translateY(-2px); border-color:var(--bronze); 
   .auth-bg, .auth-logo, .camp-fire{ animation:none; }
   .auth-embers, .camp-embers{ display:none; }
 }
+
+/* Escenas de historia: una ilustración ya precargada entra sin fundido (no deja ver nada debajo). */
+.story-card .ws-illus.ready{ animation:none; }

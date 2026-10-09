@@ -414,13 +414,21 @@ function showStoryScenes(level, onDone){
   div.className = 'overlay-msg story-ov';
   document.body.appendChild(div);
   const fallback = `src/assets/fondos/${level-9}-${level}.jpg`;
+  // Igual que en la bienvenida (2026-10-09): antes el marco mostraba el fondo
+  // de combate de la década mientras cargaba la ilustración, y al pasar de
+  // página se veía ese otro dibujo por un instante. Ahora las ilustraciones se
+  // precargan al abrir, el marco espera en negro y el fondo de la década solo
+  // aparece si la ilustración de esa página no existe.
+  const artSrc = (i)=> `src/assets/historia/${level}_${i+1}.jpg?v=2`;
+  const artReady = new Set();
+  story.pages.forEach((_, i)=>{ const im = new Image(); im.onload = ()=> artReady.add(i); im.src = artSrc(i); });
   let step = 0;
   const draw = ()=>{
     const last = step === story.pages.length-1;
     div.innerHTML = `<div class="story-card">
       <h2 class="cw-title">${story.title}</h2>
-      <div class="ws-scene has-art" style="background:#0b0907 url('${fallback}') center/cover">
-        <img class="ws-illus" src="src/assets/historia/${level}_${step+1}.jpg?v=2" alt="" onerror="this.remove()">
+      <div class="ws-scene has-art" style="background:#0b0907">
+        <img class="ws-illus ${artReady.has(step)?'ready':''}" src="${artSrc(step)}" alt="">
       </div>
       <div class="ws-dialog">
         <div class="ws-narrator"><div class="ws-portrait"><img src="src/assets/bienvenida/cronista.jpg?v=1" alt="" onerror="this.replaceWith('📜')"></div><b>El Cronista</b></div>
@@ -435,6 +443,8 @@ function showStoryScenes(level, onDone){
         </div>
       </div>
     </div>`;
+    const illus = div.querySelector('.ws-illus');
+    illus.onerror = ()=>{ illus.parentElement.style.background = `#0b0907 url("${fallback}") center/cover`; illus.remove(); };
     const finish = ()=>{ div.remove(); onDone(); };
     div.querySelectorAll('[data-st]').forEach(b=> b.onclick = ()=>{
       const k = b.dataset.st;
