@@ -633,12 +633,12 @@ const SKILLS = {
   },
 
   bola_fuego: {
-    id:'bola_fuego', name:'Bola de fuego', cost:{tipo:'estamina', valor:15}, dmgType:'fuego', mult:0.9,
+    id:'bola_fuego', name:'Bola de fuego', cost:{tipo:'estamina', valor:15}, dmgType:'fuego', mult:0.8, // 0.9 hasta el 2026-10-09
     applies:{name:'Quemadura', chance:0.8, duration:3, stack:true, maxStack:3},
     desc: ()=> `Daño de fuego. ${Math.round(skillBonus('bola_fuego','applyChance',0.8)*100)}% de apilar Quemadura (hasta x${skillBonus('bola_fuego','maxStack',3)}, daño por turno) durante 3 turnos.`, targetMode:'any'
   },
   lanza_hielo: {
-    id:'lanza_hielo', name:'Lanza de hielo', cost:{tipo:'estamina', valor:15}, dmgType:'hielo', mult:0.9,
+    id:'lanza_hielo', name:'Lanza de hielo', cost:{tipo:'estamina', valor:15}, dmgType:'hielo', mult:0.8, // 0.9 hasta el 2026-10-09
     applies:{name:'Ralentizado', chance:0.8, duration:2},
     desc: ()=> `Daño de hielo. Aplica Ralentizado (-20% evasión, actúa después) durante ${skillBonus('lanza_hielo','duration',2)} turnos.`, targetMode:'any'
   },
