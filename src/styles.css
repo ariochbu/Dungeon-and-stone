@@ -2232,3 +2232,22 @@ button.cron-card:hover{ transform:translateY(-2px); border-color:var(--bronze); 
 .fu-egg-shell{ width:50px; height:66px; border-radius:0; background:url("assets/ui/huevo.png?v=1") center/contain no-repeat; box-shadow:none;
   filter:grayscale(calc(1 - var(--k))) brightness(calc(0.7 + var(--k) * 0.4)) drop-shadow(0 0 calc(var(--k) * 9px) rgba(255,59,46,calc(var(--k) * 0.9))); }
 .fu-egg-shell i{ display:none; }
+
+/* Tablón del Gremio: tinta oscura en todo (ariochbu, 2026-10-10: el texto claro no se distinguía) */
+.gm-sheet, .gm-goal{ color:#1a0f06; }
+.gm-goal{ font-weight:600; }
+.gm-goal b{ color:#6a1509; }
+.gm-prog{ color:#3a2812; font-style:normal; font-weight:600; font-size:0.82em; }
+.gm-rank{ color:#150c04; font-weight:900; text-shadow:0 1px 0 rgba(255,255,255,0.45); }
+.gm-reward{ background:linear-gradient(90deg,#e2c377,#d2ad58); color:#1f1206; font-weight:700; border-left:3px solid #6a4310; box-shadow:0 2px 4px rgba(0,0,0,0.3); }
+.gm-reward .ic{ color:#1f1206; }
+.gm-btns .inv-btn:disabled{ opacity:1; background:rgba(70,45,18,0.16); color:#4a3418; border-color:rgba(70,45,18,0.55); }
+.gm-sheet.claimed{ filter:grayscale(0.5) brightness(0.92); }
+.gm-stamp{ color:#7a1d10; border-color:#7a1d10; opacity:1; font-weight:700; }
+
+/* El juego ya es oscuro: que ningún "modo oscuro forzado" del navegador o de una extensión reinterprete los
+   colores. Las hojas de pergamino son claras a propósito (tinta oscura sobre papel). */
+:root{ color-scheme:only dark; }
+.gm-sheet, .ws-dialog, .sc-talk{ color-scheme:only light; forced-color-adjust:none; }
+/* Respaldo: si aun así algo aclara la tinta, el halo oscuro la mantiene legible sobre el papel */
+.gm-goal, .gm-prog{ text-shadow:0 0 1px rgba(26,15,6,0.55); }
