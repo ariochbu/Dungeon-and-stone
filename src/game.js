@@ -4766,11 +4766,43 @@ const COMMON_VS_TANK_81 = {dmgMult:1.00, tanksOnly:true}; // sin castigo extra a
 const ENEMY_VS_CLASS_81 = {from:81, to:89, mult:{pesada:1.10, paladin:1.10, doblefilo:0.96, tirador:1.10, mago:0.66, hechicero:0.56},
   // Jefe del 90: solo el Arquero, que en tres tandas de 200 combates salía en 17/22/28% (tope pedido: 20%).
   boss90:{tirador:1.12}};
+// La misma idea para 1-80 (recalibración por senda pedida por ariochbu, 2026-10-09): daño que recibe el
+// jugador según su senda, por década (pisos x1-x9) y por jefe de década. Vacío = x1.
+// Calibrado con tools/calib_1_80.js. En 21-40 solo aplica a las cuentas de la beta (las viejas juegan esas
+// décadas con otra escala y cuatro aliados). Los tanques superaban casi todas las salas y la retaguardia
+// moría antes del guardián: por eso reciben más daño unos y menos otros.
+const ENEMY_VS_CLASS = {     // {índice de década: {senda: mult}}
+  2: {pesada:1.29, paladin:1.51, doblefilo:0.67, tirador:1.29, mago:1.14, hechicero:0.64},
+  3: {pesada:1.63, paladin:1.42, doblefilo:0.72, tirador:0.92, mago:0.71, hechicero:0.87},
+  4: {pesada:1.80, paladin:1.80, doblefilo:0.89, tirador:1.15, mago:0.63, hechicero:0.67},
+  5: {pesada:1.55, paladin:1.70, doblefilo:0.72, tirador:1.65, mago:0.85, hechicero:0.67},
+  6: {pesada:1.44, paladin:1.45, doblefilo:0.85, tirador:1.15, mago:0.71, hechicero:0.56},
+  7: {pesada:1.26, paladin:1.15, doblefilo:1.01, tirador:1.20, mago:0.73, hechicero:0.57},
+};
+const GUARDIAN_VS_CLASS = {  // {índice de década: {senda: mult}}, se multiplica al anterior en la sala del guardián
+  2: {pesada:1.45, paladin:1.23, doblefilo:1.03, tirador:0.79, mago:0.72, hechicero:1.34},
+  3: {pesada:1.28, paladin:1.31, doblefilo:1.10, tirador:0.81, mago:0.92, hechicero:1.17},
+  4: {pesada:1.10, paladin:1.25, doblefilo:0.69, tirador:0.94, mago:0.81, hechicero:0.95},
+  5: {pesada:1.18, paladin:1.07, doblefilo:0.96, tirador:0.62, mago:0.67, hechicero:1.14},
+  6: {pesada:0.55, paladin:0.52, doblefilo:1.25, tirador:0.81, mago:0.70, hechicero:1.20},
+  7: {pesada:0.67, paladin:0.75, doblefilo:1.10, tirador:0.88, mago:1.00, hechicero:1.80},
+};
+const BOSS_VS_CLASS = {      // {piso del jefe: {senda: mult}}
+  30: {pesada:1.35, paladin:1.33, doblefilo:0.78, tirador:0.95, mago:1.34, hechicero:1.15},
+  40: {pesada:1.02, paladin:0.82, doblefilo:1.16, tirador:0.87, mago:1.17, hechicero:1.80},
+  50: {pesada:1.00, paladin:0.90, doblefilo:0.85, tirador:0.95, mago:1.15, hechicero:1.60},
+  60: {pesada:1.38, paladin:1.55, doblefilo:0.78, tirador:1.20, mago:0.46, hechicero:0.76},
+  70: {pesada:1.03, paladin:0.73, doblefilo:1.18, tirador:1.56, mago:0.90, hechicero:0.92},
+  80: {pesada:1.01, paladin:0.88, doblefilo:0.95, tirador:0.88, mago:1.32, hechicero:1.10},
+};
 function enemyVsClassMult(){
-  const lvl = (state.dungeon && state.dungeon.level) || 0;
-  if(lvl === 90) return ENEMY_VS_CLASS_81.boss90[state.char.style] || 1;
-  if(lvl < ENEMY_VS_CLASS_81.from || lvl > ENEMY_VS_CLASS_81.to) return 1;
-  return ENEMY_VS_CLASS_81.mult[state.char.style] || 1;
+  const lvl = (state.dungeon && state.dungeon.level) || 0, st = state.char.style;
+  if(lvl === 90) return ENEMY_VS_CLASS_81.boss90[st] || 1;
+  if(lvl >= ENEMY_VS_CLASS_81.from && lvl <= ENEMY_VS_CLASS_81.to) return ENEMY_VS_CLASS_81.mult[st] || 1;
+  if(lvl < 1 || lvl > 80 || (lvl <= 40 && !BETA_BALANCE)) return 1;
+  if(lvl % 10 === 0) return (BOSS_VS_CLASS[lvl] && BOSS_VS_CLASS[lvl][st]) || 1;
+  const d = decadeIndexForLevel(lvl), t = ENEMY_VS_CLASS[d], g = combat && combat.node && combat.node.type === 'jefe' && GUARDIAN_VS_CLASS[d];
+  return ((t && t[st]) || 1) * ((g && g[st]) || 1);
 }
 function guardianVsFront(enemy){
   const lvl = (state.dungeon && state.dungeon.level) || 0;
@@ -10020,6 +10052,7 @@ function pickSmartTemplates(pool, count){
 // guardián va al frente, casi siempre una de retaguardia, y al revés. La élite llega debilitada (hpPct,
 // atkPct) y el guardián bajó de 2.40/3.04 a 1.69/2.15 (DECADE_ENEMY_TUNING[8]): con la élite entera y el
 // guardián de antes, los niveles se superaban el 7-15% de las veces en vez del ~50% pedido.
+const PARAISO_GUARDIAN_GROUP = {hp:1.07, atk:1.07};
 const GUARDIAN_ELITE_81 = {from:81, to:89, complementChance:0.7, hpPct:0.50, atkPct:0.65};
 function guardianEliteFor(guardianTpl, elites){
   const wantFront = !guardianTpl.frontline;
@@ -10082,6 +10115,9 @@ function buildEncounterGroup(nodeType, f, level){
   if(paraisoGuardianFloor){
     pickSmartTemplates(bestiary.regular, 5).forEach(t=> group.push(makeEnemy(t, f, level)));
     group.push(makeEnemy(bestiary.elite[0], f, level));
+    // Este "guardián" es un grupo de normales + élite: lleva su propio ajuste (PARAISO_GUARDIAN_GROUP),
+    // porque el de guardianes de la década no le llega y el de normales lo arrastraba.
+    group.forEach(e=>{ e.maxHP = Math.max(1, Math.round(e.maxHP * PARAISO_GUARDIAN_GROUP.hp)); e.hp = e.maxHP; e.atk = Math.max(1, Math.round(e.atk * PARAISO_GUARDIAN_GROUP.atk)); });
   } else if(nodeType==='jefe'){
     for(let i=0;i<count;i++) group.push(makeEnemy(pick(templates), f, level));
   } else {
@@ -10546,11 +10582,13 @@ const DECADE_BOSS_TUNING = {
   // arnés tools/calib_harness.js — media de las seis sendas, 40 combates cada
   // una, 4 aliados y todo rango A. Metas: 50 → 60%, 60 → 50%, 70 → 40%, 80 → 30%.
   // 2026-10-08, quinta vuelta (rama clases-x1): daño x1, vida nueva, kit y rotación del Hechicero, dos tanques para la retaguardia.
-  50: {hp:1.62, atk:1.66},  // Custodio: 61% sin el bono de frente
-  60: {hp:2.42, atk:2.68},  // Storm Gush: 59% con sus áreas al 75% (Arquero 30, Mago 43; antes 10 y 3)
+  // RECALIBRACIÓN 2026-10-09 (objetivos nuevos: 50 → 70%, 60 → 50%, 70 → 40%, 80 → 30%; reparto por senda en BOSS_VS_CLASS).
+  // Antes: 1.62/1.66, 2.42/2.68, 1.93/2.13, 2.06/2.23.
+  50: {hp:1.52, atk:1.56},  // Custodio: 63% con 1.55/1.59 tras el último reparto por senda; bajado un 2% sin volver a medir
+  60: {hp:2.52, atk:2.80},  // Storm Gush: 48% // antes 59% con sus áreas al 75% (Arquero 30, Mago 43; antes 10 y 3)
   // Área (Pliegue Espacial) -25% por decisión de ariochbu (2026-10-08); los Reflejos no se tocan.
-  70: {hp:1.93, atk:2.13},  // El Sin Forma: 37% (sin bono de frente, área -25%, castigo al frente; con 2.08/2.30 daba 21%)
-  80: {hp:2.06, atk:2.23},  // El Corazón Marchito: 29-30%
+  70: {hp:2.08, atk:2.30},  // El Sin Forma: 36% // antes: 37% (sin bono de frente, área -25%, castigo al frente; con 2.08/2.30 daba 21%)
+  80: {hp:2.14, atk:2.32},  // El Corazón Marchito: 32% (muy sensible: 2.17/2.35 daba 23 y 2.12/2.29, 39)
   // 2026-10-09, objetivo de ariochbu: ninguna senda por encima del 20% con la referencia de rango A.
   // Medido con 200 combates por senda en 2.38/2.55: Asesino 23, Arquero 21, Mago 13, Guerrero 12, Paladín 12, Hechicero 8;
   // se sube el ataque a 2.60 para bajar a los dos primeros. El reparto entre sendas sale del propio jefe
@@ -10572,8 +10610,8 @@ const BETA_DECADE_BOSS_TUNING = {
   // Pisos 1-20 se dejan como están en producción (decisión de ariochbu, 2026-10-08).
   10: {hp:0.24, atk:0.50},  // Ogro
   20: {hp:0.80, atk:0.80},  // Matriarca
-  30: {hp:1.96, atk:1.87},  // Riakis: 66% (quinta vuelta, 2026-10-08)
-  40: {hp:1.57, atk:1.47},  // Usurpador: objetivo 65%. Medido 2026-10-08 (noche): 1.50/1.40 daba 80%, 1.56/1.46 ~69%, 1.63/1.52 54% — muy sensible
+  30: {hp:1.82, atk:1.73},  // Riakis: 81% (objetivo nuevo 80; antes 1.96/1.87 para 65%)
+  40: {hp:1.58, atk:1.49},  // Usurpador: 75% con el reparto por senda (objetivo nuevo 75). Muy sensible.
 };
 // Enemigos que NO son jefe de década, por índice de década (1 = pisos 11-19...).
 // Medido: con 2-3 aliados los combates normales/élite/guardián rinden igual
@@ -10589,8 +10627,10 @@ const BETA_ENEMY_SCALE = {
   // medidos SIN Ley del Caos ni Corrupción): 1-20 90% (no se tocan), 21-40 80%,
   // 41-60 70%, 61-80 60%. Medido: 21-29 → 81%, 31-39 → 85%.
   1: {regular:{hp:1.08, atk:1.16}, elite:{hp:1.08, atk:1.16}, guardian:{hp:1.08, atk:1.16}},   // sin cambios (pisos 1-20 como en producción)
-  2: {regular:{hp:1.73, atk:1.73}, elite:{hp:1.73, atk:1.73}, guardian:{hp:1.73, atk:1.73}},
-  3: {regular:{hp:2.79, atk:3.22}, elite:{hp:2.79, atk:3.22}, guardian:{hp:2.57, atk:2.89}},   // 84% (quinta vuelta)
+  // RECALIBRACIÓN 2026-10-09 (objetivos nuevos de ariochbu, ver tools/calib_1_80.js): llegar al guardián 85%,
+  // guardián 85% (21-29) y 80% (31-39). Antes: 1.73 todo; 2.79/3.22 y guardián 2.57/2.89.
+  2: {regular:{hp:2.58, atk:2.58}, elite:{hp:2.58, atk:2.58}, guardian:{hp:1.57, atk:1.57}},   // medido: llega 82, guardián 89, niveles 73
+  3: {regular:{hp:3.77, atk:4.35}, elite:{hp:3.77, atk:4.35}, guardian:{hp:2.95, atk:3.32}},   // medido: llega 83, guardián 79, niveles 65
 };
 // Normales, élites y guardianes por década (índice 4 = pisos 41-50, 5 = 51-60).
 // Calibrado con el simulador de balance (simLevels) contra la misma referencia
@@ -10608,10 +10648,12 @@ const DECADE_ENEMY_TUNING = {
   // REDISEÑO DE CLASES (2026-10-08), mismos objetivos que arriba. Medido (dos
   // niveles por década, 8 intentos por senda): 41-49 → 73%, 51-59 → 75% antes
   // del último retoque, 61-69 → 69% y 71-79 → 65% antes del último retoque.
-  4: {regular:{hp:1.36, atk:1.36}, elite:{hp:1.36, atk:1.36}, guardian:{hp:1.36, atk:1.36}},   // 74% (quinta vuelta)
-  5: {regular:{hp:2.36, atk:3.42}, elite:{hp:2.24, atk:3.16}, guardian:{hp:1.98, atk:2.31}},   // 75%
-  6: {regular:{hp:3.29, atk:4.99}, elite:{hp:3.29, atk:4.99}, guardian:{hp:1.95, atk:2.46}},   // 2026-10-09: guardian correcto por nivel + castigo al frente; media 61-69 ~60%
-  7: {regular:{hp:3.63, atk:5.57}, elite:{hp:3.63, atk:5.57}, guardian:{hp:1.78, atk:2.25}},   // 2026-10-09: idem; media 71-79 ~63%
+  // RECALIBRACIÓN 2026-10-09 (tools/calib_1_80.js). Objetivos: llegar al guardián 80% (41-59) y 75% (61-79); guardián
+  // 75 / 55 / 45 / 35%. Antes: 4 → 1.36 todo; 5 → 2.36/3.42, 2.24/3.16, 1.98/2.31; 6 → guardián 1.95/2.46; 7 → 3.63/5.57 y 1.78/2.25.
+  4: {regular:{hp:1.49, atk:1.49}, elite:{hp:1.49, atk:1.49}, guardian:{hp:1.36, atk:1.36}},   // medido: llega 76, guardián (grupo, ver PARAISO_GUARDIAN_GROUP) 73, niveles 55
+  5: {regular:{hp:2.88, atk:4.18}, elite:{hp:2.74, atk:3.86}, guardian:{hp:3.20, atk:3.74}},   // medido: llega 78, guardián 55, niveles 43
+  6: {regular:{hp:3.29, atk:4.99}, elite:{hp:3.29, atk:4.99}, guardian:{hp:2.31, atk:2.92}},   // medido: llega 71-76, guardián 44 //   // 2026-10-09: guardian correcto por nivel + castigo al frente; media 61-69 ~60%
+  7: {regular:{hp:3.48, atk:5.33}, elite:{hp:3.48, atk:5.33}, guardian:{hp:2.02, atk:2.55}},   // medido: llega 76, guardián 38, niveles 29 //   // 2026-10-09: idem; media 71-79 ~63%
   8: {regular:{hp:4.90, atk:7.52}, elite:{hp:3.60, atk:5.60}, guardian:{hp:1.69, atk:2.15}},   // guardián: 2.40/3.04 hasta que se le sumó la élite de escolta (GUARDIAN_ELITE_81) // 2026-10-09, segunda pasada: más duro en general y el reparto por senda en ENEMY_VS_CLASS_81 (objetivo de ariochbu: ~50% de niveles completados por senda). Élites algo por debajo: el simulador casi nunca les ganaba
 };
 function makeEnemy(tpl, floorIdx, level){
@@ -14452,7 +14494,7 @@ async function simLevels(cfg){
       Object.keys(fights).forEach(k=>{ fights[k][0] += r.tally[k][0]; fights[k][1] += r.tally[k][1]; });
     }
     const pct = (a)=> a[0] ? Math.round(a[1]/a[0]*100) : null;
-    return {style: cfg.style, dungeonLevel: cfg.dungeonLevel, n, clear: Math.round(cleared/n*100), muereEn: died, ganaCombate: pct(fights.combate), ganaElite: pct(fights.elite), ganaGuardian: pct(fights.jefe)};
+    return {style: cfg.style, dungeonLevel: cfg.dungeonLevel, n, clear: Math.round(cleared/n*100), cleared, peleas: fights, muereEn: died, ganaCombate: pct(fights.combate), ganaElite: pct(fights.elite), ganaGuardian: pct(fights.jefe)};
   } finally { simMode = false; BETA_BALANCE = saved.beta; state = saved.state; combat = saved.combat; }
 }
 async function simRun(cfg){
@@ -14505,6 +14547,7 @@ if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
   window.__combat = ()=> combat; // inspección del combate en curso (simulaciones que no terminan)
   window.__tanque = TANK_TUNE; window.__lvl30 = LEVEL30_SKILL_BONUS; window.__healLock = ENEMY_HEAL_LOCK; window.__gFrente = GUARDIAN_VS_FRONT; window.__cTanque = COMMON_VS_TANK; window.__escolta = GUARDIAN_ESCORT; window.__grupo = buildEncounterGroup; window.__rol = enemyRole; window.__grupoIA = GROUP_AI; window.__elite81 = GUARDIAN_ELITE_81;
   window.__palRes = PALADIN_ESP_RES; window.__savia = SAVIA_PODRIDA;
+  window.__vsClase = {paraiso: PARAISO_GUARDIAN_GROUP, gua: GUARDIAN_VS_CLASS, dec: ENEMY_VS_CLASS, jefe: BOSS_VS_CLASS, tuning: DECADE_ENEMY_TUNING, beta: BETA_ENEMY_SCALE, jefeTuning: DECADE_BOSS_TUNING, jefeBeta: BETA_DECADE_BOSS_TUNING};
   window.__frente81 = {guardian: GUARDIAN_VS_FRONT_81, comun: COMMON_VS_TANK_81, invocacion: ASCUA_TPL, clase: ENEMY_VS_CLASS_81.mult, clase90: ENEMY_VS_CLASS_81.boss90};
   // Defensa de una senda con el equipo de referencia puesto: __defensa('paladin', 79)
   window.__defensa = (styleId, level, gear)=>{
