@@ -16,7 +16,7 @@
 import { CLASS_SPRITES, ALLY_SPRITES, ENEMY_SPRITES, playerSpriteFor, RACE_SIZE, ALLY_TEMPLATE_SPRITES, enemySpriteFor, enemyChibiKey } from './battleSprites.js?v=92';
 
 import { SpriteAnim, sheetFromMeta } from './spriteAnim.js?v=2';
-import { drawIcon, preloadIcons } from './icons.js?v=1';
+import { drawIcon, preloadIcons } from './icons.js?v=2';
 
 const TILE = 16;
 const SCALE = 3;

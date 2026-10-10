@@ -2,9 +2,9 @@
 
 import { supabase } from './supabaseClient.js';
 import * as auth from './auth.js';
-import { syncBattleStage, playBattleAnim } from './battleStage.js?v=112';
-import { mountLabyrinth } from './labyrinthMap.js?v=9';
-import { installIconizer } from './icons.js?v=1';
+import { syncBattleStage, playBattleAnim } from './battleStage.js?v=113';
+import { mountLabyrinth } from './labyrinthMap.js?v=10';
+import { installIconizer } from './icons.js?v=2';
 installIconizer(); // ningún emoji llega a pantalla: se cambian por los iconos del juego (ver icons.js)
 import { CLASS_SPRITES, ENEMY_SPRITES, playerSpriteFor, playerIllustrationFor, enemySpriteFor, ALLY_TEMPLATE_SPRITES } from './battleSprites.js?v=92';
 
@@ -2865,10 +2865,8 @@ function fusionAutoPick(){
     if(take > 0){ fusionPick[t.id] = take; left -= take; }
   });
 }
-async function doFusion(){
-  if(fusionPicked() !== FUSION_NEED || !FUSION_CHANCE[fusionRarity]) return null;
-  if(!(await checkSessionStillActive())) return null;
-  ensurePets();
+// Una fusión con lo elegido en fusionPick. No guarda: lo hace quien la llama.
+function fusionOnce(){
   const used = [];
   for(const [id, n] of Object.entries(fusionPick)){
     if(n > fusionSpare(id)) return null;                      // nunca por debajo de 1
@@ -2884,8 +2882,56 @@ async function doFusion(){
   log(success
     ? `El Crisol arde: de ${FUSION_NEED} Caídos ${PET_RARITIES[fusionRarity].name} nace <b>${tpl.name}</b> (${PET_RARITIES[outRarity].name}).`
     : `El Crisol se apaga: la fusión falla y solo vuelve <b>${tpl.name}</b> (${PET_RARITIES[outRarity].name}).`);
-  await flushSave();
   return {used, tpl, success, isDup};
+}
+async function doFusion(){
+  if(fusionPicked() !== FUSION_NEED || !FUSION_CHANCE[fusionRarity]) return null;
+  if(!(await checkSessionStillActive())) return null;
+  ensurePets();
+  const res = fusionOnce();
+  if(res) await flushSave();
+  return res;
+}
+// Hasta `times` fusiones seguidas eligiendo solas los repetidos (pedido de ariochbu, 2026-10-10: "de 10 en
+// 10"). Los que vuelven de una fusión fallida pueden entrar en las siguientes.
+const FUSION_BATCH = 10;
+function fusionSpareTotal(rk){ return PET_CATALOG.filter(t=> t.rarity === rk).reduce((a, t)=> a + fusionSpare(t.id), 0); }
+async function doFusionBatch(times){
+  if(!FUSION_CHANCE[fusionRarity]) return null;
+  if(!(await checkSessionStillActive())) return null;
+  ensurePets();
+  const out = [];
+  for(let i = 0; i < times && fusionSpareTotal(fusionRarity) >= FUSION_NEED; i++){
+    fusionAutoPick();
+    const r = fusionOnce();
+    if(!r) break;
+    out.push(r);
+  }
+  fusionPick = {};
+  if(out.length) await flushSave();
+  return out.length ? out : null;
+}
+// Resultado de varias fusiones: la misma animación y, al final, todas las cartas con las logradas resaltadas.
+function showFusionBatchCinematic(list){
+  return new Promise(resolve=>{
+    const reduce = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    const wins = list.filter(r=> r.success).length, top = wins ? PET_RARITIES[list.find(r=> r.success).tpl.rarity] : PET_RARITIES[list[0].tpl.rarity];
+    const div = document.createElement('div');
+    div.className = 'fu-cine fu-multi';
+    div.style.setProperty('--oc', top.color);
+    div.innerHTML = `
+      <div class="fu-ring">${list[0].used.map((id, i)=> `<div class="fu-orb" style="--i:${i}; --rc:${PET_RARITIES[petTpl(id).rarity].color}"><img src="${petArtPath(id)}" alt=""></div>`).join('')}</div>
+      <div class="fu-core"></div><div class="fu-flash"></div>
+      <div class="fu-result"><div class="fu-verdict ${wins ? 'ok' : 'fail'}">${wins ? `${wins} de ${list.length} fusiones logradas` : `Ninguna de las ${list.length} fusiones salió bien`}</div>
+        <div class="fu-many">${list.map(r=> `<div class="fu-mini ${r.success ? 'ok' : ''}" style="--rc:${PET_RARITIES[r.tpl.rarity].color}"><img src="${petArtPath(r.tpl.id)}" alt=""><span>${r.tpl.name}</span></div>`).join('')}</div>
+        <div class="fu-hint">Toca para continuar</div></div>`;
+    document.body.appendChild(div);
+    let done = false, shown = false;
+    const show = ()=>{ if(!shown){ shown = true; div.classList.add('reveal', wins ? 'ok' : 'fail'); } };
+    const finish = ()=>{ if(done) return; done = true; div.classList.add('out'); setTimeout(()=> div.remove(), 320); resolve(); };
+    setTimeout(show, reduce ? 150 : 2100);
+    div.onclick = ()=>{ if(shown) finish(); else show(); };
+  });
 }
 // Animación de la fusión: los cuatro Caídos giran hacia el centro, estallan y aparece el resultado.
 function showFusionCinematic(res){
@@ -2914,7 +2960,7 @@ function renderFusion(){
   ensurePets();
   const panel = document.getElementById('main-panel');
   const ranks = Object.keys(FUSION_CHANCE);
-  const spareOf = (rk)=> PET_CATALOG.filter(t=> t.rarity === rk).reduce((a, t)=> a + fusionSpare(t.id), 0);
+  const spareOf = fusionSpareTotal;
   // lo elegido tiene que seguir siendo válido (otro rango, o ya se gastó)
   Object.keys(fusionPick).forEach(id=>{ const t = petTpl(id); if(!t || t.rarity !== fusionRarity || fusionPick[id] > fusionSpare(id)) delete fusionPick[id]; });
   const list = PET_CATALOG.filter(t=> t.rarity === fusionRarity && fusionSpare(t.id) > 0);
@@ -2935,6 +2981,7 @@ function renderFusion(){
       <div class="fu-actions">
         <button class="reset-btn" id="fu-auto" ${spareOf(fusionRarity) >= FUSION_NEED ? '' : 'disabled'}>Elegir automáticamente</button>
         <button class="btn-main" id="fu-go" ${picked === FUSION_NEED ? '' : 'disabled'}>Combinar (${picked} / ${FUSION_NEED})</button>
+        <button class="btn-main fu-x10" id="fu-go10" ${spareOf(fusionRarity) >= FUSION_NEED*2 ? '' : 'disabled'} title="Hace hasta ${FUSION_BATCH} fusiones seguidas eligiendo solas los repetidos">Combinar x${Math.max(2, Math.min(FUSION_BATCH, Math.floor(spareOf(fusionRarity)/FUSION_NEED)))}</button>
       </div>
     </div>
     ${list.length ? `<div class="fu-grid">${list.map(t=>{
@@ -2957,6 +3004,14 @@ function renderFusion(){
     const res = await doFusion();
     if(!res){ renderFusion(); return; }
     await showFusionCinematic(res);
+    renderSheet(); renderFusion();
+  };
+  const go10 = document.getElementById('fu-go10');
+  go10.onclick = async ()=>{
+    go10.disabled = true; go.disabled = true;
+    const list = await doFusionBatch(FUSION_BATCH);
+    if(!list){ renderFusion(); return; }
+    await showFusionBatchCinematic(list);
     renderSheet(); renderFusion();
   };
   wirePetZoomEvents(panel);
@@ -7621,22 +7676,30 @@ function closeAllPanels(){
 // primera visita (viñetas provisionales hasta que haya ilustraciones).
 const CITY_PLACES = {
   shop:    {name:'Tienda', ic:'⚒️', open:()=>{ shopOpen = true; }, img:'tienda', d:[24.4,62.7], m:[19.4,36.8], keeper:'Gerd el herrero',
-            intro:['“¿Nuevo? Se nota por cómo agarras esa espada.”','“Vendo armas, armaduras y pociones. Compro lo que traigas de abajo.”','“Vuelve con oro… o con Sellos del Laberinto.”']},
+            scene:'src/assets/escenas/tienda.jpg',
+            intro:['Esta es la forja de Gerd, el herrero. Se nota que eres nuevo por cómo agarras esa espada, y él también lo notará.','Aquí se venden armas, armaduras y pociones, y se compra todo lo que subas del laberinto.','Vuelve con oro… o con Sellos del Laberinto. Gerd acepta los dos.']},
   home:    {name:'Hogar', ic:'🏠', open:()=>{ homeOpen = true; }, img:'hogar', d:[30.4,79.0], m:[18.6,58.0], keeper:'Tu casera',
-            intro:['“Tu cuarto está arriba. Guarda aquí lo que no quieras perder.”','“Lo que dejes en el Hogar no se pierde aunque caigas en el laberinto.”']},
+            scene:'src/assets/escenas/hogar.jpg',
+            intro:['Este es tu Hogar. Tu casera te ha dejado un cuarto arriba.','Lo que guardes aquí no se pierde aunque caigas en el laberinto. Lo que lleves encima, sí.']},
   taberna: {name:'Taberna', ic:'🍺', open:()=>{ tabernaOpen = true; }, img:'taberna', d:[29.6,34.5], m:[23.6,21.3], keeper:'Shaza la tabernera',
-            intro:['“¡Otro valiente que viene a morir al laberinto!”','“Aquí se contratan espadas… si tienes fama y oro.”','“Cada aliado cobra su salario al salir del laberinto. No lo olvides.”']},
+            scene:'src/assets/escenas/taberna.jpg',
+            intro:['La Taberna de Shaza. Aquí beben los que piensan bajar… y los que ya no se atreven.','En estas mesas se contratan espadas, si tienes fama y oro para pagarlas.','Recuerda que cada aliado cobra su salario al salir del laberinto.']},
   missions:{name:'Gremio', ic:'📜', open:()=>{ missionsOpen = true; }, img:'gremio', d:[51.4,32.7], m:[54.4,21.1], keeper:'La maestra del Gremio',
-            intro:['“El Gremio paga por trabajo bien hecho.”','“Cada 12 horas hay contratos nuevos en el tablón.”','“Cúmplelos y cobra oro, experiencia y Sellos del Laberinto.”']},
+            scene:'src/assets/escenas/gremio.jpg',
+            intro:['El Gremio paga por trabajo bien hecho. Su maestra no regala nada.','Cada doce horas clava contratos nuevos en el tablón.','Cúmplelos y cobrarás oro, experiencia y Sellos del Laberinto.']},
   ofrenda: {name:'Árbol de ofrendas', ic:'🌳', open:()=>{ ofrendaOpen = true; }, img:'arbol', d:[79.6,65.7], m:[74.4,75.3], keeper:'Yggdrasil',
-            intro:['Las raíces del pequeño árbol brillan al acercarte…','Ofrécele oro o Sellos y te devolverá a uno de los Caídos del Laberinto.']},
+            scene:'src/assets/ofrenda/ygdrasil.jpg',
+            intro:['Mira cómo brillan las raíces del pequeño árbol cuando te acercas. Lo llaman Yggdrasil.','Ofrécele oro o Sellos y te devolverá a uno de los Caídos del Laberinto, para que camine contigo.']},
   // Edificio nuevo (2026-10-10): no tiene solar propio en el mapa, va sobre un claro.
   fusion:  {name:'Crisol de los Caídos', ic:'🔥', open:()=>{ fusionOpen = true; }, img:'crisol', d:[63.0,26.0], m:[80.0,41.0], keeper:'La guardiana del Crisol',
-            intro:['“Los Caídos que se repiten no descansan. Tráemelos.”','“Cuatro del mismo rango entran al Crisol. A veces sale uno más fuerte… y a veces no.”','“Nunca te quitaré el último de cada uno. Solo los que te sobran.”']},
+            scene:'src/assets/escenas/crisol.jpg',
+            intro:['Este es el Crisol. Su guardiana dice que los Caídos que se repiten no descansan.','Cuatro del mismo rango entran al fuego. A veces sale uno más fuerte… y a veces no.','No temas por los tuyos: el Crisol nunca toma el último de cada uno, solo los que te sobran.']},
   checkin: {name:'Check-in diario', ic:'📅', open:()=>{ checkinOpen = true; }, img:'campanario', d:[81.2,40.5], m:[79.6,58.9], keeper:'El campanero',
-            intro:['“Cada día que vuelvas a la ciudad, el árbol te regala ofrendas.”','“El día 1 de cada mes empieza un calendario nuevo.”']},
+            scene:null,
+            intro:['El campanario marca los días. Cada día que vuelvas a la ciudad, el árbol te regalará ofrendas.','El primer día de cada mes empieza un calendario nuevo.']},
   ranking: {name:'Ranking', ic:'🏆', open:()=>{ rankingOpen = true; }, img:'ranking', d:[50.8,71.4], m:[22.0,74.3], keeper:'El pregonero',
-            intro:['“¡Escuchad! Aquí se graban los nombres de los que más hondo bajaron.”']},
+            scene:'src/assets/escenas/ranking.jpg',
+            intro:['El Salón de los Nombres. Aquí el pregonero graba a los que más hondo bajaron.','Quizá algún día lea el tuyo.']},
 };
 function navBadges(){
   const missionsReady = (state.missions||[]).filter(m=>m.status==='completed').length;
@@ -7746,15 +7809,26 @@ function maybeShowPlaceIntro(key){
   let i = 0;
   const div = document.createElement('div');
   div.className = 'overlay-msg';
+  // El Cronista presenta cada lugar (pedido de ariochbu, 2026-10-10): misma voz que la bienvenida, con la
+  // escena del lugar arriba si tiene ilustración.
   const draw = ()=>{
-    div.innerHTML = `<div class="overlay-card intro-card">
-      <h2>${p.ic} ${p.name}</h2>
-      <div class="intro-comic">${p.intro.map((t,k)=>`<div class="intro-panel ip${k%3} ${k<=i?'shown':''}"><span class="intro-cap">${t}</span></div>`).join('')}</div>
-      <div class="intro-foot"><span>${p.keeper}</span><span style="display:flex; gap:8px;">
-        <button class="reset-btn" data-intro="skip">Saltar</button>
-        <button class="btn-main" data-intro="next">${i<p.intro.length-1?'Continuar ›':'Entrar'}</button></span></div>
+    div.innerHTML = `<div class="overlay-card intro-card intro-cron">
+      <h2>${p.name}</h2>
+      ${p.scene ? `<div class="intro-scene"><img src="${p.scene}?v=1" alt="" onerror="this.parentElement.remove()"></div>` : ''}
+      <div class="ws-dialog">
+        <div class="ws-narrator"><div class="ws-portrait"><img src="src/assets/bienvenida/cronista.jpg?v=1" alt="" onerror="this.remove()"></div><b>El Cronista</b></div>
+        <p class="ws-text">${p.intro[i]}</p>
+        <div class="ws-foot">
+          <div class="ws-dots">${p.intro.map((_, k)=> `<i class="${k===i?'on':(k<i?'done':'')}"></i>`).join('')}</div>
+          <div class="ws-btns">
+            ${i < p.intro.length-1 ? '<button class="reset-btn" data-intro="skip">Saltar</button>' : ''}
+            <button class="btn-main" data-intro="next">${i<p.intro.length-1?'Continuar ›':'Entrar'}</button>
+          </div>
+        </div>
+      </div>
     </div>`;
-    div.querySelector('[data-intro="skip"]').onclick = ()=> div.remove();
+    const skip = div.querySelector('[data-intro="skip"]');
+    if(skip) skip.onclick = ()=> div.remove();
     div.querySelector('[data-intro="next"]').onclick = ()=>{ if(i<p.intro.length-1){ i++; draw(); } else div.remove(); };
   };
   draw();
@@ -14745,6 +14819,7 @@ async function simRun(cfg){
 if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
   window.__sim = simRun; window.__simLevel = simLevels;
   // Dibuja la ficha de un personaje de prueba (para revisar la pestaña de profesión sin iniciar sesión).
+  window.__intro = (key)=>{ window.__ficha({}); lsGet = ()=> null; lsSet = ()=>{}; maybeShowPlaceIntro(key); };
   window.__crisol = (cfg, owned)=>{ window.__ficha(cfg || {}); ensurePets(); Object.assign(state.char.pets.owned, owned || {1:5, 2:3, 3:2}); checkSessionStillActive = async ()=> true; flushSave = async ()=>{}; renderSheet = ()=>{}; fusionOpen = true; renderFusion(); };
   window.__gremio = (cfg)=>{ window.__ficha(cfg || {}); state.char.missionCurrency = 240; state.missions = [['A','rest',3,2,'active'],['S','chests',5,2,'active'],['A','floors',5,5,'completed'],['S','floors',6,6,'claimed'],['B','combats',8,6,'active'],['A','gear',5,3,'active']].map((m, i)=> ({id:'m'+i, rank:m[0], objective_type: MISSION_OBJECTIVE_TYPES[i % MISSION_OBJECTIVE_TYPES.length], objective_target:m[2], progress:m[3], status:m[4], reward_gold:200, reward_xp:150, reward_currency:12, reward_item:null})); missionsOpen = true; renderMissions(); };
   window.__inv = (cfg)=>{ window.__ficha(cfg || {}); for(let i = 0; i < 9; i++){ const it = generateLoot(2, state.char.level); if(it) state.char.inventory.push(it); } invTab = 'mochila'; renderInventory = ((orig)=> orig)(renderInventory); renderInventory(); };

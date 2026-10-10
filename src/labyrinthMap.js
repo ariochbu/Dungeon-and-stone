@@ -9,7 +9,7 @@
 // (opts.onEnter → enterNode). No cambia state.dungeon.
 
 import { SpriteAnim, sheetFromMeta } from './spriteAnim.js?v=2';
-import { drawIcon, preloadIcons } from './icons.js?v=1';
+import { drawIcon, preloadIcons } from './icons.js?v=2';
 preloadIcons(['swords', 'skull', 'crown'], '#ffd9d4'); preloadIcons(['skull'], '#e6d6ff'); preloadIcons(['crown'], '#ffe9a8'); preloadIcons(['lock', 'fire', 'chest'], '#f1e3c4');
 
 const T = 16;                    // unidad de la cuadrícula

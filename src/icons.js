@@ -70,6 +70,9 @@ const P = {
   dizzy: 'M12 3l1.5 5.5L19 7l-3.5 4.5L21 14l-5.5 1L17 21l-5-3-5 3 1.5-6L3 14l5.5-2.5L5 7l5.5 1.5z',
   brick: 'M3 6h18v12H3z|M3 12h18|M9 6v6|M15 12v6',
   wind: 'M3 9h11a3 3 0 1 0-3-3|M3 14h15a3 3 0 1 1-3 3|M3 19h6',
+  portal: 'M5 21V11a7 7 0 0 1 14 0v10|M3 21h18|M12 13a1.5 1.5 0 1 1 1.5 1.5 3 3 0 1 1-3-3 4.5 4.5 0 0 1 4.5 4.5',
+  dice: 'M5 5h14v14H5z|@M8 9a1 1 0 1 0 2 0 1 1 0 1 0-2 0|@M14 9a1 1 0 1 0 2 0 1 1 0 1 0-2 0|@M11 12a1 1 0 1 0 2 0 1 1 0 1 0-2 0|@M8 15a1 1 0 1 0 2 0 1 1 0 1 0-2 0|@M14 15a1 1 0 1 0 2 0 1 1 0 1 0-2 0',
+  boot: 'M9 3h5v9l5 3v4H7v-6z|M7 19h12',
 };
 export const ICON_NAMES = Object.keys(P);
 function svgBody(name){
@@ -85,15 +88,16 @@ export function icon(name){ return P[name] ? `<span class="ic" data-ic="${name}"
 // Qué icono le toca a cada emoji que todavía aparece en textos y datos. Lo que no esté aquí se quita
 // (las criaturas tienen su retrato; un emoji suelto junto al nombre no aporta nada).
 const E = {
-  sword: '🗡️ ⚔ 🔪 🤺', swords: '⚔️', shield: '🛡️ 🛡 🪖 🔰', bow: '🏹', axe: '🪓', wand: '🔮 🪄 ✨ 🧙',
-  skull: '💀 ☠ ☠️ 👹 👺 🧟 👻 ⚰️', heart: '❤️ 🫀', coin: '⛁ 💰', gem: '💎 🔷 💠', star: '★ ⭐ ✦ 🌟',
+  sword: '🗡️ ⚔ 🔪 🤺', swords: '⚔️', shield: '🛡️ 🛡 🪖 🔰 🧥 🧤', bow: '🏹', axe: '🪓', wand: '🔮 🪄 ✨ 🧙',
+  skull: '💀 ☠ ☠️ 👹 👺 🧟 👻 ⚰️', heart: '❤️ 🫀', coin: '⛁ 💰', gem: '💎 🔷 💠 📿', star: '★ ⭐ ✦ 🌟',
   potion: '🧪 🍷 🥃', book: '📘 📖', scroll: '📜', key: '🗝️ 🔑', chest: '🧰', fire: '🔥 ♨️', snow: '❄️', drop: '🩸 💧 ☣️ 🦠',
-  bolt: '⚡ 💥', eye: '👁️ 🔭', crown: '👑 ♛', gear: '⚙️ 🛠️', question: '❓ ❕ ❗', sound: '🔊', mute: '🔇 🤐', people: '👥',
+  bolt: '⚡ 💥', eye: '👁️ 🔭', crown: '👑 ♛', gear: '⚙️ 🛠️', question: '❓ ❕ ❗', sound: '🔊', mute: '🔇 🤐', people: '👥 🪑',
   person: '🧝 👤 🧑 🧍', home: '🏠 🏚️ 🏚', bag: '🎒 🛒', mug: '🍺', tree: '🌳 🌿 🌱 🌾', calendar: '📅', trophy: '🏆 🥇 🥈 🥉',
   map: '🗺️', medal: '🎖️', lock: '🔒', warning: '⚠', check: '✓ ✔', cross: '✕ ✖', paw: '🐾 🐺 🐕', mask: '🎭',
   mirror: '🪞', moon: '🌑', gift: '🎁', target: '🎯', card: '🎴', hammer: '⚒️ 🔨 ⛏️', chain: '⛓️ ⛓', door: '🚪',
   music: '🎼 ♪ 🥁 📯 🎺', city: '🏙️ 🏰', cap: '🎓', trash: '🗑️', chat: '💬 🗣️ 📣', spiral: '🌀 🌪', up: '💪', down: '⬇ 📉',
   dizzy: '💫 💢', brick: '🧱', wind: '💨', bubble: '🫥',
+  portal: '🕳️ 🕳', dice: '🎲', boot: '👢',
 };
 const EMOJI_TO_ICON = {};
 Object.entries(E).forEach(([name, list])=> list.split(' ').forEach(e=>{ EMOJI_TO_ICON[e] = name; EMOJI_TO_ICON[e.replace(/️/g, '')] = name; }));
