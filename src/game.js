@@ -577,7 +577,71 @@ const LEVEL30_SKILL_BONUS = {
   lanza_hielo:      {duration: 3},                            // era 2
   toque_venenoso:   {maxStack: 5}                             // era 3 (4 hasta el rediseño del Hechicero, 2026-10-08)
 };
+// PROFESIONES (nivel 80; idea de ariochbu, 2026-10-09: "arquero se puede convertir en ballestero o
+// francotirador"). Cada senda elige entre dos: una de GRUPO (limpia salas) y una de DUELO (un solo
+// objetivo). Una profesión no suma poder, lo mueve: lo que gana en un tipo de combate lo pierde en el
+// otro. Se hace con dos piezas: skillMult (daño de cada habilidad) y bonus (los mismos campos que
+// LEVEL30_SKILL_BONUS, que ya leen tanto el texto como la resolución del combate).
+const PROFESSION_LEVEL = 80;
+const PROFESSION_CHANGE_COST = 20000;   // la primera elección es gratis; cambiar cuesta oro
+const PROFESSIONS = {
+  tirador: [
+    {id:'ballestero', name:'Ballestero', role:'grupo', icon:'🎯', text:'Virotes en abanico: barre líneas enteras, pero cada disparo suelto pega menos.',
+      skillMult:{lluvia_flechas:1.30, disparo_certero:0.85, disparo_cazador_final:0.85}, bonus:{lluvia_flechas:{bonusVsMarked:0.45}}, extra:'Lluvia de flechas: +45% contra Marcados (antes +35%).'},
+    {id:'francotirador', name:'Francotirador', role:'duelo', icon:'🔭', text:'Un disparo, una baja: castiga a un solo objetivo y casi renuncia a la lluvia.',
+      skillMult:{disparo_certero:1.25, disparo_cazador_final:1.20, lluvia_flechas:0.70}, bonus:{marca_cazador:{duration:5}}, extra:'Marca del cazador dura 5 turnos (antes 4).'},
+  ],
+  pesada: [
+    {id:'baluarte', name:'Baluarte', role:'grupo', icon:'🏰', text:'Aguanta la línea y castiga a todos a la vez; su remate individual pierde filo.',
+      skillMult:{furia_titan:1.25, machacar:0.85}, bonus:{grito_guerra:{healPct:0.15}}, extra:'Grito de guerra te cura un 15% de tu vida (antes 10%).'},
+    {id:'verdugo', name:'Verdugo', role:'duelo', icon:'🪓', text:'Vive para rematar a un enemigo Tambaleante; su golpe en área se queda corto.',
+      skillMult:{golpe_bruto:1.10, machacar:1.10, furia_titan:0.75}, bonus:{machacar:{comboBonusMult:2.5}}, extra:'Machacar sobre un enemigo Tambaleante hace x2.5 (antes x2.1).'},
+  ],
+  paladin: [
+    {id:'custodio', name:'Custodio', role:'grupo', icon:'🛡️', text:'Más escudo y un Juicio que arrasa la sala; su golpe consagrado pega menos.',
+      skillMult:{juicio_divino:1.30, golpe_consagrado:0.85}, bonus:{escudo_del_juramento:{shieldPct:0.30}}, extra:'Escudo del Juramento: 30% de tu vida máxima (antes 25%).'},
+    {id:'inquisidor', name:'Inquisidor', role:'duelo', icon:'⚖️', text:'Castigo sagrado sobre un solo hereje, que además lo cura más; su Juicio en área se debilita.',
+      skillMult:{golpe_consagrado:1.25, juicio_divino:0.75}, bonus:{golpe_consagrado:{healPct:0.27}}, extra:'Golpe Consagrado te cura un 27% de lo infligido (antes 22%).'},
+  ],
+  doblefilo: [
+    {id:'danzante', name:'Danzante de hojas', role:'grupo', icon:'🌀', text:'Sus cuchillas saltan de enemigo en enemigo; el remate a uno solo pierde fuerza.',
+      skillMult:{danza_cuchillas:1.20, vals_sangre:1.15, golpe_gracia:0.80}},
+    {id:'ejecutor', name:'Ejecutor', role:'duelo', icon:'🗡️', text:'Sangra a una presa y la remata; contra grupos su vals se queda en poco.',
+      skillMult:{golpe_gracia:1.30, corte_rapido:1.10, danza_cuchillas:0.90, vals_sangre:0.75}, bonus:{golpe_gracia:{perStackMult:0.27}}, extra:'Golpe de gracia: +27% por carga de Sangrado consumida (antes +22%).'},
+  ],
+  mago: [
+    {id:'piromante', name:'Piromante', role:'grupo', icon:'🔥', text:'El fuego se propaga: más daño en área y en la detonación; su hielo se resiente.',
+      skillMult:{cataclismo_elemental:1.25, explosion_arcana:1.10, lanza_hielo:0.80}},
+    {id:'criomante', name:'Criomante', role:'duelo', icon:'❄️', text:'Congela a un objetivo y lo revienta; el cataclismo en área pierde potencia.',
+      skillMult:{lanza_hielo:1.35, explosion_arcana:1.10, cataclismo_elemental:0.75}, bonus:{lanza_hielo:{duration:4}, explosion_arcana:{bonusMult:0.95}}, extra:'Ralentizado dura 4 turnos (antes 3) y la Explosión arcana gana +95% al detonar (antes +75%).'},
+  ],
+  hechicero: [
+    {id:'plaguero', name:'Plaguero', role:'grupo', icon:'☣️', text:'Sus gritos golpean más fuerte a líneas enteras; el veneno sobre uno solo pierde fuerza.',
+      skillMult:{grito_de_panico:1.40, grito_del_abismo:1.30, toque_venenoso:0.85}},
+    {id:'maldecidor', name:'Maldecidor', role:'duelo', icon:'🕯️', text:'Acumula veneno y drena a una sola víctima; su grito en área se apaga.',
+      skillMult:{toque_venenoso:1.25, drenaje_de_esencia:1.20, grito_del_abismo:0.75}, bonus:{toque_venenoso:{maxStack:6}}, extra:'El Veneno se apila hasta x6 (antes x5).'},
+  ],
+};
+function myProfession(){
+  const c = state && state.char;
+  if(!c || !c.profession || c.level < PROFESSION_LEVEL) return null;
+  return (PROFESSIONS[c.style] || []).find(p=> p.id === c.profession) || null;
+}
+function profSkillMult(skillId){ const p = myProfession(); return (p && p.skillMult && p.skillMult[skillId]) || 1; }
+// Texto de lo que la profesión le cambia a una habilidad ("+30% de daño"), para el menú de combate.
+function profSkillNote(skillId){
+  const m = profSkillMult(skillId);
+  return m === 1 ? '' : ` <b>${myProfession().name}: ${m > 1 ? '+' : ''}${Math.round((m - 1) * 100)}% de daño.</b>`;
+}
+function loadLocalProfession(charId){ try{ return localStorage.getItem('ds_prof_' + charId) || null; }catch(e){ return null; } }
+function setProfession(id){
+  state.char.profession = id;
+  if(!state.char.professionColumn){ try{ localStorage.setItem('ds_prof_' + state.char.id, id); }catch(e){} }
+  save();
+}
 function skillBonus(skillId, field, base){
+  const prof = myProfession(), pb = prof && prof.bonus && prof.bonus[skillId];
+  if(pb && pb[field] !== undefined) return pb[field];
   if(!state || !state.char || state.char.level < LEVEL_30_MILESTONE) return base;
   const b = LEVEL30_SKILL_BONUS[skillId];
   return (b && b[field]!==undefined) ? b[field] : base;
@@ -4763,9 +4827,22 @@ const COMMON_VS_TANK_81 = {dmgMult:1.00, tanksOnly:true}; // sin castigo extra a
 // Reajustado el 2026-10-09 al sumar la élite al guardián y la composición inteligente de grupos. Con estos
 // valores (10 intentos por senda y piso, 81-89): Guerrero 64 (medido con 1.05; se sube a 1.10), Paladín 49,
 // Asesino 46, Arquero 52, Mago 56 (medido con 0.64; se sube a 0.66), Hechicero 49. Antes: 1.00/1.15/1.00/1.08/0.67/0.66.
-const ENEMY_VS_CLASS_81 = {from:81, to:89, mult:{pesada:1.10, paladin:1.10, doblefilo:0.96, tirador:1.10, mago:0.66, hechicero:0.56},
-  // Jefe del 90: solo el Arquero, que en tres tandas de 200 combates salía en 17/22/28% (tope pedido: 20%).
-  boss90:{tirador:1.12}};
+// RECALIBRACIÓN CON PROFESIONES (2026-10-10, tools/calib_1_80.js con las 12 profesiones). Objetivos de ariochbu:
+// llegar al guardián 70%, guardián 25%, jefe del 90 20%. Medido: llega 69 (53-80 según profesión), guardián 26
+// (15-34), jefe 21 (17-24), niveles completos 18%. Cada profesión tiene su valor; el de la senda (para quien
+// todavía no eligió) es la media de sus dos profesiones. Los últimos retoques (Piromante, Plaguero, Criomante) no se volvieron a medir.
+const ENEMY_VS_CLASS_81 = {from:81, to:89,
+  mult:{pesada:1.47, paladin:1.48, doblefilo:0.82, tirador:0.99, mago:0.63, hechicero:0.53,
+    baluarte:1.45, verdugo:1.50, custodio:1.58, inquisidor:1.39, danzante:0.84, ejecutor:0.80,
+    ballestero:1.15, francotirador:0.83, piromante:0.60, criomante:0.60, plaguero:0.60, maldecidor:0.46},
+  // sala del guardián (se multiplica al anterior)
+  guardian:{pesada:0.59, paladin:0.64, doblefilo:1.31, tirador:1.10, mago:1.02, hechicero:1.33,
+    baluarte:0.57, verdugo:0.61, custodio:0.63, inquisidor:0.65, danzante:1.35, ejecutor:1.27,
+    ballestero:0.90, francotirador:1.30, piromante:0.95, criomante:1.08, plaguero:1.15, maldecidor:1.51},
+  // jefe del 90
+  boss90:{pesada:1.03, paladin:0.85, doblefilo:1.00, tirador:1.08, mago:1.24, hechicero:0.98,
+    baluarte:1.03, verdugo:1.03, custodio:0.90, inquisidor:0.81, danzante:1.08, ejecutor:0.95,
+    ballestero:0.95, francotirador:1.21, piromante:1.31, criomante:1.17, plaguero:0.97, maldecidor:1.00}};
 // La misma idea para 1-80 (recalibración por senda pedida por ariochbu, 2026-10-09): daño que recibe el
 // jugador según su senda, por década (pisos x1-x9) y por jefe de década. Vacío = x1.
 // Calibrado con tools/calib_1_80.js. En 21-40 solo aplica a las cuentas de la beta (las viejas juegan esas
@@ -4799,15 +4876,16 @@ const BOSS_VS_CLASS = {      // {piso del jefe: {senda: mult}}
   70: {pesada:1.03, paladin:0.73, doblefilo:1.18, tirador:1.56, mago:0.90, hechicero:0.92},
   80: {pesada:1.01, paladin:0.88, doblefilo:0.95, tirador:0.88, mago:1.32, hechicero:1.10},
 };
+ENEMY_VS_CLASS[8] = ENEMY_VS_CLASS_81.mult; BOSS_VS_CLASS[90] = ENEMY_VS_CLASS_81.boss90; GUARDIAN_VS_CLASS[8] = ENEMY_VS_CLASS_81.guardian;
 function enemyVsClassMult(){
-  const lvl = (state.dungeon && state.dungeon.level) || 0, st = state.char.style;
-  if(lvl === 90) return ENEMY_VS_CLASS_81.boss90[st] || 1;
-  if(lvl >= ENEMY_VS_CLASS_81.from && lvl <= ENEMY_VS_CLASS_81.to) return ENEMY_VS_CLASS_81.mult[st] || 1;
-  if(lvl < 1 || lvl > 80 || (lvl <= 40 && !BETA_BALANCE)) return 1;
+  const lvl = (state.dungeon && state.dungeon.level) || 0, st = state.char.style, prof = myProfession();
+  if(lvl < 1 || lvl > 90 || (lvl <= 40 && !BETA_BALANCE)) return 1;
   if(lvl <= 2) return 1;
-  if(lvl % 10 === 0) return (BOSS_VS_CLASS[lvl] && BOSS_VS_CLASS[lvl][st]) || 1;
-  const d = decadeIndexForLevel(lvl), t = ENEMY_VS_CLASS[d], g = combat && combat.node && combat.node.type === 'jefe' && GUARDIAN_VS_CLASS[d];
-  return ((t && t[st]) || 1) * ((g && g[st]) || 1);
+  // la profesión tiene su propio valor; si no hay, el de la senda
+  const of = (t)=> !t ? 1 : (prof && t[prof.id] !== undefined) ? t[prof.id] : (t[st] || 1);
+  if(lvl % 10 === 0) return of(BOSS_VS_CLASS[lvl]);
+  const d = decadeIndexForLevel(lvl);
+  return of(ENEMY_VS_CLASS[d]) * (combat && combat.node && combat.node.type === 'jefe' ? of(GUARDIAN_VS_CLASS[d]) : 1);
 }
 function guardianVsFront(enemy){
   const lvl = (state.dungeon && state.dungeon.level) || 0;
@@ -5167,6 +5245,7 @@ function characterToRow(){
     ...(state.char.bossesColumn ? {bosses_beaten: myBossesBeaten()} : {}),
     ...(state.char.sacerdoteSColumn ? {sacerdote_s_granted: !!state.char.sacerdoteSGranted} : {}),
     ...(state.char.storyColumn ? {story_choices: state.char.storyChoices || {}} : {}),
+    ...(state.char.professionColumn ? {profession: state.char.profession || null} : {}),
     ...(state.char.bestiaryColumn ? {bestiary: state.char.bestiary || []} : {}),
     ...(state.char.recordTurnsColumn ? {record_turns: state.char.recordTurns || null, record_turns_level: state.char.recordTurnsLevel || null} : {}),
     ...(sessionEnforced ? {last_session: SESSION_ID} : {})
@@ -5254,6 +5333,7 @@ function rowToState(row){
       bossesBeaten: row.bosses_beaten || 0, bossesColumn: row.bosses_beaten !== undefined, firstRetornado: !!row.first_retornado,
       sacerdoteSGranted: !!row.sacerdote_s_granted, sacerdoteSColumn: row.sacerdote_s_granted !== undefined,
       storyChoices: row.story_choices !== undefined ? (row.story_choices || {}) : loadLocalStoryChoices(row.id), storyColumn: row.story_choices !== undefined,
+      profession: row.profession !== undefined ? (row.profession || null) : loadLocalProfession(row.id), professionColumn: row.profession !== undefined,
       race: row.race, style: row.style,
       level: row.level, xp: row.xp, gold: row.gold, missionCurrency: row.mission_currency || 0,
       missionRerollCycle: row.mission_reroll_cycle || null, missionRerollCount: row.mission_reroll_count || 0,
@@ -6225,7 +6305,21 @@ function renderFicha(){
     return it ? `<div class="fc-eq" style="--rc:${RARITIES[it.rarity||'comun'].color}">${itemArtTileHTML(it, 52)}</div>`
               : `<div class="fc-eq empty" title="${slotLabel(slot)}: vacío"><span>${slotLabel(slot)}</span></div>`;
   }).join('');
-  const tabs = [['ataque','⚔️ Ataque'],['defensa','🛡️ Defensa'],['conjuntos','✨ Conjuntos']];
+  const tabs = [['ataque','⚔️ Ataque'],['defensa','🛡️ Defensa'],['conjuntos','✨ Conjuntos'],['profesion','🎓 Profesión']];
+  // Profesión (nivel 80): dos opciones por senda; la primera elección es gratis, cambiar cuesta oro.
+  const profList = PROFESSIONS[state.char.style] || [], profNow = myProfession();
+  const profLine = (p)=> Object.entries(p.skillMult || {}).map(([id, m])=> `${SKILLS[id].name} ${m > 1 ? '+' : ''}${Math.round((m - 1) * 100)}%`).join(' · ');
+  const profesion = state.char.level < PROFESSION_LEVEL
+    ? `<p class="inv-empty-msg">Al llegar al nivel ${PROFESSION_LEVEL} podrás elegir una profesión para tu senda: ${profList.map(p=> p.name).join(' o ')}.</p>`
+    : profList.map(p=>{
+        const mine = profNow && profNow.id === p.id;
+        const btn = mine ? '<span>Tu profesión</span>'
+          : `<button class="reset-btn" data-prof="${p.id}">${profNow ? `Cambiar (${PROFESSION_CHANGE_COST.toLocaleString('es')} de oro)` : 'Elegir'}</button>`;
+        return `<div class="fc-set"><div class="fc-set-head"><b>${p.icon} ${p.name} · ${p.role === 'grupo' ? 'de grupo' : 'de duelo'}</b>${btn}</div>
+          <div class="fc-set-line ${mine ? 'on' : ''}"><i>★</i><span>${p.text}</span></div>
+          <div class="fc-set-line ${mine ? 'on' : ''}"><i>±</i><span><b>Daño:</b> ${profLine(p)}</span></div>
+          ${p.extra ? `<div class="fc-set-line ${mine ? 'on' : ''}"><i>+</i><span>${p.extra}</span></div>` : ''}</div>`;
+      }).join('') + '<p class="sc-note" style="margin-top:6px;">Una profesión no te hace más fuerte en todo: refuerza una forma de pelear a costa de la otra. La primera elección es gratis.</p>';
   (fichaHostEl || document.getElementById('main-panel')).innerHTML = `
     <div class="fc">
       <div class="fc-left">
@@ -6241,7 +6335,7 @@ function renderFicha(){
         <div class="fc-vitals">${bar('Vida', state.char.curHP, d.maxHP, 'hp')}${bar('MP', state.char.curSta, d.maxSta, 'st')}${bar('Espíritu', state.char.curSpi, d.maxSpi, 'sp')}</div>
         <div class="fc-attrs">${attrsHTML}</div>
         <div class="rk-tabs fc-tabs">${tabs.map(([k,l])=>`<button class="${fichaTab===k?'on':''}" data-fc-tab="${k}">${l}</button>`).join('')}</div>
-        <div class="${fichaTab==='conjuntos'?'':'fc-tiles'}">${fichaTab==='ataque' ? ataque : fichaTab==='defensa' ? defensa : conjuntos}</div>
+        <div class="${(fichaTab==='conjuntos'||fichaTab==='profesion')?'':'fc-tiles'}">${fichaTab==='ataque' ? ataque : fichaTab==='defensa' ? defensa : fichaTab==='profesion' ? profesion : conjuntos}</div>
         ${fichaTab==='defensa' ? '<p class="sc-note" style="margin-top:8px;">La evasión mostrada es fuera de combate; en combate varía según el nivel del enemigo y tus efectos activos.</p>' : ''}
         <div class="fc-titlebox">
           ${myEarnedTitles().length ? `
@@ -6258,6 +6352,15 @@ function renderFicha(){
       </div>
     </div>`;
   document.querySelectorAll('[data-fc-tab]').forEach(b=>{ b.onclick = ()=>{ fichaTab = b.dataset.fcTab; renderFicha(); }; });
+  document.querySelectorAll('[data-prof]').forEach(b=>{ b.onclick = ()=>{
+    const p = (PROFESSIONS[state.char.style] || []).find(x=> x.id === b.dataset.prof), had = !!myProfession();
+    if(!p) return;
+    if(state.dungeon){ showOverlay('Profesión', 'No puedes cambiar de profesión dentro del laberinto.'); return; }
+    if(had && state.char.gold < PROFESSION_CHANGE_COST){ showOverlay('Profesión', `Cambiar de profesión cuesta ${PROFESSION_CHANGE_COST.toLocaleString('es')} de oro y no te alcanza.`); return; }
+    showChoiceOverlay(`${p.icon} ${p.name}`, `${p.text}${had ? ` Cambiar cuesta ${PROFESSION_CHANGE_COST.toLocaleString('es')} de oro.` : ' Podrás cambiarla más adelante pagando oro.'}`, [
+      {label: had ? 'Cambiar de profesión' : 'Elegir esta profesión', primary:true, onClick: ()=>{ if(had) state.char.gold -= PROFESSION_CHANGE_COST; setProfession(p.id); renderAll(); renderFicha(); }},
+      {label:'Todavía no', onClick: ()=>{}}]);
+  }; });
   const fcInv = document.getElementById('fc-inv');
   if(fichaHostEl){
     // Fuera de la ciudad la ficha es de consulta: sin atajo al inventario y
@@ -10601,7 +10704,7 @@ const DECADE_BOSS_TUNING = {
   // Control antes de liberar (200 por senda): Asesino 16-21, Hechicero 7-10, Guerrero 9-11, Paladín 9, Arquero 22-28
   // (se le corrige aparte, ver ENEMY_VS_CLASS_81.boss90) y Mago 27 con la debilidad al hielo del jefe. Esa debilidad se
   // QUEDA por decisión de ariochbu (2026-10-09): es la ventaja de su senda, aunque pase del 20%.
-  90: {hp:2.38, atk:2.64},  // El Carcelero
+  90: {hp:2.26, atk:2.51},  // El Carcelero: 21% de media con las 12 profesiones (17-24). Antes 2.38/2.64 sin profesiones.
 };
 // BETA (con BETA_ALLY_UNLOCKS): en las décadas 0-3 el jugador lleva menos
 // aliados (0 hasta el Ogro, 1 hasta la Matriarca, 2 hasta Riakis, 3 hasta
@@ -10667,7 +10770,8 @@ const DECADE_ENEMY_TUNING = {
   5: {regular:{hp:2.88, atk:4.18}, elite:{hp:2.74, atk:3.86}, guardian:{hp:3.20, atk:3.74}},   // medido: llega 78, guardián 55, niveles 43
   6: {regular:{hp:3.29, atk:4.99}, elite:{hp:3.29, atk:4.99}, guardian:{hp:2.31, atk:2.92}},   // medido: llega 71-76, guardián 44 //   // 2026-10-09: guardian correcto por nivel + castigo al frente; media 61-69 ~60%
   7: {regular:{hp:3.48, atk:5.33}, elite:{hp:3.48, atk:5.33}, guardian:{hp:2.02, atk:2.55}},   // medido: llega 76, guardián 38, niveles 29 //   // 2026-10-09: idem; media 71-79 ~63%
-  8: {regular:{hp:4.90, atk:7.52}, elite:{hp:3.60, atk:5.60}, guardian:{hp:1.69, atk:2.15}},   // guardián: 2.40/3.04 hasta que se le sumó la élite de escolta (GUARDIAN_ELITE_81) // 2026-10-09, segunda pasada: más duro en general y el reparto por senda en ENEMY_VS_CLASS_81 (objetivo de ariochbu: ~50% de niveles completados por senda). Élites algo por debajo: el simulador casi nunca les ganaba
+  // 2026-10-10: recalibrado con profesiones (antes 4.90/7.52, 3.60/5.60 y guardián 1.69/2.15, cuando el objetivo era ~50% de niveles).
+  8: {regular:{hp:5.20, atk:7.98}, elite:{hp:3.82, atk:5.94}, guardian:{hp:2.52, atk:3.21}},   // guardián: 2.40/3.04 hasta que se le sumó la élite de escolta (GUARDIAN_ELITE_81) // 2026-10-09, segunda pasada: más duro en general y el reparto por senda en ENEMY_VS_CLASS_81 (objetivo de ariochbu: ~50% de niveles completados por senda). Élites algo por debajo: el simulador casi nunca les ganaba
 };
 function makeEnemy(tpl, floorIdx, level){
   const lvlMult = levelMult(level||1);
@@ -12266,7 +12370,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
       }
     }
     // evasion of enemy (simple: small base)
-    let base = skillBaseDamage() * skill.mult * (skill.hits||1);
+    let base = skillBaseDamage() * skill.mult * (skill.hits||1) * profSkillMult(skillId);
 
     // race passives affecting outgoing
     if(raceObj.id==='draconido' && skill.dmgType==='fuego') base *= 1.15;
@@ -14265,7 +14369,7 @@ function simBuildState(cfg){
     maxLevelUnlocked: cfg.dungeonLevel, checkpointLevel: cfg.dungeonLevel, record:{level:cfg.dungeonLevel, floorIdx:0},
     stash:{gold:0, items:[]}, soulSlots, pityGear:0, pityStone:0,
     pets:{owned:{}, equipped:[], pendingFreePulls:0}, checkin:{day:0, lastClaimDate:null}, allies,
-    titleChoice:0, titleColumn:true, bossesBeaten:0, bossesColumn:true,
+    titleChoice:0, titleColumn:true, bossesBeaten:0, bossesColumn:true, profession: cfg.profession || null, professionColumn:true,
   }, dungeon:{level: cfg.dungeonLevel, floors:[[{type: cfg.node || 'jefe', done:false}]], atFloor:0, atNode:0, visited:{}, allyHP:{}, allyMP:{}, allySpirit:{}}, log:[]};
   return {st, petPool};
 }
@@ -14525,6 +14629,8 @@ async function simRun(cfg){
 }
 if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
   window.__sim = simRun; window.__simLevel = simLevels;
+  // Dibuja la ficha de un personaje de prueba (para revisar la pestaña de profesión sin iniciar sesión).
+  window.__ficha = (cfg)=>{ const {st} = simBuildState(Object.assign({style:'tirador', level:80, dungeonLevel:80}, cfg)); st.dungeon = null; st.char.gold = cfg.gold || 0; state = st; const d = derived(); state.char.curHP = d.maxHP; state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi; fichaTab = 'profesion'; fichaHostEl = null; save = ()=>{}; renderAll = ()=>{}; renderFicha(); };
   window.__historia = (level)=> showStoryScenes(level, ()=>{});
   // Vista de prueba sin iniciar sesión: arma un personaje de mentira (no guarda
   // nada: save() falla sin sesión) y abre una pantalla. __vista('cronicas','bestiario'),
@@ -15170,7 +15276,7 @@ function renderCombat(){
     const descText = typeof sk.desc==='function' ? sk.desc() : sk.desc;
     return `<div class="submenu-item ${disabled?'disabled':''} ${sk.ultimate?'ultimate-btn':''}" data-skill="${sid}">
       <span class="item-name">${sk.ultimate?'⚡ ':''}${sk.name} — ${costText}${sk.requiresPos?(' · requiere '+ (sk.requiresPos==='frente'?'Frente':'Retaguardia')):''}</span>
-      <span>${descText}</span>
+      <span>${descText}${profSkillNote(sid)}</span>
     </div>`;
   }).join('');
 

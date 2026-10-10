@@ -12,9 +12,12 @@
 // dejaba los niveles completados en 8-14% y solo contaba a las sendas que sobrevivían.
 // 1-20 solo se mide (rango B, ~100%): no se endurece para no cerrar el paso a personajes nuevos.
 await import('/tools/calib_harness.js');
-const W = window, CLS = W.CLS, V = W.__vsClase;
-const FIGHT_TARGET = [90, 90, 85, 85, 80, 80, 75, 75];
-const BOSS_TARGET = {10: 90, 20: 85, 30: 80, 40: 75, 50: 70, 60: 50, 70: 40, 80: 30};
+const W = window, V = W.__vsClase;
+// Variantes a medir: sendas ('mago') o senda con profesión ('mago:piromante'). W.CALVARS las cambia.
+const CLS = new Proxy([], {get: (_t, k)=>{ const arr = W.CALVARS || W.CLS; const v = arr[k]; return typeof v === 'function' ? v.bind(arr) : v; }});
+const keyOf = (st)=> st.split(':').pop();
+const FIGHT_TARGET = [90, 90, 85, 85, 80, 80, 75, 75, 70];
+const BOSS_TARGET = {10: 90, 20: 85, 30: 80, 40: 75, 50: 70, 60: 50, 70: 40, 80: 30, 90: 20};
 // Con la pestaña oculta el navegador frena los temporizadores a uno por segundo y el simulador se
 // arrastra: los cortos se despachan por MessageChannel (los largos, que son los de corte, siguen igual).
 if(!W.__st){
@@ -24,7 +27,7 @@ if(!W.__st){
 }
 const race = (p, ms)=> Promise.race([p, new Promise(res=> setTimeout(()=> res(null), ms))]);
 const yieldNow = ()=> new Promise(res=>{ const ch = new MessageChannel(); ch.port1.onmessage = ()=> res(); ch.port2.postMessage(0); });
-const cfg = (st, lv, extra)=> Object.assign({style: st, level: lv, dungeonLevel: lv, n: 1, beta: true}, W.refFor(lv), extra || {});
+const cfg = (st, lv, extra)=> Object.assign({style: st.split(':')[0], profession: st.split(':')[1] || null, level: lv, dungeonLevel: lv, n: 1, beta: true}, W.refFor(lv), extra || {});
 const pct = (w, t)=> t ? Math.round(w / t * 100) : null;
 const save = ()=>{ try{ localStorage.setItem('cal180', JSON.stringify(W.CAL)); }catch(e){} };
 const note = (s)=>{ W.CAL.log.push(new Date().toISOString().slice(11, 19) + ' ' + s); W.CAL.now = s; save(); };
@@ -105,13 +108,14 @@ async function tune(label, get, set, target, read, steps){
   return {s: +s.toFixed(3), last, v: get()};
 }
 // Reparto por senda: la que gana de más recibe más daño, la que gana de menos, menos.
-function nudgeClass(table, per, key, target){
+function nudgeClass(table, per, key, target, gain){
   const lg = (v)=>{ const p = Math.max(3, Math.min(97, v)) / 100; return Math.log(p / (1 - p)); };
   CLS.forEach(st=>{
     const v = per[st] != null && typeof per[st] === 'object' ? per[st][key] : per[st];
     if(v == null) return;
-    const m = (table[st] || 1) * Math.exp(Math.max(-0.3, Math.min(0.3, 0.25 * (lg(v) - lg(target)))));
-    table[st] = +Math.max(0.4, Math.min(1.8, m)).toFixed(3);
+    const k = keyOf(st), cur = table[k] !== undefined ? table[k] : (table[st.split(':')[0]] || 1);
+    const m = cur * Math.exp(Math.max(-0.3, Math.min(0.3, (gain || 0.25) * (lg(v) - lg(target)))));
+    table[k] = +Math.max(0.4, Math.min(1.8, m)).toFixed(3);
   });
 }
 
@@ -126,7 +130,7 @@ async function calibDecade(dec, tuneIt){
   const sendas = async (key, table, target, label)=>{
     for(let k = 0; k < 4; k++){
       const m = await measureLevels(dec, 16);
-      note(`d${dec} sendas ${label} v${k}: ${CLS.map(st=> st.slice(0, 3) + ' ' + m.per[st][key]).join(' ')} (media ${m[key]})`);
+      note(`d${dec} sendas ${label} v${k}: ${CLS.map(st=> keyOf(st).slice(0, 4) + ' ' + m.per[st][key]).join(' ')} (media ${m[key]})`);
       if(CLS.every(st=> m.per[st][key] != null && Math.abs(m.per[st][key] - target) <= 7)) break;
       nudgeClass(table, m.per, key, target);
     }
@@ -151,14 +155,14 @@ async function calibBoss(lv){
   await tune(`jefe ${lv}`, ()=> bossOf(lv), (h, a)=> setBoss(lv, h, a), T, async ()=> (await measureFights([lv], 'jefe', 40)).mean, 7);
   for(let k = 0; k < 3; k++){
     const m = await measureFights([lv], 'jefe', 60);
-    note(`jefe ${lv} sendas v${k}: ${CLS.map(st=> st.slice(0, 3) + ' ' + m.per[st]).join(' ')} (media ${m.mean})`);
+    note(`jefe ${lv} sendas v${k}: ${CLS.map(st=> keyOf(st).slice(0, 4) + ' ' + m.per[st]).join(' ')} (media ${m.mean})`);
     nudgeClass(V.jefe[lv], m.per, null, T);
   }
   await tune(`jefe ${lv} (repaso)`, ()=> bossOf(lv), (h, a)=> setBoss(lv, h, a), T, async ()=> (await measureFights([lv], 'jefe', 50)).mean, 4);
   rec.final = await measureFights([lv], 'jefe', 100);
   rec.tune = bossOf(lv); rec.clase = Object.assign({}, V.jefe[lv]);
   W.CAL.boss[lv] = rec;
-  note(`jefe ${lv} FINAL ${rec.final.mean}: ${CLS.map(st=> st.slice(0, 3) + ' ' + rec.final.per[st]).join(' ')}`);
+  note(`jefe ${lv} FINAL ${rec.final.mean}: ${CLS.map(st=> keyOf(st).slice(0, 4) + ' ' + rec.final.per[st]).join(' ')}`);
 }
 
 // decs: décadas a ajustar; soloMedir: décadas que solo se miden; bosses: jefes a ajustar.
@@ -170,4 +174,20 @@ W.calib180 = async (decs, soloMedir, bosses)=>{
     for(const lv of (bosses || [10, 20, 30, 40, 50, 60, 70, 80])) await calibBoss(lv);
   }catch(e){ note('ERROR ' + (e && e.stack || e)); W.CAL.error = String(e); }
   W.CAL.done = true; save();
+};
+
+// Afinado del reparto por variante con muestras grandes y paso corto (los jefes y guardianes de 81-90 son
+// muy sensibles: con el paso normal el reparto oscila). rounds: {salas, guardian, jefe}.
+W.calRefine = async (dec, bossLv, rounds, gain)=>{
+  W.REF = {log: [], done: false};
+  const T = FIGHT_TARGET[dec], TG = BOSS_TARGET[bossLv] + 5, TB = BOSS_TARGET[bossLv];
+  const say = (x)=>{ W.REF.log.push(new Date().toISOString().slice(11, 19) + ' ' + x); };
+  const fmt = (m, key)=> CLS.map(st=> keyOf(st).slice(0, 4) + ' ' + (key ? m.per[st][key] : m.per[st])).join(' ');
+  for(let k = 0; k < (rounds.salas || 0); k++){ const m = await measureLevels(dec, 40); say(`salas v${k}: ${fmt(m, 'lle')} (media ${m.lle})`); nudgeClass(V.dec[dec], m.per, 'lle', T, gain); }
+  for(let k = 0; k < (rounds.guardian || 0); k++){ const m = await measureLevels(dec, 40); say(`guardián v${k}: ${fmt(m, 'gua')} (media ${m.gua}; llega ${m.lle})`); nudgeClass(V.gua[dec], m.per, 'gua', TG, gain); }
+  for(let k = 0; k < (rounds.jefe || 0); k++){ const m = await measureFights([bossLv], 'jefe', 150); say(`jefe v${k}: ${fmt(m)} (media ${m.mean})`); nudgeClass(V.jefe[bossLv], m.per, null, TB, gain); }
+  const f = await measureLevels(dec, 50), b = await measureFights([bossLv], 'jefe', 200);
+  W.REF.final = {niveles: f, jefe: b};
+  say(`FINAL llega ${f.lle} [${fmt(f, 'lle')}] guardián ${f.gua} [${fmt(f, 'gua')}] niveles ${f.clear} · jefe ${b.mean} [${fmt(b)}]`);
+  W.REF.done = true;
 };
