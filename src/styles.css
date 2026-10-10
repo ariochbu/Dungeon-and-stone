@@ -2142,3 +2142,30 @@ button.cron-card:hover{ transform:translateY(-2px); border-color:var(--bronze); 
 .fu-rank{ color:var(--oc); font-size:0.9em; margin-top:2px; }
 .fu-hint{ margin-top:14px; font-size:0.8em; color:#8f8779; }
 @media (prefers-reduced-motion: reduce){ .fu-ring, .fu-core{ animation-duration:0.15s; } }
+
+/* ESTILO «TABLÓN Y PERGAMINO» (2026-10-10, elegido por ariochbu). Muestra: el Gremio. Texturas pintadas en
+   src/assets/ui (madera.jpg, pergamino.jpg) y la escena de cabecera en src/assets/escenas/gremio.jpg. */
+.gm-hero{ min-height:190px; border-width:2px; box-shadow:0 6px 18px rgba(0,0,0,0.55); }
+.gm-hero .rk-hero-art{ object-position:50% 38%; }
+.gm-hero::after{ background:linear-gradient(180deg, rgba(8,6,4,0.05) 30%, rgba(8,6,4,0.92)); }
+.gm-board{ background:#3b2a18 url(assets/ui/madera.jpg) 0 0 / 420px auto; border:10px solid #2a1c0f; border-image:linear-gradient(145deg,#6b4a26,#2a1c0f 45%,#553a1d) 1; box-shadow:inset 0 0 0 2px rgba(0,0,0,0.55), inset 0 0 46px rgba(0,0,0,0.65), 0 8px 20px rgba(0,0,0,0.5); padding:22px 16px; gap:20px 16px; }
+.gm-sheet{ background:#e9d9b4 url(assets/ui/pergamino.jpg) center / 300px auto; border-radius:3px; padding:18px 13px 12px; box-shadow:inset 0 0 22px rgba(120,84,40,0.35), 0 6px 12px rgba(0,0,0,0.6); color:#2b1c0e; }
+.gm-sheet::before{ content:''; position:absolute; inset:5px; border:1px solid rgba(90,60,25,0.35); pointer-events:none; }
+.gm-pin{ width:16px; height:16px; top:-8px; margin-left:-8px; background:radial-gradient(circle at 35% 30%, #fff0b8, #c8962e 45%, #5d3f0c); box-shadow:0 3px 4px rgba(0,0,0,0.6); }
+.gm-rank{ width:40px; height:40px; top:6px; right:6px; font-size:1.05em; color:#fff6dc; text-shadow:0 1px 2px rgba(0,0,0,0.6); background:radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--rc) 70%, #fff), var(--rc) 55%, color-mix(in srgb, var(--rc) 55%, #000)); box-shadow:0 0 0 3px color-mix(in srgb, var(--rc) 70%, #000), 0 0 0 4px rgba(0,0,0,0.3), 0 3px 5px rgba(0,0,0,0.5), inset 0 -3px 5px rgba(0,0,0,0.3); transform:rotate(-8deg); }
+.gm-goal{ padding-right:44px; font-family:'EB Garamond', Georgia, serif; font-size:1.02em; }
+.gm-goal b{ font-size:1.35em; color:#5a1d12; }
+.gm-bar{ height:9px; border-radius:2px; background:rgba(70,45,18,0.22); border:1px solid rgba(70,45,18,0.5); }
+.gm-bar i{ background:linear-gradient(180deg,#7fa64a,#4f7a2c); }
+.gm-prog{ color:#5a4226; font-style:italic; }
+/* La recompensa, en su franja resaltada (el mismo recurso que la caja de Título) */
+.gm-reward{ border-top:none; margin:3px -13px 0; padding:6px 13px; background:linear-gradient(90deg, rgba(40,24,10,0.92), rgba(60,38,16,0.86)); color:#ffe9a8; border-left:3px solid #d4a23c; font-size:0.8em; box-shadow:0 2px 4px rgba(0,0,0,0.35); }
+.gm-btns{ margin-top:8px; }
+.gm-btns .inv-btn{ background:linear-gradient(180deg,#4a3018,#2f1e0e); color:#f3e3bd; border:1px solid #1d1208; box-shadow:inset 0 1px 0 rgba(255,220,150,0.25); font-family:'Cinzel'; }
+.gm-btns .inv-btn:disabled{ background:rgba(70,45,18,0.25); color:rgba(60,40,20,0.6); border-color:rgba(70,45,18,0.35); box-shadow:none; }
+.gm-sheet.done .gm-btns .inv-btn:not(.gm-reroll){ background:linear-gradient(180deg,#a8322a,#6e1810); color:#fff1cf; border-color:#3f0c07; box-shadow:0 0 10px rgba(255,190,90,0.55), inset 0 1px 0 rgba(255,220,180,0.4); }
+.gm-sheet.done{ box-shadow:0 0 0 2px #e0b23f, 0 0 20px rgba(224,178,63,0.6), 0 6px 12px rgba(0,0,0,0.6); }
+.gm-stamp{ font-size:1.05em; letter-spacing:0.08em; border-width:3px; padding:4px; }
+/* Cabeceras con escena pintada: Crisol */
+.rk-hero:has(.rk-hero-art[src*='crisol']){ min-height:190px; }
+.rk-hero-art[src*='crisol']{ object-position:50% 35%; }
