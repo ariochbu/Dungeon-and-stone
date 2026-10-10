@@ -246,6 +246,17 @@
    4
   ]
  },
+ "enemigo_alcaide_blanco": {
+  "bh": 128,
+  "ch": 161,
+  "cw": 224,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
  "enemigo_alcaide_menor": {
   "bh": 128,
   "ch": 130,
@@ -299,6 +310,17 @@
    6,
    2,
    5
+  ]
+ },
+ "enemigo_archivista_nombres": {
+  "bh": 128,
+  "ch": 132,
+  "cw": 164,
+  "frames": [
+   4,
+   6,
+   2,
+   4
   ]
  },
  "enemigo_arpia_hollin": {
@@ -433,6 +455,17 @@
    4
   ]
  },
+ "enemigo_cantor_silencio": {
+  "bh": 128,
+  "ch": 130,
+  "cw": 258,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
  "enemigo_capataz_ogro": {
   "bh": 128,
   "ch": 150,
@@ -536,6 +569,17 @@
   "bh": 128,
   "ch": 130,
   "cw": 208,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_centinela_palido": {
+  "bh": 128,
+  "ch": 137,
+  "cw": 286,
   "frames": [
    4,
    6,
@@ -653,6 +697,17 @@
    4
   ]
  },
+ "enemigo_custodio_celda": {
+  "bh": 128,
+  "ch": 154,
+  "cw": 330,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
  "enemigo_custodio_invernadero": {
   "bh": 128,
   "ch": 137,
@@ -756,6 +811,17 @@
   "bh": 128,
   "ch": 130,
   "cw": 162,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_eco_preso": {
+  "bh": 128,
+  "ch": 139,
+  "cw": 254,
   "frames": [
    4,
    6,
@@ -1060,6 +1126,17 @@
    4
   ]
  },
+ "enemigo_grillete_vivo": {
+  "bh": 128,
+  "ch": 146,
+  "cw": 338,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
  "enemigo_guardia_profundidades": {
   "bh": 128,
   "ch": 130,
@@ -1251,6 +1328,17 @@
   "bh": 128,
   "ch": 139,
   "cw": 244,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_lector_sentencias": {
+  "bh": 128,
+  "ch": 130,
+  "cw": 238,
   "frames": [
    4,
    6,
@@ -1581,6 +1669,17 @@
   "bh": 128,
   "ch": 130,
   "cw": 222,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_primer_retornado": {
+  "bh": 128,
+  "ch": 131,
+  "cw": 230,
   "frames": [
    4,
    6,
@@ -2065,6 +2164,28 @@
   "bh": 128,
   "ch": 151,
   "cw": 248,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_verdugo_silencio": {
+  "bh": 128,
+  "ch": 173,
+  "cw": 214,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_vigia_sin_rostro": {
+  "bh": 128,
+  "ch": 130,
+  "cw": 182,
   "frames": [
    4,
    6,

@@ -130,6 +130,11 @@ ENEMIGO_POR_NOMBRE = {
     'el segundo carcelero': 'segundo_carcelero',
     'carcelero primera fase': 'carcelero', 'el carcelero primera fase': 'carcelero', 'el carcelero segunda fase': 'carcelero_f2',
     'el carcelero tercera forma': 'carcelero_f3', 'el carcelero tercera fase': 'carcelero_f3',
+    # La Celda (91-100): láminas generadas y descargadas por Claude el 2026-10-10 (miran a la derecha)
+    'centinela palido': 'centinela_palido', 'eco de un preso': 'eco_preso', 'grillete vivo': 'grillete_vivo',
+    'vigia sin rostro': 'vigia_sin_rostro', 'lector de sentencias': 'lector_sentencias', 'cantor del silencio': 'cantor_silencio',
+    'alcaide blanco': 'alcaide_blanco', 'verdugo del silencio': 'verdugo_silencio', 'archivista de nombres': 'archivista_nombres',
+    'custodio de la celda': 'custodio_celda', 'el primer retornado': 'primer_retornado',
 }
 # Sin nombre (identificados a ojo, comparando con el sprite que ya tenía cada uno).
 ENEMIGO_POR_ARCHIVO = {

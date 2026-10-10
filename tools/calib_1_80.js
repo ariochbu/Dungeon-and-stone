@@ -16,8 +16,8 @@ const W = window, V = W.__vsClase;
 // Variantes a medir: sendas ('mago') o senda con profesión ('mago:piromante'). W.CALVARS las cambia.
 const CLS = new Proxy([], {get: (_t, k)=>{ const arr = W.CALVARS || W.CLS; const v = arr[k]; return typeof v === 'function' ? v.bind(arr) : v; }});
 const keyOf = (st)=> st.split(':').pop();
-const FIGHT_TARGET = [90, 90, 85, 85, 80, 80, 75, 75, 70];
-const BOSS_TARGET = {10: 90, 20: 85, 30: 80, 40: 75, 50: 70, 60: 50, 70: 40, 80: 30, 90: 20};
+const FIGHT_TARGET = [90, 90, 85, 85, 80, 80, 75, 75, 70, 60];
+const BOSS_TARGET = {10: 90, 20: 85, 30: 80, 40: 75, 50: 70, 60: 50, 70: 40, 80: 30, 90: 20, 100: 10};
 // Con la pestaña oculta el navegador frena los temporizadores a uno por segundo y el simulador se
 // arrastra: los cortos se despachan por MessageChannel (los largos, que son los de corte, siguen igual).
 if(!W.__st){

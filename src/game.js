@@ -2,11 +2,11 @@
 
 import { supabase } from './supabaseClient.js';
 import * as auth from './auth.js';
-import { syncBattleStage, playBattleAnim } from './battleStage.js?v=113';
+import { syncBattleStage, playBattleAnim } from './battleStage.js?v=114';
 import { mountLabyrinth } from './labyrinthMap.js?v=10';
 import { installIconizer } from './icons.js?v=2';
 installIconizer(); // ningún emoji llega a pantalla: se cambian por los iconos del juego (ver icons.js)
-import { CLASS_SPRITES, ENEMY_SPRITES, playerSpriteFor, playerIllustrationFor, enemySpriteFor, ALLY_TEMPLATE_SPRITES } from './battleSprites.js?v=92';
+import { CLASS_SPRITES, ENEMY_SPRITES, playerSpriteFor, playerIllustrationFor, enemySpriteFor, ALLY_TEMPLATE_SPRITES } from './battleSprites.js?v=93';
 
 /* ============================================================
    DATA
@@ -967,6 +967,9 @@ const BROTE_MENOR_TPL = {id:'brote_menor', name:'Brote Menor', icon:'🌱', hp:0
 function QUEMADURA(chance){ return {name:'Quemadura', chance, duration:3, stack:true, maxStack:3}; }
 const ASCUA_TPL = {id:'preso_menor', name:'Preso Encadenado', icon:'⛓️', hp:0.3, atk:0.45, res:rs(0,25,-30,0,0), frontline:true,
   abilities:{cadenazo:{label:'Cadenazo', mult:1.0, applies:QUEMADURA(0.20)}}, aiPriority:['cadenazo']};
+// La Celda (91-100): el custodio pequeño que escolta a cada guardián despertado.
+const CUSTODIO_CELDA_TPL = {id:'custodio_celda', name:'Custodio de la Celda', icon:'🗝️', hp:0.3, atk:0.45, res:rs(10,10,10,10,0), frontline:true,
+  abilities:{porrazo_cc:{label:'Porrazo', mult:1.0, applies:{name:'Debilitado', chance:0.15, duration:2}}}, aiPriority:['porrazo_cc']};
 const DECOY_CLON_SOMBRA = decoyTpl('senuelo_clon', 'Clon de Sombra', '👤');
 const DECOY_REPLICA = decoyTpl('senuelo_replica', 'Réplica', '🪞');
 const DECOY_DUPLICADO = decoyTpl('senuelo_duplicado', 'Duplicado', '🪞');
@@ -2420,6 +2423,51 @@ const DECADE_BESTIARY = [
       },
       aiPriority:['llaves_al_rojo','golpe_cansado','llamar_presos','nueve_llaves','sentencia','alabarda_llave','grillete','golpe_carcelero']}
   }
+  ,
+  // Década 9 — pisos 91-100 — La Celda (2026-10-10; se abre o cierra con FLOORS_91_100_OPEN). Bajo el
+  // fuego no hay fuego: hay silencio, piedra blanca y una sola celda. Su identidad es el SILENCIO y las
+  // MARCAS (sentencias). Diseño y números propios, a falta de hoja de ariochbu; lo decidido por él:
+  // los guardianes de 91-99 son los jefes de década "despertados", cada uno con 3 custodios y 2 élites
+  // (ver GUARDIAN_ELITE_91 y awakenedGuardians más abajo), y el jefe es el Primer Retornado, que pelea
+  // con la senda del jugador (RETORNADO_KITS).
+  {
+    regular: [
+      {id:'centinela_palido', name:'Centinela Pálido', icon:'🛡️', hp:1.10, atk:1.05, res:rs(20,10,10,10,10), frontline:true,
+        abilities:{lanza_blanca:{label:'Lanza Blanca', mult:1.00}, guardia_muda:{label:'Guardia Muda', utility:'self_buff', cooldown:5, selfBuff:{name:'Guardia Muda', duration:3, dmgMult:1.15}}, empujon_cp:{label:'Embestida de Escudo', mult:1.30, cooldown:4}},
+        aiPriority:['guardia_muda','empujon_cp','lanza_blanca']},
+      {id:'eco_preso', name:'Eco de un Preso', icon:'👻', hp:0.95, atk:1.10, res:rs(5,5,5,5,0), frontline:true,
+        abilities:{zarpazo_ep:{label:'Zarpazo', mult:1.00}, eco_dolor:{label:'Eco de Dolor', mult:0.85, applies:{name:'Sangrado', chance:0.40, duration:3, stack:true, maxStack:3}, cooldown:3}, remate_ep:{label:'Remate', mult:1.30, cooldown:4, condition:(ctx)=>ctx.targetHpPct<0.5}},
+        aiPriority:['remate_ep','eco_dolor','zarpazo_ep']},
+      {id:'grillete_vivo', name:'Grillete Vivo', icon:'⛓️', hp:1.05, atk:1.00, res:rs(30,10,10,20,25), frontline:true, immuneRetroceso:true,
+        abilities:{cadena_gv:{label:'Cadena', mult:1.00}, apresar:{label:'Apresar', mult:0.80, applies:{name:'Paralisis', chance:0.22, duration:1}, cooldown:4}, estrujar:{label:'Estrujar', mult:1.25, cooldown:4}},
+        aiPriority:['estrujar','apresar','cadena_gv']},
+      {id:'vigia_sin_rostro', name:'Vigía sin Rostro', icon:'👁️', hp:0.85, atk:1.12, res:rs(0,10,10,0,0),
+        abilities:{dardo_vr:{label:'Dardo', mult:1.00}, mirada_vacia:{label:'Mirada Vacía', mult:0.80, applies:{name:'Debilitado', chance:0.45, duration:2}, cooldown:4}, disparo_lejano:{label:'Disparo Lejano', mult:1.35, cooldown:4, condition:(ctx)=>ctx.targetHpPct>0.6}},
+        aiPriority:['disparo_lejano','mirada_vacia','dardo_vr']},
+      {id:'lector_sentencias', name:'Lector de Sentencias', icon:'📜', hp:0.85, atk:1.08, res:rs(-5,20,20,10,0),
+        abilities:{sentencia_menor:{label:'Sentencia Menor', mult:1.00}, marcar_ls:{label:'Señalar', mult:0.75, applies:{name:'Marcado', chance:0.50, duration:2}, cooldown:4}, veredicto:{label:'Veredicto', utility:'aoe', mult:0.45, rearMult:0.50, cooldown:5}},
+        aiPriority:['veredicto','marcar_ls','sentencia_menor']},
+      {id:'cantor_silencio', name:'Cantor del Silencio', icon:'🔇', hp:0.85, atk:0.95, res:rs(-5,15,15,10,0),
+        abilities:{nota_hueca:{label:'Nota Hueca', mult:0.95}, acallar:{label:'Acallar', mult:0.70, applies:{name:'Silencio', chance:0.25, duration:1}, cooldown:5}, coro_blanco:{label:'Coro Blanco', utility:'heal_ally', healPct:0.10, cooldown:4, condition:(ctx)=>combat.enemies.some(e=>e.hp>0 && e.hp<e.maxHP*0.7)}},
+        aiPriority:['coro_blanco','acallar','nota_hueca']},
+    ],
+    elite: [
+      {id:'alcaide_blanco', name:'Alcaide Blanco', icon:'🔑', hp:2.35, atk:1.25, res:rs(25,15,15,10,25), elite:true, frontline:true, immuneRetroceso:true,
+        abilities:{maza_ab:{label:'Maza', mult:1.00}, orden_cerrar:{label:'Orden de Cerrar', utility:'buff_allies', cooldown:5, buffAllies:{name:'Fortalecido', duration:2, stacks:5}, condition:(ctx)=>combat.enemies.filter(e=>e.hp>0).length>1}, golpe_sello:{label:'Golpe de Sello', mult:1.40, cooldown:3, applies:{name:'Debilitado', chance:0.40, duration:2}}},
+        aiPriority:['orden_cerrar','golpe_sello','maza_ab']},
+      {id:'verdugo_silencio', name:'Verdugo del Silencio', icon:'🪓', hp:2.30, atk:1.32, res:rs(15,10,10,5,20), elite:true, frontline:true,
+        abilities:{tajo_vs:{label:'Tajo', mult:1.00}, ejecucion_vs:{label:'Ejecución', mult:1.50, cooldown:4, condition:(ctx)=>ctx.targetHpPct<0.5}, hacha_muda:{label:'Hacha Muda', mult:0.90, applies:{name:'Silencio', chance:0.25, duration:1}, cooldown:5}},
+        aiPriority:['ejecucion_vs','hacha_muda','tajo_vs']},
+      {id:'archivista_nombres', name:'Archivista de Nombres', icon:'📖', hp:2.05, atk:1.20, res:rs(5,25,25,10,10), elite:true,
+        abilities:{pluma_an:{label:'Pluma', mult:1.00}, borrar_nombre:{label:'Borrar el Nombre', mult:0.80, applies:{name:'Marcado', chance:0.60, duration:3}, cooldown:4}, tinta_blanca:{label:'Tinta Blanca', utility:'aoe', mult:0.50, rearMult:0.50, cooldown:4}, restaurar_an:{label:'Restaurar', utility:'heal_ally', healPct:0.12, cooldown:5, condition:(ctx)=>combat.enemies.some(e=>e.hp>0 && e.hp<e.maxHP*0.6)}},
+        aiPriority:['restaurar_an','tinta_blanca','borrar_nombre','pluma_an']},
+    ],
+    guardians: [],
+    guardianByFloor: {},   // se rellena abajo con los jefes de década despertados
+    decadeBoss: {id:'primer_retornado', name:'El Primer Retornado', icon:'👤', hp:6.6, atk:1.90, res:rs(20,20,20,20,30), boss:true, frontline:true, immuneRetroceso:true,
+      phases:[{below:0.60, msg:'te mira como quien se reconoce: <b>pelea como tú</b> (fase 2).'},{below:0.25, msg:'ya no se guarda nada: <b>todo o nada</b> (fase 3).'}],
+      abilities:{golpe_pr:{label:'Golpe', mult:1.00}}, aiPriority:['golpe_pr']}
+  }
 ];
 
 // RESISTENCIA FÍSICA EN 61-90 (pedido de ariochbu, 2026-10-09: "tipo el gran cangrejo", para que
@@ -2438,6 +2486,68 @@ const DECADE_BESTIARY = [
 // llegan al combate con una escolta de 2 criaturas menores (ya están ahí
 // desde el primer turno, no se invocan) y con más vida, para que su combate
 // dure y desgaste al frente como el de los que sí invocan (69 y 79).
+// GUARDIANES DE 91-99 (decisión de ariochbu): los jefes de década, "despertados". Es la misma plantilla
+// del jefe (mismo id: así conservan sus fases, su sprite y la lógica propia de cada uno), con otro nombre
+// y una escolta de 3 custodios. Al no ser el piso 10/20/..., no reciben el ajuste de jefe de década sino
+// el de guardián de esta década.
+const AWAKENED_NAMES = ['Ogro Despertado', 'Matriarca Escarlata Despertada', 'Riakis Despertado', 'Usurpador Despertado', 'Custodio de la Isla Despertado',
+  'Storm Gush Despertado', 'El Sin Forma Despertado', 'El Corazón Marchito Despertado', 'El Carcelero Despertado'];
+AWAKENED_NAMES.forEach((name, i)=>{
+  DECADE_BESTIARY[9].guardianByFloor[i + 1] = Object.assign({}, DECADE_BESTIARY[i].decadeBoss, {name, awakened:true, escort:{tpl:CUSTODIO_CELDA_TPL, count:3}});
+});
+// El Primer Retornado pelea con la senda de quien lo enfrenta: un juego de habilidades por senda, hecho
+// con el vocabulario de los enemigos pero calcando el kit del jugador (aplicar estado → rematar, área, etc.).
+const RETORNADO_KITS = {
+  pesada: {abilities:{
+      golpe_bruto_r:{label:'Golpe Bruto', mult:1.00, applies:{name:'Debilitado', chance:0.50, duration:2}},
+      machacar_r:{label:'Machacar', mult:1.50, cooldown:3, bonusVsTargetStatus:{name:'Debilitado', mult:1.30}},
+      grito_r:{label:'Grito de Guerra', utility:'self_buff', cooldown:6, selfBuff:{name:'Furioso', duration:3, dmgMult:1.20}},
+      furia_r:{label:'Furia del Titán', utility:'aoe', mult:0.60, rearMult:0.50, cooldown:5, condition:(ctx)=>ctx.selfHpPct<0.60}},
+    aiPriority:['grito_r','furia_r','machacar_r','golpe_bruto_r']},
+  // `tune` corrige vida/ataque de esa variante: contra su propio espejo, Paladín y Mago quedaban en 0-5% aun
+  // recibiendo el mínimo de daño (el del Paladín se curaba más de lo que le quitaban; el del Mago los arrasaba).
+  paladin: {tune:{hp:0.85, atk:1.25}, abilities:{
+      consagrado_r:{label:'Golpe Consagrado', mult:1.00},
+      muro_r:{label:'Muro de Fe', utility:'self_heal', healPct:0.02, cooldown:7, condition:(ctx)=>ctx.selfHpPct<0.70},
+      juicio_r:{label:'Juicio Divino', utility:'aoe', mult:0.55, rearMult:0.50, cooldown:5, condition:(ctx)=>ctx.selfHpPct<0.60},
+      castigo_r:{label:'Castigo', mult:1.40, cooldown:3, applies:{name:'Debilitado', chance:0.40, duration:2}}},
+    aiPriority:['muro_r','juicio_r','castigo_r','consagrado_r']},
+  doblefilo: {abilities:{
+      corte_r:{label:'Corte Rápido', mult:0.95, applies:{name:'Sangrado', chance:0.60, duration:3, stack:true, maxStack:4}},
+      danza_r:{label:'Danza de Cuchillas', mult:1.30, cooldown:3},
+      gracia_r:{label:'Golpe de Gracia', mult:1.50, cooldown:4, bonusVsTargetStatus:{name:'Sangrado', minStacks:2, mult:1.30}},
+      vals_r:{label:'Vals de Sangre', utility:'aoe', mult:0.50, rearMult:0.50, cooldown:5, condition:(ctx)=>ctx.selfHpPct<0.60}},
+    aiPriority:['vals_r','gracia_r','danza_r','corte_r']},
+  tirador: {abilities:{
+      disparo_r:{label:'Disparo', mult:1.00},
+      marca_r:{label:'Marca del Cazador', mult:0.70, cooldown:5, applies:{name:'Marcado', chance:1, duration:3}},
+      certero_r:{label:'Disparo Certero', mult:1.35, cooldown:3},
+      lluvia_r:{label:'Lluvia de Flechas', utility:'aoe', mult:0.50, rearMult:1.00, cooldown:4},
+      final_r:{label:'Disparo del Cazador Final', mult:1.80, cooldown:6, condition:(ctx)=>ctx.selfHpPct<0.50}},
+    aiPriority:['final_r','marca_r','lluvia_r','certero_r','disparo_r']},
+  mago: {tune:{hp:0.90, atk:0.72}, abilities:{
+      bola_r:{label:'Bola de Fuego', mult:1.00, applies:QUEMADURA(0.60)},
+      lanza_r:{label:'Lanza de Hielo', mult:1.00, cooldown:3, applies:{name:'Ralentizado', chance:0.60, duration:2}},
+      explosion_r:{label:'Explosión Arcana', mult:1.45, cooldown:4, bonusVsTargetStatus:{name:'Quemadura', mult:1.25}},
+      cataclismo_r:{label:'Cataclismo Elemental', utility:'aoe', mult:0.50, rearMult:0.50, cooldown:5, condition:(ctx)=>ctx.selfHpPct<0.60, applies:QUEMADURA(0.40)}},
+    aiPriority:['cataclismo_r','explosion_r','lanza_r','bola_r']},
+  hechicero: {abilities:{
+      toque_r:{label:'Toque Venenoso', mult:0.95, applies:{name:'Veneno', chance:0.70, duration:3, stack:true, maxStack:4}},
+      locura_r:{label:'Grito de Locura', mult:0.70, cooldown:4, applies:{name:'Miedo', chance:0.35, duration:2, procChance:0.4}},
+      drenaje_r:{label:'Drenaje de Esencia', utility:'self_heal', healPct:0.06, cooldown:5, condition:(ctx)=>ctx.selfHpPct<0.70},
+      abismo_r:{label:'Grito del Abismo', utility:'aoe', mult:0.50, rearMult:1.00, cooldown:6, condition:(ctx)=>ctx.selfHpPct<0.60, applies:{name:'Miedo', chance:0.25, duration:2, procChance:0.4}}},
+    aiPriority:['abismo_r','drenaje_r','locura_r','toque_r']},
+};
+// La plantilla del jefe del 100 para la senda del jugador (mismo id y sprite; cambia el kit).
+const RETORNADO_TPLS = {};
+function retornadoTplFor(styleId){
+  const base = DECADE_BESTIARY[9].decadeBoss, kit = RETORNADO_KITS[styleId];
+  if(!kit) return base;
+  if(!RETORNADO_TPLS[styleId]) RETORNADO_TPLS[styleId] = Object.assign({}, base, kit, {decadeBossOf:100});
+  return RETORNADO_TPLS[styleId];
+}
+// Escolta de élites de los guardianes de 91-99: dos, una de frente y una de retaguardia, debilitadas.
+const GUARDIAN_ELITE_91 = {from:91, to:99, hpPct:0.50, atkPct:0.65};
 const GUARDIAN_ESCORT = {count:2, hpPct:0.07, atkPct:0.35, hpBoost:1.30, noHpBoost:['rey_articulaciones']};
 [[6, LARVA_ERRANTE_TPL], [7, BROTE_MENOR_TPL], [8, ASCUA_TPL]].forEach(([dec, tpl])=>{
   Object.values((DECADE_BESTIARY[dec] && DECADE_BESTIARY[dec].guardianByFloor) || {}).forEach(g=>{
@@ -2950,6 +3060,7 @@ function fusionOnce(){
   const isDup = !!state.char.pets.owned[tpl.id];
   state.char.pets.owned[tpl.id] = (state.char.pets.owned[tpl.id] || 0) + 1;
   fusionPick = {};
+  if(!success && FUSION_EGG_TARGETS.includes(fusionNextRarity(fusionRarity))) fusionEggAdd(fusionNextRarity(fusionRarity), 1);
   log(success
     ? `El Crisol arde: de ${FUSION_NEED} Caídos ${PET_RARITIES[fusionRarity].name} nace <b>${tpl.name}</b> (${PET_RARITIES[outRarity].name}).`
     : `El Crisol se apaga: la fusión falla y solo vuelve <b>${tpl.name}</b> (${PET_RARITIES[outRarity].name}).`);
@@ -2966,6 +3077,25 @@ async function doFusion(){
 // Hasta `times` fusiones seguidas eligiendo solas los repetidos (pedido de ariochbu, 2026-10-10: "de 10 en
 // 10"). Los que vuelven de una fusión fallida pueden entrar en las siguientes.
 const FUSION_BATCH = 10;
+// EL HUEVO DEL CRISOL (pedido de ariochbu, 2026-10-10). Solo para las fusiones que buscan Épico o Legendario:
+// cada fallo suma 1 a su contador y el huevo se va poniendo más rojo. Con FUSION_EGG_NEED fallos puede
+// "nacer" un Caído seguro de ese rango, pero solo cuando el jugador lo toca; mientras, sigue contando.
+// El contador tiene un tope interno (FUSION_EGG_MAX) que no se muestra: solo se avisa al acercarse.
+const FUSION_EGG_NEED = 20, FUSION_EGG_MAX = 1000, FUSION_EGG_WARN = 990;
+const FUSION_EGG_TARGETS = ['epico', 'legendario'];
+function fusionEgg(rk){ ensurePets(); const e = state.char.pets.fusionEgg || (state.char.pets.fusionEgg = {}); return e[rk] || 0; }
+function fusionEggAdd(rk, n){ ensurePets(); const e = state.char.pets.fusionEgg || (state.char.pets.fusionEgg = {}); e[rk] = Math.max(0, Math.min(FUSION_EGG_MAX, (e[rk] || 0) + n)); return e[rk]; }
+async function hatchFusionEgg(rk){
+  if(!FUSION_EGG_TARGETS.includes(rk) || fusionEgg(rk) < FUSION_EGG_NEED) return null;
+  if(!(await checkSessionStillActive())) return null;
+  fusionEggAdd(rk, -FUSION_EGG_NEED);
+  const tpl = pick(PET_CATALOG.filter(t=> t.rarity === rk));
+  const isDup = !!state.char.pets.owned[tpl.id];
+  state.char.pets.owned[tpl.id] = (state.char.pets.owned[tpl.id] || 0) + 1;
+  log(`El huevo del Crisol se abre: nace <b>${tpl.name}</b> (${PET_RARITIES[rk].name}).`);
+  await flushSave();
+  return {used: [], tpl, success: true, isDup, hatched: true};
+}
 function fusionSpareTotal(rk){ return PET_CATALOG.filter(t=> t.rarity === rk).reduce((a, t)=> a + fusionSpare(t.id), 0); }
 async function doFusionBatch(times){
   if(!FUSION_CHANCE[fusionRarity]) return null;
@@ -3015,7 +3145,7 @@ function showFusionCinematic(res){
     div.innerHTML = `
       <div class="fu-ring">${res.used.map((id, i)=> `<div class="fu-orb" style="--i:${i}; --rc:${PET_RARITIES[petTpl(id).rarity].color}"><img src="${petArtPath(id)}" alt=""></div>`).join('')}</div>
       <div class="fu-core"></div><div class="fu-flash"></div>
-      <div class="fu-result"><div class="fu-verdict ${res.success ? 'ok' : 'fail'}">${res.success ? 'Fusión lograda' : 'La fusión falló'}</div>
+      <div class="fu-result"><div class="fu-verdict ${res.success ? 'ok' : 'fail'}">${res.hatched ? 'El huevo se abre' : res.success ? 'Fusión lograda' : 'La fusión falló'}</div>
         <div class="fu-card"><img src="${petArtPath(res.tpl.id)}" alt=""></div>
         <div class="fu-name">${res.tpl.name}</div><div class="fu-rank">${r.name}${res.isDup ? ' · repetido' : ' · nuevo'}</div>
         <div class="fu-hint">Toca para continuar</div></div>`;
@@ -3049,6 +3179,14 @@ function renderFusion(){
     <div class="fu-box" style="--rc:${r.color}; --nc:${next.color}">
       <div class="fu-slots">${slotHTML}<span class="fu-arrow">→</span><div class="fu-slot out" style="--rc:${next.color}"><b>?</b></div></div>
       <div class="fu-odds"><b>${Math.round(FUSION_CHANCE[fusionRarity]*100)}%</b> de obtener un Caído <b style="color:${next.color}">${next.name}</b>. Si falla, vuelve uno <b style="color:${r.color}">${r.name}</b> al azar.</div>
+      ${FUSION_EGG_TARGETS.includes(next.id) ? (()=>{ const n = fusionEgg(next.id), ready = n >= FUSION_EGG_NEED, k = Math.min(1, n / FUSION_EGG_NEED);
+        return `<div class="fu-egg ${ready ? 'ready' : ''}" style="--k:${k.toFixed(2)}; --nc:${next.color}" ${ready ? `data-fu-hatch="${next.id}" title="Toca para que nazca"` : ''}>
+          <div class="fu-egg-shell"><i></i></div>
+          <div class="fu-egg-txt"><b>${ready ? 'Listo para nacer' : 'Huevo del Crisol'}</b>
+            <span>${ready ? `Toca el huevo y nacerá un Caído ${next.name}. No tiene prisa: te espera.` : `Cada fusión fallida hacia ${next.name} lo calienta. ${n} / ${FUSION_EGG_NEED}`}</span>
+            ${ready && n > FUSION_EGG_NEED ? `<span>Fallos acumulados: ${n}</span>` : ''}
+            ${n >= FUSION_EGG_WARN ? '<span class="fu-egg-warn">Estás llegando a tu límite.</span>' : ''}</div>
+          ${ready ? '<span class="fu-egg-go">Nacer</span>' : ''}</div>`; })() : ''}
       <div class="fu-actions">
         <button class="reset-btn" id="fu-auto" ${spareOf(fusionRarity) >= FUSION_NEED ? '' : 'disabled'}>Elegir automáticamente</button>
         <button class="btn-main" id="fu-go" ${picked === FUSION_NEED ? '' : 'disabled'}>Combinar (${picked} / ${FUSION_NEED})</button>
@@ -3073,6 +3211,14 @@ function renderFusion(){
   go.onclick = async ()=>{
     go.disabled = true;
     const res = await doFusion();
+    if(!res){ renderFusion(); return; }
+    await showFusionCinematic(res);
+    renderSheet(); renderFusion();
+  };
+  const eggEl = panel.querySelector('[data-fu-hatch]');
+  if(eggEl) eggEl.onclick = async ()=>{
+    eggEl.onclick = null;
+    const res = await hatchFusionEgg(eggEl.dataset.fuHatch);
     if(!res){ renderFusion(); return; }
     await showFusionCinematic(res);
     renderSheet(); renderFusion();
@@ -5125,10 +5271,17 @@ const BOSS_VS_CLASS = {      // {piso del jefe: {senda: mult}}
   70: {pesada:1.03, paladin:0.73, doblefilo:1.18, tirador:1.56, mago:0.90, hechicero:0.92},
   80: {pesada:1.01, paladin:0.88, doblefilo:0.95, tirador:0.88, mago:1.32, hechicero:1.10},
 };
+// La Celda (91-100), por profesión (calibrado el 2026-10-10; la senda sin profesión usa la media de las dos).
+ENEMY_VS_CLASS[9] = {pesada:1.75, paladin:1.58, doblefilo:0.92, tirador:1.10, mago:0.67, hechicero:0.60,
+  baluarte:1.80, verdugo:1.70, custodio:1.59, inquisidor:1.58, danzante:0.97, ejecutor:0.88, ballestero:1.32, francotirador:0.89, piromante:0.61, criomante:0.73, plaguero:0.65, maldecidor:0.56};
+GUARDIAN_VS_CLASS[9] = {pesada:0.58, paladin:1.32, doblefilo:0.76, tirador:0.60, mago:0.96, hechicero:0.81,
+  baluarte:0.60, verdugo:0.56, custodio:1.44, inquisidor:1.20, danzante:0.80, ejecutor:0.72, ballestero:0.49, francotirador:0.72, piromante:0.97, criomante:0.95, plaguero:0.73, maldecidor:0.90};
+BOSS_VS_CLASS[100] = {pesada:1.52, paladin:1.50, doblefilo:0.78, tirador:0.78, mago:0.69, hechicero:0.77,
+  baluarte:1.54, verdugo:1.50, custodio:1.50, inquisidor:1.50, danzante:0.79, ejecutor:0.76, ballestero:0.73, francotirador:0.83, piromante:0.64, criomante:0.74, plaguero:0.74, maldecidor:0.80};
 ENEMY_VS_CLASS[8] = ENEMY_VS_CLASS_81.mult; BOSS_VS_CLASS[90] = ENEMY_VS_CLASS_81.boss90; GUARDIAN_VS_CLASS[8] = ENEMY_VS_CLASS_81.guardian;
 function enemyVsClassMult(){
   const lvl = (state.dungeon && state.dungeon.level) || 0, st = state.char.style, prof = myProfession();
-  if(lvl < 1 || lvl > 90 || (lvl <= 40 && !BETA_BALANCE)) return 1;
+  if(lvl < 1 || lvl > 100 || (lvl <= 40 && !BETA_BALANCE)) return 1;
   if(lvl <= 2) return 1;
   // la profesión tiene su propio valor; si no hay, el de la senda
   const of = (t)=> !t ? 1 : (prof && t[prof.id] !== undefined) ? t[prof.id] : (t[st] || 1);
@@ -5329,7 +5482,7 @@ function baseDamageFromStat(statVal){
 // linealmente entre medio), calibrados con simulaciones contra los jefes de
 // década (ver DECADE_BOSS_TUNING) para que todas las clases rindan parecido
 // en cada tramo del laberinto.
-const CLASS_CURVE_LEVELS = [1,10,20,30,40,50,60,70,80,90]; // nivel 1 = neutro (sin ajuste)
+const CLASS_CURVE_LEVELS = [1,10,20,30,40,50,60,70,80,90,100]; // nivel 1 = neutro (sin ajuste)
 const CLASS_CURVE = {
   pesada:    {hp:[1.00,0.85,0.77,0.69,0.62,0.55,0.49,0.49,0.49,0.49], dmg:[1.00,0.92,0.88,0.83,0.79,0.74,0.70,0.70,0.70,0.70]},
   tirador:   {hp:[1.00,0.69,0.77,0.87,0.98,1.10,1.24,1.24,1.24,1.24], dmg:[1.00,0.83,0.88,0.93,0.99,1.05,1.11,1.11,1.11,1.11]},
@@ -5873,8 +6026,8 @@ async function fetchProfile(userId){
 /* ============================================================
    DUNGEON LEVELS (1-60)
    ============================================================ */
-const LEVEL_CAP = 90;      // 2026-10-09: Abismo en llamas (81-90). La base ya admite hasta 100 (migración 0039).
-const CHAR_LEVEL_CAP = 90; // tope de nivel de personaje pedido
+const LEVEL_CAP = 100; // 2026-10-10: La Celda (91-100), cerrada con FLOORS_91_100_OPEN hasta calibrar. Antes 90:      // 2026-10-09: Abismo en llamas (81-90). La base ya admite hasta 100 (migración 0039).
+const CHAR_LEVEL_CAP = 100; // tope de nivel de personaje pedido
 // CIERRE TEMPORAL de los pisos 61-80 (decisión de ariochbu, 2026-10-08 noche):
 // la gente empezó a jugarlos mientras se estaban rehaciendo. Hasta nuevo aviso
 // el laberinto y el nivel de personaje topan en 60 para los jugadores. Para
@@ -5888,8 +6041,11 @@ const FLOORS_OPEN_HERE = FLOORS_61_80_OPEN || (/^(localhost|127\.0\.0\.1)$/.test
 // 80 y solo localhost los ve (?cerrado=1 también los cierra ahí).
 const FLOORS_81_90_OPEN = true; // liberados el 2026-10-09 por orden de ariochbu, tras las simulaciones por senda
 const FLOORS_81_90_HERE = FLOORS_81_90_OPEN || (/^(localhost|127\.0\.0\.1)$/.test(location.hostname) && !/[?&]cerrado=1/.test(location.search));
-const OPEN_LEVEL_CAP = !FLOORS_OPEN_HERE ? 60 : FLOORS_81_90_HERE ? LEVEL_CAP : 80;
-const OPEN_CHAR_LEVEL_CAP = !FLOORS_OPEN_HERE ? 60 : FLOORS_81_90_HERE ? CHAR_LEVEL_CAP : 80;
+// Pisos 91-100 (2026-10-10): cerrados para los jugadores hasta que ariochbu los libere; abiertos en localhost.
+const FLOORS_91_100_OPEN = false;
+const FLOORS_91_100_HERE = FLOORS_91_100_OPEN || (/^(localhost|127\.0\.0\.1)$/.test(location.hostname) && !/[?&]cerrado=1/.test(location.search));
+const OPEN_LEVEL_CAP = !FLOORS_OPEN_HERE ? 60 : !FLOORS_81_90_HERE ? 80 : FLOORS_91_100_HERE ? LEVEL_CAP : 90;
+const OPEN_CHAR_LEVEL_CAP = !FLOORS_OPEN_HERE ? 60 : !FLOORS_81_90_HERE ? 80 : FLOORS_91_100_HERE ? CHAR_LEVEL_CAP : 90;
 function mobXP(level){ return level; }        // mobs normales: 1 en piso 1, 2 en piso 2...
 // 2026-09-25, pedido explícito: recalibrados para que el élite y el
 // guardián/jefe de década den más en piso 1 (7 y 12 respectivamente, antes
@@ -8041,7 +8197,7 @@ window.addEventListener('resize', ()=>{
   if(mobile !== cityMapMobile) renderCityMap();
 });
 // Nombres de cada década para las puertas de la entrada.
-const DECADE_GATE_NAMES = {1:'Bosque Goblin', 11:'Nido de Arañas', 21:'Tierra de Bestias', 31:'Salón del Usurpador', 41:'Isla Paraíso', 51:'El Mar', 61:'La Grieta', 71:'Bosque Muerto', 81:'Abismo en Llamas'};
+const DECADE_GATE_NAMES = {1:'Bosque Goblin', 11:'Nido de Arañas', 21:'Tierra de Bestias', 31:'Salón del Usurpador', 41:'Isla Paraíso', 51:'El Mar', 61:'La Grieta', 71:'Bosque Muerto', 81:'Abismo en Llamas', 91:'La Celda'};
 function renderCityDungeonEntry(){
   // Entrada al laberinto (rediseño 2026-10-04, pedido explícito: "algo más
   // real y que dé miedo"): boca oscura con niebla, cada checkpoint es una
@@ -10440,7 +10596,7 @@ function buildEncounterGroup(nodeType, f, level){
   let templates, count;
   if(nodeType==='jefe'){
     if(isDecadeFinal){
-      templates = [bestiary.decadeBoss];
+      templates = [level === 100 ? retornadoTplFor(state.char.style) : bestiary.decadeBoss];
       count = 1;
     } else if(paraisoGuardianFloor){
       templates = null; count = 0; // se arma a mano más abajo
@@ -10494,6 +10650,15 @@ function buildEncounterGroup(nodeType, f, level){
     e.atk = Math.max(1, Math.round(e.atk * GUARDIAN_ELITE_81.atkPct));
     group.push(e);
   }
+  if(nodeType==='jefe' && !isDecadeFinal && level >= GUARDIAN_ELITE_91.from && level <= GUARDIAN_ELITE_91.to && GROUP_AI.eliteOn && bestiary.elite && bestiary.elite.length){
+    const fronts = bestiary.elite.filter(t=> t.frontline), rears = bestiary.elite.filter(t=> !t.frontline);
+    [pick(fronts.length ? fronts : bestiary.elite), pick(rears.length ? rears : bestiary.elite)].forEach(t=>{
+      const e = makeEnemy(t, f, level);
+      e.maxHP = Math.max(1, Math.round(e.maxHP * GUARDIAN_ELITE_91.hpPct)); e.hp = e.maxHP;
+      e.atk = Math.max(1, Math.round(e.atk * GUARDIAN_ELITE_91.atkPct));
+      group.push(e);
+    });
+  }
   if(nodeType==='jefe' && isDecadeFinal && paraiso){
     // el jefe de Isla Paraíso llega escoltado por dos élites en el frente
     // mientras él se queda atrás.
@@ -10521,7 +10686,7 @@ function buildEncounterGroup(nodeType, f, level){
   if(nodeType==='jefe' && !isDecadeFinal){
     group.slice().forEach(g=>{
       if(!g.tpl.escort) return;
-      for(let i=0; i<GUARDIAN_ESCORT.count && group.length<6; i++){
+      for(let i=0; i<(g.tpl.escort.count || GUARDIAN_ESCORT.count) && group.length<6; i++){
         const e = makeEnemy(g.tpl.escort.tpl, f, level);
         e.maxHP = Math.max(1, Math.round(g.maxHP*GUARDIAN_ESCORT.hpPct)); e.hp = e.maxHP;
         e.atk = Math.max(1, Math.round(g.atk*GUARDIAN_ESCORT.atkPct));
@@ -10962,6 +11127,7 @@ const DECADE_BOSS_TUNING = {
   // (se le corrige aparte, ver ENEMY_VS_CLASS_81.boss90) y Mago 27 con la debilidad al hielo del jefe. Esa debilidad se
   // QUEDA por decisión de ariochbu (2026-10-09): es la ventaja de su senda, aunque pase del 20%.
   90: {hp:2.26, atk:2.51},  // El Carcelero: 21% de media con las 12 profesiones (17-24). Antes 2.38/2.64 sin profesiones.
+  100: {hp:5.34, atk:5.79},  // El Primer Retornado (objetivo 10%); cada senda enfrenta su propia variante (RETORNADO_KITS)
 };
 // BETA (con BETA_ALLY_UNLOCKS): en las décadas 0-3 el jugador lleva menos
 // aliados (0 hasta el Ogro, 1 hasta la Matriarca, 2 hasta Riakis, 3 hasta
@@ -11032,6 +11198,7 @@ const DECADE_ENEMY_TUNING = {
   7: {regular:{hp:3.48, atk:5.33}, elite:{hp:3.48, atk:5.33}, guardian:{hp:2.02, atk:2.55}},   // medido: llega 76, guardián 38, niveles 29 //   // 2026-10-09: idem; media 71-79 ~63%
   // 2026-10-10: recalibrado con profesiones (antes 4.90/7.52, 3.60/5.60 y guardián 1.69/2.15, cuando el objetivo era ~50% de niveles).
   8: {regular:{hp:5.20, atk:7.98}, elite:{hp:3.82, atk:5.94}, guardian:{hp:2.52, atk:3.21}},   // guardián: 2.40/3.04 hasta que se le sumó la élite de escolta (GUARDIAN_ELITE_81) // 2026-10-09, segunda pasada: más duro en general y el reparto por senda en ENEMY_VS_CLASS_81 (objetivo de ariochbu: ~50% de niveles completados por senda). Élites algo por debajo: el simulador casi nunca les ganaba
+  9: {regular:{hp:6.68, atk:10.26}, elite:{hp:4.89, atk:7.64}, guardian:{hp:2.69, atk:3.37}},   // La Celda (2026-10-10, 12 profesiones): llega 57-61, guardián 15-21
 };
 function makeEnemy(tpl, floorIdx, level){
   const lvlMult = levelMult(level||1);
@@ -11053,9 +11220,10 @@ function makeEnemy(tpl, floorIdx, level){
     }
     // Jefe de década: ajuste propio de vida/ataque (ver DECADE_BOSS_TUNING).
     const tune = (BETA_BALANCE && BETA_DECADE_BOSS_TUNING[level]) || DECADE_BOSS_TUNING[level];
-    if(tune && level % 10 === 0 && DECADE_BESTIARY[decadeIndexForLevel(level)].decadeBoss === tpl){
+    if(tune && level % 10 === 0 && (DECADE_BESTIARY[decadeIndexForLevel(level)].decadeBoss === tpl || tpl.decadeBossOf === level)){
       hp = Math.round(hp * tune.hp);
       atk = Math.round(atk * tune.atk);
+      if(tpl.tune && tpl.decadeBossOf === level){ hp = Math.round(hp * tpl.tune.hp); atk = Math.round(atk * tpl.tune.atk); }
     }
   } else if(tpl.elite){
     // elite: 2026-09-16, pedido explícito — base sube de 100-110 a 125-135,
@@ -11079,7 +11247,7 @@ function makeEnemy(tpl, floorIdx, level){
   }
   if(BETA_BALANCE){
     const dIdx = decadeIndexForLevel(level||1);
-    const isDecadeBoss = (level||1) % 10 === 0 && DECADE_BESTIARY[dIdx].decadeBoss === tpl;
+    const isDecadeBoss = (level||1) % 10 === 0 && (DECADE_BESTIARY[dIdx].decadeBoss === tpl || tpl.decadeBossOf === level);
     // Pisos 1-2: se quedan con la escala de siempre (la recalibración para jugadores nuevos empieza en el 3).
     const scAll = !isDecadeBoss && ((level||1) <= 2 ? BETA_ENEMY_SCALE_TUTORIAL : BETA_ENEMY_SCALE[dIdx]);
     // por tipo (regular/elite/guardian) o un único {hp, atk} para todos
@@ -11093,7 +11261,7 @@ function makeEnemy(tpl, floorIdx, level){
   // DECADE_ENEMY_TUNING): normales, élites y guardianes, cada uno por separado.
   {
     const dIdx = decadeIndexForLevel(level||1);
-    const isDecadeBoss = (level||1) % 10 === 0 && DECADE_BESTIARY[dIdx].decadeBoss === tpl;
+    const isDecadeBoss = (level||1) % 10 === 0 && (DECADE_BESTIARY[dIdx].decadeBoss === tpl || tpl.decadeBossOf === level);
     // En la beta las décadas 0-3 se juegan con menos aliados y tienen su propia escala (BETA_ENEMY_SCALE).
     const t = !isDecadeBoss && !(BETA_BALANCE && dIdx <= 3) && DECADE_ENEMY_TUNING[dIdx] && DECADE_ENEMY_TUNING[dIdx][tpl.boss ? 'guardian' : tpl.elite ? 'elite' : 'regular'];
     if(t){ hp = Math.max(1, Math.round(hp*t.hp)); atk = Math.max(1, Math.round(atk*t.atk)); }
@@ -14893,7 +15061,7 @@ if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
   window.__tutorial = ()=>{ showTutorial(); };
   window.__corazon = (cfg)=>{ window.__ficha(Object.assign({level:82}, cfg || {})); state.char.maxLevelUnlocked = 81; lsGet = ()=> null; lsSet = ()=>{}; professionSceneOpen = false; maybeOfferProfession(); };
   window.__intro = (key)=>{ window.__ficha({}); lsGet = ()=> null; lsSet = ()=>{}; maybeShowPlaceIntro(key); };
-  window.__crisol = (cfg, owned)=>{ window.__ficha(cfg || {}); ensurePets(); Object.assign(state.char.pets.owned, owned || {1:5, 2:3, 3:2}); checkSessionStillActive = async ()=> true; flushSave = async ()=>{}; renderSheet = ()=>{}; fusionOpen = true; renderFusion(); };
+  window.__crisol = (cfg, owned, egg)=>{ window.__ficha(cfg || {}); ensurePets(); state.char.pets.fusionEgg = egg || {}; Object.assign(state.char.pets.owned, owned || {1:5, 2:3, 3:2}); checkSessionStillActive = async ()=> true; flushSave = async ()=>{}; renderSheet = ()=>{}; fusionOpen = true; renderFusion(); };
   window.__gremio = (cfg)=>{ window.__ficha(cfg || {}); state.char.missionCurrency = 240; state.missions = [['A','rest',3,2,'active'],['S','chests',5,2,'active'],['A','floors',5,5,'completed'],['S','floors',6,6,'claimed'],['B','combats',8,6,'active'],['A','gear',5,3,'active']].map((m, i)=> ({id:'m'+i, rank:m[0], objective_type: MISSION_OBJECTIVE_TYPES[i % MISSION_OBJECTIVE_TYPES.length], objective_target:m[2], progress:m[3], status:m[4], reward_gold:200, reward_xp:150, reward_currency:12, reward_item:null})); missionsOpen = true; renderMissions(); };
   window.__inv = (cfg)=>{ window.__ficha(cfg || {}); for(let i = 0; i < 9; i++){ const it = generateLoot(2, state.char.level); if(it) state.char.inventory.push(it); } invTab = 'mochila'; renderInventory = ((orig)=> orig)(renderInventory); renderInventory(); };
   window.__ficha = (cfg)=>{ const {st} = simBuildState(Object.assign({style:'tirador', level:80, dungeonLevel:80}, cfg)); st.dungeon = null; st.char.gold = cfg.gold || 0; state = st; const d = derived(); state.char.curHP = d.maxHP; state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi; fichaTab = 'profesion'; fichaHostEl = null; save = ()=>{}; renderAll = ()=>{}; renderFicha(); };
@@ -16077,6 +16245,7 @@ const DUNGEON_MUSIC_RANGES = [
   {max:70, src:'./src/assets/audio/dungeon-31-40.mp4'},
   {max:80, src:'./src/assets/audio/dungeon-11-20.mp4'},
   {max:90, src:'./src/assets/audio/dungeon-31-40.mp4'}, // Abismo en llamas: sin pista propia todavía
+  {max:100, src:'./src/assets/audio/dungeon-11-20.mp4'}, // La Celda: sin pista propia todavía
 ];
 function dungeonTrackFor(level){
   const range = DUNGEON_MUSIC_RANGES.find(r=>level<=r.max);

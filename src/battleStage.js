@@ -13,7 +13,7 @@
 // combat.enemies/combat.allies/combat.lastActor/combat.lastAction y dibuja.
 // No aplica daño, no decide turnos, no cambia HP.
 
-import { CLASS_SPRITES, ALLY_SPRITES, ENEMY_SPRITES, playerSpriteFor, RACE_SIZE, ALLY_TEMPLATE_SPRITES, enemySpriteFor, enemyChibiKey } from './battleSprites.js?v=92';
+import { CLASS_SPRITES, ALLY_SPRITES, ENEMY_SPRITES, playerSpriteFor, RACE_SIZE, ALLY_TEMPLATE_SPRITES, enemySpriteFor, enemyChibiKey } from './battleSprites.js?v=93';
 
 import { SpriteAnim, sheetFromMeta } from './spriteAnim.js?v=2';
 import { drawIcon, preloadIcons } from './icons.js?v=2';
@@ -27,12 +27,12 @@ const SIZE = TILE * SCALE; // 48px por actor a escala base (sprites fijos sin ve
 // tamaño de celda y los cuadros de cada una. Quien no tenga tira (monstruos de
 // décadas aún sin arte chibi) sigue con su sprite fijo de siempre.
 let CHIBI = {};
-fetch('src/assets/chibi/index.json?v=10').then(r=> r.json()).then(j=>{ CHIBI = j; }).catch(()=>{});
+fetch('src/assets/chibi/index.json?v=11').then(r=> r.json()).then(j=>{ CHIBI = j; }).catch(()=>{});
 const chibiImgs = {}; // key -> Image (cargando o lista)
 function chibiAnimFor(key){
   const meta = CHIBI[key];
   if(!meta) return null;
-  if(!chibiImgs[key]){ chibiImgs[key] = new Image(); chibiImgs[key].src = `src/assets/chibi/${key}.png?v=9`; }
+  if(!chibiImgs[key]){ chibiImgs[key] = new Image(); chibiImgs[key].src = `src/assets/chibi/${key}.png?v=10`; }
   const img = chibiImgs[key];
   return img.complete && img.naturalWidth > 0 ? new SpriteAnim(img, sheetFromMeta(meta)) : null;
 }
@@ -471,7 +471,7 @@ function syncBattleStage(container, combat, playerInfo, onTargetClick){
     if(!a){ a = makeActor(k); actors.set(k, a); }
     a.baseX = enemyPos[i].x; a.baseY = enemyPos[i].y; a.x = a.baseX; a.y = a.baseY;
     Object.assign(a, {
-      vanish:false, kind:'enemy', refIdx:i, name: en.name, icon: en.icon, nameMaxW: enemyPos[i].nameMaxW, sprite: spriteFor('enemy', en), chibiKey: enemyChibiKey(en), sizeMul: en.tpl && en.tpl.boss ? 1.3 : (en.tpl && en.tpl.elite ? 1.12 : (en.tpl && en.tpl.decoy ? 0.9 : (en.summoned ? 0.8 : 1))),
+      vanish:false, kind:'enemy', refIdx:i, name: en.name, icon: en.icon, nameMaxW: enemyPos[i].nameMaxW, sprite: spriteFor('enemy', en), chibiKey: enemyChibiKey(en), awakened: !!(en.tpl && en.tpl.awakened), sizeMul: en.tpl && en.tpl.awakened ? 1.75 : en.tpl && en.tpl.boss ? 1.3 : (en.tpl && en.tpl.elite ? 1.12 : (en.tpl && en.tpl.decoy ? 0.9 : (en.summoned ? 0.8 : 1))),
       role: roleFor('enemy', en), hp: en.hp, maxHP: en.maxHP, alive: en.hp>0, showResources:false,
       statuses: en.statuses||[],
       // Con pendingTargetFilter==='front' (2026-09-25: elegir a cuál de 2+
@@ -678,6 +678,7 @@ function drawActor(a, hud, dt){
   if(a.alive===false) ctx.filter = 'grayscale(1)';
   else if(a.flash>0) ctx.filter = 'brightness(1.8) saturate(0.3) sepia(1) hue-rotate(-50deg) saturate(4)';
   else if(dupTint) ctx.filter = 'hue-rotate(210deg) saturate(1.2)';
+  else if(a.awakened) ctx.filter = 'grayscale(0.9) brightness(1.22) contrast(1.12)'; // su verdadera forma: sin color
 
   // Sprite fijo (monstruos sin tira chibi): a un tamaño parejo con los chibi.
   const sz = STATIC_SIZE*(a.scale||1)*(a.sizeMul||1);
