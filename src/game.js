@@ -2,7 +2,7 @@
 
 import { supabase } from './supabaseClient.js';
 import * as auth from './auth.js';
-import { syncBattleStage, playBattleAnim } from './battleStage.js?v=114';
+import { syncBattleStage, playBattleAnim } from './battleStage.js?v=115';
 import { mountLabyrinth } from './labyrinthMap.js?v=10';
 import { installIconizer } from './icons.js?v=2';
 installIconizer(); // ningún emoji llega a pantalla: se cambian por los iconos del juego (ver icons.js)
@@ -174,7 +174,9 @@ const MAX_ALLIES = 4;
 // alfa. Se decide al iniciar sesión (onAuthed) con profiles.created_at, y
 // hire_ally aplica la misma fecha en el servidor (migración 0034).
 // ============================================================
-let BETA_ALLY_UNLOCKS = false;
+// 2026-10-10 (ariochbu): el sistema se aplica a TODAS las cuentas (migración 0045 en hire_ally). Quien ya
+// tenía más aliados que su cupo los conserva; el cupo solo limita reclutar.
+let BETA_ALLY_UNLOCKS = true;
 const BETA_ACCOUNTS_FROM = Date.parse('2026-10-05T04:00:00Z');
 // El BALANCE de los pisos 1-40 (jefes, enemigos y curva de sendas calibrados
 // para 0/1/2/3 aliados) es el mismo para TODAS las cuentas (aclaración de
@@ -557,6 +559,17 @@ function allyHireCost(tpl, charLevel){ return tpl.baseCost + charLevel*tpl.costP
 // nunca hay un texto que diga una cosa y una pelea que haga otra.
 const LEVEL_30_MILESTONE = 30;
 const LEVEL_60_MILESTONE = 60;
+// 2026-10-10 (ariochbu): además del nivel, la mejora de habilidades pide haber derrotado a Riakis (piso 30) y
+// la definitiva a Storm Gush (piso 60): el jefe suelta lo que permite el avance. Esto NO se le dice al jugador
+// en ningún texto; solo recibe un aviso corto cuando ya las tiene (maybeNotifySkillMilestones).
+function skillsUpgraded(){ const c = state && state.char; return !!c && c.level >= LEVEL_30_MILESTONE && (c.maxLevelUnlocked || 1) > 30; }
+function ultimateUnlocked(){ const c = state && state.char; return !!c && c.level >= LEVEL_60_MILESTONE && (c.maxLevelUnlocked || 1) > 60; }
+function maybeNotifySkillMilestones(){
+  if(simMode || !state || !state.char || state.dungeon || combat || professionSceneOpen) return;
+  const cron = 'src/assets/bienvenida/cronista.jpg?v=1';
+  if(skillsUpgraded() && !lsGet(charKey('hito30'))){ lsSet(charKey('hito30'), '1'); showSpeech([{who:'El Cronista', img:cron, text:'Algo ha cambiado en tu forma de pelear. <b>Tus habilidades han sido mejoradas.</b>'}], null, 'Entendido'); return; }
+  if(ultimateUnlocked() && !lsGet(charKey('hito60'))){ lsSet(charKey('hito60'), '1'); showSpeech([{who:'El Cronista', img:cron, text:`Un poder nuevo responde a tu llamada. <b>Has despertado tu habilidad definitiva: ${SKILLS[ULTIMATE_BY_STYLE[state.char.style]].name}.</b>`}], null, 'Entendido'); }
+}
 const LEVEL30_SKILL_BONUS = {
   golpe_bruto:      {tambaleoChance: 0.85},                 // era 0.70
   machacar:         {comboBonusMult: 2.1},                  // era 1.8
@@ -717,7 +730,7 @@ function setProfession(id){
 function skillBonus(skillId, field, base){
   const prof = myProfession(), pb = prof && prof.bonus && prof.bonus[skillId];
   if(pb && pb[field] !== undefined) return pb[field];
-  if(!state || !state.char || state.char.level < LEVEL_30_MILESTONE) return base;
+  if(!skillsUpgraded()) return base;
   const b = LEVEL30_SKILL_BONUS[skillId];
   return (b && b[field]!==undefined) ? b[field] : base;
 }
@@ -765,7 +778,7 @@ const SKILLS = {
     id:'grito_guerra', name:'Grito de guerra', cost:{tipo:'espiritu', valor:10}, utility:'buff_self',
     applySelf:{name:'Furioso', duration:2, dmgMult:1.3, evasionDelta:-10}, // sin reducción de daño recibido (era 0.2; decisión de ariochbu, 2026-10-09)
     desc: ()=> `+30% daño físico durante 2 turnos, a cambio de -10% evasión.` +
-      (state && state.char && state.char.level>=LEVEL_30_MILESTONE ? ' Además te cura un 10% de tu vida máxima y da +10% de daño a tus aliados durante 2 turnos.' : ''),
+      (skillsUpgraded() ? ' Además te cura un 10% de tu vida máxima y da +10% de daño a tus aliados durante 2 turnos.' : ''),
     targetMode:'self'
   },
 
@@ -875,7 +888,7 @@ const SKILLS = {
     id:'drenaje_de_esencia', name:'Drenaje de Esencia', cost:{tipo:'estamina', valor:18}, dmgType:'arcano', mult:0.70,
     selfHealPctOfDmg:0.30,
     applies:{name:'Quebranto', chance:1, duration:3, resPenalty:15, mentalPenalty:0.5},
-    desc: ()=> `Daño arcano moderado. ${skillBonus('drenaje_de_esencia','healPct',0) > 0 ? `Te cura el ${Math.round(skillBonus('drenaje_de_esencia','healPct',0)*100)}% de lo infligido y deja` : 'Deja'} al objetivo Quebrantado 3 turnos: -15 a todas sus resistencias y la mitad de su resistencia a estados.${skillBonus('drenaje_de_esencia','healPct',0) > 0 ? '' : ' (Al nivel 30: además te cura el 30% de lo infligido.)'}`,
+    desc: ()=> `Daño arcano moderado. ${skillBonus('drenaje_de_esencia','healPct',0) > 0 ? `Te cura el ${Math.round(skillBonus('drenaje_de_esencia','healPct',0)*100)}% de lo infligido y deja` : 'Deja'} al objetivo Quebrantado 3 turnos: -15 a todas sus resistencias y la mitad de su resistencia a estados.`,
     targetMode:'any'
   },
   mirada_de_locura: {
@@ -2545,6 +2558,125 @@ function retornadoTplFor(styleId){
   if(!kit) return base;
   if(!RETORNADO_TPLS[styleId]) RETORNADO_TPLS[styleId] = Object.assign({}, base, kit, {decadeBossOf:100});
   return RETORNADO_TPLS[styleId];
+}
+// LO QUE DICEN LOS GUARDIANES DE LA CELDA (pedido de ariochbu, 2026-10-10). Cada jefe despertado suelta una
+// frase antes de pelear. La Matriarca no habla: chasquea, y se entiende que quiere decir algo. El del 99
+// depende de lo que el jugador hizo con el Carcelero en el piso 90 (perdón / muerte).
+const CELDA_LINES = {
+  91: '«Estas cadenas… no las puse yo. Me las pusieron para que nadie bajara.» El Ogro levanta las muñecas, grises, en carne viva. «Rómpelas. Por mí.»',
+  92: '«Krrr… ssshk… kh-kh-khrrr…» La Matriarca chasquea las mandíbulas despacio, una y otra vez, como quien repite una palabra que ya nadie sabe traducir. Señala los sellos rotos con una pata. Luego te señala a ti.',
+  93: '«Veo que lograste sobrevivir a la corrupción del vacío.» Riakis ya no ríe. «Yo no. Yo solo aprendí a reírme mientras me comía. Aquí abajo no hace falta fingir.»',
+  94: '«Siempre supe que llegarías aquí.» El Usurpador no lleva ninguna cara robada: esta es la suya, y casi no queda. «Yo llegué antes. Demuéstrame que no vas a terminar como yo.»',
+  95: '«Te pinté un cielo para que no siguieras bajando.» El Custodio clava su arma en un suelo sin arena. «Aquí ya no me queda pintura. Solo me queda cerrarte el paso.»',
+  96: '«Lloré mil años para mantenerla cerrada. A ti te bastó un día para abrirla.» El agua que lo forma ya no es azul. «No me quedan lágrimas. Me queda la marea.»',
+  97: '«Probé todas las formas… y ninguna era mía.» La cosa se detiene, por primera vez quieta. «Esta es la que tenía cuando me encerraron. Mírala bien. Nadie más la ha visto.»',
+  98: '«Me podaste… y te lo agradecí.» Late una vez, despacio, sin una sola flor. «Pero la raíz estaba aquí abajo. Lo que crece de ella no pide permiso.»',
+  99: {
+    perdon: '«Bajaste el arma una vez. No lo he olvidado.» El Carcelero levanta la alabarda igualmente. «Pero cerrar es lo único que sé hacer, y esta es la última puerta. Pasa por encima de mí… y abajo te pago lo que te debo.»',
+    muerte: '«Me remataste arriba.» La voz sale de una armadura sin brasa dentro. «Aquí abajo nadie muere del todo. No te guardo rencor: guardo la puerta. Es lo único que me dejaste.»',
+    none: '«Nueve llaves, nueve puertas.» El Carcelero cruza la alabarda ante la última. «Esta no se abre con ninguna.»',
+  },
+};
+// PISO 100 (pedido de ariochbu, 2026-10-10). Al combate con el Primer Retornado entran dos invitados:
+// - el ESPÍRITU DEL USURPADOR, de tu lado: pega fuerte pero muere de un solo golpe (1 de vida);
+// - el CARCELERO, según lo que hiciste en el piso 90: si lo perdonaste viene a pagar su deuda y pelea al
+//   frente a tu lado; si lo remataste, su sombra pelea delante del Retornado.
+// Si la elección no existe (no debería: se elige al vencerlo), no aparece en ningún bando.
+const CELDA_GUESTS = {
+  usurpador: {atk:2.5},                 // × el ataque base de un aliado de tu nivel
+  carcelero: {hpPct:0.80, atk:1.2},     // vida = % de la tuya
+  sombra: {hp:1000, atkPct:0.15},       // vida fija; ataque = % del del Retornado
+};
+// LAS SOMBRAS (ariochbu, 2026-10-10): al Retornado lo acompañan las sombras de los jefes de década, de una en
+// una: tienen poca vida (~1000) y, al caer una, se levanta la siguiente, hasta agotar la lista. No está la del
+// Usurpador (su espíritu pelea de tu lado) ni la del Carcelero si lo perdonaste (también está contigo).
+const CELDA_SHADOW_NAMES = {0:'Sombra del Ogro', 1:'Sombra de la Matriarca', 2:'Sombra de Riakis', 4:'Sombra del Custodio', 5:'Sombra de Storm Gush', 6:'Sombra del Sin Forma', 7:'Sombra del Corazón Marchito', 8:'Sombra del Carcelero'};
+function celdaShadowTpls(){
+  return Object.keys(CELDA_SHADOW_NAMES).map(Number).filter(i=> i !== 8 || celdaChoice() === 'muerte').map(i=>{
+    const b = DECADE_BESTIARY[i].decadeBoss;
+    return {id:b.id, name:CELDA_SHADOW_NAMES[i], icon:b.icon, hp:1, atk:1, res:rs(10,10,10,10,10), frontline:true, awakened:true, stageSize:1.0,
+      abilities:{golpe_sombra:{label:'Golpe de Sombra', mult:1.00}}, aiPriority:['golpe_sombra']};
+  });
+}
+// Se llama al empezar el combate y cada vez que se revisan las bajas: si no queda sombra en pie, sale la siguiente.
+// Si cae el Retornado, las sombras se deshacen con él.
+function celdaShadowTick(){
+  if(!combat || !combat.celdaShadows) return;
+  const boss = combat.enemies.find(e=> e.tpl && e.tpl.decadeBossOf === 100) || combat.enemies.find(e=> e.tpl && e.tpl.id === 'primer_retornado');
+  if(!boss || boss.hp <= 0){ combat.enemies.forEach(e=>{ if(e.celdaShadow) e.hp = 0; }); combat.celdaShadows = []; return; }
+  if(!combat.celdaShadows.length || combat.enemies.some(e=> e.celdaShadow && e.hp > 0)) return;
+  const tpl = combat.celdaShadows.shift(), e = makeEnemy(tpl, state.dungeon.atFloor || 0, 100);
+  e.maxHP = CELDA_GUESTS.sombra.hp; e.hp = e.maxHP;
+  e.atk = Math.max(1, Math.round(boss.atk*CELDA_GUESTS.sombra.atkPct));
+  e.summoned = true; e.summoner = boss; e.celdaShadow = true;
+  combat.enemies.push(e);
+  if(combat.celdaShadowSeen) log(`De la celda se levanta otra: <b>${e.name}</b>.`);
+  combat.celdaShadowSeen = true;
+}
+let SIM_CELDA = null; // solo pruebas: {choice:'perdon'|'muerte'|'none', usurpador:false}
+function celdaChoice(){
+  if(SIM_CELDA && SIM_CELDA.choice) return SIM_CELDA.choice === 'none' ? null : SIM_CELDA.choice;
+  return (state.char.storyChoices || {})[90] || null;
+}
+function celdaGuestAllies(){
+  const lvl = state.char.level || 100, baseAtk = 6 + lvl*1.7, out = [];
+  const mk = (o)=> Object.assign({level:lvl, maxMP:0, mp:0, maxSpirit:0, spirit:0, statuses:[], shield:0, skillCooldown:999, specials:[], guest:true,
+    res:{fisico:10, fuego:10, hielo:10, veneno:10, aturdimiento:10}}, o);
+  if(!(SIM_CELDA && SIM_CELDA.usurpador === false)) out.push(mk({id:'guest_usurpador', templateId:'espiritu_usurpador', chibiKey:'enemigo_usurpador', ghost:true,
+    name:'Espíritu del Usurpador', icon:'🎭', role:'espiritu', frontline:false, pos:'retaguardia', maxHP:1, hp:1, atk: Math.round(baseAtk*CELDA_GUESTS.usurpador.atk),
+    lastWords:'«Era todo lo que me quedaba», dice el Usurpador, y se deshace. «Termínalo tú.»'}));
+  if(celdaChoice() === 'perdon'){
+    const hp = Math.max(1, Math.round(derived().maxHP*CELDA_GUESTS.carcelero.hpPct));
+    out.push(mk({id:'guest_carcelero', templateId:'carcelero_aliado', chibiKey:'enemigo_carcelero', name:'El Carcelero', icon:'🗝️', role:'espiritu', frontline:true, pos:'frente',
+      maxHP:hp, hp, atk: Math.round(baseAtk*CELDA_GUESTS.carcelero.atk), res:{fisico:25, fuego:35, hielo:-10, veneno:0, aturdimiento:30},
+      lastWords:'El Carcelero cae sobre una rodilla por segunda vez. «La deuda está pagada.» Su última llave se apaga.'}));
+  }
+  return out;
+}
+// Bocadillo de diálogo sobre el combate: una o varias páginas, cada una con quién habla.
+function showSpeech(pages, onDone, endLabel){
+  const div = document.createElement('div');
+  div.className = 'overlay-msg speech-ov';
+  document.body.appendChild(div);
+  let step = 0;
+  const draw = ()=>{
+    const p = pages[step], last = step === pages.length-1;
+    div.innerHTML = `<div class="speech-card ${p.pale ? 'pale' : ''}">
+      <div class="ws-dialog">
+        <div class="ws-narrator"><div class="ws-portrait">${p.img ? `<img src="${p.img}" alt="">` : ''}</div><b>${p.who}</b></div>
+        <p class="ws-text">${p.text}</p>
+        <div class="ws-foot">
+          <div class="ws-dots">${pages.length > 1 ? pages.map((_,i)=>`<i class="${i===step?'on':(i<step?'done':'')}"></i>`).join('') : ''}</div>
+          <div class="ws-btns"><button class="btn-main" data-sp="next">${last ? (endLabel || 'Pelear') : 'Continuar ›'}</button></div>
+        </div>
+      </div></div>`;
+    div.querySelector('[data-sp]').onclick = ()=>{ if(last){ div.remove(); if(onDone) onDone(); } else { step++; draw(); } };
+  };
+  draw();
+}
+function celdaPreFightSpeech(enemyGroup){
+  const level = state.dungeon.level;
+  if(level >= 91 && level <= 99){
+    const g = enemyGroup.find(e=> e.tpl && e.tpl.awakened && e.tpl.boss); if(!g) return;
+    let line = CELDA_LINES[level]; if(line && typeof line === 'object') line = line[celdaChoice() || 'none'];
+    if(line) showSpeech([{who: g.name, img: enemySpriteFor(g), pale:true, text: line}]);
+    return;
+  }
+  if(level !== 100) return;
+  const usu = enemySpriteFor({tpl: DECADE_BESTIARY[3].decadeBoss}), car = enemySpriteFor({tpl: DECADE_BESTIARY[8].decadeBoss});
+  const boss = enemyGroup.find(e=> e.tpl && e.tpl.decadeBossOf === 100) || enemyGroup[0];
+  const choice = celdaChoice();
+  const pages = [
+    {who:'Espíritu del Usurpador', img:usu, pale:true, text:'«Me venciste dos veces. A la tercera vengo de tu lado.» El espíritu se detiene ante la única celda. «Ahí dentro está el primero que bajó. También fue el primero en volver… y volvió tantas veces que ya no le queda nada, salvo el camino de vuelta.»'},
+    {who:'Espíritu del Usurpador', img:usu, pale:true, text:'«Va a pelear como tú, porque es lo que serás si sigues bajando sin saber por qué. Yo me quedé a medio camino de ser él.» Levanta un arma que ya no pesa. «No me queda cuerpo. Me queda un golpe. Úsalo bien.»'},
+  ];
+  if(choice === 'perdon') pages.push({who:'El Carcelero', img:car, text:'La última llave, la que te tendió, se calienta en tu mano. El Carcelero entra detrás de ti con la alabarda baja. «Bajaste el arma cuando pudiste rematarme. Los que cerramos no olvidamos una deuda. Vengo a pagarla.»'});
+  else if(choice === 'muerte') pages.push({who:'Sombra del Carcelero', img:car, pale:true, text:'De la ceniza que traes en las botas se levanta una sombra con nueve llaves frías. No te mira a ti: mira la celda. «Me quitaste la guardia. Él me dio otra.» Y entra a esperar su turno con las demás.'});
+  pages.push({who:'Espíritu del Usurpador', img:usu, pale:true, text:'«No está solo. Cada cerrojo que rompiste dejó aquí su sombra: el Ogro, la Matriarca, Riakis, todos. Caen fácil… pero al caer una se levanta la siguiente. La mía no está entre ellas. La mía soy yo.»'});
+  const lastPage = {who: boss.name, img: enemySpriteFor(boss), text:'La celda se abre sola. El que sale sujeta el arma como tú, pisa como tú, respira a tu ritmo. Te mira un momento largo. «…Otra vez», dice, y no es una pregunta.'};
+  const key = 'ds_celda100_' + state.char.id;
+  const seen = lsGet(key); lsSet(key, '1');
+  showSpeech(seen ? [lastPage] : pages.concat([lastPage]));
 }
 // Escolta de élites de los guardianes de 91-99: dos, una de frente y una de retaguardia, debilitadas.
 const GUARDIAN_ELITE_91 = {from:91, to:99, hpPct:0.50, atkPct:0.65};
@@ -8063,6 +8195,7 @@ function maybeShowPlaceIntro(key){
 function renderCity(){
   ensureCityView();
   maybeOfferProfession();
+  maybeNotifySkillMilestones();
   if(cityView==='welcome') return renderCityWelcome();
   if(cityView==='laberinto') return renderCityDungeonEntry();
   if(cityView==='ficha') return renderFicha();
@@ -11144,7 +11277,7 @@ const BETA_DECADE_BOSS_TUNING = {
   // un aliado, equipo raro, piedras F y Caídos raros. Antes: .24/.50 y .80/.80 (con esa referencia el Ogro se ganaba el 22-26%).
   10: {hp:0.213, atk:0.439},  // Ogro: 87% con la referencia de la segunda vuelta (ver BETA_ENEMY_SCALE)
   20: {hp:0.81, atk:0.81},  // Matriarca: 70% con 0.858 y el reparto por senda suavizado (Guerrero 49, Arquero 45); bajada un 6%
-  30: {hp:1.82, atk:1.73},  // Riakis: 81% (objetivo nuevo 80; antes 1.96/1.87 para 65%)
+  30: {hp:1.66, atk:1.57},  // 2026-10-10: bajó de 1.82/1.73 porque a Riakis ya se le enfrenta sin la mejora de habilidades (64% -> ~80%).  // Riakis: 81% (objetivo nuevo 80; antes 1.96/1.87 para 65%)
   40: {hp:1.58, atk:1.49},  // Usurpador: 75% con el reparto por senda (objetivo nuevo 75). Muy sensible.
 };
 // Enemigos que NO son jefe de década, por índice de década (1 = pisos 11-19...).
@@ -11377,6 +11510,7 @@ function startCombat(enemyGroup, node){
   // combate en este mismo nivel (ver syncAllyHPToDungeon) - un aliado
   // derribado sigue fuera de combate hasta avanzar de nivel, no revive aquí.
   const allies = (state.char.allies||[]).map(makeCombatAlly);
+  if(node.type==='jefe' && state.dungeon.level === 100) celdaGuestAllies().forEach(g=> allies.push(g));
   combat = {
     active:true,
     node,
@@ -11418,8 +11552,10 @@ function startCombat(enemyGroup, node){
   const allyText = allies.length ? ` A tu lado: ${allies.map(a=>a.name).join(', ')}.` : '';
   log(`¡Emboscada! Te enfrentas a: ${enemyGroup.map(e=>e.name).join(', ')}.${allyText}`);
   applyChaosLaw();
+  if(node.type==='jefe' && state.dungeon.level === 100 && !(SIM_CELDA && SIM_CELDA.sombras === false)){ combat.celdaShadows = celdaShadowTpls(); celdaShadowTick(); }
   if(node.type==='jefe' && state.dungeon.level % 10 === 0){ stopDungeonAudio(); playBossAudio(); }
   renderAll();
+  if(node.type==='jefe' && state.dungeon.level >= 91 && !simMode) celdaPreFightSpeech(enemyGroup);
 }
 
 function livingAllies(){ return (combat.allies||[]).filter(a=>a.hp>0); }
@@ -11470,6 +11606,7 @@ function dealDamageToAlly(ally, amount){
     shieldBroke = ally.shield<=0;
   }
   if(amount>0) ally.hp = Math.max(0, ally.hp - amount);
+  if(ally.guest && ally.hp<=0 && ally.lastWords){ log(ally.lastWords); ally.lastWords = null; }
   checkAllyFuriaContenidaTrigger(ally);
   if(shieldBroke && ally.hp>0) tryRenewShield(false, ally);
   checkUltimoBastion(false, ally);
@@ -12727,7 +12864,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
     // explícito) - vive acá en vez de como campos genéricos de SKILLS
     // porque es el único buff_self con efectos secundarios; si otra
     // habilidad llega a necesitar lo mismo, generalizar entonces.
-    if(skillId==='grito_guerra' && state.char.level>=LEVEL_30_MILESTONE){
+    if(skillId==='grito_guerra' && skillsUpgraded()){
       const healPct = skillBonus('grito_guerra','healPct',0);
       if(healPct>0){
         const heal = Math.round(d.maxHP*healPct);
@@ -13359,7 +13496,7 @@ const KEYBIND_ACTIONS = [
   {id:'skill1', label:'Habilidad 1', default:['q','1']},
   {id:'skill2', label:'Habilidad 2', default:['w','2']},
   {id:'skill3', label:'Habilidad 3', default:['e','3']},
-  {id:'ultimate', label:'Ultimate (nivel 60+)', default:['r','4']},
+  {id:'ultimate', label:'Habilidad definitiva', default:['r','4']},
 ];
 function getKeybinds(){
   let saved = {};
@@ -13402,7 +13539,7 @@ document.addEventListener('keydown', (e)=>{
     e.preventDefault(); useSkillFromMenu(style().skills[2]);
   } else if(matches('ultimate')){
     e.preventDefault();
-    if(state.char.level < LEVEL_60_MILESTONE){ log('Tu Ultimate se desbloquea en el nivel 60.'); return; }
+    if(!ultimateUnlocked()){ log('Todavía no has despertado tu habilidad definitiva.'); return; }
     useSkillFromMenu(ULTIMATE_BY_STYLE[state.char.style]);
   }
 });
@@ -14945,7 +15082,7 @@ async function simOneFight(cfg){
   simOutcome = null; combat = null;
   const node = state.dungeon.floors[0][0], f = numFloorsForLevel(cfg.dungeonLevel) - 1;
   startCombat(buildEncounterGroup(node.type, f, cfg.dungeonLevel), node);
-  const skillIds = style().skills.concat(state.char.level >= LEVEL_60_MILESTONE ? [ULTIMATE_BY_STYLE[state.char.style]] : []);
+  const skillIds = style().skills.concat(ultimateUnlocked() ? [ULTIMATE_BY_STYLE[state.char.style]] : []);
   let guard = 0;
   while(combat && !combat.over && !simOutcome && guard++ < 400){
     const tc = combat.turnCount, d = derived();
@@ -14973,7 +15110,7 @@ async function simOneFight(cfg){
 }
 // Juega un combate ya iniciado hasta que termina (misma política que simOneFight).
 async function simFightLoop(){
-  const skillIds = style().skills.concat(state.char.level >= LEVEL_60_MILESTONE ? [ULTIMATE_BY_STYLE[state.char.style]] : []);
+  const skillIds = style().skills.concat(ultimateUnlocked() ? [ULTIMATE_BY_STYLE[state.char.style]] : []);
   let guard = 0;
   simOutcome = null;
   while(combat && !combat.over && !simOutcome && guard++ < 400){
@@ -15065,6 +15202,9 @@ if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
   window.__gremio = (cfg)=>{ window.__ficha(cfg || {}); state.char.missionCurrency = 240; state.missions = [['A','rest',3,2,'active'],['S','chests',5,2,'active'],['A','floors',5,5,'completed'],['S','floors',6,6,'claimed'],['B','combats',8,6,'active'],['A','gear',5,3,'active']].map((m, i)=> ({id:'m'+i, rank:m[0], objective_type: MISSION_OBJECTIVE_TYPES[i % MISSION_OBJECTIVE_TYPES.length], objective_target:m[2], progress:m[3], status:m[4], reward_gold:200, reward_xp:150, reward_currency:12, reward_item:null})); missionsOpen = true; renderMissions(); };
   window.__inv = (cfg)=>{ window.__ficha(cfg || {}); for(let i = 0; i < 9; i++){ const it = generateLoot(2, state.char.level); if(it) state.char.inventory.push(it); } invTab = 'mochila'; renderInventory = ((orig)=> orig)(renderInventory); renderInventory(); };
   window.__ficha = (cfg)=>{ const {st} = simBuildState(Object.assign({style:'tirador', level:80, dungeonLevel:80}, cfg)); st.dungeon = null; st.char.gold = cfg.gold || 0; state = st; const d = derived(); state.char.curHP = d.maxHP; state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi; fichaTab = 'profesion'; fichaHostEl = null; save = ()=>{}; renderAll = ()=>{}; renderFicha(); };
+  window.__celdaVer = (level, cfg)=>{ const {st} = simBuildState(Object.assign({style:'pesada', level:100, dungeonLevel:level}, cfg || {})); state = st; state.log = []; const d = derived(); state.char.curHP = d.maxHP; state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi; save = ()=>{}; lsGet = ()=> null; lsSet = ()=>{}; const dg = Object.assign(generateDungeon(level), {allyHP:{}, allyMP:{}, allySpirit:{}}); state.dungeon = dg; showScreen('screen-game'); const f = dg.floors.length - 1; dg.atFloor = f; dg.atNode = 0; startCombat(buildEncounterGroup('jefe', f, level), dg.floors[f][0]); };
+  window.__celdaG = CELDA_GUESTS;
+  window.__celda = (v)=>{ if(v !== undefined) SIM_CELDA = v; return SIM_CELDA; };
   window.__historia = (level)=> showStoryScenes(level, ()=>{});
   // Vista de prueba sin iniciar sesión: arma un personaje de mentira (no guarda
   // nada: save() falla sin sesión) y abre una pantalla. __vista('cronicas','bestiario'),
@@ -15175,6 +15315,7 @@ function checkCombatEnd(){
     return;
   }
   processEnemyDeaths();
+  celdaShadowTick();
   if(livingEnemies().length===0){
     combat.over = true;
     if(simMode){ simOutcome = 'win'; return; }
@@ -15683,7 +15824,7 @@ function renderCombat(){
   if(!state || !state.dungeon || !combat) return;
   const d = derived();
   const s = style();
-  const skillIds = s.skills.concat(state.char.level>=LEVEL_60_MILESTONE ? [ULTIMATE_BY_STYLE[s.id]] : []);
+  const skillIds = s.skills.concat(ultimateUnlocked() ? [ULTIMATE_BY_STYLE[s.id]] : []);
 
   // La visualización de enemigos/aliados/jugador ahora la dibuja
   // battleStage.js sobre un <canvas> (sprite si existe, ícono si no, en la
@@ -16592,7 +16733,7 @@ function resetHeaderForLoggedOut(){
 function showAuthScreen(message){
   state = null; combat = null;
   invOpen = false; homeOpen = false; shopOpen = false; rankingOpen = false; adminOpen = false;
-  currentUser = null; currentProfile = null; BETA_ALLY_UNLOCKS = false;
+  currentUser = null; currentProfile = null;
   resetHeaderForLoggedOut();
   stopBossAudio();
   stopDungeonAudio();
@@ -16629,7 +16770,7 @@ async function onAuthed(user){
     await auth.signOut();
     return;
   }
-  BETA_ALLY_UNLOCKS = !!profile.created_at && Date.parse(profile.created_at) >= BETA_ACCOUNTS_FROM;
+  BETA_ALLY_UNLOCKS = true;
   if(profile.is_banned){
     await auth.signOut();
     showAuthScreen('Tu cuenta está suspendida.');

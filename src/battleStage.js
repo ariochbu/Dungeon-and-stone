@@ -438,7 +438,7 @@ function syncBattleStage(container, combat, playerInfo, onTargetClick){
     a.baseX = allyPos[i].x; a.baseY = allyPos[i].y; a.x = a.baseX; a.y = a.baseY;
     const hostile = typeof clickHandler.isAllyHostile==='function' && clickHandler.isAllyHostile(ally.id);
     Object.assign(a, {
-      kind:'ally', refIdx:i, name: ally.name, icon: ally.icon, nameMaxW: allyPos[i].nameMaxW, sprite: spriteFor('ally', ally), chibiKey: 'aliado_' + ally.templateId,
+      kind:'ally', refIdx:i, name: ally.name, icon: ally.icon, nameMaxW: allyPos[i].nameMaxW, sprite: spriteFor('ally', ally), chibiKey: ally.chibiKey || ('aliado_' + ally.templateId), ghost: !!ally.ghost, sizeMul: ally.stageSize || 1,
       role: roleFor('ally', ally), hp: ally.hp, maxHP: ally.maxHP, mp: ally.mp, maxMP: ally.maxMP,
       spirit: ally.spirit, maxSpirit: ally.maxSpirit, alive: ally.hp>0, shield: ally.shield||0, showResources:true,
       statuses: ally.statuses||[], targetable: hostile && ally.hp>0, side:'party',
@@ -471,7 +471,7 @@ function syncBattleStage(container, combat, playerInfo, onTargetClick){
     if(!a){ a = makeActor(k); actors.set(k, a); }
     a.baseX = enemyPos[i].x; a.baseY = enemyPos[i].y; a.x = a.baseX; a.y = a.baseY;
     Object.assign(a, {
-      vanish:false, kind:'enemy', refIdx:i, name: en.name, icon: en.icon, nameMaxW: enemyPos[i].nameMaxW, sprite: spriteFor('enemy', en), chibiKey: enemyChibiKey(en), awakened: !!(en.tpl && en.tpl.awakened), sizeMul: en.tpl && en.tpl.awakened ? 1.75 : en.tpl && en.tpl.boss ? 1.3 : (en.tpl && en.tpl.elite ? 1.12 : (en.tpl && en.tpl.decoy ? 0.9 : (en.summoned ? 0.8 : 1))),
+      vanish:false, kind:'enemy', refIdx:i, name: en.name, icon: en.icon, nameMaxW: enemyPos[i].nameMaxW, sprite: spriteFor('enemy', en), chibiKey: enemyChibiKey(en), awakened: !!(en.tpl && en.tpl.awakened), sizeMul: en.tpl && en.tpl.stageSize ? en.tpl.stageSize : en.tpl && en.tpl.awakened ? 1.75 : en.tpl && en.tpl.boss ? 1.3 : (en.tpl && en.tpl.elite ? 1.12 : (en.tpl && en.tpl.decoy ? 0.9 : (en.summoned ? 0.8 : 1))),
       role: roleFor('enemy', en), hp: en.hp, maxHP: en.maxHP, alive: en.hp>0, showResources:false,
       statuses: en.statuses||[],
       // Con pendingTargetFilter==='front' (2026-09-25: elegir a cuál de 2+
@@ -678,6 +678,7 @@ function drawActor(a, hud, dt){
   if(a.alive===false) ctx.filter = 'grayscale(1)';
   else if(a.flash>0) ctx.filter = 'brightness(1.8) saturate(0.3) sepia(1) hue-rotate(-50deg) saturate(4)';
   else if(dupTint) ctx.filter = 'hue-rotate(210deg) saturate(1.2)';
+  else if(a.ghost){ ctx.filter = 'grayscale(0.75) brightness(1.35)'; ctx.globalAlpha *= 0.72; } // espíritu: pálido y medio transparente
   else if(a.awakened) ctx.filter = 'grayscale(0.9) brightness(1.22) contrast(1.12)'; // su verdadera forma: sin color
 
   // Sprite fijo (monstruos sin tira chibi): a un tamaño parejo con los chibi.
