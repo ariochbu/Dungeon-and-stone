@@ -9,6 +9,8 @@
 // (opts.onEnter → enterNode). No cambia state.dungeon.
 
 import { SpriteAnim, sheetFromMeta } from './spriteAnim.js?v=2';
+import { drawIcon, preloadIcons } from './icons.js?v=1';
+preloadIcons(['swords', 'skull', 'crown'], '#ffd9d4'); preloadIcons(['skull'], '#e6d6ff'); preloadIcons(['crown'], '#ffe9a8'); preloadIcons(['lock', 'fire', 'chest'], '#f1e3c4');
 
 const T = 16;                    // unidad de la cuadrícula
 const ROOM_W = 7, ROOM_H = 5;    // tamaño de una sala, en unidades
@@ -16,9 +18,9 @@ const FX = ROOM_W + 4, LY = ROOM_H + 2; // paso entre pisos (→) y entre sendas
 const VIEW_W = 480, VIEW_H = 384;
 const TYPE_COLOR = { entrada:'#8a8f99', combate:'#c44a4a', elite:'#9a5fd0', tesoro:'#e0b23f', descanso:'#e8853a', jefe:'#ff3b3b' };
 const BADGE = {
-  combate: {icon:'⚔', label:'Normal',   bg:'#5a2a2a', fg:'#ffd9d4', line:'#c44a4a'},
-  elite:   {icon:'☠', label:'Élite',    bg:'#3f2a66', fg:'#e6d6ff', line:'#9a5fd0'},
-  jefe:    {icon:'♛', label:'Guardián', bg:'#7a1c1c', fg:'#ffe9a8', line:'#ffd76a'},
+  combate: {icon:'swords', label:'Normal',   bg:'#5a2a2a', fg:'#ffd9d4', line:'#c44a4a'},
+  elite:   {icon:'skull', label:'Élite',    bg:'#3f2a66', fg:'#e6d6ff', line:'#9a5fd0'},
+  jefe:    {icon:'crown', label:'Guardián', bg:'#7a1c1c', fg:'#ffe9a8', line:'#ffd76a'},
 };
 
 let CHIBI = {};
@@ -175,7 +177,7 @@ function drawBadge(m){
   const w = ctx.measureText(b.label).width + 19;
   ctx.fillStyle = b.bg; ctx.fillRect(x, y, w, 12);
   ctx.strokeStyle = b.line; ctx.lineWidth = 1; ctx.strokeRect(x + 0.5, y + 0.5, w - 1, 11);
-  ctx.fillStyle = b.fg; ctx.font = '9px serif'; ctx.fillText(b.icon, x + 3, y + 6.5);
+  ctx.fillStyle = b.fg; drawIcon(ctx, b.icon, x + 7.5, y + 6, 9, b.fg);
   ctx.font = 'bold 8px Georgia'; ctx.fillText(b.label, x + 14, y + 6.5);
 }
 function drawRoom(m, t, dt){
@@ -197,14 +199,14 @@ function drawRoom(m, t, dt){
   }
   if(node.type === 'descanso'){
     ctx.fillStyle = `rgba(255,170,60,${0.13 + 0.05*Math.sin(t*7)})`; ctx.beginPath(); ctx.arc(cx, cy + 6, 26, 0, 7); ctx.fill();
-    if(!icon('hoguera', cx, cy + 6, 34)){ ctx.font = '22px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('🔥', cx, cy + 6); ctx.textAlign = 'left'; }
+    if(!icon('hoguera', cx, cy + 6, 34)){ ctx.font = '22px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; drawIcon(ctx, 'fire', cx, cy + 6, 24, '#f1e3c4'); ctx.textAlign = 'left'; }
   } else if(node.type === 'tesoro'){
-    if(!icon(node.done ? 'cofre_abierto' : 'cofre', cx, cy + 6, 34)){ ctx.font = '22px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('💰', cx, cy + 6); ctx.textAlign = 'left'; }
+    if(!icon(node.done ? 'cofre_abierto' : 'cofre', cx, cy + 6, 34)){ ctx.font = '22px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; drawIcon(ctx, 'chest', cx, cy + 6, 24, '#f1e3c4'); ctx.textAlign = 'left'; }
   } else if(['combate', 'elite', 'jefe'].includes(node.type) && !node.done) drawFoes(m, cx, cy, dt);
   drawBadge(m);
   // sala del piso siguiente a la que no se puede pasar: candado y más oscura
   if(m.f === dg.atFloor + 1 && !reach && !walking){
-    ctx.font = '11px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('🔒', x - T + 6, (m.cy + 0.5)*T); ctx.textAlign = 'left';
+    ctx.font = '11px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; drawIcon(ctx, 'lock', x - T + 6, (m.cy + 0.5)*T, 11, '#f1e3c4'); ctx.textAlign = 'left';
     roundRect(x, y, w, h, 6); ctx.fillStyle = 'rgba(8,6,10,0.4)'; ctx.fill();
   }
 }

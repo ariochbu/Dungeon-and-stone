@@ -2075,3 +2075,19 @@ button.cron-card:hover{ transform:translateY(-2px); border-color:var(--bronze); 
   .auth-tabs{ margin-bottom:10px; }
   .auth-or{ margin:8px 0; }
 }
+
+/* Retrato del inventario (2026-10-10): tres ranuras a cada lado, del alto del retrato, y el arma principal centrada debajo. */
+.pj-doll{ align-items:stretch; }
+.pj-col{ align-content:space-between; }
+.pj-doll > .pj-portrait{ height:auto; min-height:256px; }
+.pj-doll > .pj-weapons{ grid-column:1 / -1; }
+.pj-slot.sel{ border-color:#ffe9a8; box-shadow:0 0 0 2px #ffd76a, 0 0 14px rgba(255,215,106,0.5); }
+.pj-unq{ position:absolute; left:50%; bottom:-14px; transform:translateX(-50%); z-index:3; white-space:nowrap; font-size:0.68em; padding:3px 8px; }
+.bag-grid-eq{ grid-template-columns:repeat(auto-fill, minmax(76px, 1fr)); }
+.bag-cell{ display:flex; flex-direction:column; gap:4px; }
+.bag-cell .bag-tile{ cursor:default; }
+.bag-cell .inv-btn{ font-size:0.7em; padding:3px 4px; width:100%; }
+
+/* Iconos propios (icons.js): sustituyen a todos los emojis y heredan el color del texto. */
+.ic{ display:inline-block; width:1.1em; height:1.1em; vertical-align:-0.2em; line-height:0; flex:none; }
+.ic svg{ width:100%; height:100%; display:block; }

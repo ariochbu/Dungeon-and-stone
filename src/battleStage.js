@@ -16,6 +16,7 @@
 import { CLASS_SPRITES, ALLY_SPRITES, ENEMY_SPRITES, playerSpriteFor, RACE_SIZE, ALLY_TEMPLATE_SPRITES, enemySpriteFor, enemyChibiKey } from './battleSprites.js?v=92';
 
 import { SpriteAnim, sheetFromMeta } from './spriteAnim.js?v=2';
+import { drawIcon, preloadIcons } from './icons.js?v=1';
 
 const TILE = 16;
 const SCALE = 3;
@@ -100,14 +101,16 @@ let uiScale = 1;
 let BUFF_STATUS_NAMES = new Set(['Furioso','Inspirado','Fortalecido']); // se reemplaza con playerInfo.buffNames
 // Ícono de cada estado para las fichas bajo las barras. Los nombres son los de
 // STATUS_INFO en game.js; uno sin ícono muestra sus dos primeras letras.
+// Nombre del icono (icons.js) de cada estado.
 const STATUS_ICON = {
-  Tambaleo:'💢', Quebranto:'🕯️', 'Armadura Rota':'🛡', Aturdido:'💫', Furioso:'😡', Inspirado:'🎺', Sangrado:'🩸', Veneno:'☠', Marcado:'🎯', Quemadura:'🔥',
-  Ralentizado:'🐌', Bendecido:'🔻', 'Bendición':'✨', Fortalecido:'💪', Corrosion:'🧪', Debilitado:'⬇', Voluntad:'🧠',
-  'Último Bastión':'🛡', Empapado:'💧', Lluvia:'🌧', 'Cristalización':'💎', 'Forma Robada':'🎭', 'Caos Desatado':'🌪',
-  'Sacerdote de la Tormenta':'⚡', Mermado:'📉', Ruina:'🏚', Paralisis:'⛓', Ceguera:'🙈', Miedo:'😱', Confusion:'❓',
-  Silencio:'🤐', 'Bastión':'🧱', 'Égida':'🔰',
-  'Corrupción':'🥀', 'Ley: Gravedad Reducida':'🪶', 'Ley: Eco Violento':'📣', 'Ley: Carne de Piedra':'🗿', 'Ley: Silencio Arcano':'🔇',
+  Tambaleo:'dizzy', Quebranto:'down', 'Armadura Rota':'shield', Aturdido:'dizzy', Furioso:'fire', Inspirado:'music', Sangrado:'drop', Veneno:'skull', Marcado:'target', Quemadura:'fire',
+  Ralentizado:'snow', Bendecido:'star', 'Bendición':'star', Fortalecido:'up', Corrosion:'potion', Debilitado:'down', Voluntad:'eye',
+  'Último Bastión':'shield', Empapado:'drop', Lluvia:'drop', 'Cristalización':'gem', 'Forma Robada':'mask', 'Caos Desatado':'spiral',
+  'Sacerdote de la Tormenta':'bolt', Mermado:'down', Ruina:'home', Paralisis:'chain', Ceguera:'eye', Miedo:'warning', Confusion:'question',
+  Silencio:'mute', 'Bastión':'brick', 'Égida':'shield',
+  'Corrupción':'skull', 'Ley: Gravedad Reducida':'wind', 'Ley: Eco Violento':'chat', 'Ley: Carne de Piedra':'brick', 'Ley: Silencio Arcano':'mute',
 };
+preloadIcons([...new Set(Object.values(STATUS_ICON))], '#ffffff');
 // Los estados "para todo el combate" se guardan con duración 99 y van bajando
 // (97, 96…): se muestran como ∞ en vez de un número que no dice nada.
 const PERMANENT_TURNS = 50;
@@ -131,7 +134,7 @@ function drawStatusTip(){
   if(statusTip.until && performance.now() > statusTip.until){ statusTip = null; return; }
   const st = statusTip.st, info = STATUS_INFO_REF[st.name] || {}, buff = BUFF_STATUS_NAMES.has(st.name);
   const fs = Math.round(11*Math.min(uiScale, 1.7)), lh = fs + 4, maxW = Math.min(STAGE_W - 16, 250*Math.min(uiScale, 1.5));
-  const title = `${STATUS_ICON[st.name] ? STATUS_ICON[st.name] + ' ' : ''}${st.name}`;
+  const title = st.name;
   const meta = [st.stacks > 1 ? `x${st.stacks} cargas` : '', st.duration != null ? (st.duration >= PERMANENT_TURNS ? 'hasta el final del combate' : `${st.duration} turno${st.duration === 1 ? '' : 's'}`) : ''].filter(Boolean).join(' · ');
   ctx.save();
   ctx.font = `${fs}px Georgia, serif`; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
@@ -717,7 +720,7 @@ function drawActor(a, hud, dt){
     ctx.filter = a.flash>0 ? ctx.filter : 'none';
     ctx.font = `${Math.round(SIZE*0.8*(a.scale||1))}px sans-serif`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-    ctx.fillText(a.icon||'❓', cx, cy+2);
+    ctx.fillText((a.name || '?').trim().charAt(0).toUpperCase(), cx, cy+2); // sin sprite: su inicial
   }
   ctx.filter = 'none';
   ctx.restore();
@@ -780,7 +783,7 @@ function drawStatusChips(a, cx, topY){
     ctx.strokeStyle = buff ? '#7ed957' : '#ff8a80'; ctx.lineWidth = 1; ctx.strokeRect(x + 1.5, topY - 6.5, cw - 3, 13);
     const icon = STATUS_ICON[st.name];
     ctx.fillStyle = '#fff';
-    if(icon){ ctx.font = `${Math.round(10*uiScale)}px sans-serif`; ctx.fillText(icon, x + 7, topY + 1); }
+    if(icon && drawIcon(ctx, icon, x + 7, topY, 10, '#ffffff')){ /* dibujado */ }
     else { ctx.font = `bold ${Math.round(8*uiScale)}px monospace`; ctx.fillText(st.name.slice(0, 2), x + 7, topY + 1); }
     // número: cargas (x2, x3) si se acumula; si no, turnos que le quedan
     const num = st.stacks > 1 ? 'x' + st.stacks : (st.duration != null ? (st.duration >= PERMANENT_TURNS ? '∞' : String(st.duration)) : '');
