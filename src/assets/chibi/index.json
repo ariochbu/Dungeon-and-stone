@@ -1481,12 +1481,12 @@
  "enemigo_ogro": {
   "bh": 128,
   "ch": 139,
-  "cw": 214,
+  "cw": 246,
   "frames": [
    4,
    6,
    2,
-   5
+   4
   ]
  },
  "enemigo_ojo_reflujo": {

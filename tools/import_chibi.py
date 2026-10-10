@@ -238,7 +238,13 @@ LAMINA_NUEVA_POR_NOMBRE = {
 NUEVA_MIRA_IZQUIERDA = set()
 # Láminas que mezclan sentidos: {tira: {fila: [columnas]}} con los cuadros que miran al revés que el resto.
 # Goblin saqueador (visto en combate por ariochbu, 2026-10-10): el reposo y parte del ataque miran a la izquierda.
-CUADROS_AL_REVES = {'enemigo_goblin_saqueador': {0: [0, 1, 2, 3], 1: [0, 1, 5]}}
+# Ogro (ídem, 2026-10-10): el reposo y el último cuadro del ataque miran a la izquierda.
+CUADROS_AL_REVES = {'enemigo_goblin_saqueador': {0: [0, 1, 2, 3], 1: [0, 1, 5]}, 'enemigo_ogro': {0: [0, 1, 2, 3], 1: [5]}}
+# Cuadros que la detección partió en dos: {tira: {fila: [(primero, último)]}} se vuelven a unir.
+CUADROS_UNIDOS = {'enemigo_ogro': {3: [(3, 4)]}}
+# Cuadros recortados a mano, en píxeles de la lámina original: {tira: {(fila, columna): (caja, [zonas a borrar])}}.
+# Ogro: los dos últimos cuadros del ataque se solapan (el garrote caído de uno queda bajo el garrote alzado del otro).
+CUADROS_A_MANO = {'enemigo_ogro': {(1, 4): ((1040, 345, 1338, 532), []), (1, 5): ((1270, 268, 1500, 532), [(1270, 440, 1342, 532)])}}
 
 
 def new_sheet_id(path):
@@ -616,7 +622,7 @@ def find_frames_grid(alpha, nrows=4, ncols=6):
     return [[bx[:4] for bx in line if bx[4] >= 0.25 * ref_area] for line in rows]
 
 
-def build_strip(im, alpha, rows, flip=False, walk=False, odd=None):
+def build_strip(im, alpha, rows, flip=False, walk=False, odd=None, manual=None):
     rgba = np.dstack([np.asarray(im.convert('RGB')), (alpha * 255).astype(np.uint8)])
     src = Image.fromarray(rgba, 'RGBA')
     idle_h = np.median([y1 - y0 for (_x0, y0, _x1, y1) in rows[0]])
@@ -627,6 +633,12 @@ def build_strip(im, alpha, rows, flip=False, walk=False, odd=None):
         line = []
         for c, box in enumerate(boxes):
             crop = src.crop(box)
+            if manual and (r, c) in manual:
+                mbox, erase = manual[(r, c)]
+                crop = src.crop(mbox)
+                for (ex0, ey0, ex1, ey1) in erase:
+                    crop.paste((0, 0, 0, 0), (ex0 - mbox[0], ey0 - mbox[1], ex1 - mbox[0], ey1 - mbox[1]))
+                crop = crop.crop(crop.getbbox())
             if flip != (c in (odd or {}).get(r, ())):
                 crop = crop.transpose(Image.FLIP_LEFT_RIGHT)
             small = crop.resize((max(1, round(crop.width * k)), max(1, round(crop.height * k))), Image.BOX)
@@ -785,8 +797,14 @@ def process(job):
         return None, name, f, None, None
     if kind == 'enemigo2' and name not in REJILLA_FIJA:
         rows = split_merged_attack(alpha, rows)
+    if kind == 'enemigo2':
+        for r, pairs in CUADROS_UNIDOS.get(name, {}).items():
+            for a, b in sorted(pairs, reverse=True):
+                if b < len(rows[r]):
+                    part = rows[r][a:b + 1]
+                    rows[r][a:b + 1] = [(min(x[0] for x in part), min(x[1] for x in part), max(x[2] for x in part), max(x[3] for x in part))]
     flip = name[8:] in NUEVA_MIRA_IZQUIERDA if kind == 'enemigo2' else name in MIRA_IZQUIERDA
-    sheet, meta = build_strip(im, alpha, rows, flip, walk, CUADROS_AL_REVES.get(name) if kind == 'enemigo2' else None)
+    sheet, meta = build_strip(im, alpha, rows, flip, walk, CUADROS_AL_REVES.get(name) if kind == 'enemigo2' else None, CUADROS_A_MANO.get(name) if kind == 'enemigo2' else None)
     return 'tira', name, f, sheet, meta
 
 

@@ -31,7 +31,7 @@ const chibiImgs = {}; // key -> Image (cargando o lista)
 function chibiAnimFor(key){
   const meta = CHIBI[key];
   if(!meta) return null;
-  if(!chibiImgs[key]){ chibiImgs[key] = new Image(); chibiImgs[key].src = `src/assets/chibi/${key}.png?v=8`; }
+  if(!chibiImgs[key]){ chibiImgs[key] = new Image(); chibiImgs[key].src = `src/assets/chibi/${key}.png?v=9`; }
   const img = chibiImgs[key];
   return img.complete && img.naturalWidth > 0 ? new SpriteAnim(img, sheetFromMeta(meta)) : null;
 }

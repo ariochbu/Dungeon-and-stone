@@ -2,7 +2,7 @@
 
 import { supabase } from './supabaseClient.js';
 import * as auth from './auth.js';
-import { syncBattleStage, playBattleAnim } from './battleStage.js?v=110';
+import { syncBattleStage, playBattleAnim } from './battleStage.js?v=111';
 import { mountLabyrinth } from './labyrinthMap.js?v=8';
 import { CLASS_SPRITES, ENEMY_SPRITES, playerSpriteFor, playerIllustrationFor, enemySpriteFor, ALLY_TEMPLATE_SPRITES } from './battleSprites.js?v=92';
 
@@ -575,7 +575,10 @@ const LEVEL30_SKILL_BONUS = {
   lluvia_flechas:   {bonusVsMarked: 0.35},                    // era 0.25 (sin subir el daño en área)
   bola_fuego:       {applyChance: 1.0},                       // era 0.8
   lanza_hielo:      {duration: 3},                            // era 2
-  toque_venenoso:   {maxStack: 5}                             // era 3 (4 hasta el rediseño del Hechicero, 2026-10-08)
+  toque_venenoso:   {maxStack: 5},                            // era 3 (4 hasta el rediseño del Hechicero, 2026-10-08)
+  // 2026-10-10 (ariochbu): la curación del Drenaje era demasiado para los primeros pisos (cuenta nueva, sin aliados,
+  // hasta el piso 16). Antes del nivel 30 el Drenaje no cura; la curación es su mejora.
+  drenaje_de_esencia: {healPct: 0.30}
 };
 // PROFESIONES (nivel 80; idea de ariochbu, 2026-10-09: "arquero se puede convertir en ballestero o
 // francotirador"). Cada senda elige entre dos: una de GRUPO (limpia salas) y una de DUELO (un solo
@@ -583,7 +586,6 @@ const LEVEL30_SKILL_BONUS = {
 // otro. Se hace con dos piezas: skillMult (daño de cada habilidad) y bonus (los mismos campos que
 // LEVEL30_SKILL_BONUS, que ya leen tanto el texto como la resolución del combate).
 const PROFESSION_LEVEL = 80;
-const PROFESSION_CHANGE_COST = 20000;   // la primera elección es gratis; cambiar cuesta oro
 const PROFESSIONS = {
   tirador: [
     {id:'ballestero', name:'Ballestero', role:'grupo', icon:'🎯', text:'Virotes en abanico: barre líneas enteras, pero cada disparo suelto pega menos.',
@@ -800,7 +802,7 @@ const SKILLS = {
     id:'drenaje_de_esencia', name:'Drenaje de Esencia', cost:{tipo:'estamina', valor:18}, dmgType:'arcano', mult:0.70,
     selfHealPctOfDmg:0.30,
     applies:{name:'Quebranto', chance:1, duration:3, resPenalty:15, mentalPenalty:0.5},
-    desc:'Daño arcano moderado. Te cura el 30% de lo infligido y deja al objetivo Quebrantado 3 turnos: -15 a todas sus resistencias y la mitad de su resistencia a estados.',
+    desc: ()=> `Daño arcano moderado. ${skillBonus('drenaje_de_esencia','healPct',0) > 0 ? `Te cura el ${Math.round(skillBonus('drenaje_de_esencia','healPct',0)*100)}% de lo infligido y deja` : 'Deja'} al objetivo Quebrantado 3 turnos: -15 a todas sus resistencias y la mitad de su resistencia a estados.${skillBonus('drenaje_de_esencia','healPct',0) > 0 ? '' : ' (Al nivel 30: además te cura el 30% de lo infligido.)'}`,
     targetMode:'any'
   },
   mirada_de_locura: {
@@ -931,12 +933,12 @@ const DECADE_BESTIARY = [
   // patrón, manteniendo la temática propia de cada una.
   {
     regular: [
-      {id:'goblin_arquero', name:'Goblin arquero', icon:'🏹', role:'ranged', hp:0.85, atk:1.1, res:{fisico:-5,fuego:0,hielo:0,veneno:5,aturdimiento:0}, moves:['pegar','robar']},
-      {id:'goblin_guerrero', name:'Goblin guerrero', icon:'🗡️', role:'melee', hp:1.15, atk:1.05, res:{fisico:10,fuego:-5,hielo:0,veneno:0,aturdimiento:5}, moves:['pegar'], frontline:true},
-      {id:'goblin_saqueador', name:'Goblin saqueador', icon:'🪓', role:'melee', hp:1.0, atk:1.0, res:{fisico:0,fuego:0,hielo:-10,veneno:10,aturdimiento:10}, moves:['pegar','robar'], frontline:true},
-      {id:'goblin_chaman', name:'Chamán goblin', icon:'💀', role:'mago', hp:0.85, atk:0.95, res:{fisico:-10,fuego:15,hielo:15,veneno:25,aturdimiento:-10}, moves:['maldicion_venenosa','curar_aliado','debilitar']}
+      {id:'goblin_arquero', name:'Goblin arquero', icon:'🏹', role:'ranged', hp:0.85, atk:1.1, res:{fisico:-5,fuego:0,hielo:0,veneno:5,aturdimiento:0}, abilities:{disparo:{label:'Disparo', mult:1.0}, flecha_sucia:{label:'Flecha sucia', mult:0.85, applies:{name:'Veneno', chance:0.30, duration:3, stack:true, maxStack:3}, cooldown:3}, disparo_apuntado:{label:'Disparo apuntado', mult:1.35, cooldown:4, condition:(ctx)=>ctx.targetHpPct>0.6}}, aiPriority:['disparo_apuntado','flecha_sucia','disparo']},
+      {id:'goblin_guerrero', name:'Goblin guerrero', icon:'🗡️', role:'melee', hp:1.15, atk:1.05, res:{fisico:10,fuego:-5,hielo:0,veneno:0,aturdimiento:5}, abilities:{tajo:{label:'Tajo', mult:1.0}, golpe_escudo:{label:'Golpe de escudo', mult:0.8, applies:{name:'Debilitado', chance:0.35, duration:2}, cooldown:4}, embestida:{label:'Embestida', mult:1.3, cooldown:4}}, aiPriority:['embestida','golpe_escudo','tajo'], frontline:true},
+      {id:'goblin_saqueador', name:'Goblin saqueador', icon:'🪓', role:'melee', hp:1.0, atk:1.0, res:{fisico:0,fuego:0,hielo:-10,veneno:10,aturdimiento:10}, abilities:{punalada:{label:'Puñalada', mult:1.0}, tajo_sucio:{label:'Tajo sucio', mult:0.85, applies:{name:'Sangrado', chance:0.35, duration:3, stack:true, maxStack:3}, cooldown:3}, golpe_bajo:{label:'Golpe bajo', mult:1.25, cooldown:4, condition:(ctx)=>ctx.targetHpPct<0.5}}, aiPriority:['golpe_bajo','tajo_sucio','punalada'], frontline:true},
+      {id:'goblin_chaman', name:'Chamán goblin', icon:'💀', role:'mago', hp:0.85, atk:0.95, res:{fisico:-10,fuego:15,hielo:15,veneno:25,aturdimiento:-10}, abilities:{maldicion:{label:'Maldición', mult:1.05}, maldicion_venenosa:{label:'Maldición venenosa', mult:0.9, applies:{name:'Veneno', chance:0.40, duration:3, stack:true, maxStack:3}, cooldown:3}, curacion_ch:{label:'Curación', utility:'heal_ally', healPct:0.10, cooldown:4, condition:(ctx)=>combat.enemies.some(e=>e.hp>0 && e.hp<e.maxHP*0.7)}, mal_de_ojo:{label:'Mal de ojo', mult:0.7, applies:{name:'Debilitado', chance:0.50, duration:2}, cooldown:4}}, aiPriority:['curacion_ch','mal_de_ojo','maldicion_venenosa','maldicion']}
     ],
-    elite: [{id:'jefe_goblin', name:'Jefe goblin', icon:'👹', role:'melee', hp:1.9, atk:1.4, res:{fisico:20,fuego:-10,hielo:5,veneno:15,aturdimiento:25}, moves:['pegar','aplastar'], elite:true, frontline:true}],
+    elite: [{id:'jefe_goblin', name:'Jefe goblin', icon:'👹', role:'melee', hp:1.9, atk:1.4, res:{fisico:20,fuego:-10,hielo:5,veneno:15,aturdimiento:25}, abilities:{hachazo:{label:'Hachazo', mult:1.0}, golpe_brutal:{label:'Golpe brutal', mult:1.4, cooldown:3}, grito_mando:{label:'Grito de mando', utility:'buff_allies', cooldown:5, buffAllies:{name:'Fortalecido', duration:2, stacks:5}, condition:(ctx)=>combat.enemies.filter(e=>e.hp>0).length>1}}, aiPriority:['grito_mando','golpe_brutal','hachazo'], elite:true, frontline:true}],
     guardians: [],
     // Guardián único por piso (1 a 9), como en el resto de décadas (pedido de
     // ariochbu, 2026-10-09). La dificultad NO cambia: antes se sorteaba entre
@@ -946,13 +948,13 @@ const DECADE_BESTIARY = [
     guardianByFloor: {
       1: {id:'goblin_centinela', name:'Goblin Centinela', icon:'📯', role:'melee', hp:1.75, atk:1.175, res:{fisico:12,fuego:5,hielo:5,veneno:15,aturdimiento:25}, moves:['pegar','aplastar','debilitar'], boss:true, frontline:true},
       2: {id:'goblin_trampero', name:'Goblin Trampero', icon:'🪤', role:'melee', hp:1.75, atk:1.175, res:{fisico:10,fuego:5,hielo:5,veneno:20,aturdimiento:25}, moves:['pegar','aplastar','debilitar'], boss:true, frontline:true},
-      3: {id:'goblin_carnicero', name:'Goblin Carnicero', icon:'🔪', role:'melee', hp:1.75, atk:1.175, res:{fisico:12,fuego:5,hielo:5,veneno:15,aturdimiento:25}, moves:['pegar','aplastar','debilitar'], boss:true, frontline:true},
-      4: {id:'hobgoblin', name:'Hobgoblin', icon:'🛡️', role:'melee', hp:1.8, atk:1.15, res:{fisico:15,fuego:5,hielo:5,veneno:15,aturdimiento:30}, moves:['pegar','aplastar','debilitar'], boss:true, frontline:true},
-      5: {id:'bruja_pantano', name:'Bruja del Pantano', icon:'🧪', role:'melee', hp:1.75, atk:1.175, res:{fisico:10,fuego:10,hielo:10,veneno:20,aturdimiento:20}, moves:['pegar','aplastar','debilitar'], boss:true, frontline:true},
-      6: {id:'gilgoblin', name:'Gilgoblin', icon:'🔱', role:'melee', hp:1.7, atk:1.2, res:{fisico:10,fuego:10,hielo:10,veneno:20,aturdimiento:20}, moves:['pegar','aplastar','debilitar'], boss:true, frontline:true},
-      7: {id:'tamborilero_guerra', name:'Tamborilero de Guerra', icon:'🥁', role:'melee', hp:1.75, atk:1.175, res:{fisico:12,fuego:5,hielo:5,veneno:15,aturdimiento:25}, moves:['pegar','aplastar','debilitar'], boss:true, frontline:true},
-      8: {id:'campeon_hobgoblin', name:'Campeón Hobgoblin', icon:'⚔️', role:'melee', hp:1.8, atk:1.15, res:{fisico:15,fuego:5,hielo:5,veneno:15,aturdimiento:30}, moves:['pegar','aplastar','debilitar'], boss:true, frontline:true},
-      9: {id:'capataz_ogro', name:'Capataz del Ogro', icon:'⛓️', role:'melee', hp:1.7, atk:1.2, res:{fisico:10,fuego:10,hielo:10,veneno:20,aturdimiento:20}, moves:['pegar','aplastar','debilitar'], boss:true, frontline:true},
+      3: {id:'goblin_carnicero', name:'Goblin Carnicero', icon:'🔪', role:'melee', hp:1.75, atk:1.175, res:{fisico:12,fuego:5,hielo:5,veneno:15,aturdimiento:25}, abilities:{tajo_c:{label:'Tajo de carnicero', mult:1.0}, gancho:{label:'Gancho de carne', mult:0.85, applies:{name:'Sangrado', chance:0.50, duration:3, stack:true, maxStack:3}, cooldown:3}, cuchilla_brutal:{label:'Cuchilla brutal', mult:1.4, cooldown:3}}, aiPriority:['cuchilla_brutal','gancho','tajo_c'], boss:true, frontline:true},
+      4: {id:'hobgoblin', name:'Hobgoblin', icon:'🛡️', role:'melee', hp:1.8, atk:1.15, res:{fisico:15,fuego:5,hielo:5,veneno:15,aturdimiento:30}, abilities:{lanzazo:{label:'Lanzazo', mult:1.0}, embestida_h:{label:'Embestida con escudo', mult:1.35, cooldown:3}, romper_guardia:{label:'Romper la guardia', mult:0.75, applies:{name:'Debilitado', chance:0.55, duration:2}, cooldown:4}}, aiPriority:['embestida_h','romper_guardia','lanzazo'], boss:true, frontline:true},
+      5: {id:'bruja_pantano', name:'Bruja del Pantano', icon:'🧪', role:'melee', hp:1.75, atk:1.175, res:{fisico:10,fuego:10,hielo:10,veneno:20,aturdimiento:20}, abilities:{cucharon:{label:'Cucharonazo', mult:1.0}, pocion_toxica:{label:'Poción tóxica', mult:0.85, applies:{name:'Veneno', chance:0.50, duration:3, stack:true, maxStack:3}, cooldown:3}, maleficio:{label:'Maleficio', mult:0.7, applies:{name:'Debilitado', chance:0.55, duration:2}, cooldown:4}, caldero:{label:'Caldero hirviente', mult:1.35, cooldown:4}}, aiPriority:['caldero','maleficio','pocion_toxica','cucharon'], boss:true, frontline:true},
+      6: {id:'gilgoblin', name:'Gilgoblin', icon:'🔱', role:'melee', hp:1.7, atk:1.2, res:{fisico:10,fuego:10,hielo:10,veneno:20,aturdimiento:20}, abilities:{tajo_g:{label:'Tajo', mult:1.0}, doble_tajo:{label:'Doble tajo', mult:1.3, cooldown:3}, corte_feroz:{label:'Corte feroz', mult:0.85, applies:{name:'Sangrado', chance:0.40, duration:3, stack:true, maxStack:3}, cooldown:3}, frenesi:{label:'Frenesí', utility:'self_buff', oncePerCombat:true, instant:true, condition:(ctx)=>ctx.selfHpPct<0.5, selfBuff:{name:'Frenesí', duration:99, dmgMult:1.15}}}, aiPriority:['frenesi','doble_tajo','corte_feroz','tajo_g'], boss:true, frontline:true},
+      7: {id:'tamborilero_guerra', name:'Tamborilero de Guerra', icon:'🥁', role:'melee', hp:1.75, atk:1.175, res:{fisico:12,fuego:5,hielo:5,veneno:15,aturdimiento:25}, abilities:{baquetazo:{label:'Baquetazo', mult:1.0}, redoble:{label:'Redoble de guerra', utility:'self_buff', cooldown:5, selfBuff:{name:'Redoble', duration:3, dmgMult:1.2}}, golpe_tambor:{label:'Golpe de tambor', mult:0.8, applies:{name:'Aturdido', chance:0.20, duration:1}, cooldown:4}, mazazo:{label:'Mazazo', mult:1.35, cooldown:3}}, aiPriority:['redoble','mazazo','golpe_tambor','baquetazo'], boss:true, frontline:true},
+      8: {id:'campeon_hobgoblin', name:'Campeón Hobgoblin', icon:'⚔️', role:'melee', hp:1.8, atk:1.15, res:{fisico:15,fuego:5,hielo:5,veneno:15,aturdimiento:30}, abilities:{tajo_ch:{label:'Tajo', mult:1.0}, tajo_amplio:{label:'Tajo amplio', mult:1.4, cooldown:3}, rompeguardia:{label:'Rompeguardia', mult:0.75, applies:{name:'Debilitado', chance:0.55, duration:2}, cooldown:4}, furia_campeon:{label:'Furia del campeón', utility:'self_buff', oncePerCombat:true, instant:true, condition:(ctx)=>ctx.selfHpPct<0.4, selfBuff:{name:'Furia del campeón', duration:99, dmgMult:1.2}}}, aiPriority:['furia_campeon','tajo_amplio','rompeguardia','tajo_ch'], boss:true, frontline:true},
+      9: {id:'capataz_ogro', name:'Capataz del Ogro', icon:'⛓️', role:'melee', hp:1.7, atk:1.2, res:{fisico:10,fuego:10,hielo:10,veneno:20,aturdimiento:20}, abilities:{latigazo:{label:'Latigazo', mult:1.0, applies:{name:'Sangrado', chance:0.30, duration:3, stack:true, maxStack:3}}, cadena:{label:'Cadena al cuello', mult:0.8, applies:{name:'Paralisis', chance:0.25, duration:1}, cooldown:4}, castigo:{label:'Castigo', mult:1.45, cooldown:3}}, aiPriority:['castigo','cadena','latigazo'], boss:true, frontline:true},
     },
     // Fases (2026-10-02): 60% Furia, 30% lanza rocas.
     decadeBoss: {id:'ogro', name:'Ogro', icon:'👺', role:'melee', hp:4.2, atk:1.9, res:{fisico:25,fuego:0,hielo:0,veneno:10,aturdimiento:35}, boss:true, frontline:true,
@@ -4849,6 +4851,9 @@ const ENEMY_VS_CLASS_81 = {from:81, to:89,
 // décadas con otra escala y cuatro aliados). Los tanques superaban casi todas las salas y la retaguardia
 // moría antes del guardián: por eso reciben más daño unos y menos otros.
 const ENEMY_VS_CLASS = {     // {índice de década: {senda: mult}}
+  // 1-20 (2026-10-10): valores medidos suavizados a la mitad; con tan pocas salas por nivel la medida es muy ruidosa.
+  0: {pesada:1.34, paladin:0.97, doblefilo:1.04, tirador:1.17, mago:0.98, hechicero:0.95},
+  1: {pesada:0.91, paladin:1.07, doblefilo:1.03, tirador:1.14, mago:1.34, hechicero:1.23},
   2: {pesada:1.29, paladin:1.51, doblefilo:0.67, tirador:1.29, mago:1.14, hechicero:0.64},
   3: {pesada:1.63, paladin:1.42, doblefilo:0.72, tirador:0.92, mago:0.71, hechicero:0.87},
   4: {pesada:1.80, paladin:1.80, doblefilo:0.89, tirador:1.15, mago:0.63, hechicero:0.67},
@@ -4857,8 +4862,8 @@ const ENEMY_VS_CLASS = {     // {índice de década: {senda: mult}}
   7: {pesada:1.26, paladin:1.15, doblefilo:1.01, tirador:1.20, mago:0.73, hechicero:0.57},
 };
 const GUARDIAN_VS_CLASS = {  // {índice de década: {senda: mult}}, se multiplica al anterior en la sala del guardián
-  0: {pesada:1.09, paladin:1.30, doblefilo:0.88, tirador:0.57, mago:1.04, hechicero:1.04},
-  1: {pesada:0.83, paladin:1.26, doblefilo:0.85, tirador:0.80, mago:1.34, hechicero:1.55},
+  0: {pesada:0.91, paladin:1.22, doblefilo:0.88, tirador:0.81, mago:1.09, hechicero:1.09},
+  1: {pesada:0.91, paladin:1.12, doblefilo:0.92, tirador:0.89, mago:1.16, hechicero:1.24},
   2: {pesada:1.45, paladin:1.23, doblefilo:1.03, tirador:0.79, mago:0.72, hechicero:1.34},
   3: {pesada:1.28, paladin:1.31, doblefilo:1.10, tirador:0.81, mago:0.92, hechicero:1.17},
   4: {pesada:1.10, paladin:1.25, doblefilo:0.69, tirador:0.94, mago:0.81, hechicero:0.95},
@@ -4867,8 +4872,8 @@ const GUARDIAN_VS_CLASS = {  // {índice de década: {senda: mult}}, se multipli
   7: {pesada:0.67, paladin:0.75, doblefilo:1.10, tirador:0.88, mago:1.00, hechicero:1.80},
 };
 const BOSS_VS_CLASS = {      // {piso del jefe: {senda: mult}}
-  10: {pesada:1.10, paladin:0.95, doblefilo:0.82, tirador:0.77, mago:0.80, hechicero:0.82},
-  20: {pesada:0.78, paladin:0.82, doblefilo:1.80, tirador:0.62, mago:1.80, hechicero:1.80},
+  10: {pesada:1.23, paladin:0.88, doblefilo:0.98, tirador:1.02, mago:0.77, hechicero:0.95},
+  20: {pesada:0.76, paladin:0.70, doblefilo:1.30, tirador:0.70, mago:1.34, hechicero:1.34},
   30: {pesada:1.35, paladin:1.33, doblefilo:0.78, tirador:0.95, mago:1.34, hechicero:1.15},
   40: {pesada:1.02, paladin:0.82, doblefilo:1.16, tirador:0.87, mago:1.17, hechicero:1.80},
   50: {pesada:1.00, paladin:0.90, doblefilo:0.85, tirador:0.95, mago:1.15, hechicero:1.60},
@@ -6308,18 +6313,19 @@ function renderFicha(){
   const tabs = [['ataque','⚔️ Ataque'],['defensa','🛡️ Defensa'],['conjuntos','✨ Conjuntos'],['profesion','🎓 Profesión']];
   // Profesión (nivel 80): dos opciones por senda; la primera elección es gratis, cambiar cuesta oro.
   const profList = PROFESSIONS[state.char.style] || [], profNow = myProfession();
-  const profLine = (p)=> Object.entries(p.skillMult || {}).map(([id, m])=> `${SKILLS[id].name} ${m > 1 ? '+' : ''}${Math.round((m - 1) * 100)}%`).join(' · ');
+  // Se elige UNA vez y no se puede cambiar (decisión de ariochbu, 2026-10-10): por eso cada opción
+  // enseña a la vista qué gana y qué pierde.
+  const profSide = (p, up)=> Object.entries(p.skillMult || {}).filter(([, m])=> up ? m > 1 : m < 1)
+    .map(([id, m])=> `${SKILLS[id].name} ${m > 1 ? '+' : ''}${Math.round((m - 1) * 100)}% de daño`).concat(up && p.extra ? [p.extra] : []).join(' · ');
   const profesion = state.char.level < PROFESSION_LEVEL
-    ? `<p class="inv-empty-msg">Al llegar al nivel ${PROFESSION_LEVEL} podrás elegir una profesión para tu senda: ${profList.map(p=> p.name).join(' o ')}.</p>`
-    : profList.map(p=>{
+    ? `<p class="inv-empty-msg">Al llegar al nivel ${PROFESSION_LEVEL} podrás elegir una profesión para tu senda: ${profList.map(p=> p.name).join(' o ')}. Se elige una sola vez.</p>`
+    : profList.filter(p=> !profNow || profNow.id === p.id).map(p=>{
         const mine = profNow && profNow.id === p.id;
-        const btn = mine ? '<span>Tu profesión</span>'
-          : `<button class="reset-btn" data-prof="${p.id}">${profNow ? `Cambiar (${PROFESSION_CHANGE_COST.toLocaleString('es')} de oro)` : 'Elegir'}</button>`;
-        return `<div class="fc-set"><div class="fc-set-head"><b>${p.icon} ${p.name} · ${p.role === 'grupo' ? 'de grupo' : 'de duelo'}</b>${btn}</div>
-          <div class="fc-set-line ${mine ? 'on' : ''}"><i>★</i><span>${p.text}</span></div>
-          <div class="fc-set-line ${mine ? 'on' : ''}"><i>±</i><span><b>Daño:</b> ${profLine(p)}</span></div>
-          ${p.extra ? `<div class="fc-set-line ${mine ? 'on' : ''}"><i>+</i><span>${p.extra}</span></div>` : ''}</div>`;
-      }).join('') + '<p class="sc-note" style="margin-top:6px;">Una profesión no te hace más fuerte en todo: refuerza una forma de pelear a costa de la otra. La primera elección es gratis.</p>';
+        return `<div class="fc-set"><div class="fc-set-head"><b>${p.icon} ${p.name} · ${p.role === 'grupo' ? 'de grupo' : 'de duelo'}</b>${mine ? '<span>Tu profesión</span>' : `<button class="reset-btn" data-prof="${p.id}">Elegir</button>`}</div>
+          <div class="fc-set-line on"><i>★</i><span>${p.text}</span></div>
+          <div class="fc-set-line on"><i>▲</i><span><b>Puntos fuertes:</b> ${profSide(p, true)}</span></div>
+          <div class="fc-set-line"><i>▼</i><span><b>Puntos débiles:</b> ${profSide(p, false)}</span></div></div>`;
+      }).join('') + (profNow ? '' : '<p class="sc-note" style="margin-top:6px;"><b>La profesión se elige una sola vez y no se puede cambiar.</b> No te hace más fuerte en todo: refuerza una forma de pelear a costa de la otra.</p>');
   (fichaHostEl || document.getElementById('main-panel')).innerHTML = `
     <div class="fc">
       <div class="fc-left">
@@ -6353,12 +6359,10 @@ function renderFicha(){
     </div>`;
   document.querySelectorAll('[data-fc-tab]').forEach(b=>{ b.onclick = ()=>{ fichaTab = b.dataset.fcTab; renderFicha(); }; });
   document.querySelectorAll('[data-prof]').forEach(b=>{ b.onclick = ()=>{
-    const p = (PROFESSIONS[state.char.style] || []).find(x=> x.id === b.dataset.prof), had = !!myProfession();
-    if(!p) return;
-    if(state.dungeon){ showOverlay('Profesión', 'No puedes cambiar de profesión dentro del laberinto.'); return; }
-    if(had && state.char.gold < PROFESSION_CHANGE_COST){ showOverlay('Profesión', `Cambiar de profesión cuesta ${PROFESSION_CHANGE_COST.toLocaleString('es')} de oro y no te alcanza.`); return; }
-    showChoiceOverlay(`${p.icon} ${p.name}`, `${p.text}${had ? ` Cambiar cuesta ${PROFESSION_CHANGE_COST.toLocaleString('es')} de oro.` : ' Podrás cambiarla más adelante pagando oro.'}`, [
-      {label: had ? 'Cambiar de profesión' : 'Elegir esta profesión', primary:true, onClick: ()=>{ if(had) state.char.gold -= PROFESSION_CHANGE_COST; setProfession(p.id); renderAll(); renderFicha(); }},
+    const p = (PROFESSIONS[state.char.style] || []).find(x=> x.id === b.dataset.prof);
+    if(!p || myProfession()) return;
+    showChoiceOverlay(`${p.icon} ${p.name}`, `${p.text}<br><br><b>Esta elección es definitiva: no podrás cambiar de profesión.</b>`, [
+      {label:'Elegir esta profesión', primary:true, onClick: ()=>{ if(!myProfession()){ setProfession(p.id); renderAll(); renderFicha(); } }},
       {label:'Todavía no', onClick: ()=>{}}]);
   }; });
   const fcInv = document.getElementById('fc-inv');
@@ -10719,8 +10723,8 @@ const BETA_DECADE_BOSS_TUNING = {
   // CALIBRACIÓN 3-20 PARA JUGADORES NUEVOS (2026-10-10, pedido de ariochbu: "medianamente duro para un nuevo").
   // Referencia: sin aliados y equipo común (3-5) o poco común (6-10), piedras E y Caídos poco comunes; del 11 al 20,
   // un aliado, equipo raro, piedras F y Caídos raros. Antes: .24/.50 y .80/.80 (con esa referencia el Ogro se ganaba el 22-26%).
-  10: {hp:0.206, atk:0.425},  // Ogro: 96% con 0.196/0.405; subido un 5% sin volver a medir (objetivo 90)
-  20: {hp:0.70, atk:0.70},  // Matriarca: 83% (objetivo 85)
+  10: {hp:0.213, atk:0.439},  // Ogro: 87% con la referencia de la segunda vuelta (ver BETA_ENEMY_SCALE)
+  20: {hp:0.81, atk:0.81},  // Matriarca: 70% con 0.858 y el reparto por senda suavizado (Guerrero 49, Arquero 45); bajada un 6%
   30: {hp:1.82, atk:1.73},  // Riakis: 81% (objetivo nuevo 80; antes 1.96/1.87 para 65%)
   40: {hp:1.58, atk:1.49},  // Usurpador: 75% con el reparto por senda (objetivo nuevo 75). Muy sensible.
 };
@@ -10738,11 +10742,14 @@ const BETA_ENEMY_SCALE = {
   // CALIBRACIÓN 3-20 PARA JUGADORES NUEVOS (2026-10-10, ver la referencia en BETA_DECADE_BOSS_TUNING). Objetivos: llegar al
   // guardián 90%, guardián 95% (3-9) y 90% (11-19). Medido: 3-9 llega 84-94, guardián 90-97; 11-19 llega 90-96, guardián 86-99.
   // Los pisos 1-2 no cambian (BETA_ENEMY_SCALE_TUTORIAL). Antes: década 0 solo guardián .60/.70; década 1 todo 1.08/1.16.
-  0: {regular:{hp:1.67, atk:1.67}, elite:{hp:1.67, atk:1.67}, guardian:{hp:0.51, atk:0.59}},
+  // 2026-10-10 (segunda vuelta): la primera década ganó habilidades y el Hechicero perdió la curación del Drenaje antes del
+  // nivel 30; ariochbu llegó al piso 16 con una cuenta nueva sin aliados, así que la referencia sube un escalón: poco común
+  // (3-5), raro (6-14) y rango B (15-20). Medido: 3-9 llega 89, guardián 96; 11-19 llega 93, guardián 90.
+  0: {regular:{hp:1.85, atk:1.85}, elite:{hp:1.85, atk:1.85}, guardian:{hp:0.51, atk:0.59}},
   // REDISEÑO DE CLASES (2026-10-08). Objetivos de ariochbu (niveles completados,
   // medidos SIN Ley del Caos ni Corrupción): 1-20 90% (no se tocan), 21-40 80%,
   // 41-60 70%, 61-80 60%. Medido: 21-29 → 81%, 31-39 → 85%.
-  1: {regular:{hp:2.40, atk:2.58}, elite:{hp:2.40, atk:2.58}, guardian:{hp:0.64, atk:0.68}},
+  1: {regular:{hp:2.40, atk:2.58}, elite:{hp:2.40, atk:2.58}, guardian:{hp:0.80, atk:0.85}},
   // RECALIBRACIÓN 2026-10-09 (objetivos nuevos de ariochbu, ver tools/calib_1_80.js): llegar al guardián 85%,
   // guardián 85% (21-29) y 80% (31-39). Antes: 1.73 todo; 2.79/3.22 y guardián 2.57/2.89.
   2: {regular:{hp:2.58, atk:2.58}, elite:{hp:2.58, atk:2.58}, guardian:{hp:1.57, atk:1.57}},   // medido: llega 82, guardián 89, niveles 73
@@ -12566,8 +12573,8 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
     turnEffects.push(target.tpl
       ? {targetKind:'enemy', key: combat.enemies.indexOf(target), amount:dmg, kind:'dmg'}
       : {targetKind:'ally', key: target.id, amount:dmg, kind:'dmg'});
-    if(skill.selfHealPctOfDmg){
-      let healPct = skillId==='golpe_consagrado' ? skillBonus('golpe_consagrado','healPct', skill.selfHealPctOfDmg) : skill.selfHealPctOfDmg;
+    if(skill.selfHealPctOfDmg && !(skillId==='drenaje_de_esencia' && skillBonus('drenaje_de_esencia','healPct',0) <= 0)){
+      let healPct = skillId==='golpe_consagrado' ? skillBonus('golpe_consagrado','healPct', skill.selfHealPctOfDmg) : skillId==='drenaje_de_esencia' ? skillBonus('drenaje_de_esencia','healPct',0) : skill.selfHealPctOfDmg;
       // Sello de la Sentencia épico+: Golpe Consagrado cura más contra un
       // enemigo debilitado (puntos porcentuales sumados al % base).
       if(skillId==='golpe_consagrado' && targetWasWeakened){
