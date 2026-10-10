@@ -236,6 +236,9 @@ LAMINA_NUEVA_POR_NOMBRE = {
     'capataz de ogro': 'capataz_ogro', 'ogro': 'ogro',
 }
 NUEVA_MIRA_IZQUIERDA = set()
+# Láminas que mezclan sentidos: {tira: {fila: [columnas]}} con los cuadros que miran al revés que el resto.
+# Goblin saqueador (visto en combate por ariochbu, 2026-10-10): el reposo y parte del ataque miran a la izquierda.
+CUADROS_AL_REVES = {'enemigo_goblin_saqueador': {0: [0, 1, 2, 3], 1: [0, 1, 5]}}
 
 
 def new_sheet_id(path):
@@ -613,7 +616,7 @@ def find_frames_grid(alpha, nrows=4, ncols=6):
     return [[bx[:4] for bx in line if bx[4] >= 0.25 * ref_area] for line in rows]
 
 
-def build_strip(im, alpha, rows, flip=False, walk=False):
+def build_strip(im, alpha, rows, flip=False, walk=False, odd=None):
     rgba = np.dstack([np.asarray(im.convert('RGB')), (alpha * 255).astype(np.uint8)])
     src = Image.fromarray(rgba, 'RGBA')
     idle_h = np.median([y1 - y0 for (_x0, y0, _x1, y1) in rows[0]])
@@ -622,9 +625,9 @@ def build_strip(im, alpha, rows, flip=False, walk=False):
     frames = []
     for r, boxes in enumerate(rows):
         line = []
-        for box in boxes:
+        for c, box in enumerate(boxes):
             crop = src.crop(box)
-            if flip:
+            if flip != (c in (odd or {}).get(r, ())):
                 crop = crop.transpose(Image.FLIP_LEFT_RIGHT)
             small = crop.resize((max(1, round(crop.width * k)), max(1, round(crop.height * k))), Image.BOX)
             small.putalpha(small.getchannel('A').point(lambda v: 255 if v >= 140 else 0))
@@ -783,7 +786,7 @@ def process(job):
     if kind == 'enemigo2' and name not in REJILLA_FIJA:
         rows = split_merged_attack(alpha, rows)
     flip = name[8:] in NUEVA_MIRA_IZQUIERDA if kind == 'enemigo2' else name in MIRA_IZQUIERDA
-    sheet, meta = build_strip(im, alpha, rows, flip, walk)
+    sheet, meta = build_strip(im, alpha, rows, flip, walk, CUADROS_AL_REVES.get(name) if kind == 'enemigo2' else None)
     return 'tira', name, f, sheet, meta
 
 
