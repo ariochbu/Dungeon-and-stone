@@ -4780,6 +4780,8 @@ const ENEMY_VS_CLASS = {     // {índice de década: {senda: mult}}
   7: {pesada:1.26, paladin:1.15, doblefilo:1.01, tirador:1.20, mago:0.73, hechicero:0.57},
 };
 const GUARDIAN_VS_CLASS = {  // {índice de década: {senda: mult}}, se multiplica al anterior en la sala del guardián
+  0: {pesada:1.09, paladin:1.30, doblefilo:0.88, tirador:0.57, mago:1.04, hechicero:1.04},
+  1: {pesada:0.83, paladin:1.26, doblefilo:0.85, tirador:0.80, mago:1.34, hechicero:1.55},
   2: {pesada:1.45, paladin:1.23, doblefilo:1.03, tirador:0.79, mago:0.72, hechicero:1.34},
   3: {pesada:1.28, paladin:1.31, doblefilo:1.10, tirador:0.81, mago:0.92, hechicero:1.17},
   4: {pesada:1.10, paladin:1.25, doblefilo:0.69, tirador:0.94, mago:0.81, hechicero:0.95},
@@ -4788,6 +4790,8 @@ const GUARDIAN_VS_CLASS = {  // {índice de década: {senda: mult}}, se multipli
   7: {pesada:0.67, paladin:0.75, doblefilo:1.10, tirador:0.88, mago:1.00, hechicero:1.80},
 };
 const BOSS_VS_CLASS = {      // {piso del jefe: {senda: mult}}
+  10: {pesada:1.10, paladin:0.95, doblefilo:0.82, tirador:0.77, mago:0.80, hechicero:0.82},
+  20: {pesada:0.78, paladin:0.82, doblefilo:1.80, tirador:0.62, mago:1.80, hechicero:1.80},
   30: {pesada:1.35, paladin:1.33, doblefilo:0.78, tirador:0.95, mago:1.34, hechicero:1.15},
   40: {pesada:1.02, paladin:0.82, doblefilo:1.16, tirador:0.87, mago:1.17, hechicero:1.80},
   50: {pesada:1.00, paladin:0.90, doblefilo:0.85, tirador:0.95, mago:1.15, hechicero:1.60},
@@ -4800,6 +4804,7 @@ function enemyVsClassMult(){
   if(lvl === 90) return ENEMY_VS_CLASS_81.boss90[st] || 1;
   if(lvl >= ENEMY_VS_CLASS_81.from && lvl <= ENEMY_VS_CLASS_81.to) return ENEMY_VS_CLASS_81.mult[st] || 1;
   if(lvl < 1 || lvl > 80 || (lvl <= 40 && !BETA_BALANCE)) return 1;
+  if(lvl <= 2) return 1;
   if(lvl % 10 === 0) return (BOSS_VS_CLASS[lvl] && BOSS_VS_CLASS[lvl][st]) || 1;
   const d = decadeIndexForLevel(lvl), t = ENEMY_VS_CLASS[d], g = combat && combat.node && combat.node.type === 'jefe' && GUARDIAN_VS_CLASS[d];
   return ((t && t[st]) || 1) * ((g && g[st]) || 1);
@@ -10608,8 +10613,11 @@ const BETA_DECADE_BOSS_TUNING = {
   // sin aliados y rango B; 20 con 1 aliado y rango B; 30 con 2 y rango A; 40
   // con 3 y rango A. Meta ~65%. (Antes: .24/.50, .80/.80, 1.05/1.00, .87/.82.)
   // Pisos 1-20 se dejan como están en producción (decisión de ariochbu, 2026-10-08).
-  10: {hp:0.24, atk:0.50},  // Ogro
-  20: {hp:0.80, atk:0.80},  // Matriarca
+  // CALIBRACIÓN 3-20 PARA JUGADORES NUEVOS (2026-10-10, pedido de ariochbu: "medianamente duro para un nuevo").
+  // Referencia: sin aliados y equipo común (3-5) o poco común (6-10), piedras E y Caídos poco comunes; del 11 al 20,
+  // un aliado, equipo raro, piedras F y Caídos raros. Antes: .24/.50 y .80/.80 (con esa referencia el Ogro se ganaba el 22-26%).
+  10: {hp:0.206, atk:0.425},  // Ogro: 96% con 0.196/0.405; subido un 5% sin volver a medir (objetivo 90)
+  20: {hp:0.70, atk:0.70},  // Matriarca: 83% (objetivo 85)
   30: {hp:1.82, atk:1.73},  // Riakis: 81% (objetivo nuevo 80; antes 1.96/1.87 para 65%)
   40: {hp:1.58, atk:1.49},  // Usurpador: 75% con el reparto por senda (objetivo nuevo 75). Muy sensible.
 };
@@ -10618,15 +10626,20 @@ const BETA_DECADE_BOSS_TUNING = {
 // que con 4; solo los guardianes de la década 1 (1 aliado) necesitaban ajuste.
 // 2026-10-04: por tipo. Pisos despejados enteros con la referencia del tramo:
 // 5-9 ≈ 85-99%, 15-19 ≈ 97-100%, 25-29 ≈ 86%, 35-39 ≈ 86-89%.
+const BETA_LEVEL_TAPER = {7:{room:0.95}, 8:{room:0.87}, 9:{room:0.79}, 15:{guardian:0.96}, 17:{room:0.97, guardian:0.92}, 18:{room:0.95, guardian:0.89}, 19:{room:0.92, guardian:0.86}};
+const BETA_ENEMY_SCALE_TUTORIAL = {guardian:{hp:0.60, atk:0.70}};
 const BETA_ENEMY_SCALE = {
   // Década 0 SIN recalibrar a propósito: con la referencia de rango B salía
   // x2.28 y un personaje nuevo con equipo común no pasaba del nivel 1 (20% /
   // 0% / 0% de niveles 1, 3 y 6 completados). Pendiente de decisión de ariochbu.
-  0: {guardian:{hp:0.60, atk:0.70}},
+  // CALIBRACIÓN 3-20 PARA JUGADORES NUEVOS (2026-10-10, ver la referencia en BETA_DECADE_BOSS_TUNING). Objetivos: llegar al
+  // guardián 90%, guardián 95% (3-9) y 90% (11-19). Medido: 3-9 llega 84-94, guardián 90-97; 11-19 llega 90-96, guardián 86-99.
+  // Los pisos 1-2 no cambian (BETA_ENEMY_SCALE_TUTORIAL). Antes: década 0 solo guardián .60/.70; década 1 todo 1.08/1.16.
+  0: {regular:{hp:1.67, atk:1.67}, elite:{hp:1.67, atk:1.67}, guardian:{hp:0.51, atk:0.59}},
   // REDISEÑO DE CLASES (2026-10-08). Objetivos de ariochbu (niveles completados,
   // medidos SIN Ley del Caos ni Corrupción): 1-20 90% (no se tocan), 21-40 80%,
   // 41-60 70%, 61-80 60%. Medido: 21-29 → 81%, 31-39 → 85%.
-  1: {regular:{hp:1.08, atk:1.16}, elite:{hp:1.08, atk:1.16}, guardian:{hp:1.08, atk:1.16}},   // sin cambios (pisos 1-20 como en producción)
+  1: {regular:{hp:2.40, atk:2.58}, elite:{hp:2.40, atk:2.58}, guardian:{hp:0.64, atk:0.68}},
   // RECALIBRACIÓN 2026-10-09 (objetivos nuevos de ariochbu, ver tools/calib_1_80.js): llegar al guardián 85%,
   // guardián 85% (21-29) y 80% (31-39). Antes: 1.73 todo; 2.79/3.22 y guardián 2.57/2.89.
   2: {regular:{hp:2.58, atk:2.58}, elite:{hp:2.58, atk:2.58}, guardian:{hp:1.57, atk:1.57}},   // medido: llega 82, guardián 89, niveles 73
@@ -10703,10 +10716,14 @@ function makeEnemy(tpl, floorIdx, level){
   if(BETA_BALANCE){
     const dIdx = decadeIndexForLevel(level||1);
     const isDecadeBoss = (level||1) % 10 === 0 && DECADE_BESTIARY[dIdx].decadeBoss === tpl;
-    const scAll = !isDecadeBoss && BETA_ENEMY_SCALE[dIdx];
+    // Pisos 1-2: se quedan con la escala de siempre (la recalibración para jugadores nuevos empieza en el 3).
+    const scAll = !isDecadeBoss && ((level||1) <= 2 ? BETA_ENEMY_SCALE_TUTORIAL : BETA_ENEMY_SCALE[dIdx]);
     // por tipo (regular/elite/guardian) o un único {hp, atk} para todos
     const sc = scAll && (scAll[tpl.boss ? 'guardian' : tpl.elite ? 'elite' : 'regular'] || (scAll.hp ? scAll : null));
     if(sc){ hp = Math.max(1, Math.round(hp*sc.hp)); atk = Math.max(1, Math.round(atk*sc.atk)); }
+    // Últimos pisos de 1-20: el enemigo crece piso a piso pero el equipo de un jugador nuevo no; se rebaja el tramo final.
+    const tp = !isDecadeBoss && BETA_LEVEL_TAPER[level||1], k = tp && tp[tpl.boss ? 'guardian' : 'room'];
+    if(k){ hp = Math.max(1, Math.round(hp*k)); atk = Math.max(1, Math.round(atk*k)); }
   }
   // Ajuste por década de los enemigos que NO son jefe de década (ver
   // DECADE_ENEMY_TUNING): normales, élites y guardianes, cada uno por separado.
@@ -14547,7 +14564,7 @@ if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
   window.__combat = ()=> combat; // inspección del combate en curso (simulaciones que no terminan)
   window.__tanque = TANK_TUNE; window.__lvl30 = LEVEL30_SKILL_BONUS; window.__healLock = ENEMY_HEAL_LOCK; window.__gFrente = GUARDIAN_VS_FRONT; window.__cTanque = COMMON_VS_TANK; window.__escolta = GUARDIAN_ESCORT; window.__grupo = buildEncounterGroup; window.__rol = enemyRole; window.__grupoIA = GROUP_AI; window.__elite81 = GUARDIAN_ELITE_81;
   window.__palRes = PALADIN_ESP_RES; window.__savia = SAVIA_PODRIDA;
-  window.__vsClase = {paraiso: PARAISO_GUARDIAN_GROUP, gua: GUARDIAN_VS_CLASS, dec: ENEMY_VS_CLASS, jefe: BOSS_VS_CLASS, tuning: DECADE_ENEMY_TUNING, beta: BETA_ENEMY_SCALE, jefeTuning: DECADE_BOSS_TUNING, jefeBeta: BETA_DECADE_BOSS_TUNING};
+  window.__vsClase = {taper: BETA_LEVEL_TAPER, paraiso: PARAISO_GUARDIAN_GROUP, gua: GUARDIAN_VS_CLASS, dec: ENEMY_VS_CLASS, jefe: BOSS_VS_CLASS, tuning: DECADE_ENEMY_TUNING, beta: BETA_ENEMY_SCALE, jefeTuning: DECADE_BOSS_TUNING, jefeBeta: BETA_DECADE_BOSS_TUNING};
   window.__frente81 = {guardian: GUARDIAN_VS_FRONT_81, comun: COMMON_VS_TANK_81, invocacion: ASCUA_TPL, clase: ENEMY_VS_CLASS_81.mult, clase90: ENEMY_VS_CLASS_81.boss90};
   // Defensa de una senda con el equipo de referencia puesto: __defensa('paladin', 79)
   window.__defensa = (styleId, level, gear)=>{
