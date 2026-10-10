@@ -2184,3 +2184,25 @@ button.cron-card:hover{ transform:translateY(-2px); border-color:var(--bronze); 
 .fu-mini.ok{ border-color:var(--rc); opacity:1; box-shadow:0 0 16px color-mix(in srgb, var(--rc) 75%, transparent); }
 .fu-mini img{ width:100%; aspect-ratio:1; object-fit:cover; display:block; }
 .fu-mini span{ display:block; font-size:0.62em; line-height:1.15; padding:3px 2px; color:#e9dfc6; min-height:2.5em; }
+
+/* Escena del Corazón Marchito y elección de profesión */
+.hc-cine{ position:fixed; inset:0; z-index:9000; background:radial-gradient(circle at 50% 40%, #3a0d10, #070304 70%); overflow:hidden; cursor:pointer; display:flex; align-items:flex-end; justify-content:center; animation:fu-in 0.5s ease; }
+.hc-cine.out{ opacity:0; transition:opacity 0.4s; }
+.hc-art{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:50% 35%; animation:hc-zoom 14s ease-out forwards; }
+@keyframes hc-zoom{ from{ transform:scale(1.02); } to{ transform:scale(1.14); } }
+.hc-pulse{ position:absolute; left:50%; top:38%; width:46vmin; height:46vmin; margin:-23vmin; border-radius:50%; background:radial-gradient(circle, rgba(255,90,90,0.55), rgba(255,60,60,0) 65%); animation:hc-beat 1.25s ease-in-out infinite; pointer-events:none; mix-blend-mode:screen; }
+@keyframes hc-beat{ 0%,100%{ transform:scale(0.85); opacity:0.45; } 18%{ transform:scale(1.12); opacity:0.95; } 36%{ transform:scale(0.95); opacity:0.6; } 52%{ transform:scale(1.06); opacity:0.85; } }
+.hc-veil{ position:absolute; inset:0; background:linear-gradient(180deg, rgba(5,3,3,0) 45%, rgba(5,3,3,0.9)); pointer-events:none; }
+.hc-box{ position:relative; width:min(92vw, 640px); margin:0 0 6vh; padding:14px 16px; border-radius:8px; border:1px solid #b8934a; background:linear-gradient(180deg,#f4e8cc,#dccba0); color:#2a1d10; box-shadow:0 8px 26px rgba(0,0,0,0.7); }
+.hc-hint{ margin-top:8px; font-size:0.78em; color:#7a5a30; text-align:right; }
+.pf-card{ max-width:780px !important; width:94vw; }
+.pf-grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:12px; margin:12px 0; text-align:left; }
+.pf-opt{ border:1px solid var(--bronze); border-radius:8px; padding:12px; background:radial-gradient(ellipse at 50% 0%, #33240f, #15110c 75%); display:flex; flex-direction:column; gap:6px; }
+.pf-opt h3{ margin:0; font-family:'Cinzel'; color:#ffe9a8; }
+.pf-opt small{ color:var(--bronze-light); }
+.pf-opt p{ margin:0; font-size:0.9em; }
+.pf-up, .pf-down{ font-size:0.84em; padding:6px 8px; border-left:3px solid #7fbf4a; background:rgba(127,191,74,0.08); }
+.pf-down{ border-left-color:#c8553f; background:rgba(200,85,63,0.08); }
+.pf-up b, .pf-down b{ display:block; font-family:'Cinzel'; font-size:0.9em; color:#cfe8b4; }
+.pf-down b{ color:#f0b7a8; }
+.pf-opt .btn-main{ margin-top:auto; }

@@ -588,6 +588,77 @@ const LEVEL30_SKILL_BONUS = {
 // otro. Se hace con dos piezas: skillMult (daño de cada habilidad) y bonus (los mismos campos que
 // LEVEL30_SKILL_BONUS, que ya leen tanto el texto como la resolución del combate).
 const PROFESSION_LEVEL = 80;
+// Además del nivel hay que haber derrotado al jefe del piso 80 (decisión de ariochbu, 2026-10-10): su
+// corazón se funde con el jugador y, al volver a la ciudad, una escena muestra ese poder y deja elegir.
+const PROFESSION_BOSS_LEVEL = 80;
+function professionUnlocked(){
+  const c = state && state.char;
+  return !!c && c.level >= PROFESSION_LEVEL && (c.maxLevelUnlocked || 1) > PROFESSION_BOSS_LEVEL;
+}
+// Lo que una profesión refuerza (up) o debilita, en texto.
+function profSideText(p, up){
+  return Object.entries(p.skillMult || {}).filter(([, m])=> up ? m > 1 : m < 1)
+    .map(([id, m])=> `${SKILLS[id].name} ${m > 1 ? '+' : ''}${Math.round((m - 1) * 100)}% de daño`).concat(up && p.extra ? [p.extra] : []).join(' · ');
+}
+let professionSceneOpen = false;
+function maybeOfferProfession(){
+  if(simMode || professionSceneOpen || !state || !state.char || state.dungeon || combat || myProfession() || !professionUnlocked()) return;
+  if(lsGet(charKey('prof-cine'))) return;      // la escena solo sale una vez; después se elige desde la Ficha
+  lsSet(charKey('prof-cine'), '1');
+  professionSceneOpen = true;
+  showHeartCinematic().then(()=> showProfessionChoice()).then(()=>{ professionSceneOpen = false; });
+}
+// Escena del corazón: tres frases del Cronista sobre la ilustración, con el corazón latiendo.
+function showHeartCinematic(){
+  return new Promise(resolve=>{
+    const lines = ['El Corazón Marchito no dejó de latir cuando cayó su dueño. Lo traes contigo, tibio todavía.',
+      'Al cruzar la puerta de la ciudad, sus raíces se abren y la magia que guardaba se vierte en ti.',
+      'Algo cambia para siempre. Tu senda se divide en dos… y solo podrás andar una.'];
+    let i = 0;
+    const div = document.createElement('div');
+    div.className = 'hc-cine';
+    const draw = ()=>{
+      div.innerHTML = `<img class="hc-art" src="src/assets/escenas/corazon.jpg?v=1" alt="" onerror="this.remove()">
+        <div class="hc-pulse"></div><div class="hc-veil"></div>
+        <div class="hc-box"><div class="ws-narrator"><div class="ws-portrait"><img src="src/assets/bienvenida/cronista.jpg?v=1" alt="" onerror="this.remove()"></div><b>El Cronista</b></div>
+          <p class="ws-text">${lines[i]}</p><div class="hc-hint">${i < lines.length-1 ? 'Toca para continuar' : 'Toca para elegir tu profesión'}</div></div>`;
+    };
+    draw();
+    document.body.appendChild(div);
+    div.onclick = ()=>{
+      if(i < lines.length-1){ i++; draw(); return; }
+      div.classList.add('out'); setTimeout(()=> div.remove(), 400); resolve();
+    };
+  });
+}
+// Elección de profesión (definitiva). Se puede dejar para más tarde: queda en la pestaña de la Ficha.
+function showProfessionChoice(){
+  return new Promise(resolve=>{
+    const list = PROFESSIONS[state.char.style] || [];
+    if(!list.length || myProfession()) return resolve();
+    const div = document.createElement('div');
+    div.className = 'overlay-msg';
+    div.innerHTML = `<div class="overlay-card pf-card">
+      <h2>Elige tu profesión</h2>
+      <p>El corazón te ofrece dos caminos. <b>La elección es definitiva.</b></p>
+      <div class="pf-grid">${list.map(p=> `<div class="pf-opt">
+        <h3>${p.name}</h3><small>${p.role === 'grupo' ? 'Profesión de grupo' : 'Profesión de duelo'}</small>
+        <p>${p.text}</p>
+        <div class="pf-up"><b>Puntos fuertes</b>${profSideText(p, true)}</div>
+        <div class="pf-down"><b>Puntos débiles</b>${profSideText(p, false)}</div>
+        <button class="btn-main" data-pf="${p.id}">Elegir ${p.name}</button></div>`).join('')}</div>
+      <button class="reset-btn" data-pf-later>Decidir más tarde (desde tu Ficha)</button>
+    </div>`;
+    document.body.appendChild(div);
+    const close = ()=>{ div.remove(); resolve(); };
+    div.querySelector('[data-pf-later]').onclick = close;
+    div.querySelectorAll('[data-pf]').forEach(b=>{ b.onclick = ()=>{
+      const p = list.find(x=> x.id === b.dataset.pf);
+      if(b.dataset.sure !== '1'){ div.querySelectorAll('[data-pf]').forEach(x=>{ x.dataset.sure = ''; x.textContent = 'Elegir ' + list.find(y=> y.id === x.dataset.pf).name; }); b.dataset.sure = '1'; b.textContent = '¿Seguro? Es para siempre'; return; }
+      setProfession(p.id); log(`El Corazón Marchito se funde contigo: ahora eres <b>${p.name}</b>.`); close(); renderAll();
+    }; });
+  });
+}
 const PROFESSIONS = {
   tirador: [
     {id:'ballestero', name:'Ballestero', role:'grupo', icon:'🎯', text:'Virotes en abanico: barre líneas enteras, pero cada disparo suelto pega menos.',
@@ -6490,10 +6561,9 @@ function renderFicha(){
   const profList = PROFESSIONS[state.char.style] || [], profNow = myProfession();
   // Se elige UNA vez y no se puede cambiar (decisión de ariochbu, 2026-10-10): por eso cada opción
   // enseña a la vista qué gana y qué pierde.
-  const profSide = (p, up)=> Object.entries(p.skillMult || {}).filter(([, m])=> up ? m > 1 : m < 1)
-    .map(([id, m])=> `${SKILLS[id].name} ${m > 1 ? '+' : ''}${Math.round((m - 1) * 100)}% de daño`).concat(up && p.extra ? [p.extra] : []).join(' · ');
-  const profesion = state.char.level < PROFESSION_LEVEL
-    ? `<p class="inv-empty-msg">Al llegar al nivel ${PROFESSION_LEVEL} podrás elegir una profesión para tu senda: ${profList.map(p=> p.name).join(' o ')}. Se elige una sola vez.</p>`
+  const profSide = profSideText;
+  const profesion = !professionUnlocked() && !profNow
+    ? `<p class="inv-empty-msg">Para elegir profesión necesitas el nivel ${PROFESSION_LEVEL} y el corazón del jefe del piso ${PROFESSION_BOSS_LEVEL}. Tu senda podrá ser ${profList.map(p=> p.name).join(' o ')}; se elige una sola vez.</p>`
     : profList.filter(p=> !profNow || profNow.id === p.id).map(p=>{
         const mine = profNow && profNow.id === p.id;
         return `<div class="fc-set"><div class="fc-set-head"><b>${p.icon} ${p.name} · ${p.role === 'grupo' ? 'de grupo' : 'de duelo'}</b>${mine ? '<span>Tu profesión</span>' : `<button class="reset-btn" data-prof="${p.id}">Elegir</button>`}</div>
@@ -6535,7 +6605,7 @@ function renderFicha(){
   document.querySelectorAll('[data-fc-tab]').forEach(b=>{ b.onclick = ()=>{ fichaTab = b.dataset.fcTab; renderFicha(); }; });
   document.querySelectorAll('[data-prof]').forEach(b=>{ b.onclick = ()=>{
     const p = (PROFESSIONS[state.char.style] || []).find(x=> x.id === b.dataset.prof);
-    if(!p || myProfession()) return;
+    if(!p || myProfession() || !professionUnlocked()) return;
     showChoiceOverlay(`${p.icon} ${p.name}`, `${p.text}<br><br><b>Esta elección es definitiva: no podrás cambiar de profesión.</b>`, [
       {label:'Elegir esta profesión', primary:true, onClick: ()=>{ if(!myProfession()){ setProfession(p.id); renderAll(); renderFicha(); } }},
       {label:'Todavía no', onClick: ()=>{}}]);
@@ -7836,6 +7906,7 @@ function maybeShowPlaceIntro(key){
 }
 function renderCity(){
   ensureCityView();
+  maybeOfferProfession();
   if(cityView==='welcome') return renderCityWelcome();
   if(cityView==='laberinto') return renderCityDungeonEntry();
   if(cityView==='ficha') return renderFicha();
@@ -14819,6 +14890,8 @@ async function simRun(cfg){
 if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
   window.__sim = simRun; window.__simLevel = simLevels;
   // Dibuja la ficha de un personaje de prueba (para revisar la pestaña de profesión sin iniciar sesión).
+  window.__tutorial = ()=>{ showTutorial(); };
+  window.__corazon = (cfg)=>{ window.__ficha(Object.assign({level:82}, cfg || {})); state.char.maxLevelUnlocked = 81; lsGet = ()=> null; lsSet = ()=>{}; professionSceneOpen = false; maybeOfferProfession(); };
   window.__intro = (key)=>{ window.__ficha({}); lsGet = ()=> null; lsSet = ()=>{}; maybeShowPlaceIntro(key); };
   window.__crisol = (cfg, owned)=>{ window.__ficha(cfg || {}); ensurePets(); Object.assign(state.char.pets.owned, owned || {1:5, 2:3, 3:2}); checkSessionStillActive = async ()=> true; flushSave = async ()=>{}; renderSheet = ()=>{}; fusionOpen = true; renderFusion(); };
   window.__gremio = (cfg)=>{ window.__ficha(cfg || {}); state.char.missionCurrency = 240; state.missions = [['A','rest',3,2,'active'],['S','chests',5,2,'active'],['A','floors',5,5,'completed'],['S','floors',6,6,'claimed'],['B','combats',8,6,'active'],['A','gear',5,3,'active']].map((m, i)=> ({id:'m'+i, rank:m[0], objective_type: MISSION_OBJECTIVE_TYPES[i % MISSION_OBJECTIVE_TYPES.length], objective_target:m[2], progress:m[3], status:m[4], reward_gold:200, reward_xp:150, reward_currency:12, reward_item:null})); missionsOpen = true; renderMissions(); };
@@ -15119,6 +15192,7 @@ function handleVictory(){
   if(isBoss){
     const clearedLevel = level;
     const wasFrontier = clearedLevel === maxLevelUnlocked();
+    if(isDecadeFinal && clearedLevel === PROFESSION_BOSS_LEVEL && !state.char.profession) log('Entre las raíces rotas queda su <b>Corazón Marchito</b>, latiendo todavía. Lo llevas contigo: algo en él quiere volver a la ciudad.');
     if(wasFrontier) state.char.maxLevelUnlocked = Math.max(state.char.maxLevelUnlocked||1, Math.min(OPEN_LEVEL_CAP, clearedLevel+1));
     // Checkpoints: solo los jefes de década (piso 10, 20, 30...) habilitan un
     // punto de entrada nuevo, en el piso siguiente (11, 21, 31...). Si mueres
@@ -15286,23 +15360,24 @@ function showChoiceOverlay(title, text, buttons){
 /* ============================================================
    TUTORIAL — omitible, se puede volver a abrir desde "¿Cómo jugar?"
    ============================================================ */
+// Tutorial (reescrito el 2026-10-10 a pedido de ariochbu): lo cuenta el Cronista, sin lo que ya no existe
+// (el botón Descansar, el tope de 60 pisos) y con lo nuevo (salas del laberinto, Crisol, profesiones,
+// check-in, Crónicas). `art` es la escena que acompaña a la página, si la hay.
 const TUTORIAL_SLIDES = [
-  {title:'Bienvenido a Dungeon & Stone', body:'Un tutorial rápido de las pantallas y mecánicas principales. Puedes saltarlo cuando quieras, y volver a verlo después desde el botón "¿Cómo jugar?" en la ciudad.'},
-  {title:'La ciudad', body:'Tu base entre expediciones. Desde aquí descansas, entras al laberinto, y accedes al Hogar, la Tienda, el Ranking, el Gremio y la Taberna.'},
-  {title:'Descansar', body:'Restaura toda tu vida, MP y espíritu antes de partir. Gratis y sin límite de usos en la ciudad.'},
-  {title:'Entrar al laberinto', body:'Avanzas piso a piso por sendas: solo puedes moverte a la senda igual o adyacente a la tuya, nunca saltar de un extremo al otro. Cada piso tiene combates, cofres, descansos y de vez en cuando un élite.'},
-  {title:'El Hogar', body:'Guarda equipo, pociones y oro. Nada de lo que dejes aquí se pierde si mueres en el laberinto — solo se pierde lo que llevas encima.'},
-  {title:'El Gremio', body:'Un tablón de 10 misiones que se refresca cada 12 horas. Complétalas para ganar oro, experiencia y Sellos del Laberinto, canjeables por equipo Único y Épico. Si una misión no te gusta, puedes refrescarla hasta 3 veces por tablón.'},
-  {title:'La Taberna', body:'Desde nivel 10, recluta aliados — guerrero, arquero, asesino, mago o sacerdote — pagando oro. Pelean junto a ti de forma automática: el que tiene rol de tanque ocupa el Frente y absorbe los golpes por ti. Los sacerdotes solo existen como aliados, nunca como senda de combate propia: cuidan a quien pelea, no bajan a pelear ellos mismos.'},
-  {title:'Mantener a tus aliados', body:'Cada aliado te cobra un salario cada vez que sales del laberinto. Pagarlo sube un poco su satisfacción; no poder pagarlo la baja bastante, cada vez más si se repite. Si su satisfacción cae demasiado, deserta y lo pierdes para siempre — no vuelve a estar disponible, ni siquiera despidiéndolo tú antes.'},
-  {title:'Otorgar ofrenda', body:'El Yggdrasil de la ciudad entrega Caídos del Laberinto a cambio de oro, Sellos o una recarga. Cada uno se equipa en un espacio pasivo y aporta su propio don mientras lo lleves — no combaten por su cuenta ni ocupan un puesto de Frente o Retaguardia.'},
-  {title:'Ranking', body:'Tu récord personal (el piso más profundo que has alcanzado) y el top 10 de todos los jugadores.'},
-  {title:'Combate por turnos', body:'Cada turno eliges una habilidad o acción. Frente y Retaguardia son tus dos posiciones: la mayoría de golpes físicos fuertes exigen estar en el Frente; la Retaguardia favorece las habilidades a distancia.'},
-  {title:'MP y Espíritu', body:'El MP (lo alimenta Habilidad) paga casi todas las habilidades de ataque: Guerrero, Asesino, Arquero, Mago y Hechicero. El Espíritu (lo alimenta Espíritu) paga las del Paladín y las de utilidad como Grito de guerra o Marca del cazador. Reposicionarte cambia entre Frente y Retaguardia, y ocupa tu turno.'},
-  {title:'Frente y Retaguardia, con aliados', body:'Cuando tengas un aliado tanque en el Frente, los enemigos no podrán llegar hasta tu Retaguardia sin pasar por él primero — igual que tú no puedes golpear al enemigo de atrás sin resolver primero al de adelante. Posicionarte bien pesará tanto como golpear fuerte.'},
-  {title:'Defenderse', body:'Te da al menos 50% de probabilidad de esquivar el próximo golpe, y si aun así te alcanzan, el daño se reduce a la mitad. Es una opción real cuando la pelea se pone difícil, no solo un último recurso.'},
-  {title:'Kit de habilidades', body:'Al nivel 30, las 3 habilidades de tu senda se vuelven más fuertes. Al nivel 60 desbloqueas una 4ta habilidad, tu ultimate — mucho más poderosa, pero limitada a 3 usos por cada entrada al laberinto y con 5 turnos de enfriamiento tras usarla.'},
-  {title:'Buena suerte, viajero', body:'Eso es todo. El laberinto tiene 60 pisos conocidos, y cada década esconde algo distinto. A partir de aquí, el resto lo descubres jugando.'}
+  {title:'Bienvenido, viajero', art:'src/assets/bienvenida/escena_1.jpg', body:'Soy el Cronista. Llevo la cuenta de todos los que bajan al laberinto… y de los pocos que vuelven. Te cuento lo esencial; puedes saltarlo y volver a oírme cuando quieras desde «¿Cómo jugar?».'},
+  {title:'La Última Ciudad', art:'src/assets/ciudad/mapa.jpg', body:'Esta ciudad es tu refugio entre una bajada y otra. Toca un edificio del mapa, o usa el menú, para ir a cada lugar. Cada vez que entras al laberinto, tú y tus aliados salís con la vida y el MP completos.'},
+  {title:'El laberinto', body:'Cada nivel es un mapa de salas. Toca una sala iluminada para avanzar: hay combates, élites, cofres y hogueras donde descansar, y al final te espera un guardián. Cada diez niveles, un jefe de década; vencerlo abre un punto de entrada nuevo.'},
+  {title:'Si caes', art:'src/assets/escenas/hogar.jpg', body:'Quien muere abajo pierde lo que llevaba encima. Lo que guardes en tu Hogar —equipo, pociones y oro— está a salvo pase lo que pase. Guarda antes de arriesgar.'},
+  {title:'El combate', body:'Se pelea por turnos. Hay dos posiciones: el Frente recibe los golpes y permite los ataques cuerpo a cuerpo; la Retaguardia favorece los ataques a distancia. Los enemigos también se reparten así: primero hay que abrirse paso por su frente.'},
+  {title:'MP, Espíritu y defensa', body:'El MP paga casi todas las habilidades de ataque; el Espíritu, las del Paladín y las de apoyo. Si la cosa se tuerce, Defenderse te da media oportunidad de esquivar y reduce a la mitad el golpe que entre.'},
+  {title:'Tu senda crece contigo', body:'Al nivel 30 tus tres habilidades se vuelven más fuertes. Al 60 despiertas tu definitiva: muy poderosa, con tres usos por bajada. Y quien derrota al guardián del nivel 80 absorbe su corazón y elige una profesión, para siempre.'},
+  {title:'Equipo y piedras', art:'src/assets/escenas/tienda.jpg', body:'En «Personaje e inventario» cada objeto tiene su botón de Equipar, y cada pieza puesta, el de Desequipar. Las piedras de alma se engarzan aparte. Gerd, en la Tienda, vende lo básico y compra lo que subas.'},
+  {title:'El Gremio', art:'src/assets/escenas/gremio.jpg', body:'En el tablón hay diez contratos que se renuevan cada doce horas. Cumplirlos da oro, experiencia y Sellos del Laberinto, que el propio Gremio cambia por equipo. Si uno no te convence, puedes cambiarlo hasta tres veces.'},
+  {title:'La Taberna', art:'src/assets/escenas/taberna.jpg', body:'Cuando hayas vencido al Ogro del nivel 10 podrás contratar aliados; cada jefe de década derrotado te deja llevar uno más, hasta cuatro. Pelean solos, cobran salario al salir del laberinto y, si no les pagas, acaban desertando.'},
+  {title:'Los Caídos', art:'src/assets/ofrenda/ygdrasil.jpg', body:'El pequeño árbol, Yggdrasil, te entrega Caídos del Laberinto a cambio de oro o Sellos. No pelean: los llevas contigo y cada uno te presta su don. El campanario te regala ofrendas cada día que vuelvas.'},
+  {title:'El Crisol', art:'src/assets/escenas/crisol.jpg', body:'Los Caídos repetidos se funden en el Crisol: cuatro del mismo rango pueden dar uno del rango siguiente. Suele fallar, y entonces vuelve uno del mismo rango. Nunca toma el último de cada uno.'},
+  {title:'Fama y memoria', body:'Cada jefe de década te da un título con su propio beneficio. En el Salón de los Nombres se graban los que más hondo bajaron, y en las Crónicas guardo la historia, el bestiario y la música de lo que vayas descubriendo.'},
+  {title:'Buena suerte', art:'src/assets/bienvenida/escena_1.jpg', body:'Nadie ha llegado al fondo. Cada década esconde algo distinto, y lo que hay abajo del todo… eso tendrás que contármelo tú.'}
 ];
 let tutorialStep = 0;
 function showTutorial(){
@@ -15322,17 +15397,25 @@ function renderTutorialStep(){
   const dots = TUTORIAL_SLIDES.map((_,i)=>
     `<span style="width:6px; height:6px; border-radius:50%; display:inline-block; margin:0 3px; background:${i===tutorialStep?'var(--bronze-light)':'var(--border)'};"></span>`
   ).join('');
-  div.innerHTML = `<div class="overlay-card">
+  const dotsHTML = TUTORIAL_SLIDES.map((_, i)=> `<i class="${i===tutorialStep?'on':(i<tutorialStep?'done':'')}"></i>`).join('');
+  div.innerHTML = `<div class="overlay-card intro-card intro-cron">
     <h2>${slide.title}</h2>
-    <p>${slide.body}</p>
-    <div style="margin:12px 0;">${dots}</div>
-    <div style="display:flex; flex-wrap:wrap; gap:10px; justify-content:center;">
-      <button class="btn-main secondary-choice" id="tut-skip">Saltar</button>
-      ${tutorialStep>0 ? `<button class="btn-main secondary-choice" id="tut-prev">Anterior</button>` : ''}
-      <button class="btn-main" id="tut-next">${isLast ? 'Comenzar' : 'Siguiente'}</button>
+    ${slide.art ? `<div class="intro-scene"><img src="${slide.art}?v=1" alt="" onerror="this.parentElement.remove()"></div>` : ''}
+    <div class="ws-dialog">
+      <div class="ws-narrator"><div class="ws-portrait"><img src="src/assets/bienvenida/cronista.jpg?v=1" alt="" onerror="this.remove()"></div><b>El Cronista</b></div>
+      <p class="ws-text">${slide.body}</p>
+      <div class="ws-foot">
+        <div class="ws-dots">${dotsHTML}</div>
+        <div class="ws-btns">
+          ${isLast ? '' : '<button class="reset-btn" id="tut-skip">Saltar</button>'}
+          ${tutorialStep>0 ? '<button class="reset-btn" id="tut-prev">‹ Atrás</button>' : ''}
+          <button class="btn-main" id="tut-next">${isLast ? 'Comenzar' : 'Continuar ›'}</button>
+        </div>
+      </div>
     </div>
   </div>`;
-  document.getElementById('tut-skip').onclick = closeTutorial;
+  const skipBtn = document.getElementById('tut-skip');
+  if(skipBtn) skipBtn.onclick = closeTutorial;
   const prevBtn = document.getElementById('tut-prev');
   if(prevBtn) prevBtn.onclick = ()=>{ tutorialStep -= 1; renderTutorialStep(); };
   document.getElementById('tut-next').onclick = ()=>{
