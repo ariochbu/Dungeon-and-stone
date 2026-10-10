@@ -2846,6 +2846,121 @@ async function pullGacha(kind, payWith){
   results.filter(r=> r.tpl.rarity==='mitico' && !r.isDup).forEach(r=> announceMythicSummon(r.id));
   return results;
 }
+// CRISOL DE LOS CAÍDOS (pedido de ariochbu, 2026-10-10, "tipo Mir4"): se combinan FUSION_NEED Caídos
+// repetidos del mismo rango para intentar sacar uno del rango siguiente. Nunca consume el último de cada
+// Caído (solo cuenta lo que pasa de 1). Si falla, devuelve uno al azar del mismo rango. Las probabilidades
+// son mías: no encontré las oficiales de Mir4, solo que son bajas y bajan con el rango.
+const FUSION_NEED = 4;
+const FUSION_CHANCE = {poco_comun:0.30, raro:0.20, unico:0.10, epico:0.03};   // rango de los que se combinan → éxito
+let fusionRarity = 'poco_comun', fusionPick = {};
+function fusionSpare(id){ return Math.max(0, ownedPetCount(id) - 1); }
+function fusionPicked(){ return Object.values(fusionPick).reduce((a, b)=> a + b, 0); }
+function fusionNextRarity(r){ return PET_RARITY_ORDER[PET_RARITY_ORDER.indexOf(r) + 1]; }
+function fusionAutoPick(){
+  fusionPick = {};
+  let left = FUSION_NEED;
+  // primero los que más sobran, para no agotar ninguno antes de tiempo
+  PET_CATALOG.filter(t=> t.rarity === fusionRarity && fusionSpare(t.id) > 0).sort((a, b)=> fusionSpare(b.id) - fusionSpare(a.id)).forEach(t=>{
+    const take = Math.min(left, fusionSpare(t.id));
+    if(take > 0){ fusionPick[t.id] = take; left -= take; }
+  });
+}
+async function doFusion(){
+  if(fusionPicked() !== FUSION_NEED || !FUSION_CHANCE[fusionRarity]) return null;
+  if(!(await checkSessionStillActive())) return null;
+  ensurePets();
+  const used = [];
+  for(const [id, n] of Object.entries(fusionPick)){
+    if(n > fusionSpare(id)) return null;                      // nunca por debajo de 1
+    for(let i = 0; i < n; i++) used.push(Number(id));
+  }
+  used.forEach(id=>{ state.char.pets.owned[id] -= 1; });
+  const success = chance(FUSION_CHANCE[fusionRarity]);
+  const outRarity = success ? fusionNextRarity(fusionRarity) : fusionRarity;
+  const tpl = pick(PET_CATALOG.filter(t=> t.rarity === outRarity));
+  const isDup = !!state.char.pets.owned[tpl.id];
+  state.char.pets.owned[tpl.id] = (state.char.pets.owned[tpl.id] || 0) + 1;
+  fusionPick = {};
+  log(success
+    ? `El Crisol arde: de ${FUSION_NEED} Caídos ${PET_RARITIES[fusionRarity].name} nace <b>${tpl.name}</b> (${PET_RARITIES[outRarity].name}).`
+    : `El Crisol se apaga: la fusión falla y solo vuelve <b>${tpl.name}</b> (${PET_RARITIES[outRarity].name}).`);
+  await flushSave();
+  return {used, tpl, success, isDup};
+}
+// Animación de la fusión: los cuatro Caídos giran hacia el centro, estallan y aparece el resultado.
+function showFusionCinematic(res){
+  return new Promise(resolve=>{
+    const reduce = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    const div = document.createElement('div');
+    const r = PET_RARITIES[res.tpl.rarity];
+    div.className = 'fu-cine';
+    div.style.setProperty('--oc', r.color);
+    div.innerHTML = `
+      <div class="fu-ring">${res.used.map((id, i)=> `<div class="fu-orb" style="--i:${i}; --rc:${PET_RARITIES[petTpl(id).rarity].color}"><img src="${petArtPath(id)}" alt=""></div>`).join('')}</div>
+      <div class="fu-core"></div><div class="fu-flash"></div>
+      <div class="fu-result"><div class="fu-verdict ${res.success ? 'ok' : 'fail'}">${res.success ? 'Fusión lograda' : 'La fusión falló'}</div>
+        <div class="fu-card"><img src="${petArtPath(res.tpl.id)}" alt=""></div>
+        <div class="fu-name">${res.tpl.name}</div><div class="fu-rank">${r.name}${res.isDup ? ' · repetido' : ' · nuevo'}</div>
+        <div class="fu-hint">Toca para continuar</div></div>`;
+    document.body.appendChild(div);
+    let done = false, shown = false;
+    const show = ()=>{ if(!shown){ shown = true; div.classList.add('reveal', res.success ? 'ok' : 'fail'); } };
+    const finish = ()=>{ if(done) return; done = true; div.classList.add('out'); setTimeout(()=> div.remove(), 320); resolve(); };
+    setTimeout(show, reduce ? 150 : 2100);
+    div.onclick = ()=>{ if(shown) finish(); else show(); };
+  });
+}
+function renderFusion(){
+  ensurePets();
+  const panel = document.getElementById('main-panel');
+  const ranks = Object.keys(FUSION_CHANCE);
+  const spareOf = (rk)=> PET_CATALOG.filter(t=> t.rarity === rk).reduce((a, t)=> a + fusionSpare(t.id), 0);
+  // lo elegido tiene que seguir siendo válido (otro rango, o ya se gastó)
+  Object.keys(fusionPick).forEach(id=>{ const t = petTpl(id); if(!t || t.rarity !== fusionRarity || fusionPick[id] > fusionSpare(id)) delete fusionPick[id]; });
+  const list = PET_CATALOG.filter(t=> t.rarity === fusionRarity && fusionSpare(t.id) > 0);
+  const picked = fusionPicked(), r = PET_RARITIES[fusionRarity], next = PET_RARITIES[fusionNextRarity(fusionRarity)];
+  const slots = []; Object.entries(fusionPick).forEach(([id, n])=>{ for(let i = 0; i < n; i++) slots.push(Number(id)); });
+  const slotHTML = Array.from({length: FUSION_NEED}, (_, i)=> slots[i]
+    ? `<div class="fu-slot on" style="--rc:${r.color}"><img src="${petArtPath(slots[i])}" alt=""></div>` : `<div class="fu-slot"></div>`).join('');
+  panel.innerHTML = `
+    <div class="rk-hero">
+      <img class="rk-hero-art" src="src/assets/escenas/crisol.jpg?v=1" alt="" onerror="this.remove()">
+      <button class="reset-btn rk-close" id="btn-close-fusion">Cerrar</button>
+      <div class="rk-hero-txt"><h3>Crisol de los Caídos</h3><p>Combina ${FUSION_NEED} Caídos repetidos del mismo rango. Nunca se consume el último de cada uno.</p></div>
+    </div>
+    <div class="rk-tabs">${ranks.map(rk=> `<button class="${fusionRarity===rk?'on':''}" data-fu-rk="${rk}" style="--rc:${PET_RARITIES[rk].color}">${PET_RARITIES[rk].name} <small>(${spareOf(rk)})</small></button>`).join('')}</div>
+    <div class="fu-box" style="--rc:${r.color}; --nc:${next.color}">
+      <div class="fu-slots">${slotHTML}<span class="fu-arrow">→</span><div class="fu-slot out" style="--rc:${next.color}"><b>?</b></div></div>
+      <div class="fu-odds"><b>${Math.round(FUSION_CHANCE[fusionRarity]*100)}%</b> de obtener un Caído <b style="color:${next.color}">${next.name}</b>. Si falla, vuelve uno <b style="color:${r.color}">${r.name}</b> al azar.</div>
+      <div class="fu-actions">
+        <button class="reset-btn" id="fu-auto" ${spareOf(fusionRarity) >= FUSION_NEED ? '' : 'disabled'}>Elegir automáticamente</button>
+        <button class="btn-main" id="fu-go" ${picked === FUSION_NEED ? '' : 'disabled'}>Combinar (${picked} / ${FUSION_NEED})</button>
+      </div>
+    </div>
+    ${list.length ? `<div class="fu-grid">${list.map(t=>{
+      const n = fusionPick[t.id] || 0, spare = fusionSpare(t.id);
+      return `<div class="fu-item ${n ? 'on' : ''}" style="--rc:${r.color}">
+        <div class="fu-item-art" data-pet-zoom="${t.id}"><img src="${petArtPath(t.id)}" alt=""><span>x${spare}</span></div>
+        <div class="fu-item-name">${t.name}</div>
+        <div class="fu-item-ctl"><button class="inv-btn" data-fu-minus="${t.id}" ${n ? '' : 'disabled'}>−</button><b>${n}</b><button class="inv-btn" data-fu-plus="${t.id}" ${n < spare && picked < FUSION_NEED ? '' : 'disabled'}>+</button></div>
+      </div>`;
+    }).join('')}</div>` : `<p class="inv-empty-msg">No tienes Caídos ${r.name} repetidos. Solo se combinan los que te sobran: el último de cada uno se queda contigo.</p>`}
+  `;
+  document.getElementById('btn-close-fusion').onclick = ()=>{ fusionOpen = false; renderAll(); };
+  panel.querySelectorAll('[data-fu-rk]').forEach(b=>{ b.onclick = ()=>{ fusionRarity = b.dataset.fuRk; fusionPick = {}; renderFusion(); }; });
+  panel.querySelectorAll('[data-fu-plus]').forEach(b=>{ b.onclick = ()=>{ const id = b.dataset.fuPlus; if(fusionPicked() < FUSION_NEED && (fusionPick[id] || 0) < fusionSpare(id)){ fusionPick[id] = (fusionPick[id] || 0) + 1; renderFusion(); } }; });
+  panel.querySelectorAll('[data-fu-minus]').forEach(b=>{ b.onclick = ()=>{ const id = b.dataset.fuMinus; if(fusionPick[id]){ fusionPick[id] -= 1; if(!fusionPick[id]) delete fusionPick[id]; renderFusion(); } }; });
+  document.getElementById('fu-auto').onclick = ()=>{ fusionAutoPick(); renderFusion(); };
+  const go = document.getElementById('fu-go');
+  go.onclick = async ()=>{
+    go.disabled = true;
+    const res = await doFusion();
+    if(!res){ renderFusion(); return; }
+    await showFusionCinematic(res);
+    renderSheet(); renderFusion();
+  };
+  wirePetZoomEvents(panel);
+}
 // Tiradas de regalo (check-in diario y otorgadas por admin, ver más abajo)
 // — mismo motor de doPetPulls, sin cobrar nada. resuelve YA MISMO (revela
 // las mascotas); las que llegan como "pendientes" (ver pets.pendingFreePulls)
@@ -4668,6 +4783,7 @@ let rankingOpen = false; // whether the Ranking panel is showing
 let adminOpen = false; // whether the Admin panel is showing
 let missionsOpen = false; // whether the Gremio (missions board) panel is showing
 let tabernaOpen = false; // whether the Taberna (allies) panel is showing
+let fusionOpen = false; // Crisol de los Caídos (combinar repetidos)
 let ofrendaOpen = false; // whether the Otorgar Ofrenda (pet gacha) panel is showing
 let checkinOpen = false; // whether the check-in diario panel is showing
 let optionsOpen = false; // whether the Opciones (volumen + atajos de teclado) panel is showing
@@ -5994,6 +6110,7 @@ function renderAll(){
     missionsOpen = false;
     tabernaOpen = false;
     ofrendaOpen = false;
+    fusionOpen = false;
     checkinOpen = false;
     optionsOpen = false;
     renderCombat();
@@ -6013,6 +6130,8 @@ function renderAll(){
     renderTaberna();
   } else if(ofrendaOpen){
     renderOfrenda();
+  } else if(fusionOpen){
+    renderFusion();
   } else if(checkinOpen){
     renderCheckin();
   } else if(optionsOpen){
@@ -7496,7 +7615,7 @@ function lsGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; 
 function lsSet(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
 function closeAllPanels(){
   invOpen = false; homeOpen = false; shopOpen = false; rankingOpen = false; adminOpen = false;
-  missionsOpen = false; tabernaOpen = false; ofrendaOpen = false; checkinOpen = false; optionsOpen = false;
+  missionsOpen = false; tabernaOpen = false; ofrendaOpen = false; checkinOpen = false; optionsOpen = false; fusionOpen = false;
 }
 // Lugares de la ciudad: clave del menú, panel que abre y su introducción de
 // primera visita (viñetas provisionales hasta que haya ilustraciones).
@@ -7511,6 +7630,9 @@ const CITY_PLACES = {
             intro:['“El Gremio paga por trabajo bien hecho.”','“Cada 12 horas hay contratos nuevos en el tablón.”','“Cúmplelos y cobra oro, experiencia y Sellos del Laberinto.”']},
   ofrenda: {name:'Árbol de ofrendas', ic:'🌳', open:()=>{ ofrendaOpen = true; }, img:'arbol', d:[79.6,65.7], m:[74.4,75.3], keeper:'Yggdrasil',
             intro:['Las raíces del pequeño árbol brillan al acercarte…','Ofrécele oro o Sellos y te devolverá a uno de los Caídos del Laberinto.']},
+  // Edificio nuevo (2026-10-10): no tiene solar propio en el mapa, va sobre un claro.
+  fusion:  {name:'Crisol de los Caídos', ic:'🔥', open:()=>{ fusionOpen = true; }, img:'crisol', d:[63.0,26.0], m:[80.0,41.0], keeper:'La guardiana del Crisol',
+            intro:['“Los Caídos que se repiten no descansan. Tráemelos.”','“Cuatro del mismo rango entran al Crisol. A veces sale uno más fuerte… y a veces no.”','“Nunca te quitaré el último de cada uno. Solo los que te sobran.”']},
   checkin: {name:'Check-in diario', ic:'📅', open:()=>{ checkinOpen = true; }, img:'campanario', d:[81.2,40.5], m:[79.6,58.9], keeper:'El campanero',
             intro:['“Cada día que vuelvas a la ciudad, el árbol te regala ofrendas.”','“El día 1 de cada mes empieza un calendario nuevo.”']},
   ranking: {name:'Ranking', ic:'🏆', open:()=>{ rankingOpen = true; }, img:'ranking', d:[50.8,71.4], m:[22.0,74.3], keeper:'El pregonero',
@@ -7524,7 +7646,7 @@ function navBadges(){
 function activeNavKey(){
   if(invOpen) return 'inv';
   if(homeOpen) return 'home'; if(shopOpen) return 'shop'; if(tabernaOpen) return 'taberna';
-  if(missionsOpen) return 'missions'; if(ofrendaOpen) return 'ofrenda'; if(checkinOpen) return 'checkin';
+  if(missionsOpen) return 'missions'; if(ofrendaOpen) return 'ofrenda'; if(fusionOpen) return 'fusion'; if(checkinOpen) return 'checkin';
   if(rankingOpen) return 'ranking'; if(adminOpen) return 'admin'; if(optionsOpen) return 'options';
   ensureCityView();
   return cityView;
@@ -7568,6 +7690,7 @@ function renderSideNav(){
       ${item('taberna','🍺','Taberna', tavernLocked ? {locked:true, lockWhy: state.char.level < ALLY_MIN_LEVEL ? `Requiere nivel ${ALLY_MIN_LEVEL}${BETA_ALLY_UNLOCKS?' y derrotar al Ogro':''}` : 'Derrota al Ogro (nivel 10)'} : {})}
       ${item('missions','📜','Gremio',{badge:badges.missions})}
       ${item('ofrenda','🌳','Árbol de ofrendas',{badge:badges.ofrenda})}
+      ${item('fusion','🔥','Crisol de los Caídos')}
       ${item('checkin','📅','Check-in diario',{badge:badges.checkin})}
     </div>
     <div class="sn-sec"><h5>Laberinto</h5>
@@ -14622,6 +14745,7 @@ async function simRun(cfg){
 if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
   window.__sim = simRun; window.__simLevel = simLevels;
   // Dibuja la ficha de un personaje de prueba (para revisar la pestaña de profesión sin iniciar sesión).
+  window.__crisol = (cfg, owned)=>{ window.__ficha(cfg || {}); ensurePets(); Object.assign(state.char.pets.owned, owned || {1:5, 2:3, 3:2}); checkSessionStillActive = async ()=> true; flushSave = async ()=>{}; renderSheet = ()=>{}; fusionOpen = true; renderFusion(); };
   window.__inv = (cfg)=>{ window.__ficha(cfg || {}); for(let i = 0; i < 9; i++){ const it = generateLoot(2, state.char.level); if(it) state.char.inventory.push(it); } invTab = 'mochila'; renderInventory = ((orig)=> orig)(renderInventory); renderInventory(); };
   window.__ficha = (cfg)=>{ const {st} = simBuildState(Object.assign({style:'tirador', level:80, dungeonLevel:80}, cfg)); st.dungeon = null; st.char.gold = cfg.gold || 0; state = st; const d = derived(); state.char.curHP = d.maxHP; state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi; fichaTab = 'profesion'; fichaHostEl = null; save = ()=>{}; renderAll = ()=>{}; renderFicha(); };
   window.__historia = (level)=> showStoryScenes(level, ()=>{});
@@ -15643,7 +15767,7 @@ document.querySelectorAll('#city-nav .nav-btn').forEach(btn=>{
     if(!state) return;
     if(combat && combat.active) return;
     const key = btn.dataset.nav;
-    invOpen = false; homeOpen = false; shopOpen = false; rankingOpen = false; adminOpen = false; missionsOpen = false; tabernaOpen = false; ofrendaOpen = false; checkinOpen = false;
+    invOpen = false; homeOpen = false; shopOpen = false; rankingOpen = false; adminOpen = false; missionsOpen = false; tabernaOpen = false; ofrendaOpen = false; checkinOpen = false; fusionOpen = false;
     if(key==='home') homeOpen = true;
     else if(key==='shop') shopOpen = true;
     else if(key==='taberna') tabernaOpen = true;
