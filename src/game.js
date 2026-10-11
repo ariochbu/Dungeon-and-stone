@@ -6254,7 +6254,7 @@ const FLOORS_OPEN_HERE = FLOORS_61_80_OPEN || (/^(localhost|127\.0\.0\.1)$/.test
 const FLOORS_81_90_OPEN = true; // liberados el 2026-10-09 por orden de ariochbu, tras las simulaciones por senda
 const FLOORS_81_90_HERE = FLOORS_81_90_OPEN || (/^(localhost|127\.0\.0\.1)$/.test(location.hostname) && !/[?&]cerrado=1/.test(location.search));
 // Pisos 91-100 (2026-10-10): cerrados para los jugadores hasta que ariochbu los libere; abiertos en localhost.
-const FLOORS_91_100_OPEN = false;
+const FLOORS_91_100_OPEN = true;   // abiertos por orden de ariochbu (2026-10-11)
 const FLOORS_91_100_HERE = FLOORS_91_100_OPEN || (/^(localhost|127\.0\.0\.1)$/.test(location.hostname) && !/[?&]cerrado=1/.test(location.search));
 const OPEN_LEVEL_CAP = !FLOORS_OPEN_HERE ? 60 : !FLOORS_81_90_HERE ? 80 : FLOORS_91_100_HERE ? LEVEL_CAP : 90;
 const OPEN_CHAR_LEVEL_CAP = !FLOORS_OPEN_HERE ? 60 : !FLOORS_81_90_HERE ? 80 : FLOORS_91_100_HERE ? CHAR_LEVEL_CAP : 90;
