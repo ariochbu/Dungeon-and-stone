@@ -502,7 +502,6 @@ function showCredits(onDone){
       <h3>Los que cerraban</h3><div class="credits-parade">${parade}</div>
       <h3>Música que suena en el laberinto</h3>${music}
       <p><small>Toda la música pertenece a sus compositores y a quienes tienen sus derechos.</small></p>
-      <h3>Inspiración</h3><p><small>Proyecto de fans sin fines de lucro, de inspiración libre en la novela «Sobreviviendo al juego siendo un bárbaro». No está afiliado a sus autores ni editores.</small></p>
       <h3>Y a ti</h3><p class="cred-name">${state && state.char ? state.char.nickname : 'Aventurero'}</p><p>Por bajar hasta el fondo.</p>
       <p class="cred-big cred-end">El laberinto sigue abierto.</p>
     </div></div>
