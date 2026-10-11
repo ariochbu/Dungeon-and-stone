@@ -516,8 +516,7 @@ function showCredits(onDone){
 // De vuelta en la ciudad tras vencer al Retornado: el Cronista felicita y anuncia los dos modos nuevos (una vez).
 function maybeCelebrateRetornado(){
   if(simMode || !state || !state.char || state.dungeon || combat || professionSceneOpen) return false;
-  if((state.char.bossesBeaten || 0) < 10 || lsGet(charKey('fin100'))) return false;
-  lsSet(charKey('fin100'), '1');
+  if((state.char.bossesBeaten || 0) < 10 || seenOnce('fin100')) return false;
   const cron = 'src/assets/bienvenida/cronista.jpg?v=1';
   showSpeech([
     {who:'El Cronista', img:cron, text:'«Felicidades, aventurero. Sabía que tú podrías.» Cierra el libro, y por primera vez no lo guarda. «Pero este no es el final del todo.»'},
@@ -645,8 +644,8 @@ function ultimateUnlocked(){ const c = state && state.char; return !!c && c.leve
 function maybeNotifySkillMilestones(){
   if(simMode || !state || !state.char || state.dungeon || combat || professionSceneOpen) return;
   const cron = 'src/assets/bienvenida/cronista.jpg?v=1';
-  if(skillsUpgraded() && !lsGet(charKey('hito30'))){ lsSet(charKey('hito30'), '1'); showSpeech([{who:'El Cronista', img:cron, text:'Algo ha cambiado en tu forma de pelear. <b>Tus habilidades han sido mejoradas.</b>'}], null, 'Entendido'); return; }
-  if(ultimateUnlocked() && !lsGet(charKey('hito60'))){ lsSet(charKey('hito60'), '1'); showSpeech([{who:'El Cronista', img:cron, text:`Un poder nuevo responde a tu llamada. <b>Has despertado tu habilidad definitiva: ${SKILLS[ULTIMATE_BY_STYLE[state.char.style]].name}.</b>`}], null, 'Entendido'); }
+  if(skillsUpgraded() && !seenOnce('hito30')){ showSpeech([{who:'El Cronista', img:cron, text:'Algo ha cambiado en tu forma de pelear. <b>Tus habilidades han sido mejoradas.</b>'}], null, 'Entendido'); return; }
+  if(ultimateUnlocked() && !seenOnce('hito60')){ showSpeech([{who:'El Cronista', img:cron, text:`Un poder nuevo responde a tu llamada. <b>Has despertado tu habilidad definitiva: ${SKILLS[ULTIMATE_BY_STYLE[state.char.style]].name}.</b>`}], null, 'Entendido'); }
 }
 const LEVEL30_SKILL_BONUS = {
   golpe_bruto:      {tambaleoChance: 0.85},                 // era 0.70
@@ -694,8 +693,7 @@ function profSideText(p, up){
 let professionSceneOpen = false;
 function maybeOfferProfession(){
   if(simMode || professionSceneOpen || !state || !state.char || state.dungeon || combat || myProfession() || !professionUnlocked()) return;
-  if(lsGet(charKey('prof-cine'))) return;      // la escena solo sale una vez; después se elige desde la Ficha
-  lsSet(charKey('prof-cine'), '1');
+  if(seenOnce('prof-cine')) return;      // la escena solo sale una vez; después se elige desde la Ficha
   professionSceneOpen = true;
   showHeartCinematic().then(()=> showProfessionChoice()).then(()=>{ professionSceneOpen = false; });
 }
@@ -2753,7 +2751,7 @@ function celdaPreFightSpeech(enemyGroup){
   pages.push({who:'Espíritu del Usurpador', img:usu, pale:true, text:'«No está solo. Cada cerrojo que rompiste dejó aquí su sombra: el Ogro, la Matriarca, Riakis, todos. Caen fácil… pero al caer una se levanta la siguiente. La mía no está entre ellas. La mía soy yo.»'});
   const lastPage = {who: boss.name, img: enemySpriteFor(boss), text:'La celda se abre sola. El que sale sujeta el arma como tú, pisa como tú, respira a tu ritmo. Te mira un momento largo. «…Otra vez», dice, y no es una pregunta.'};
   const key = 'ds_celda100_' + state.char.id;
-  const seen = lsGet(key); lsSet(key, '1');
+  const seen = seenOnce('celda100');
   showSpeech(seen ? [lastPage] : pages.concat([lastPage]));
 }
 // Escolta de élites de los guardianes de 91-99: dos, una de frente y una de retaguardia, debilitadas.
@@ -8105,6 +8103,20 @@ let cityView = null; // 'welcome' | 'map' | 'laberinto' | 'ficha'
 function charKey(k){ return `ds:${k}:${state && state.char ? state.char.id : 'x'}`; }
 function lsGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
 function lsSet(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
+// Avisos que solo deben verse UNA vez por personaje (presentaciones del Cronista, hitos, escenas). Antes
+// dependían solo del navegador: si este no guarda datos (modo privado, almacenamiento bloqueado o lleno, otro
+// dispositivo), salían cada vez. Ahora quedan también en el personaje (story_choices._seen) y en memoria.
+const seenThisSession = new Set();
+function seenOnce(k){
+  const c = state && state.char; if(!c) return true;
+  const id = c.id + ':' + k;
+  const sc = c.storyChoices || (c.storyChoices = {});
+  const was = seenThisSession.has(id) || !!(sc._seen && sc._seen[k]) || !!lsGet(charKey(k));
+  seenThisSession.add(id);
+  if(!(sc._seen && sc._seen[k])){ (sc._seen || (sc._seen = {}))[k] = 1; if(c.storyColumn && !simMode) save(); }
+  lsSet(charKey(k), '1');
+  return was;
+}
 function closeAllPanels(){
   invOpen = false; homeOpen = false; shopOpen = false; rankingOpen = false; adminOpen = false;
   missionsOpen = false; tabernaOpen = false; ofrendaOpen = false; checkinOpen = false; optionsOpen = false; fusionOpen = false;
@@ -8241,8 +8253,7 @@ function cityNavigate(key){
 }
 function maybeShowPlaceIntro(key){
   const p = CITY_PLACES[key];
-  if(!p || lsGet(charKey('intro-'+key))) return;
-  lsSet(charKey('intro-'+key), '1');
+  if(!p || seenOnce('intro-'+key)) return;
   let i = 0;
   const div = document.createElement('div');
   div.className = 'overlay-msg';
