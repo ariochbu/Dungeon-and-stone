@@ -2,7 +2,7 @@
 
 import { supabase } from './supabaseClient.js';
 import * as auth from './auth.js';
-import { syncBattleStage, playBattleAnim } from './battleStage.js?v=115';
+import { syncBattleStage, playBattleAnim } from './battleStage.js?v=116';
 import { mountLabyrinth } from './labyrinthMap.js?v=10';
 import { installIconizer } from './icons.js?v=2';
 installIconizer(); // ningún emoji llega a pantalla: se cambian por los iconos del juego (ver icons.js)
@@ -305,6 +305,11 @@ const STORY_SCENES = {
     'El Corazón Marchito deja caer sus raíces. No se defiende: late una vez, despacio. «Pódame». Cuando el último latido se apaga, las flores se cierran, los jardineros dejan de moverse y la luz verde se va. Por primera vez desde que entraste, el bosque está muerto de verdad.',
     'Entonces, desde abajo, sube una luz naranja. Calor. Ceniza. El jardín no era una amenaza: era un filtro. Absorbía lo que subía de las capas de más abajo… y acabas de arrancarlo.',
   ]},
+  // Final (texto de ariochbu, 2026-10-10). Después de esta escena van los créditos (showCredits).
+  100: {title:'Ahora es tu turno', pages:[
+    'El Primer Retornado suelta el arma, y es la primera vez que no la sujeta como tú. Se sienta contra la puerta de su celda, cansado como quien lleva siglos de pie. «Yo también bajé a este mundo para encontrar una solución», dice. «Solo encontré más preguntas.»',
+    '«Cuestioné la existencia de la bruja. Cuestioné a la familia real. Las respuestas que recibí fueron un silencio incómodo… y una atadura a este lugar.» Sus cadenas caen una a una, y ninguna hace ruido. Te mira sin rencor. «Ahora será tu turno.»',
+  ]},
   // Dos desenlaces (pedido explícito 2026-10-09): el jugador decide si perdona al
   // Carcelero o lo remata. La elección se hace una sola vez, la primera vez que
   // se abre la escena, y se guarda en characters.story_choices (migración 0042;
@@ -446,6 +451,80 @@ function soundtrackHTML(){
   return `<p class="cr-note">Lo que suena en cada rincón del laberinto.</p>
     <div class="ost-list">${SOUNDTRACK.map(t=>`<div class="ost-row"><span class="ost-note">♪</span><div><small>${t.place}</small><b>${t.title}</b>${t.from ? `<em>${t.from}</em>` : ''}</div></div>`).join('')}</div>
     <p class="ost-thanks">Toda la música pertenece a sus compositores y a quienes tienen sus derechos. Gracias a cada uno de ellos: sin estas piezas el laberinto no sonaría igual.</p>`;
+}
+// MODOS DE JUEGO (idea de ariochbu, 2026-10-10). Se desbloquean para la CUENTA cuando uno de sus personajes
+// vence al Primer Retornado, y se eligen al crear un personaje nuevo (no se pueden cambiar después):
+//   hardmode: los monstruos tienen +30% de vida y ataque desde el piso 1, los de distancia pueden golpear a la
+//             retaguardia y todos eligen mejor a quién atacar (rematan al más herido).
+//   inmortal: una sola vida. Si el personaje cae en el laberinto, se elimina para siempre.
+// En los dos el Tier S cae más (GAME_MODES[..].sDrop). Columna characters.game_mode (migración 0046).
+const GAME_MODES = {
+  normal:   {name:'Normal', text:'El laberinto tal como lo conoces.', enemy:1, sDrop:1},
+  hardmode: {name:'HardMode', text:'Los monstruos tienen +30% de vida y de ataque desde el primer piso. Los que atacan a distancia alcanzan tu retaguardia y todos eligen mejor a quién golpear. El equipo de Rango S cae más.', enemy:1.30, sDrop:4, focusChance:0.6},
+  inmortal: {name:'Inmortal', text:'Una sola vida. Si caes en el laberinto, tu personaje se elimina para siempre. El equipo de Rango S cae más.', enemy:1, sDrop:4},
+};
+let MODES_UNLOCKED = false;   // lo decide renderCharacterSelect con los personajes de la cuenta
+let crMode = 'normal';
+function gameMode(){ const m = state && state.char && state.char.mode; return GAME_MODES[m] ? m : 'normal'; }
+function modeBadge(m){ return m && m !== 'normal' && GAME_MODES[m] ? `<span class="slot-tag mode-${m}">${GAME_MODES[m].name}</span>` : ''; }
+// A quién golpea un enemigo en HardMode: los de distancia eligen entre todo el equipo; los de frente, dentro
+// de la fila que les toca. Casi siempre van por el más herido.
+function hardmodeTarget(enemy){
+  const allies = livingAllies();
+  let pool;
+  if(enemy.tpl && !enemy.tpl.frontline){ pool = allies.map(a=>({kind:'ally', ally:a})); pool.push({kind:'player'}); }
+  else {
+    pool = allies.filter(a=> a.pos==='frente').map(a=>({kind:'ally', ally:a}));
+    if(combat.playerPos==='frente') pool.push({kind:'player'});
+    if(!pool.length){ pool = allies.map(a=>({kind:'ally', ally:a})); pool.push({kind:'player'}); }
+  }
+  const taunter = pool.find(t=> t.kind==='ally' && (t.ally.isShadow || hasStatus(t.ally.statuses,'Bastión')));
+  if(taunter && !(enemy.tpl && !enemy.tpl.frontline)) return taunter;
+  if(!chance(GAME_MODES.hardmode.focusChance)) return pick(pool);
+  const hpPct = (t)=> t.kind==='player' ? state.char.curHP / Math.max(1, derived().maxHP) : t.ally.hp / Math.max(1, t.ally.maxHP);
+  return pool.slice().sort((a, b)=> hpPct(a) - hpPct(b))[0];
+}
+// Créditos finales: texto que sube despacio sobre el fondo de La Celda, con el desfile de los jefes de década.
+function showCredits(onDone){
+  const bosses = DECADE_BESTIARY.map(b=> b.decadeBoss).filter(Boolean);
+  const parade = bosses.map(b=> `<figure><img src="${enemySpriteFor({tpl:b})||''}" alt=""><figcaption>${b.id==='primer_retornado' ? b.name : b.name.split(',')[0]}</figcaption></figure>`).join('');
+  const music = SOUNDTRACK.map(t=> `<p><b>${t.title}</b>${t.from ? `<br><small>${t.from}</small>` : ''}</p>`).join('');
+  const div = document.createElement('div');
+  div.className = 'credits-ov';
+  div.innerHTML = `<div class="credits-bg"></div>
+    <div class="credits-roll"><div class="credits-inner">
+      <h1>Dungeon <span>&amp;</span> Stone</h1>
+      <p class="cred-big">Gracias por jugar.</p>
+      <h3>Un juego de</h3><p class="cred-name">Arioch</p>
+      <h3>Idea, historia y dirección</h3><p>Arioch</p>
+      <h3>Pruebas</h3><p class="cred-name">Team Slash</p><p><small>Por tomarse su tiempo en jugar y ayudar con el testeo.</small></p>
+      <h3>Banda sonora</h3><p class="cred-name">Ajayu</p>
+      <h3>Los que cerraban</h3><div class="credits-parade">${parade}</div>
+      <h3>Música que suena en el laberinto</h3>${music}
+      <p><small>Toda la música pertenece a sus compositores y a quienes tienen sus derechos.</small></p>
+      <h3>Inspiración</h3><p><small>Proyecto de fans sin fines de lucro, de inspiración libre en la novela «Sobreviviendo al juego siendo un bárbaro». No está afiliado a sus autores ni editores.</small></p>
+      <h3>Y a ti</h3><p class="cred-name">${state && state.char ? state.char.nickname : 'Aventurero'}</p><p>Por bajar hasta el fondo.</p>
+      <p class="cred-big cred-end">El laberinto sigue abierto.</p>
+    </div></div>
+    <button class="reset-btn credits-skip">Saltar</button>`;
+  document.body.appendChild(div);
+  let closed = false;
+  const finish = ()=>{ if(closed) return; closed = true; div.remove(); if(onDone) onDone(); };
+  div.querySelector('.credits-skip').onclick = finish;
+  const inner = div.querySelector('.credits-inner');
+  inner.addEventListener('animationend', ()=>{ const b = div.querySelector('.credits-skip'); b.textContent = 'Continuar'; b.classList.add('btn-main'); });
+}
+// De vuelta en la ciudad tras vencer al Retornado: el Cronista felicita y anuncia los dos modos nuevos (una vez).
+function maybeCelebrateRetornado(){
+  if(simMode || !state || !state.char || state.dungeon || combat || professionSceneOpen) return false;
+  if((state.char.bossesBeaten || 0) < 10 || lsGet(charKey('fin100'))) return false;
+  lsSet(charKey('fin100'), '1');
+  const cron = 'src/assets/bienvenida/cronista.jpg?v=1';
+  showSpeech([
+    {who:'El Cronista', img:cron, text:'«Felicidades, aventurero. Sabía que tú podrías.» Cierra el libro, y por primera vez no lo guarda. «Pero este no es el final del todo.»'},
+    {who:'El Cronista', img:cron, text:'«Quien vuelve del fondo puede bajar de otra manera. <b>HardMode</b>: el laberinto entero es más fuerte y más listo. <b>Inmortal</b>: una sola vida; quien cae, desaparece. Los dos caminos te esperan al crear un personaje nuevo.»'},
+  ], null, 'Entendido');
+  return true;
 }
 function showStoryScenes(level, onDone){
   const def = STORY_SCENES[level];
@@ -5866,6 +5945,7 @@ function rowToState(row){
       titleChoice: row.title_choice===undefined ? null : row.title_choice, titleColumn: row.title_choice !== undefined,
       bossesBeaten: row.bosses_beaten || 0, bossesColumn: row.bosses_beaten !== undefined, firstRetornado: !!row.first_retornado,
       sacerdoteSGranted: !!row.sacerdote_s_granted, sacerdoteSColumn: row.sacerdote_s_granted !== undefined,
+      mode: GAME_MODES[row.game_mode] ? row.game_mode : 'normal', modeColumn: row.game_mode !== undefined,
       storyChoices: row.story_choices !== undefined ? (row.story_choices || {}) : loadLocalStoryChoices(row.id), storyColumn: row.story_choices !== undefined,
       profession: row.profession !== undefined ? (row.profession || null) : loadLocalProfession(row.id), professionColumn: row.profession !== undefined,
       race: row.race, style: row.style,
@@ -8195,7 +8275,7 @@ function maybeShowPlaceIntro(key){
 function renderCity(){
   ensureCityView();
   maybeOfferProfession();
-  maybeNotifySkillMilestones();
+  if(!maybeCelebrateRetornado()) maybeNotifySkillMilestones();
   if(cityView==='welcome') return renderCityWelcome();
   if(cityView==='laberinto') return renderCityDungeonEntry();
   if(cityView==='ficha') return renderFicha();
@@ -11097,7 +11177,8 @@ function scaleLootTableForDungeon(table, lootLevel){
   const band = LOOT_FLOOR_RATES.find(b=> level >= b.from);
   return filtered.map((e,i)=>{
     const fixed = band && band.rates[e.rarity || e.tier];
-    return {...e, chance: fixed !== undefined ? fixed : e.chance * (1 + boost*(n-1-i)*0.15)};
+    const sUp = (e.rarity === 'legendario' || e.tier === 'S') ? GAME_MODES[gameMode()].sDrop : 1;
+    return {...e, chance: (fixed !== undefined ? fixed : e.chance * (1 + boost*(n-1-i)*0.15)) * sUp};
   });
 }
 // Contador de pity: combates sin un drop de rango A o mejor. Pity suave desde
@@ -11445,6 +11526,8 @@ function makeEnemy(tpl, floorIdx, level){
   const critChance = tpl.boss
     ? BOSS_CRIT_BASE + Math.min(1, level/BOSS_CRIT_FULL_LEVEL)*BOSS_CRIT_MAX_BONUS
     : (tpl.elite ? 0.035 : 0.02) + floorIdx*CRIT_PER_FLOOR;
+  const modeMult = GAME_MODES[gameMode()].enemy;
+  if(modeMult !== 1){ hp = Math.round(hp*modeMult); atk = Math.round(atk*modeMult); }
   return {
     tpl, name:tpl.name, icon:tpl.icon,
     maxHP:hp, hp:hp, atk:atk, res, evasion, precision, critChance,
@@ -12232,7 +12315,7 @@ function trySummonShadow(){
   const d = derived();
   const shadowMaxHP = Math.max(1, Math.round(d.maxHP*0.5));
   const shadow = {
-    id:'shadow_'+Date.now(), templateId:'sombra_cazadora', name:'Sombra Cazadora', icon:'🌑', role:'sombra',
+    id:'shadow_'+Date.now(), templateId:'sombra_cazadora', chibiKey:`${state.char.style}_${state.char.race}`, pale:true, name:'Sombra Cazadora', icon:'🌑', role:'sombra',
     frontline:true, pos:'frente', level: state.char.level,
     maxHP: shadowMaxHP, hp: shadowMaxHP, maxMP:0, mp:0, maxSpirit:0, spirit:0, atk:0,
     statuses:[], shield:0, skillCooldown:999, specials:[], isShadow:true,
@@ -14101,7 +14184,7 @@ function enemyAct(enemy){
     return;
   }
 
-  const target = frontlineTarget();
+  const target = gameMode() === 'hardmode' ? hardmodeTarget(enemy) : frontlineTarget();
   // La Precisión del enemigo contrarresta la evasión de quien lo recibe —
   // mismo criterio en espejo que ya usa el jugador contra la evasión de un
   // enemigo (ver d.precision en playerUseSkill), ahora también del otro
@@ -14934,7 +15017,7 @@ function simBuildState(cfg){
     maxLevelUnlocked: cfg.dungeonLevel, checkpointLevel: cfg.dungeonLevel, record:{level:cfg.dungeonLevel, floorIdx:0},
     stash:{gold:0, items:[]}, soulSlots, pityGear:0, pityStone:0,
     pets:{owned:{}, equipped:[], pendingFreePulls:0}, checkin:{day:0, lastClaimDate:null}, allies,
-    titleChoice:0, titleColumn:true, bossesBeaten:0, bossesColumn:true, profession: cfg.profession || null, professionColumn:true,
+    titleChoice:0, titleColumn:true, bossesBeaten:0, bossesColumn:true, profession: cfg.profession || null, professionColumn:true, mode: cfg.mode || 'normal',
   }, dungeon:{level: cfg.dungeonLevel, floors:[[{type: cfg.node || 'jefe', done:false}]], atFloor:0, atNode:0, visited:{}, allyHP:{}, allyMP:{}, allySpirit:{}}, log:[]};
   return {st, petPool};
 }
@@ -15203,7 +15286,7 @@ if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
   window.__inv = (cfg)=>{ window.__ficha(cfg || {}); for(let i = 0; i < 9; i++){ const it = generateLoot(2, state.char.level); if(it) state.char.inventory.push(it); } invTab = 'mochila'; renderInventory = ((orig)=> orig)(renderInventory); renderInventory(); };
   window.__ficha = (cfg)=>{ const {st} = simBuildState(Object.assign({style:'tirador', level:80, dungeonLevel:80}, cfg)); st.dungeon = null; st.char.gold = cfg.gold || 0; state = st; const d = derived(); state.char.curHP = d.maxHP; state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi; fichaTab = 'profesion'; fichaHostEl = null; save = ()=>{}; renderAll = ()=>{}; renderFicha(); };
   window.__celdaVer = (level, cfg)=>{ const {st} = simBuildState(Object.assign({style:'pesada', level:100, dungeonLevel:level}, cfg || {})); state = st; state.log = []; const d = derived(); state.char.curHP = d.maxHP; state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi; save = ()=>{}; lsGet = ()=> null; lsSet = ()=>{}; const dg = Object.assign(generateDungeon(level), {allyHP:{}, allyMP:{}, allySpirit:{}}); state.dungeon = dg; showScreen('screen-game'); const f = dg.floors.length - 1; dg.atFloor = f; dg.atNode = 0; startCombat(buildEncounterGroup('jefe', f, level), dg.floors[f][0]); };
-  window.__celdaG = CELDA_GUESTS;
+  window.__celdaG = CELDA_GUESTS; window.__creditos = ()=> showCredits(()=>{}); window.__modos = (on)=>{ MODES_UNLOCKED = on !== false; };
   window.__celda = (v)=>{ if(v !== undefined) SIM_CELDA = v; return SIM_CELDA; };
   window.__historia = (level)=> showStoryScenes(level, ()=>{});
   // Vista de prueba sin iniciar sesión: arma un personaje de mentira (no guarda
@@ -15589,7 +15672,7 @@ function handleVictory(){
       renderAll(); save();
     }});
     const storyLevel = pendingStoryLevel; pendingStoryLevel = 0;
-    if(storyLevel && STORY_SCENES[storyLevel]) showStoryScenes(storyLevel, ()=> showChoiceOverlay('Guardián derrotado', bodyText, buttons));
+    if(storyLevel && STORY_SCENES[storyLevel]) showStoryScenes(storyLevel, ()=>{ const next = ()=> showChoiceOverlay('Guardián derrotado', bodyText, buttons); if(storyLevel === 100) showCredits(next); else next(); });
     else showChoiceOverlay('Guardián derrotado', bodyText, buttons);
     // flushSave() inmediato, no el save() debounced de siempre (bug real
     // reportado 2026-09-27, "SHOSHIROHOSHINA venció al guardián del piso 40
@@ -15622,6 +15705,14 @@ const DEFEAT_GOLD_LOSS_PCT = 60;
 // aviso solo informa.
 function handleDefeat(){
   stopBossAudio();
+  if(gameMode() === 'inmortal'){
+    const lvl = (state.dungeon && state.dungeon.level) || 1, id = state.char.id, name = state.char.nickname;
+    state.dungeon = null; combat = null; pendingSave = false;
+    stopDungeonAudio();
+    // Inmortal (ariochbu, 2026-10-11): el personaje se elimina de verdad; no queda ni en la selección.
+    deleteCharacterById(id).then(()=> showOverlay('Aquí termina', `<b>${name}</b> cae en el piso ${lvl} del laberinto y no vuelve a levantarse. En el modo Inmortal solo hay una vida: el personaje ha sido eliminado.`, ()=>{ playLoginAudio(); enterGame(); }));
+    return;
+  }
   const lostItems = state.char.inventory.filter(i=>i.kind==='equip').length;
   state.char.inventory = state.char.inventory.filter(i=>i.kind!=='equip');
   state.char.gold = Math.round(state.char.gold*(1-DEFEAT_GOLD_LOSS_PCT/100));
@@ -16152,7 +16243,9 @@ function renderCreation(){
       <div class="cr-name"><input id="char-nickname" class="auth-input" type="text" maxlength="20" placeholder="Nombre del personaje" value="${crName.replace(/"/g,'&quot;')}"><button id="cr-dice" title="Nombre al azar">🎲</button></div>
       <p id="char-nickname-msg" style="color:var(--blood-light); font-size:0.85em; min-height:1.2em; margin:0;"></p>
       <div class="cr-chips"><span class="cr-chip">Pasiva: ${r.passive}</span><span class="cr-chip">${CR_STAT_NAMES[st.scaleStat]||''}</span><span class="cr-chip">${CR_REAR_STYLES.has(st.id)?'Retaguardia':'Frente'}</span></div>
+      ${MODES_UNLOCKED ? `<div class="cr-modes"><b>Dificultad</b><div class="cr-mode-row">${Object.keys(GAME_MODES).map(m=> `<button type="button" class="cr-mode ${m===crMode?'on':''} mode-${m}" data-mode="${m}">${GAME_MODES[m].name}</button>`).join('')}</div><p class="cr-mode-txt">${GAME_MODES[crMode].text} No se puede cambiar después.</p></div>` : ''}
       <div class="cr-cta"><button class="reset-btn" id="cr-back">← Clase</button><button class="btn-main" id="btn-begin" ${crName.trim().length>=3?'':'disabled'}>Comenzar aventura ⚔</button></div>`;
+    info.querySelectorAll('[data-mode]').forEach(b=> b.onclick = ()=>{ crMode = b.dataset.mode; renderCreation(); });
     const inp = document.getElementById('char-nickname');
     inp.oninput = ()=>{ crName = inp.value; document.getElementById('cr-name-title').textContent = crName.trim() || 'Sin nombre'; document.getElementById('btn-begin').disabled = crName.trim().length < 3; };
     document.getElementById('cr-dice').onclick = ()=>{
@@ -16183,6 +16276,10 @@ async function beginCharacter(){
       return;
     }
     const row = await createCharacterOnServer(selRace, selStyle, nickname);
+    if(MODES_UNLOCKED && crMode !== 'normal'){
+      const { error } = await supabase.rpc('set_character_mode', {p_character_id: row.id, p_mode: crMode});
+      if(error) console.error('No se pudo fijar el modo:', error.message); else row.game_mode = crMode;
+    }
     state = rowToState(row);
     cityView = null;
     grantStarterKit();
@@ -16536,6 +16633,7 @@ function renderCharacterSelect(rows){
   const box = document.getElementById('select-box');
   if(!rows.some(r=> r.id === campSelectedId)) campSelectedId = rows.length ? rows[0].id : null;
   const canCreateMore = rows.length < 6;
+  MODES_UNLOCKED = rows.some(r=> r.game_mode !== undefined && (r.bosses_beaten || 0) >= 10);
   const spots = CAMP_SPOTS.map((sp, i)=>{
     const row = rows[i];
     const pos = `--x:${sp.x}%; --y:${sp.y}%; --z:${Math.round(sp.y)}; --mx:${sp.mx}%; --my:${sp.my}%; --mz:${Math.round(sp.my)};`;
@@ -16574,7 +16672,7 @@ function renderCharacterSelect(rows){
     panel.innerHTML = `
       <div class="camp-who">
         <h2>${row.nickname}${renownBadge(titleFromChoice(row.title_choice, decadeBossesBeaten(row.checkpoint_level, row.record_level, row.bosses_beaten), !!row.first_retornado))}${mythicBadge(ownsMythic(row.pets && row.pets.owned))}</h2>
-        <div class="camp-tags"><span class="slot-tag">${r.name} · ${s.name}</span>${row.role==='admin'?'<span class="slot-tag">admin</span>':''}</div>
+        <div class="camp-tags"><span class="slot-tag">${r.name} · ${s.name}</span>${modeBadge(row.game_mode)}${row.role==='admin'?'<span class="slot-tag">admin</span>':''}</div>
       </div>
       <div class="camp-stats">
         <div><b>${row.level}</b><small>Nivel</small></div>
@@ -16681,7 +16779,7 @@ function goToCreation(canGoBack){
   document.getElementById('tier-badge').style.display = 'none';
   document.getElementById('btn-inventory').style.display = 'none';
   document.getElementById('header-sub').textContent = 'El juego que nadie ha superado';
-  selRace = 'barbaro'; selStyle = 'pesada'; crStep = 1; crName = '';
+  selRace = 'barbaro'; selStyle = 'pesada'; crStep = 1; crName = ''; crMode = 'normal';
   renderCreation();
   document.getElementById('create-back-row').style.display = canGoBack ? 'block' : 'none';
   document.getElementById('btn-cancel-creation').onclick = ()=> enterGame();

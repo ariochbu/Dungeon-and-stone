@@ -438,7 +438,7 @@ function syncBattleStage(container, combat, playerInfo, onTargetClick){
     a.baseX = allyPos[i].x; a.baseY = allyPos[i].y; a.x = a.baseX; a.y = a.baseY;
     const hostile = typeof clickHandler.isAllyHostile==='function' && clickHandler.isAllyHostile(ally.id);
     Object.assign(a, {
-      kind:'ally', refIdx:i, name: ally.name, icon: ally.icon, nameMaxW: allyPos[i].nameMaxW, sprite: spriteFor('ally', ally), chibiKey: ally.chibiKey || ('aliado_' + ally.templateId), ghost: !!ally.ghost, sizeMul: ally.stageSize || 1,
+      kind:'ally', refIdx:i, name: ally.name, icon: ally.icon, nameMaxW: allyPos[i].nameMaxW, sprite: spriteFor('ally', ally), chibiKey: ally.chibiKey || ('aliado_' + ally.templateId), ghost: !!ally.ghost, awakened: !!ally.pale, sizeMul: ally.stageSize || 1,
       role: roleFor('ally', ally), hp: ally.hp, maxHP: ally.maxHP, mp: ally.mp, maxMP: ally.maxMP,
       spirit: ally.spirit, maxSpirit: ally.maxSpirit, alive: ally.hp>0, shield: ally.shield||0, showResources:true,
       statuses: ally.statuses||[], targetable: hostile && ally.hp>0, side:'party',

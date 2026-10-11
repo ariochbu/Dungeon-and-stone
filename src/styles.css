@@ -2251,3 +2251,34 @@ button.cron-card:hover{ transform:translateY(-2px); border-color:var(--bronze); 
 .gm-sheet, .ws-dialog, .sc-talk{ color-scheme:only light; forced-color-adjust:none; }
 /* Respaldo: si aun así algo aclara la tinta, el halo oscuro la mantiene legible sobre el papel */
 .gm-goal, .gm-prog{ text-shadow:0 0 1px rgba(26,15,6,0.55); }
+
+/* Créditos finales */
+.credits-ov{ position:fixed; inset:0; z-index:80; background:#050403; overflow:hidden; color:#e8dfcf; text-align:center; }
+.credits-bg{ position:absolute; inset:0; background:url(assets/fondos/91-100.jpg) center/cover; opacity:0.22; filter:grayscale(0.4); }
+.credits-roll{ position:absolute; inset:0; overflow:hidden; -webkit-mask-image:linear-gradient(180deg, transparent, #000 14%, #000 86%, transparent); mask-image:linear-gradient(180deg, transparent, #000 14%, #000 86%, transparent); }
+.credits-inner{ position:absolute; left:50%; top:100%; width:min(92vw, 560px); transform:translateX(-50%); animation:credits-up 75s linear forwards; padding-bottom:40vh; }
+@keyframes credits-up{ to{ top:0; transform:translate(-50%, -100%) translateY(55vh); } }
+.credits-inner h1{ font-family:'Cinzel'; font-size:2.4em; color:#ffe9a8; margin:0 0 6px; letter-spacing:0.04em; }
+.credits-inner h1 span{ color:#b23a2e; }
+.credits-inner h3{ font-family:'Cinzel'; font-size:0.82em; letter-spacing:0.22em; text-transform:uppercase; color:#b79a5a; margin:56px 0 8px; font-weight:400; }
+.credits-inner p{ margin:4px 0; font-size:1.02em; }
+.credits-inner small{ color:#a79e8e; font-size:0.82em; }
+.credits-inner .cred-name{ font-family:'Cinzel'; font-size:1.6em; color:#fff3cf; }
+.credits-inner .cred-big{ font-family:'Cinzel'; font-size:1.35em; color:#ffe9a8; margin-top:18px; }
+.credits-inner .cred-end{ margin-top:90px; }
+.credits-parade{ display:flex; flex-wrap:wrap; justify-content:center; gap:14px 18px; margin-top:10px; }
+.credits-parade figure{ margin:0; width:96px; }
+.credits-parade img{ width:84px; height:84px; object-fit:contain; filter:grayscale(0.85) brightness(1.15); image-rendering:pixelated; }
+.credits-parade figcaption{ font-size:0.7em; color:#a79e8e; line-height:1.2; }
+.credits-skip{ position:absolute; right:16px; bottom:16px; z-index:2; }
+/* Modos de juego */
+.slot-tag.mode-hardmode{ background:#5a1410; color:#ffd9c9; border-color:#a8322a; }
+.slot-tag.mode-inmortal{ background:#3d2f08; color:#ffe9a8; border-color:#d4a23c; }
+.slot-tag.mode-caido{ background:#2a2a2a; color:#bdbdbd; border-color:#555; }
+.cr-modes{ margin:10px 0 2px; text-align:left; }
+.cr-modes > b{ font-family:'Cinzel'; color:var(--bronze-light); font-size:0.9em; }
+.cr-mode-row{ display:flex; gap:6px; margin:6px 0; flex-wrap:wrap; }
+.cr-mode{ flex:1; min-width:90px; padding:7px 8px; font-family:'Cinzel'; background:rgba(0,0,0,0.3); color:var(--text-dim); border:1px solid var(--border); border-radius:6px; cursor:pointer; }
+.cr-mode.on{ color:#fff3cf; border-color:var(--bronze-light); box-shadow:0 0 8px rgba(212,162,60,0.4); }
+.cr-mode.on.mode-hardmode{ border-color:#c8463a; box-shadow:0 0 8px rgba(200,70,58,0.5); }
+.cr-mode-txt{ font-size:0.84em; color:var(--text-dim); margin:0; min-height:3.2em; }
