@@ -602,7 +602,7 @@ def find_frames(alpha, relaxed=False, nrows=4):
 # Láminas donde dos cuadros de ataque se tocan tanto (un chorro, un tajo largo) que
 # la detección los deja pegados en uno solo: se cortan por la cuadrícula fija de 6
 # columnas. Revisar la tira después: lo que invade la celda vecina queda recortado.
-REJILLA_FIJA = {'enemigo_el_fundidor', 'enemigo_pastor_errores'}  # con el Último Jardinero (guadaña muy ancha) la cuadrícula recorta de más: se deja la detección normal
+REJILLA_FIJA = {'enemigo_el_fundidor', 'enemigo_pastor_errores', 'enemigo_rift_forja_fuelle_errante'}  # con el Último Jardinero (guadaña muy ancha) la cuadrícula recorta de más: se deja la detección normal
 
 
 def find_frames_grid(alpha, nrows=4, ncols=6):
@@ -718,6 +718,10 @@ def collect_jobs():
     for f in sorted(glob.glob('Assets/Sprites mobs/*/chibi/chibi 2/*')):
         if new_sheet_id(f):
             jobs.append((f, 'enemigo_' + new_sheet_id(f), 'enemigo2'))
+    # Rifts (2026-10-11): Assets/Sprites mobs/rifts/<tema>/<Nombre> mob.png → enemigo_rift_<tema>_<nombre>
+    for f in sorted(glob.glob('Assets/Sprites mobs/rifts/*/* mob.png')):
+        tema = os.path.basename(os.path.dirname(f))
+        jobs.append((f, 'enemigo_rift_' + tema + '_' + norm_name(f)[:-4].replace(' ', '_'), 'enemigo'))
     for f in sorted(glob.glob('Assets/Jugador/caminar/*')):
         if walk_race(f):
             jobs.append((f, 'caminar_' + walk_race(f), 'caminar'))

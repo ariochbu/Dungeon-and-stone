@@ -13,7 +13,7 @@
 // combat.enemies/combat.allies/combat.lastActor/combat.lastAction y dibuja.
 // No aplica daño, no decide turnos, no cambia HP.
 
-import { CLASS_SPRITES, ALLY_SPRITES, ENEMY_SPRITES, playerSpriteFor, RACE_SIZE, ALLY_TEMPLATE_SPRITES, enemySpriteFor, enemyChibiKey } from './battleSprites.js?v=93';
+import { CLASS_SPRITES, ALLY_SPRITES, ENEMY_SPRITES, playerSpriteFor, RACE_SIZE, ALLY_TEMPLATE_SPRITES, enemySpriteFor, enemyChibiKey } from './battleSprites.js?v=94';
 
 import { SpriteAnim, sheetFromMeta } from './spriteAnim.js?v=2';
 import { drawIcon, preloadIcons } from './icons.js?v=2';
@@ -27,7 +27,7 @@ const SIZE = TILE * SCALE; // 48px por actor a escala base (sprites fijos sin ve
 // tamaño de celda y los cuadros de cada una. Quien no tenga tira (monstruos de
 // décadas aún sin arte chibi) sigue con su sprite fijo de siempre.
 let CHIBI = {};
-fetch('src/assets/chibi/index.json?v=11').then(r=> r.json()).then(j=>{ CHIBI = j; }).catch(()=>{});
+fetch('src/assets/chibi/index.json?v=12').then(r=> r.json()).then(j=>{ CHIBI = j; }).catch(()=>{});
 const chibiImgs = {}; // key -> Image (cargando o lista)
 function chibiAnimFor(key){
   const meta = CHIBI[key];
@@ -46,6 +46,13 @@ function decadeBgImage(decade){
   return img.complete && img.naturalWidth > 0 ? img : null;
 }
 let currentDecade = null;
+let currentBgUrl = null;   // fondo propio (rifts): manda sobre el de la década
+function urlBgImage(url){
+  if(!url) return null;
+  if(!(url in bgImgs)){ bgImgs[url] = new Image(); bgImgs[url].src = url; }
+  const img = bgImgs[url];
+  return img.complete && img.naturalWidth > 0 ? img : null;
+}
 const STATIC_SIZE = 96;
 const CHIBI_SCALE = 1.25; // respecto a un cuerpo de 64px (spriteAnim iguala las tiras de más resolución)
 // Escena más grande (antes 480x300) para que quepan hasta 6 combatientes por
@@ -389,6 +396,7 @@ function syncBattleStage(container, combat, playerInfo, onTargetClick){
   lastCombatRef = combat;
 
   currentDecade = playerInfo.bgDecade != null ? playerInfo.bgDecade : null;
+  currentBgUrl = playerInfo.bgImage || null;
   if(playerInfo.buffNames) BUFF_STATUS_NAMES = new Set(playerInfo.buffNames);
   if(playerInfo.statusInfo) STATUS_INFO_REF = playerInfo.statusInfo;
   const theme = playerInfo.bgTheme || 'forest';
@@ -842,7 +850,7 @@ function draw(){
   if(shake>0){ ctx.translate((Math.random()*2-1)*shake, (Math.random()*2-1)*shake); shake = Math.max(0, shake-0.9); }
   ctx.clearRect(-10,-10,STAGE_W+20,STAGE_H+20);
   const now = performance.now(), dt = Math.min(0.05, (now - (draw._last || now))/1000); draw._last = now;
-  const bg = decadeBgImage(currentDecade);
+  const bg = (currentBgUrl && urlBgImage(currentBgUrl)) || decadeBgImage(currentDecade);
   if(bg){
     // "cover" anclado abajo: el suelo de la ilustración queda bajo los pies
     const k = Math.max(STAGE_W/bg.naturalWidth, STAGE_H/bg.naturalHeight);

@@ -2,11 +2,11 @@
 
 import { supabase } from './supabaseClient.js';
 import * as auth from './auth.js';
-import { syncBattleStage, playBattleAnim } from './battleStage.js?v=116';
-import { mountLabyrinth } from './labyrinthMap.js?v=10';
+import { syncBattleStage, playBattleAnim } from './battleStage.js?v=117';
+import { mountLabyrinth } from './labyrinthMap.js?v=11';
 import { installIconizer } from './icons.js?v=2';
 installIconizer(); // ningún emoji llega a pantalla: se cambian por los iconos del juego (ver icons.js)
-import { CLASS_SPRITES, ENEMY_SPRITES, playerSpriteFor, playerIllustrationFor, enemySpriteFor, ALLY_TEMPLATE_SPRITES } from './battleSprites.js?v=93';
+import { CLASS_SPRITES, ENEMY_SPRITES, playerSpriteFor, playerIllustrationFor, enemySpriteFor, ALLY_TEMPLATE_SPRITES } from './battleSprites.js?v=94';
 
 /* ============================================================
    DATA
@@ -6510,14 +6510,142 @@ function generateDungeon(level){
     }
     floors.push(nodes);
   }
+  // Rift: una sala intermedia al azar pasa a ser rift (ver RIFT_CHANCE_PER_DECADE)
+  const riftChance = SIM_RIFT && SIM_RIFT.force ? 1 : 1 - Math.pow(1 - RIFT_CHANCE_PER_DECADE, 1/10);
+  if(RIFTS_HERE && !simMode && numFloors > 3 && chance(riftChance)){
+    const f = rnd(1, numFloors - 2), n = rnd(0, floors[f].length - 1);
+    floors[f][n] = {type:'rift', done:false, rift: riftPickTheme(), riftStage:0};
+  }
   return {floors, atFloor:0, atNode:0, visited:{'0-0':true}, level};
 }
 
+// ============================================================
+// RIFTS (diseño de ariochbu, 2026-10-11). Una sala azul con un remolino que puede aparecer en cualquier
+// nivel del laberinto: RIFT_CHANCE_PER_DECADE de probabilidad por década recorrida (repartida entre sus 10
+// niveles). Se ve en el mapa aunque esté en la niebla. Dentro hay una cadena de combates sin volver al mapa
+// (dos oleadas y el jefe del rift) con criaturas de un tema propio que no depende de la década. La fuerza sí:
+// las oleadas pelean como el último nivel normal de la década y el jefe como su jefe de década con +10% de
+// vida. Al ganar: llave de ese tema y botín 75% Rango A / 23% S / 2% SS (el SS aún no cae: RIFT_SS_ENABLED).
+// ============================================================
+const RIFTS_OPEN = true;    // abiertos por orden de ariochbu (2026-10-11)
+const RIFTS_HERE = RIFTS_OPEN || /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+const RIFT_CHANCE_PER_DECADE = 0.10;
+const RIFT_LOOT = {rolls:3, tiers:[['ss', 0.02], ['s', 0.23], ['a', 0.75]], stoneShare:0.30};
+const RIFT_SS_ENABLED = false;
+const RIFT_BOSS_HP = 1.10;
+const RIFT_THEMES = {
+  cripta: {name:'Cripta sin dueño', night:1, status:{name:'Miedo', chance:0.30, duration:2, procChance:0.4}, mobs:[['rift_cripta_esqueleto_guardatumbas','Esqueleto Guardatumbas'], ['rift_cripta_necrofago','Necrófago'], ['rift_cripta_arquero_de_hueso','Arquero de Hueso'], ['rift_cripta_planidera','Plañidera'], ['rift_cripta_caballero_sepulto','Caballero Sepulto'], ['rift_cripta_el_liche_sin_corona','El Liche sin Corona']]},
+  forja: {name:'Forja apagada', night:-1, status:{name:'Quemadura', chance:0.45, duration:3, stack:true, maxStack:3}, mobs:[['rift_forja_automata_de_yunque','Autómata de Yunque'], ['rift_forja_tenaza_viva','Tenaza Viva'], ['rift_forja_ballestero_de_hierro','Ballestero de Hierro'], ['rift_forja_fuelle_errante','Fuelle Errante'], ['rift_forja_maestro_martillador','Maestro Martillador'], ['rift_forja_el_herrero_sin_rostro','El Herrero sin Rostro']]},
+  hielo: {name:'Pozo de hielo', night:0, status:{name:'Ralentizado', chance:0.50, duration:2}, mobs:[['rift_hielo_carambano_andante','Carámbano Andante'], ['rift_hielo_lobo_de_escarcha','Lobo de Escarcha'], ['rift_hielo_lanzador_de_granizo','Lanzador de Granizo'], ['rift_hielo_espiritu_de_ventisca','Espíritu de Ventisca'], ['rift_hielo_oso_glaciar','Oso Glaciar'], ['rift_hielo_el_coloso_dormido','El Coloso Dormido']]},
+  espejos: {name:'Sala de espejos', night:1, status:{name:'Confusion', chance:0.30, duration:2, procChance:0.35}, mobs:[['rift_espejos_guardian_de_marco','Guardián de Marco'], ['rift_espejos_reflejo_roto','Reflejo Roto'], ['rift_espejos_lanzacristales','Lanzacristales'], ['rift_espejos_doncella_de_azogue','Doncella de Azogue'], ['rift_espejos_caballero_espejado','Caballero Espejado'], ['rift_espejos_el_reflejo','El Reflejo']]},
+  jardin: {name:'Jardín devorador', night:-1, status:{name:'Veneno', chance:0.55, duration:3, stack:true, maxStack:4}, mobs:[['rift_jardin_tronco_espinoso','Tronco Espinoso'], ['rift_jardin_planta_mordedora','Planta Mordedora'], ['rift_jardin_escupesemillas','Escupesemillas'], ['rift_jardin_flor_somnifera','Flor Somnífera'], ['rift_jardin_enredadera_estranguladora','Enredadera Estranguladora'], ['rift_jardin_la_madre_espina','La Madre Espina']]},
+  tormenta: {name:'Tormenta quieta', night:0, status:{name:'Paralisis', chance:0.20, duration:1}, mobs:[['rift_tormenta_nube_acorazada','Nube Acorazada'], ['rift_tormenta_chispa_errante','Chispa Errante'], ['rift_tormenta_lancero_del_rayo','Lancero del Rayo'], ['rift_tormenta_tamborilero_del_trueno','Tamborilero del Trueno'], ['rift_tormenta_halcon_de_tormenta','Halcón de Tormenta'], ['rift_tormenta_el_ojo_de_la_tormenta','El Ojo de la Tormenta']]},
+  nido: {name:'Nido profundo', night:0, status:{name:'Veneno', chance:0.50, duration:3, stack:true, maxStack:4}, mobs:[['rift_nido_escarabajo_coraza','Escarabajo Coraza'], ['rift_nido_avispa_cortadora','Avispa Cortadora'], ['rift_nido_escupidora_de_acido','Escupidora de Ácido'], ['rift_nido_nodriza_del_nido','Nodriza del Nido'], ['rift_nido_mantis_verdugo','Mantis Verdugo'], ['rift_nido_la_reina_ciega','La Reina Ciega']]},
+  biblioteca: {name:'Biblioteca hundida', night:1, status:{name:'Silencio', chance:0.25, duration:1}, mobs:[['rift_biblioteca_estante_andante','Estante Andante'], ['rift_biblioteca_tomo_mordedor','Tomo Mordedor'], ['rift_biblioteca_escriba_ahogado','Escriba Ahogado'], ['rift_biblioteca_bibliotecaria_muda','Bibliotecaria Muda'], ['rift_biblioteca_golem_de_pergamino','Gólem de Pergamino'], ['rift_biblioteca_el_archivista','El Archivista']]},
+  arena: {name:'Arena olvidada', night:-1, status:{name:'Sangrado', chance:0.50, duration:3, stack:true, maxStack:3}, mobs:[['rift_arena_mirmillon_oxidado','Mirmillón Oxidado'], ['rift_arena_reciario','Reciario'], ['rift_arena_hondero','Hondero'], ['rift_arena_portaestandarte','Portaestandarte'], ['rift_arena_leon_de_arena','León de Arena'], ['rift_arena_el_campeon','El Campeón']]},
+  mina: {name:'Mina de sangre', night:0, status:{name:'Debilitado', chance:0.45, duration:2}, mobs:[['rift_mina_golem_de_cuarzo','Gólem de Cuarzo'], ['rift_mina_minero_maldito','Minero Maldito'], ['rift_mina_lagarto_de_esquirlas','Lagarto de Esquirlas'], ['rift_mina_linterna_viva','Linterna Viva'], ['rift_mina_topo_tallador','Topo Tallador'], ['rift_mina_el_corazon_de_cuarzo','El Corazón de Cuarzo']]},
+  mascaras: {name:'Corte de máscaras', night:1, status:{name:'Confusion', chance:0.30, duration:2, procChance:0.35}, mobs:[['rift_mascaras_guardia_enmascarado','Guardia Enmascarado'], ['rift_mascaras_duelista_de_la_corte','Duelista de la Corte'], ['rift_mascaras_dama_del_abanico','Dama del Abanico'], ['rift_mascaras_musico_de_la_corte','Músico de la Corte'], ['rift_mascaras_verdugo_de_la_corte','Verdugo de la Corte'], ['rift_mascaras_la_dama_sin_rostro','La Dama sin Rostro']]},
+  tesoreria: {name:'Tesorería maldita', night:0, status:{name:'Marcado', chance:0.50, duration:2}, mobs:[['rift_tesoreria_puerta_acorazada','Puerta Acorazada'], ['rift_tesoreria_cofre_mimico','Cofre Mímico'], ['rift_tesoreria_enjambre_de_monedas','Enjambre de Monedas'], ['rift_tesoreria_contable_maldito','Contable Maldito'], ['rift_tesoreria_caballero_de_oro','Caballero de Oro'], ['rift_tesoreria_el_avaro','El Avaro']]},
+  astillero: {name:'Astillero fantasma', night:1, status:{name:'Ralentizado', chance:0.45, duration:2}, mobs:[['rift_astillero_golem_de_casco','Gólem de Casco'], ['rift_astillero_abordador_ahogado','Abordador Ahogado'], ['rift_astillero_artillero_fantasma','Artillero Fantasma'], ['rift_astillero_sirena_del_naufragio','Sirena del Naufragio'], ['rift_astillero_contramaestre_fantasma','Contramaestre Fantasma'], ['rift_astillero_el_capitan_sin_barco','El Capitán sin Barco']]},
+  circo: {name:'Circo abandonado', night:1, status:{name:'Miedo', chance:0.30, duration:2, procChance:0.4}, mobs:[['rift_circo_forzudo_de_madera','Forzudo de Madera'], ['rift_circo_muneca_acrobata','Muñeca Acróbata'], ['rift_circo_lanzacuchillos','Lanzacuchillos'], ['rift_circo_mono_de_los_platillos','Mono de los Platillos'], ['rift_circo_oso_de_retazos','Oso de Retazos'], ['rift_circo_el_maestro_de_pista','El Maestro de Pista']]},
+  reloj: {name:'Torre del reloj', night:0, status:{name:'Ralentizado', chance:0.50, duration:2}, mobs:[['rift_reloj_guardia_del_pendulo','Guardia del Péndulo'], ['rift_reloj_bailarina_de_agujas','Bailarina de Agujas'], ['rift_reloj_cuco_tirador','Cuco Tirador'], ['rift_reloj_pequeno_relojero','Pequeño Relojero'], ['rift_reloj_campanero_de_bronce','Campanero de Bronce'], ['rift_reloj_el_guardian_de_las_horas','El Guardián de las Horas']]},
+  hongos: {name:'Cueva de hongos', night:0, status:{name:'Veneno', chance:0.60, duration:3, stack:true, maxStack:4}, mobs:[['rift_hongos_seta_bruta','Seta Bruta'], ['rift_hongos_sabueso_de_moho','Sabueso de Moho'], ['rift_hongos_lanzador_de_esporas','Lanzador de Esporas'], ['rift_hongos_chaman_de_esporas','Chamán de Esporas'], ['rift_hongos_trol_fungico','Trol Fúngico'], ['rift_hongos_la_madre_micelio','La Madre Micelio']]},
+  templo: {name:'Templo del sol muerto', night:-1, status:{name:'Debilitado', chance:0.45, duration:2}, mobs:[['rift_templo_centinela_de_arenisca','Centinela de Arenisca'], ['rift_templo_guerrero_vendado','Guerrero Vendado'], ['rift_templo_arquero_escarabajo','Arquero Escarabajo'], ['rift_templo_sacerdotisa_del_sol','Sacerdotisa del Sol'], ['rift_templo_esfinge_de_piedra','Esfinge de Piedra'], ['rift_templo_el_faraon_del_sol_muerto','El Faraón del Sol Muerto']]},
+  sombras: {name:'Fosa de sombras', night:1, status:{name:'Ceguera', chance:0.35, duration:2}, mobs:[['rift_sombras_mole_de_sombra','Mole de Sombra'], ['rift_sombras_acechador_oscuro','Acechador Oscuro'], ['rift_sombras_ojo_vigilante','Ojo Vigilante'], ['rift_sombras_apagavelas','Apagavelas'], ['rift_sombras_caballero_hueco','Caballero Hueco'], ['rift_sombras_lo_que_habita_la_fosa','Lo que Habita la Fosa']]},
+  ceniza: {name:'Santuario de ceniza', night:-1, status:{name:'Quemadura', chance:0.50, duration:3, stack:true, maxStack:3}, mobs:[['rift_ceniza_guardian_de_ceniza','Guardián de Ceniza'], ['rift_ceniza_monje_de_brasa','Monje de Brasa'], ['rift_ceniza_portador_del_incensario','Portador del Incensario'], ['rift_ceniza_guardiana_de_la_campana','Guardiana de la Campana'], ['rift_ceniza_abad_de_carbon','Abad de Carbón'], ['rift_ceniza_la_ultima_llama','La Última Llama']]},
+  observatorio: {name:'Observatorio roto', night:1, status:{name:'Marcado', chance:0.50, duration:2}, mobs:[['rift_observatorio_golem_planetario','Gólem Planetario'], ['rift_observatorio_cazador_de_constelaciones','Cazador de Constelaciones'], ['rift_observatorio_telescopio_vivo','Telescopio Vivo'], ['rift_observatorio_lector_de_estrellas','Lector de Estrellas'], ['rift_observatorio_cometa_caido','Cometa Caído'], ['rift_observatorio_el_astronomo','El Astrónomo']]},
+};
+let SIM_RIFT = null; // solo pruebas: fuerza el tema o la aparición
+// De noche (hora de Ecuador, la del reloj del juego) pesan más unos temas y de día otros; ninguno queda a cero.
+function riftPickTheme(){
+  if(SIM_RIFT && RIFT_THEMES[SIM_RIFT.theme]) return SIM_RIFT.theme;
+  const h = ((new Date().getUTCHours() + ECUADOR_UTC_OFFSET) % 24 + 24) % 24, isNight = h >= 19 || h < 6;
+  const pool = Object.keys(RIFT_THEMES).map(id=> ({tpl:id, weight: 1 + (RIFT_THEMES[id].night === (isNight ? 1 : -1) ? 1.5 : 0)}));
+  return pickWeighted(pool);
+}
+function riftTemplates(themeId){
+  const t = RIFT_THEMES[themeId], S = t.status, m = t.mobs;
+  if(t._tpl) return t._tpl;
+  const weak = Object.assign({}, S, {chance: +(S.chance*0.6).toFixed(2)});
+  const healIf = (ctx)=> combat.enemies.some(e=> e.hp > 0 && e.hp < e.maxHP*0.7);
+  t._tpl = {
+    regular: [
+      {id:m[0][0], name:m[0][1], icon:'🛡️', hp:1.35, atk:0.92, res:rs(30,10,10,10,20), frontline:true, immuneRetroceso:true,
+        abilities:{golpe:{label:'Golpe', mult:1.00}, embestida:{label:'Embestida', mult:1.25, cooldown:4}}, aiPriority:['embestida','golpe']},
+      {id:m[1][0], name:m[1][1], icon:'⚔️', hp:0.95, atk:1.15, res:rs(5,5,5,5,5), frontline:true,
+        abilities:{golpe:{label:'Golpe', mult:1.00}, marca:{label:'Golpe Maldito', mult:0.90, cooldown:3, applies:S}}, aiPriority:['marca','golpe']},
+      {id:m[2][0], name:m[2][1], icon:'🏹', hp:0.85, atk:1.10, res:rs(0,10,10,5,0),
+        abilities:{disparo:{label:'Disparo', mult:1.00}, certero:{label:'Disparo Certero', mult:1.35, cooldown:4}}, aiPriority:['certero','disparo']},
+      {id:m[3][0], name:m[3][1], icon:'✨', hp:0.85, atk:0.92, res:rs(-5,15,15,10,0),
+        abilities:{toque:{label:'Toque', mult:0.95, applies:weak}, cura:{label:'Cura', utility:'heal_ally', healPct:0.10, cooldown:4, condition:healIf}}, aiPriority:['cura','toque']},
+    ],
+    elite: {id:m[4][0], name:m[4][1], icon:'☠️', hp:2.30, atk:1.28, res:rs(20,15,15,10,20), elite:true, frontline:true, immuneRetroceso:true,
+      abilities:{golpe:{label:'Golpe', mult:1.00}, brutal:{label:'Golpe Brutal', mult:1.45, cooldown:3, applies:S}}, aiPriority:['brutal','golpe']},
+    boss: {id:m[5][0], name:m[5][1], icon:'👑', hp:5.5, atk:1.8, res:rs(20,20,20,15,30), boss:true, frontline:true, immuneRetroceso:true, riftBoss:true,
+      phases:[{below:0.50, msg:'se desata: <b>el rift entero tiembla</b> (fase 2).'}],
+      abilities:{golpe:{label:'Golpe', mult:1.00}, barrido:{label:'Barrido del Rift', utility:'aoe', mult:0.55, rearMult:0.50, cooldown:4, applies:weak}, sentencia:{label:'Golpe del Guardián', mult:1.50, cooldown:3, applies:S}},
+      aiPriority:['barrido','sentencia','golpe']},
+  };
+  return t._tpl;
+}
+// El grupo de cada etapa del rift: 0 y 1 son oleadas, 2 es el jefe.
+function buildRiftGroup(node, f, level){
+  const tp = riftTemplates(node.rift), dec = decadeIndexForLevel(level);
+  const mobLevel = dec*10 + 9, bossLevel = dec*10 + 10;
+  const n = level >= 40 ? 5 : level >= 20 ? 3 : 2;
+  const group = [];
+  if(node.riftStage < 2){
+    pickSmartTemplates(tp.regular, node.riftStage === 0 ? n : Math.max(1, n - 1)).forEach(t=> group.push(makeEnemy(t, f, mobLevel)));
+    if(node.riftStage === 1) group.push(makeEnemy(tp.elite, f, mobLevel));
+  } else {
+    const ref = DECADE_BESTIARY[dec].decadeBoss;
+    const bossTpl = Object.assign({}, tp.boss, {hp: ref.hp*RIFT_BOSS_HP, atk: ref.atk, decadeBossOf: bossLevel});
+    group.push(makeEnemy(bossTpl, f, bossLevel));
+    pickSmartTemplates(tp.regular, Math.max(1, Math.min(2, n - 1))).forEach(t=> group.push(makeEnemy(t, f, mobLevel)));
+  }
+  group.sort((a,b)=> (b.tpl.frontline?1:0) - (a.tpl.frontline?1:0));
+  return group;
+}
+function riftKeys(){ const sc = state.char.storyChoices || (state.char.storyChoices = {}); return sc._riftKeys || (sc._riftKeys = {}); }
+function enterRift(node, f){
+  const t = RIFT_THEMES[node.rift], dec = decadeIndexForLevel(state.dungeon.level);
+  showChoiceOverlay('Un rift', `El aire se pliega sobre sí mismo y deja ver otro lugar: <b>${t.name}</b>.<br><br><b style="color:#ff8a7a">Peligro.</b> Lo que hay dentro pelea como el final de esta década (nivel ${dec*10 + 10}), en dos oleadas y un guardián, sin descanso entre ellas. Una vez dentro no hay vuelta atrás.`, [
+    {label:'Entrar al rift', primary:true, onClick: ()=>{ node.riftStage = 0; startCombat(buildRiftGroup(node, f, state.dungeon.level), node); }},
+    {label:'Pasar de largo', onClick: ()=>{ node.done = true; log('Dejas el rift atrás. El remolino se cierra sin hacer ruido.'); save(); renderAll(); }},
+  ]);
+}
+// Tras ganar una etapa que no es la última: sigue la siguiente sin volver al mapa. Devuelve true si siguió.
+function riftAdvance(){
+  const node = combat.node;
+  if(node.type !== 'rift' || node.riftStage >= 2) return false;
+  node.riftStage++;
+  syncAllyHPToDungeon();
+  const f = state.dungeon.atFloor;
+  log(node.riftStage === 2 ? `Las oleadas ceden. Del fondo del rift sale <b>${RIFT_THEMES[node.rift].mobs[5][1]}</b>.` : 'La primera oleada cae. Llega otra.');
+  startCombat(buildRiftGroup(node, f, state.dungeon.level), node);
+  return true;
+}
+function grantRiftRewards(node){
+  const t = RIFT_THEMES[node.rift], keys = riftKeys(), got = [];
+  keys[node.rift] = (keys[node.rift] || 0) + 1;
+  for(let i = 0; i < RIFT_LOOT.rolls; i++){
+    let tier = pickWeighted(RIFT_LOOT.tiers.map(([id, weight])=> ({tpl:id, weight})));
+    if(tier === 'ss' && !RIFT_SS_ENABLED) tier = 's';
+    let item;
+    if(chance(RIFT_LOOT.stoneShare)){
+      const pool = Object.values(SOUL_STONES).filter(s=> s.tier === (tier === 'a' ? 'A' : 'S'));
+      item = pool.length ? makeSoulStoneItem(pick(pool)) : null;
+    } else item = generateEquipOfRarity(tier === 'a' ? 'rango_a' : 'legendario', state.dungeon.atFloor);
+    if(item){ addToInventory(item); got.push(item.name); if(tier !== 'a' && item.kind === 'equip') flashRareDrop(item, RARITIES[item.rarity].name); }
+  }
+  log(`<b>Rift superado: ${t.name}.</b> Consigues una llave de este rift (tienes ${keys[node.rift]}) y: ${got.join(', ') || 'nada más'}.`);
+  if(state.char.storyColumn) save();
+}
 function nodeIcon(type){
-  return {entrada:'🚪', combate:'⚔️', tesoro:'💰', descanso:'🔥', elite:'☠️', jefe:'🛡️'}[type] || '?';
+  return {entrada:'🚪', combate:'⚔️', tesoro:'💰', descanso:'🔥', elite:'☠️', jefe:'🛡️', rift:'🌀'}[type] || '?';
 }
 function nodeLabel(type){
-  return {entrada:'Entrada', combate:'Combate', tesoro:'Tesoro', descanso:'Descanso', elite:'Élite', jefe:'Jefe del laberinto'}[type] || type;
+  return {entrada:'Entrada', combate:'Combate', tesoro:'Tesoro', descanso:'Descanso', elite:'Élite', jefe:'Jefe del laberinto', rift:'Rift'}[type] || type;
 }
 
 /* ============================================================
@@ -10934,7 +11062,10 @@ function enterNode(f,n){
   save();
   if(advancedFloor) advanceMissionsFor('clear_floors', 1);
 
-  if(node.type==='combate' || node.type==='elite' || node.type==='jefe'){
+  if(node.type==='rift'){
+    if(node.done){ renderAll(); return; }
+    enterRift(node, f);
+  } else if(node.type==='combate' || node.type==='elite' || node.type==='jefe'){
     const group = buildEncounterGroup(node.type, f, dg.level);
     startCombat(group, node);
   } else if(node.type==='tesoro'){
@@ -15296,6 +15427,10 @@ if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
   window.__inv = (cfg)=>{ window.__ficha(cfg || {}); for(let i = 0; i < 9; i++){ const it = generateLoot(2, state.char.level); if(it) state.char.inventory.push(it); } invTab = 'mochila'; renderInventory = ((orig)=> orig)(renderInventory); renderInventory(); };
   window.__ficha = (cfg)=>{ const {st} = simBuildState(Object.assign({style:'tirador', level:80, dungeonLevel:80}, cfg)); st.dungeon = null; st.char.gold = cfg.gold || 0; state = st; const d = derived(); state.char.curHP = d.maxHP; state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi; fichaTab = 'profesion'; fichaHostEl = null; save = ()=>{}; renderAll = ()=>{}; renderFicha(); };
   window.__celdaVer = (level, cfg)=>{ const {st} = simBuildState(Object.assign({style:'pesada', level:100, dungeonLevel:level}, cfg || {})); state = st; state.log = []; const d = derived(); state.char.curHP = d.maxHP; state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi; save = ()=>{}; lsGet = ()=> null; lsSet = ()=>{}; const dg = Object.assign(generateDungeon(level), {allyHP:{}, allyMP:{}, allySpirit:{}}); state.dungeon = dg; showScreen('screen-game'); const f = dg.floors.length - 1; dg.atFloor = f; dg.atNode = 0; startCombat(buildEncounterGroup('jefe', f, level), dg.floors[f][0]); };
+  window.__riftVer = (theme, level, cfg)=>{ const {st} = simBuildState(Object.assign({style:'pesada', level: level, dungeonLevel: level}, cfg || {})); state = st; state.log = []; const d = derived(); state.char.curHP = d.maxHP; state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi; save = ()=>{}; SIM_RIFT = {theme, force:true}; const dg = Object.assign(generateDungeon(level), {allyHP:{}, allyMP:{}, allySpirit:{}}); state.dungeon = dg; showScreen('screen-game'); let pos = null; dg.floors.forEach((fl, f)=> fl.forEach((n, i)=>{ if(n.type === 'rift') pos = [f, i]; })); if(cfg && cfg.cerca && pos){ dg.atFloor = pos[0] - 1; dg.atNode = 0; for(let f = 0; f < pos[0]; f++) dg.visited[f + '-0'] = true; } renderAll(); return pos; };
+  window.__riftEntra = ()=>{ const dg = state.dungeon; let pos = null; dg.floors.forEach((fl, f)=> fl.forEach((n, i)=>{ if(n.type === 'rift') pos = [f, i]; })); dg.atFloor = pos[0]; dg.atNode = pos[1]; enterRift(dg.floors[pos[0]][pos[1]], pos[0]); };
+  window.__riftGana = ()=>{ combat.enemies.forEach(e=>{ e.hp = 0; }); checkCombatEnd(); return combat ? {etapa: combat.node.riftStage, enemigos: combat.enemies.map(e=> e.name + ' ' + e.maxHP), over: combat.over} : 'sin combate'; };
+  window.__rift = (v)=>{ if(v !== undefined) SIM_RIFT = v; return SIM_RIFT; };
   window.__celdaG = CELDA_GUESTS; window.__creditos = ()=> showCredits(()=>{}); window.__modos = (on)=>{ MODES_UNLOCKED = on !== false; };
   window.__celda = (v)=>{ if(v !== undefined) SIM_CELDA = v; return SIM_CELDA; };
   window.__historia = (level)=> showStoryScenes(level, ()=>{});
@@ -15456,6 +15591,7 @@ const DECADE_BOSS_FRAGMENTS = {
   60: {id:'storm_gush', name:'Fragmento de Storm Gush', icon:'🔱'},
 };
 function handleVictory(){
+  if(riftAdvance()) return;
   stopBossAudio();
   const isBoss = combat.node.type==='jefe';
   const isElite = combat.node.type==='elite';
@@ -15471,6 +15607,7 @@ function handleVictory(){
   state.char.gold += goldGain;
   log(`Victoria. +${myXpGain} experiencia, +${goldGain} de oro.`);
   combat.node.done = true;
+  if(combat.node.type === 'rift') grantRiftRewards(combat.node);
 
   // La experiencia no se reparte: cada aliado recibe el mismo xpGain completo
   // que tú, no una fracción — así todos evolucionan al mismo ritmo que el equipo.
@@ -16149,7 +16286,7 @@ function renderCombat(){
     hp: state.char.curHP, maxHP: d.maxHP, mp: state.char.curSta, maxMP: d.maxSta,
     spirit: state.char.curSpi, maxSpirit: d.maxSpi, statuses: combat.playerStatuses||[],
     shield: combat.playerShield||0,
-    pos: combat.playerPos, bgTheme: DECADE_BG_THEME[decadeIndexForLevel(state.dungeon.level)], bgDecade: decadeIndexForLevel(state.dungeon.level),
+    pos: combat.playerPos, bgTheme: DECADE_BG_THEME[decadeIndexForLevel(state.dungeon.level)], bgDecade: decadeIndexForLevel(state.dungeon.level), bgImage: combat.node && combat.node.type === 'rift' ? `src/assets/fondos/rift_${combat.node.rift}.jpg?v=1` : null,
     buffNames: Object.keys(STATUS_INFO).filter(k=> STATUS_INFO[k].buff), statusInfo: STATUS_INFO,
   };
   syncBattleStage(document.getElementById('battle-stage-mount'), combat, playerInfo, {

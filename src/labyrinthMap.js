@@ -16,7 +16,7 @@ const T = 16;                    // unidad de la cuadrícula
 const ROOM_W = 7, ROOM_H = 5;    // tamaño de una sala, en unidades
 const FX = ROOM_W + 4, LY = ROOM_H + 2; // paso entre pisos (→) y entre sendas (↓)
 const VIEW_W = 480, VIEW_H = 384;
-const TYPE_COLOR = { entrada:'#8a8f99', combate:'#c44a4a', elite:'#9a5fd0', tesoro:'#e0b23f', descanso:'#e8853a', jefe:'#ff3b3b' };
+const TYPE_COLOR = { entrada:'#8a8f99', combate:'#c44a4a', elite:'#9a5fd0', tesoro:'#e0b23f', descanso:'#e8853a', jefe:'#ff3b3b', rift:'#3aa0ff' };
 const BADGE = {
   combate: {icon:'swords', label:'Normal',   bg:'#5a2a2a', fg:'#ffd9d4', line:'#c44a4a'},
   elite:   {icon:'skull', label:'Élite',    bg:'#3f2a66', fg:'#e6d6ff', line:'#9a5fd0'},
@@ -24,7 +24,7 @@ const BADGE = {
 };
 
 let CHIBI = {};
-fetch('src/assets/chibi/index.json?v=8').then(r=> r.json()).then(j=>{ CHIBI = j; }).catch(()=>{});
+fetch('src/assets/chibi/index.json?v=12').then(r=> r.json()).then(j=>{ CHIBI = j; }).catch(()=>{});
 const imgs = {};
 function img(src){
   if(!imgs[src]){ imgs[src] = new Image(); imgs[src].src = src; }
@@ -185,7 +185,8 @@ function drawRoom(m, t, dt){
   const x = m.x0*T, y = m.y0*T, w = ROOM_W*T, h = ROOM_H*T;
   const here = m.f === dg.atFloor && m.n === dg.atNode, visited = !!dg.visited[m.f + '-' + m.n];
   const reach = !walking && opts.isReachable(m.f, m.n);
-  const hidden = m.f > dg.atFloor + 1; // niebla: más allá del piso siguiente no se ve
+  const isRift = node.type === 'rift' && !node.done;
+  const hidden = m.f > dg.atFloor + 1 && !isRift; // niebla: más allá del piso siguiente no se ve (un rift se ve siempre)
   roundRect(x, y, w, h, 6);
   ctx.fillStyle = hidden ? 'rgba(8,6,10,0.72)' : here ? 'rgba(255,255,255,0.10)' : visited ? 'rgba(8,6,10,0.55)' : 'rgba(8,6,10,0.34)';
   ctx.fill();
@@ -195,6 +196,20 @@ function drawRoom(m, t, dt){
   if(hidden){
     ctx.fillStyle = 'rgba(170,160,180,0.6)'; ctx.font = 'bold 20px Georgia'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText('?', x + w/2, y + h/2); ctx.textAlign = 'left';
+    return;
+  }
+  if(isRift){
+    // Rift: sala azul con un remolino en el centro
+    roundRect(x, y, w, h, 6); ctx.fillStyle = `rgba(30,90,200,${0.30 + 0.08*Math.sin(t*3)})`; ctx.fill();
+    ctx.strokeStyle = `rgba(120,190,255,${0.75 + 0.2*Math.sin(t*4)})`; ctx.lineWidth = 2; ctx.stroke();
+    ctx.save(); ctx.translate(cx, cy + 8);
+    for(let k = 0; k < 3; k++){
+      ctx.rotate(t*(1.6 - k*0.35) + k*2.1); ctx.strokeStyle = `rgba(${150 + k*35},${210 + k*15},255,${0.85 - k*0.2})`; ctx.lineWidth = 3 - k*0.7;
+      ctx.beginPath(); ctx.arc(0, 0, 9 + k*6, 0, Math.PI*1.35); ctx.stroke();
+    }
+    ctx.restore();
+    ctx.fillStyle = '#eaf6ff'; ctx.beginPath(); ctx.arc(cx, cy + 8, 3, 0, 7); ctx.fill();
+    ctx.font = 'bold 8px Georgia'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#d8ecff'; ctx.fillText('RIFT', cx, y + 9); ctx.textAlign = 'left';
     return;
   }
   if(node.type === 'descanso'){
@@ -218,7 +233,9 @@ function drawMinimap(){
   world.rooms.forEach(m=>{
     const x = ox + pad + m.f*cw, y = oy + pad + m.lane*ch, here = m.f === dg.atFloor && m.n === dg.atNode;
     ctx.globalAlpha = here || opts.isReachable(m.f, m.n) ? 1 : dg.visited[m.f + '-' + m.n] ? 0.35 : 0.6;
-    ctx.fillStyle = m.f > dg.atFloor + 1 && m.node.type !== 'jefe' ? '#4a4650' : TYPE_COLOR[m.node.type] || '#666';
+    const rift = m.node.type === 'rift' && !m.node.done;
+    if(rift) ctx.globalAlpha = 1;
+    ctx.fillStyle = m.f > dg.atFloor + 1 && m.node.type !== 'jefe' && !rift ? '#4a4650' : TYPE_COLOR[m.node.type] || '#666';
     ctx.fillRect(x, y, cw - 2, ch - 2);
     ctx.globalAlpha = 1;
     if(here){ ctx.strokeStyle = '#fff'; ctx.strokeRect(x - 0.5, y - 0.5, cw - 1, ch - 1); }

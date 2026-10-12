@@ -1808,6 +1808,1326 @@
    5
   ]
  },
+ "enemigo_rift_arena_el_campeon": {
+  "bh": 128,
+  "ch": 140,
+  "cw": 214,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_arena_hondero": {
+  "bh": 128,
+  "ch": 158,
+  "cw": 184,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "enemigo_rift_arena_leon_de_arena": {
+  "bh": 128,
+  "ch": 134,
+  "cw": 232,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_arena_mirmillon_oxidado": {
+  "bh": 128,
+  "ch": 130,
+  "cw": 192,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_arena_portaestandarte": {
+  "bh": 128,
+  "ch": 131,
+  "cw": 234,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "enemigo_rift_arena_reciario": {
+  "bh": 128,
+  "ch": 131,
+  "cw": 264,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_astillero_abordador_ahogado": {
+  "bh": 128,
+  "ch": 130,
+  "cw": 376,
+  "frames": [
+   4,
+   5,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_astillero_artillero_fantasma": {
+  "bh": 128,
+  "ch": 130,
+  "cw": 252,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_astillero_contramaestre_fantasma": {
+  "bh": 128,
+  "ch": 137,
+  "cw": 270,
+  "frames": [
+   4,
+   5,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_astillero_el_capitan_sin_barco": {
+  "bh": 128,
+  "ch": 130,
+  "cw": 180,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_astillero_golem_de_casco": {
+  "bh": 128,
+  "ch": 140,
+  "cw": 320,
+  "frames": [
+   4,
+   5,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_astillero_sirena_del_naufragio": {
+  "bh": 128,
+  "ch": 133,
+  "cw": 254,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "enemigo_rift_biblioteca_bibliotecaria_muda": {
+  "bh": 128,
+  "ch": 130,
+  "cw": 184,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_biblioteca_el_archivista": {
+  "bh": 128,
+  "ch": 130,
+  "cw": 162,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_biblioteca_escriba_ahogado": {
+  "bh": 128,
+  "ch": 134,
+  "cw": 260,
+  "frames": [
+   4,
+   5,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_biblioteca_estante_andante": {
+  "bh": 128,
+  "ch": 130,
+  "cw": 216,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "enemigo_rift_biblioteca_golem_de_pergamino": {
+  "bh": 128,
+  "ch": 136,
+  "cw": 250,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_biblioteca_tomo_mordedor": {
+  "bh": 128,
+  "ch": 146,
+  "cw": 236,
+  "frames": [
+   6,
+   6,
+   2,
+   6
+  ]
+ },
+ "enemigo_rift_ceniza_abad_de_carbon": {
+  "bh": 128,
+  "ch": 131,
+  "cw": 376,
+  "frames": [
+   4,
+   5,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_ceniza_guardian_de_ceniza": {
+  "bh": 128,
+  "ch": 145,
+  "cw": 230,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_ceniza_guardiana_de_la_campana": {
+  "bh": 128,
+  "ch": 142,
+  "cw": 340,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "enemigo_rift_ceniza_la_ultima_llama": {
+  "bh": 128,
+  "ch": 130,
+  "cw": 392,
+  "frames": [
+   4,
+   5,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_ceniza_monje_de_brasa": {
+  "bh": 128,
+  "ch": 148,
+  "cw": 392,
+  "frames": [
+   4,
+   5,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_ceniza_portador_del_incensario": {
+  "bh": 128,
+  "ch": 138,
+  "cw": 272,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "enemigo_rift_circo_el_maestro_de_pista": {
+  "bh": 128,
+  "ch": 130,
+  "cw": 218,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "enemigo_rift_circo_forzudo_de_madera": {
+  "bh": 128,
+  "ch": 140,
+  "cw": 210,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "enemigo_rift_circo_lanzacuchillos": {
+  "bh": 128,
+  "ch": 133,
+  "cw": 190,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "enemigo_rift_circo_mono_de_los_platillos": {
+  "bh": 128,
+  "ch": 145,
+  "cw": 238,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_circo_muneca_acrobata": {
+  "bh": 128,
+  "ch": 133,
+  "cw": 162,
+  "frames": [
+   4,
+   7,
+   2,
+   5
+  ]
+ },
+ "enemigo_rift_circo_oso_de_retazos": {
+  "bh": 128,
+  "ch": 136,
+  "cw": 214,
+  "frames": [
+   4,
+   6,
+   2,
+   6
+  ]
+ },
+ "enemigo_rift_cripta_arquero_de_hueso": {
+  "bh": 128,
+  "ch": 131,
+  "cw": 236,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_cripta_caballero_sepulto": {
+  "bh": 128,
+  "ch": 148,
+  "cw": 234,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_cripta_el_liche_sin_corona": {
+  "bh": 128,
+  "ch": 143,
+  "cw": 328,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_cripta_esqueleto_guardatumbas": {
+  "bh": 128,
+  "ch": 137,
+  "cw": 244,
+  "frames": [
+   6,
+   6,
+   2,
+   5
+  ]
+ },
+ "enemigo_rift_cripta_necrofago": {
+  "bh": 128,
+  "ch": 140,
+  "cw": 308,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_cripta_planidera": {
+  "bh": 128,
+  "ch": 132,
+  "cw": 298,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_espejos_caballero_espejado": {
+  "bh": 128,
+  "ch": 131,
+  "cw": 210,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_espejos_doncella_de_azogue": {
+  "bh": 128,
+  "ch": 148,
+  "cw": 270,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_espejos_el_reflejo": {
+  "bh": 128,
+  "ch": 130,
+  "cw": 286,
+  "frames": [
+   4,
+   5,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_espejos_guardian_de_marco": {
+  "bh": 128,
+  "ch": 130,
+  "cw": 192,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_espejos_lanzacristales": {
+  "bh": 128,
+  "ch": 130,
+  "cw": 304,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_espejos_reflejo_roto": {
+  "bh": 128,
+  "ch": 130,
+  "cw": 240,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_forja_automata_de_yunque": {
+  "bh": 128,
+  "ch": 160,
+  "cw": 278,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "enemigo_rift_forja_ballestero_de_hierro": {
+  "bh": 128,
+  "ch": 130,
+  "cw": 192,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_forja_el_herrero_sin_rostro": {
+  "bh": 128,
+  "ch": 152,
+  "cw": 202,
+  "frames": [
+   4,
+   6,
+   2,
+   6
+  ]
+ },
+ "enemigo_rift_forja_fuelle_errante": {
+  "bh": 128,
+  "ch": 138,
+  "cw": 244,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "enemigo_rift_forja_maestro_martillador": {
+  "bh": 128,
+  "ch": 139,
+  "cw": 220,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_forja_tenaza_viva": {
+  "bh": 128,
+  "ch": 162,
+  "cw": 490,
+  "frames": [
+   4,
+   5,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_hielo_carambano_andante": {
+  "bh": 128,
+  "ch": 130,
+  "cw": 258,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_hielo_el_coloso_dormido": {
+  "bh": 128,
+  "ch": 141,
+  "cw": 220,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_hielo_espiritu_de_ventisca": {
+  "bh": 128,
+  "ch": 130,
+  "cw": 366,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_hielo_lanzador_de_granizo": {
+  "bh": 128,
+  "ch": 142,
+  "cw": 254,
+  "frames": [
+   4,
+   5,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_hielo_lobo_de_escarcha": {
+  "bh": 128,
+  "ch": 155,
+  "cw": 286,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_hielo_oso_glaciar": {
+  "bh": 128,
+  "ch": 151,
+  "cw": 240,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "enemigo_rift_hongos_chaman_de_esporas": {
+  "bh": 128,
+  "ch": 153,
+  "cw": 242,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_hongos_la_madre_micelio": {
+  "bh": 128,
+  "ch": 136,
+  "cw": 200,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_hongos_lanzador_de_esporas": {
+  "bh": 128,
+  "ch": 134,
+  "cw": 238,
+  "frames": [
+   4,
+   5,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_hongos_sabueso_de_moho": {
+  "bh": 128,
+  "ch": 144,
+  "cw": 246,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_hongos_seta_bruta": {
+  "bh": 128,
+  "ch": 130,
+  "cw": 228,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_hongos_trol_fungico": {
+  "bh": 128,
+  "ch": 145,
+  "cw": 206,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "enemigo_rift_jardin_enredadera_estranguladora": {
+  "bh": 128,
+  "ch": 131,
+  "cw": 372,
+  "frames": [
+   4,
+   5,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_jardin_escupesemillas": {
+  "bh": 128,
+  "ch": 130,
+  "cw": 224,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_jardin_flor_somnifera": {
+  "bh": 128,
+  "ch": 132,
+  "cw": 266,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_jardin_la_madre_espina": {
+  "bh": 128,
+  "ch": 130,
+  "cw": 220,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_jardin_planta_mordedora": {
+  "bh": 128,
+  "ch": 135,
+  "cw": 248,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_jardin_tronco_espinoso": {
+  "bh": 128,
+  "ch": 150,
+  "cw": 234,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_mascaras_dama_del_abanico": {
+  "bh": 128,
+  "ch": 130,
+  "cw": 300,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "enemigo_rift_mascaras_duelista_de_la_corte": {
+  "bh": 128,
+  "ch": 133,
+  "cw": 248,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_mascaras_guardia_enmascarado": {
+  "bh": 128,
+  "ch": 136,
+  "cw": 232,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_mascaras_la_dama_sin_rostro": {
+  "bh": 128,
+  "ch": 130,
+  "cw": 198,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_mascaras_musico_de_la_corte": {
+  "bh": 128,
+  "ch": 130,
+  "cw": 284,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_mascaras_verdugo_de_la_corte": {
+  "bh": 128,
+  "ch": 151,
+  "cw": 194,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_mina_el_corazon_de_cuarzo": {
+  "bh": 128,
+  "ch": 149,
+  "cw": 248,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_mina_golem_de_cuarzo": {
+  "bh": 128,
+  "ch": 140,
+  "cw": 230,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_mina_lagarto_de_esquirlas": {
+  "bh": 128,
+  "ch": 164,
+  "cw": 362,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_mina_linterna_viva": {
+  "bh": 128,
+  "ch": 140,
+  "cw": 206,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_mina_minero_maldito": {
+  "bh": 128,
+  "ch": 157,
+  "cw": 196,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_mina_topo_tallador": {
+  "bh": 128,
+  "ch": 140,
+  "cw": 226,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_nido_avispa_cortadora": {
+  "bh": 128,
+  "ch": 133,
+  "cw": 354,
+  "frames": [
+   4,
+   5,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_nido_escarabajo_coraza": {
+  "bh": 128,
+  "ch": 166,
+  "cw": 270,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_nido_escupidora_de_acido": {
+  "bh": 128,
+  "ch": 151,
+  "cw": 290,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_nido_la_reina_ciega": {
+  "bh": 128,
+  "ch": 160,
+  "cw": 216,
+  "frames": [
+   6,
+   6,
+   4,
+   5
+  ]
+ },
+ "enemigo_rift_nido_mantis_verdugo": {
+  "bh": 128,
+  "ch": 137,
+  "cw": 248,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_nido_nodriza_del_nido": {
+  "bh": 128,
+  "ch": 137,
+  "cw": 218,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_observatorio_cazador_de_constelaciones": {
+  "bh": 128,
+  "ch": 130,
+  "cw": 254,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_observatorio_cometa_caido": {
+  "bh": 128,
+  "ch": 140,
+  "cw": 256,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_observatorio_el_astronomo": {
+  "bh": 128,
+  "ch": 132,
+  "cw": 246,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_observatorio_golem_planetario": {
+  "bh": 128,
+  "ch": 130,
+  "cw": 386,
+  "frames": [
+   4,
+   5,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_observatorio_lector_de_estrellas": {
+  "bh": 128,
+  "ch": 131,
+  "cw": 224,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "enemigo_rift_observatorio_telescopio_vivo": {
+  "bh": 128,
+  "ch": 132,
+  "cw": 270,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_reloj_bailarina_de_agujas": {
+  "bh": 128,
+  "ch": 130,
+  "cw": 212,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_reloj_campanero_de_bronce": {
+  "bh": 128,
+  "ch": 148,
+  "cw": 188,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_reloj_cuco_tirador": {
+  "bh": 128,
+  "ch": 131,
+  "cw": 202,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "enemigo_rift_reloj_el_guardian_de_las_horas": {
+  "bh": 128,
+  "ch": 131,
+  "cw": 216,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "enemigo_rift_reloj_guardia_del_pendulo": {
+  "bh": 128,
+  "ch": 131,
+  "cw": 204,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "enemigo_rift_reloj_pequeno_relojero": {
+  "bh": 128,
+  "ch": 172,
+  "cw": 230,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_sombras_acechador_oscuro": {
+  "bh": 128,
+  "ch": 141,
+  "cw": 238,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "enemigo_rift_sombras_apagavelas": {
+  "bh": 128,
+  "ch": 176,
+  "cw": 240,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_sombras_caballero_hueco": {
+  "bh": 128,
+  "ch": 160,
+  "cw": 232,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_sombras_lo_que_habita_la_fosa": {
+  "bh": 128,
+  "ch": 130,
+  "cw": 204,
+  "frames": [
+   4,
+   6,
+   2,
+   3
+  ]
+ },
+ "enemigo_rift_sombras_mole_de_sombra": {
+  "bh": 128,
+  "ch": 142,
+  "cw": 222,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "enemigo_rift_sombras_ojo_vigilante": {
+  "bh": 128,
+  "ch": 131,
+  "cw": 202,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_templo_arquero_escarabajo": {
+  "bh": 128,
+  "ch": 130,
+  "cw": 186,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "enemigo_rift_templo_centinela_de_arenisca": {
+  "bh": 128,
+  "ch": 131,
+  "cw": 204,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "enemigo_rift_templo_el_faraon_del_sol_muerto": {
+  "bh": 128,
+  "ch": 132,
+  "cw": 198,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_templo_esfinge_de_piedra": {
+  "bh": 128,
+  "ch": 156,
+  "cw": 378,
+  "frames": [
+   4,
+   5,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_templo_guerrero_vendado": {
+  "bh": 128,
+  "ch": 142,
+  "cw": 198,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "enemigo_rift_templo_sacerdotisa_del_sol": {
+  "bh": 128,
+  "ch": 135,
+  "cw": 206,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "enemigo_rift_tesoreria_caballero_de_oro": {
+  "bh": 128,
+  "ch": 132,
+  "cw": 178,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "enemigo_rift_tesoreria_cofre_mimico": {
+  "bh": 128,
+  "ch": 156,
+  "cw": 242,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_tesoreria_contable_maldito": {
+  "bh": 128,
+  "ch": 134,
+  "cw": 254,
+  "frames": [
+   4,
+   6,
+   2,
+   5
+  ]
+ },
+ "enemigo_rift_tesoreria_el_avaro": {
+  "bh": 128,
+  "ch": 130,
+  "cw": 320,
+  "frames": [
+   4,
+   5,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_tesoreria_enjambre_de_monedas": {
+  "bh": 128,
+  "ch": 135,
+  "cw": 226,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_tesoreria_puerta_acorazada": {
+  "bh": 128,
+  "ch": 134,
+  "cw": 216,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_tormenta_chispa_errante": {
+  "bh": 128,
+  "ch": 140,
+  "cw": 230,
+  "frames": [
+   4,
+   6,
+   2,
+   3
+  ]
+ },
+ "enemigo_rift_tormenta_el_ojo_de_la_tormenta": {
+  "bh": 128,
+  "ch": 147,
+  "cw": 188,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_tormenta_halcon_de_tormenta": {
+  "bh": 128,
+  "ch": 151,
+  "cw": 222,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_tormenta_lancero_del_rayo": {
+  "bh": 128,
+  "ch": 137,
+  "cw": 276,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_tormenta_nube_acorazada": {
+  "bh": 128,
+  "ch": 141,
+  "cw": 262,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
+ "enemigo_rift_tormenta_tamborilero_del_trueno": {
+  "bh": 128,
+  "ch": 166,
+  "cw": 288,
+  "frames": [
+   4,
+   6,
+   2,
+   4
+  ]
+ },
  "enemigo_sabuesa_tres_collares": {
   "bh": 128,
   "ch": 130,
