@@ -7728,6 +7728,26 @@ function renderFragua(){
     else showOverlay('La forja falla', `El fragmento se apaga sobre el yunque y las llaves se deshacen. Hodrak escupe al suelo. «Otra vez será.»<br><br>Forjas fallidas: <b>${fraguaFails()} / ${FRAGUA.pity}</b>`, ()=>{});
   };
 }
+// Barra de turnos (pedido de ariochbu, 2026-10-11): retratos en fila sobre la escena, con quién actúa ahora y
+// quién sigue. El orden del combate no cambia: tú, tus aliados y después los enemigos; al acabar la ronda se
+// enseña el principio de la siguiente.
+const TURN_BAR_MAX = 11;
+function turnBarHTML(){
+  if(!combat || combat.over) return '';
+  const stunned = list=> !!hasStatus(list || [], 'Aturdido');
+  const round = [{kind:'player', name:state.char.nickname, img:playerSpriteFor(state.char.style, state.char.race), skip:stunned(combat.playerStatuses)}];
+  livingAllies().forEach(a=> round.push({kind:'ally', id:a.id, name:a.name, img: a.isShadow ? playerSpriteFor(state.char.style, state.char.race) : ALLY_TEMPLATE_SPRITES[a.templateId], shadow:!!a.isShadow, skip:stunned(a.statuses) || !!a.isShadow}));
+  combat.enemies.forEach((e, i)=>{ if(e.hp > 0 && !(e.tpl && e.tpl.decoy)) round.push({kind:'enemy', idx:i, name:e.name, img:enemySpriteFor(e), boss:!!(e.tpl && (e.tpl.boss || e.tpl.elite)), skip:stunned(e.statuses) || !!e.pendingStun}); });
+  const la = combat.lastActor;
+  let cur = la ? round.findIndex(r=> r.kind === la.kind && (la.kind === 'player' || (la.kind === 'ally' ? r.id === la.id : r.idx === la.idx))) : 0;
+  if(cur < 0) cur = 0;
+  const cell = (r, cls)=> `<div class="tb-cell ${r.kind} ${r.boss ? 'boss' : ''} ${r.skip ? 'skip' : ''} ${r.shadow ? 'shadow' : ''} ${cls}" title="${(r.name || '').replace(/"/g, '&quot;')}${r.skip ? ' (pierde el turno)' : ''}">${r.img ? `<img src="${r.img}" alt="">` : `<b>${(r.name || '?').charAt(0)}</b>`}</div>`;
+  const now = round.slice(cur), n = (combat.turnCount || 0) + 1;
+  let html = now.map((r, i)=> cell(r, i === 0 ? 'now' : '')).join('');
+  const left = TURN_BAR_MAX - now.length;
+  if(left > 1) html += `<div class="tb-sep"><span>Ronda ${n + 1}</span></div>` + round.slice(0, left - 1).map(r=> cell(r, 'next')).join('');
+  return `<div class="turn-bar"><div class="tb-round">Ronda ${n}</div>${html}</div>`;
+}
 function nodeIcon(type){
   return {entrada:'🚪', combate:'⚔️', tesoro:'💰', descanso:'🔥', elite:'☠️', jefe:'🛡️', rift:'🌀'}[type] || '?';
 }
@@ -17505,7 +17525,7 @@ function renderCombat(){
       <span class="combat-pets-label">Caídos del Laberinto</span>
       ${equippedPets().map(p=>`<div class="combat-pet-chip" data-pet-zoom="${p.id}" style="box-shadow:0 0 0 2px ${PET_RARITIES[p.rarity].color}bb inset;"><img src="${petArtPath(p.id)}" alt="${p.name}" title="${p.name}" loading="lazy"></div>`).join('')}
     </div>` : ''}
-    <div id="battle-stage-mount" style="margin-bottom:6px;"></div>
+    <div class="tb-wrap">${turnBarHTML()}<div id="battle-stage-mount" style="margin-bottom:6px;"></div></div>
 
     <div class="battle-menu" id="battle-menu">
       <div class="battle-menu-grid" id="battle-menu-grid" style="${combat.openSubmenu?'display:none;':''}">

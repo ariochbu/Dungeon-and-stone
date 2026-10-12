@@ -2331,3 +2331,25 @@ button.cron-card:hover{ transform:translateY(-2px); border-color:var(--bronze); 
 .fg-key span{ font-size:0.8em; color:#ffd76a; }
 .fg-key.on{ border-color:#4aa3ff; box-shadow:0 0 0 2px #4aa3ff, 0 0 14px rgba(74,163,255,0.6); }
 .fg-key.on img{ opacity:0.85; }
+
+/* ---------- Barra de turnos sobre la escena de combate ---------- */
+.tb-wrap{ position:relative; }
+.turn-bar{ position:absolute; z-index:5; top:6px; left:50%; transform:translateX(-50%); display:flex; align-items:center; gap:4px; max-width:calc(100% - 12px); padding:4px 8px;
+  background:linear-gradient(180deg, rgba(14,10,8,0.88), rgba(14,10,8,0.66)); border:1px solid rgba(201,161,74,0.55); border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,0.6); pointer-events:auto; }
+.tb-round{ font-family:'Cinzel'; font-size:0.62em; letter-spacing:0.08em; text-transform:uppercase; color:#e8c46a; margin-right:4px; white-space:nowrap; }
+.tb-cell{ position:relative; width:34px; height:34px; flex:none; border-radius:5px; overflow:hidden; background:#1a1410; border:2px solid #5b6f9a; display:flex; align-items:center; justify-content:center; }
+.tb-cell img{ width:150%; height:150%; object-fit:cover; object-position:50% 12%; image-rendering:pixelated; }
+.tb-cell b{ font-family:'Cinzel'; color:#e8dfcf; }
+.tb-cell.player{ border-color:#e8c46a; }
+.tb-cell.ally{ border-color:#5b8fd6; }
+.tb-cell.enemy{ border-color:#b8433f; }
+.tb-cell.enemy.boss{ border-color:#ff5a55; box-shadow:0 0 8px rgba(224,57,63,0.8); }
+.tb-cell.shadow img{ filter:grayscale(1) brightness(0.55); }
+.tb-cell.now{ width:46px; height:46px; box-shadow:0 0 0 2px #fff3c4, 0 0 14px rgba(255,220,130,0.9); animation:tbNow 1.2s ease-in-out infinite; }
+.tb-cell.next{ opacity:0.5; width:28px; height:28px; }
+.tb-cell.skip{ filter:grayscale(1) brightness(0.6); }
+.tb-cell.skip::after{ content:''; position:absolute; left:-4px; right:-4px; top:50%; height:2px; background:#ff8a7a; transform:rotate(-38deg); }
+.tb-sep{ align-self:stretch; display:flex; align-items:center; padding:0 4px; margin:0 2px; border-left:1px dashed rgba(201,161,74,0.6); }
+.tb-sep span{ font-size:0.56em; letter-spacing:0.06em; text-transform:uppercase; color:#a59a86; white-space:nowrap; }
+@keyframes tbNow{ 0%, 100%{ transform:translateY(0); } 50%{ transform:translateY(2px); } }
+@media (max-width:640px){ .tb-cell{ width:24px; height:24px; border-width:1px; } .tb-cell.now{ width:32px; height:32px; } .tb-cell.next{ width:20px; height:20px; } .tb-round, .tb-sep span{ display:none; } .turn-bar{ gap:3px; padding:3px 5px; } }
