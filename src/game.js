@@ -15453,7 +15453,6 @@ async function processEnemyTurns(){
   // velocidad x1) le pegaba en silencio al jugador/aliados del combate
   // siguiente si el combate viejo terminaba mientras ese await seguía pendiente.
   const myCombat = combat;
-  combat.playerDefending = false;
 
   // apply DOT and determine stun per enemy (does not decrement durations yet)
   const stunFlags = new Map();
@@ -15490,6 +15489,9 @@ async function processEnemyTurns(){
     if(combat !== myCombat) return;
   }
   if(!combat || combat.over || combat!==myCombat) return;
+  // La Defensa dura hasta que los enemigos terminan de actuar. Antes se apagaba aquí arriba, ANTES de que
+  // atacaran, así que el botón no hacía nada (encontrado el 2026-10-11).
+  combat.playerDefending = false;
 
   // decrement every status exactly once per turn cycle (enemies + player + aliados)
   // (player DOT — Sangrado/Quemadura — needs to actually tick before we decrement it away;
