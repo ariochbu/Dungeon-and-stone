@@ -2282,3 +2282,52 @@ button.cron-card:hover{ transform:translateY(-2px); border-color:var(--bronze); 
 .cr-mode.on{ color:#fff3cf; border-color:var(--bronze-light); box-shadow:0 0 8px rgba(212,162,60,0.4); }
 .cr-mode.on.mode-hardmode{ border-color:#c8463a; box-shadow:0 0 8px rgba(200,70,58,0.5); }
 .cr-mode-txt{ font-size:0.84em; color:var(--text-dim); margin:0; min-height:3.2em; }
+
+/* ---------- Piezas numeradas (Rango SS): marco rojo con borde especial ---------- */
+.item-art-tile.ss{ position:relative; overflow:visible; border-radius:6px; background:#120405;
+  box-shadow:0 0 0 2px #e0393f, 0 0 0 3px #2a0608, 0 0 0 4px #ffd98a, 0 0 14px 2px rgba(224,57,63,0.75) !important; }
+.item-art-tile.ss img{ border-radius:4px; }
+.item-art-tile.ss::before{ content:''; position:absolute; inset:-5px; border-radius:9px; pointer-events:none; z-index:2;
+  background:conic-gradient(from var(--ssa, 0deg), transparent 0 70%, rgba(255,217,138,0.95) 82%, #ff5a55 90%, transparent 100%);
+  -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite:xor; mask-composite:exclude; padding:2px;
+  animation:ssSpin 3.2s linear infinite; }
+.item-art-tile.ss::after{ content:''; position:absolute; inset:-4px; pointer-events:none; z-index:3;
+  background:
+    linear-gradient(135deg, #ffd98a 0 5px, transparent 5px) top left / 9px 9px no-repeat,
+    linear-gradient(225deg, #ffd98a 0 5px, transparent 5px) top right / 9px 9px no-repeat,
+    linear-gradient(45deg, #ffd98a 0 5px, transparent 5px) bottom left / 9px 9px no-repeat,
+    linear-gradient(315deg, #ffd98a 0 5px, transparent 5px) bottom right / 9px 9px no-repeat; }
+@property --ssa{ syntax:'<angle>'; initial-value:0deg; inherits:false; }
+@keyframes ssSpin{ to{ --ssa:360deg; } }
+.bag-tile:has(.item-art-tile.ss), .pj-slot:has(.item-art-tile.ss){ overflow:visible; }
+.bag-tile .item-art-tile.ss, .pj-slot .item-art-tile.ss, .fc-eq .item-art-tile.ss{ box-shadow:0 0 0 2px #e0393f, 0 0 0 3px #ffd98a, 0 0 10px 1px rgba(224,57,63,0.8) !important; background:#120405 !important; }
+.pet-card.ss-card{ background:linear-gradient(180deg, #2a0a0c, #0e0506); }
+.pet-card.ss-card .pet-card-name{ color:#ffb0a8; text-shadow:0 0 10px rgba(224,57,63,0.8); }
+.pet-card.ss-card .pet-card-rank{ color:#ffd98a; letter-spacing:0.04em; }
+.ss-fx{ color:#ff7a70; }
+.ss-ov .mythic-art.ss-art{ width:min(56vw, 250px); aspect-ratio:1; }
+.ss-ov .mythic-art.ss-art img{ height:100%; object-position:center; }
+.ss-ov .mythic-stage p{ max-width:520px; margin-left:auto; margin-right:auto; }
+.ss-ov .ss-only{ color:#ffd98a; font-style:italic; }
+.ss-banner img{ height:46px; object-position:center; }
+/* ---------- Fragua de Hodrak ---------- */
+.rk-hero.fg-hero{ min-height:210px; }
+.fg-hero .rk-hero-art{ object-position:50% 40%; }
+.fg-hero .rk-hero-txt p{ max-width:640px; font-style:italic; }
+.fg-req{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.fg-res{ padding:10px; border:1px solid #4a3a26; border-radius:8px; background:rgba(0,0,0,0.3); text-align:center; }
+.fg-res.ok{ border-color:#e0393f; box-shadow:0 0 12px rgba(224,57,63,0.35) inset; }
+.fg-res b{ display:block; font-family:'Cinzel'; font-size:1.5em; color:#ffd76a; }
+.fg-res span{ display:block; color:var(--text); }
+.fg-res small{ color:#a59a86; }
+.fg-anvil{ width:54px; height:54px; flex:none; border-radius:50%; position:relative; background:radial-gradient(circle, rgba(224,57,63,calc(0.15 + var(--k)*0.85)) 0%, #1a0f0a 70%); box-shadow:0 0 calc(var(--k)*22px) rgba(224,57,63,0.8); border:1px solid #6b4a2a; }
+.fg-anvil i{ position:absolute; left:14px; right:14px; top:20px; height:9px; background:#3a332c; border-radius:2px 8px 2px 2px; box-shadow:0 9px 0 -2px #2a2420, 0 15px 0 1px #3a332c; }
+.fg-why{ text-align:center; color:#c9b48a; font-size:0.9em; margin:8px 0 0; }
+.fg-keys{ display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:8px; margin-top:10px; }
+.fg-key{ position:relative; height:74px; border-radius:8px; overflow:hidden; border:1px solid #4a3a26; background:#15110c; color:#fff; cursor:pointer; padding:0; text-align:left; }
+.fg-key img{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; opacity:0.55; }
+.fg-key b, .fg-key span{ position:relative; display:block; padding:0 8px; text-shadow:0 1px 4px #000; }
+.fg-key b{ margin-top:30px; font-family:'Cinzel'; font-size:0.86em; }
+.fg-key span{ font-size:0.8em; color:#ffd76a; }
+.fg-key.on{ border-color:#4aa3ff; box-shadow:0 0 0 2px #4aa3ff, 0 0 14px rgba(74,163,255,0.6); }
+.fg-key.on img{ opacity:0.85; }

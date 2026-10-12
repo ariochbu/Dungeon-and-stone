@@ -4246,6 +4246,7 @@ const SHOP_POTION_PRICES = {vida_menor:12, vida_mayor:30, estamina:12, espiritu:
 
 function dealDamageToPlayer(amount){
   if(amount<=0) return;
+  if(combat){ amount = ssIncoming(amount); if(amount<=0) return; }
   let shieldBroke = false;
   if(combat && combat.playerShield>0){
     const absorbed = Math.min(combat.playerShield, amount);
@@ -4255,7 +4256,7 @@ function dealDamageToPlayer(amount){
   }
   if(amount>0){
     const wouldBeLethal = combat && (state.char.curHP - amount) <= 0;
-    if(!(wouldBeLethal && checkPetRevive())) state.char.curHP = Math.max(0, state.char.curHP - amount);
+    if(!(wouldBeLethal && (ssLethal() || checkPetRevive()))) state.char.curHP = Math.max(0, state.char.curHP - amount);
   }
   checkPetShieldOnHit();
   checkFuriaContenidaTrigger();
@@ -4741,6 +4742,7 @@ function sellEquipOrStone(uid){
   const idx = state.char.inventory.findIndex(i=>i.uid===uid);
   if(idx<0) return;
   const item = state.char.inventory[idx];
+  if(item.ssId){ log(`<b>${item.name}</b> es una pieza numerada: no se puede vender.`); return; }
   const value = itemSellValue(item);
   state.char.inventory.splice(idx,1);
   state.char.gold += value;
@@ -5393,6 +5395,7 @@ function baseStat(key){
   EQUIP_SLOTS.forEach(slot=>{
     const it = eq[slot];
     if(it && it.bonus && it.bonus.stat === key) v += it.bonus.value;
+    if(it && it.ssId && it.bonus && it.bonus.stat === 'scale' && key === style().scaleStat) v += ssScaleBonus(it); // arma numerada de varias sendas
   });
   socketedStones().forEach(s=>{ if(s.bonus && s.bonus.stat === key) v += s.bonus.value; });
   // Piezas de conjunto (2026-10-02): pueden dar varios stats a la vez, así
@@ -6531,7 +6534,7 @@ const RIFTS_OPEN = true;    // abiertos por orden de ariochbu (2026-10-11)
 const RIFTS_HERE = RIFTS_OPEN || /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
 const RIFT_CHANCE_PER_DECADE = 0.10;
 const RIFT_LOOT = {rolls:3, tiers:[['ss', 0.02], ['s', 0.23], ['a', 0.75]], stoneShare:0.30};
-const RIFT_SS_ENABLED = false;
+const RIFT_SS_ENABLED = true; // encendido por orden de ariochbu (2026-10-11)
 const RIFT_BOSS_HP = 1.10;
 const RIFT_THEMES = {
   cripta: {name:'Cripta sin dueño', night:1, status:{name:'Miedo', chance:0.30, duration:2, procChance:0.4}, mobs:[['rift_cripta_esqueleto_guardatumbas','Esqueleto Guardatumbas'], ['rift_cripta_necrofago','Necrófago'], ['rift_cripta_arquero_de_hueso','Arquero de Hueso'], ['rift_cripta_planidera','Plañidera'], ['rift_cripta_caballero_sepulto','Caballero Sepulto'], ['rift_cripta_el_liche_sin_corona','El Liche sin Corona']]},
@@ -6563,29 +6566,231 @@ function riftPickTheme(){
   const pool = Object.keys(RIFT_THEMES).map(id=> ({tpl:id, weight: 1 + (RIFT_THEMES[id].night === (isNight ? 1 : -1) ? 1.5 : 0)}));
   return pickWeighted(pool);
 }
+// Habilidades propias de cada rift (2026-10-11, pedido de ariochbu: "crea las habilidades de los personajes
+// de los rift dependiendo del tema, el lich puede ser invocaciones"). Cada tema da las habilidades de sus seis
+// criaturas en el orden de RIFT_THEMES.mobs: frente, cuerpo a cuerpo, distancia, apoyo, élite y jefe. Las claves
+// van en orden de prioridad (la última es el golpe básico). '$' son propiedades extra de la criatura.
+// S = estado del tema, w = el mismo estado con menos probabilidad, T(i) = plantilla de la criatura i (para invocar).
+const RIFT_HP = p=> ctx=> ctx.selfHpPct < p;
+const RIFT_GROUP = ()=> combat.enemies.filter(e=> e.hp > 0).length > 1;
+const RIFT_HURT = ()=> combat.enemies.some(e=> e.hp > 0 && e.hp < e.maxHP*0.7);
+const riftHeal = (label, pct)=> ({label, utility:'heal_ally', healPct:pct || 0.10, cooldown:4, condition:RIFT_HURT});
+const riftWard = (label, red, dur)=> ({label, utility:'self_buff', cooldown:5, selfBuff:{name:label, duration:dur || 2, incomingDmgReduction:red}});
+const riftRage = (label, mult, below)=> ({label, utility:'self_buff', oncePerCombat:true, instant:true, condition:RIFT_HP(below || 0.5), selfBuff:{name:label, duration:99, dmgMult:mult}});
+const riftCheer = (label, stacks)=> ({label, utility:'buff_allies', cooldown:5, condition:RIFT_GROUP, buffAllies:{name:'Fortalecido', duration:2, stacks:stacks || 4}});
+const riftCall = (label, tpl, count, hpPct, cd)=> ({label, utility:'summon', cooldown:cd || 5, summon:{tpl, count, maxAlive:count, hpPct:hpPct || 0.05, atkPct:0.30}});
+const riftAoe = (label, mult, applies, cd)=> ({label, utility:'aoe', mult, rearMult:0.50, cooldown:cd || 4, applies});
+const RIFT_STUN = c=> ({name:'Aturdido', chance:c, duration:1});
+const RIFT_BLEED = c=> ({name:'Sangrado', chance:c, duration:3, stack:true, maxStack:3});
+const RIFT_MARK = c=> ({name:'Marcado', chance:c, duration:2});
+const RIFT_BLIND = c=> ({name:'Ceguera', chance:c, duration:2});
+const RIFT_SLOW = c=> ({name:'Ralentizado', chance:c, duration:2});
+const RIFT_WEAK = c=> ({name:'Debilitado', chance:c, duration:2});
+const RIFT_MUTE = c=> ({name:'Silencio', chance:c, duration:1});
+const RIFT_KITS = {
+  cripta: (S, w, T)=> [
+    {lapidas: riftWard('Escudo de Lápidas', 0.25), golpe:{label:'Golpe de Losa', mult:1.00}},
+    {devorar:{label:'Devorar', mult:1.20, cooldown:3, bonusVsLowHp:{below:0.40, mult:1.35}}, zarpa:{label:'Zarpa Fría', mult:1.00, applies:w}},
+    {perforar:{label:'Flecha de Hueso', mult:1.25, cooldown:3, ignoreResist:0.50}, disparo:{label:'Disparo', mult:1.00}},
+    {cura: riftHeal('Rezo por los Muertos'), lamento: riftAoe('Lamento', 0.35, S, 5), toque:{label:'Llanto', mult:0.90, applies:w}},
+    {carga:{label:'Carga Sepulcral', mult:1.45, cooldown:3, applies:S}, tajo:{label:'Tajo Enmohecido', mult:1.00}, $:{hpThresholdBuff:{threshold:0.4, buff:{name:'Juramento Roto', duration:99, dmgMult:1.15}}}},
+    {alzar: riftCall('Alzar a los Muertos', T(0), 2, 0.05), filacteria:{label:'Filacteria', utility:'self_heal', healPct:0.08, oncePerCombat:true, condition:RIFT_HP(0.35)}, coro: riftAoe('Coro de Tumbas', 0.50, w), rayo:{label:'Rayo Necrótico', mult:1.45, cooldown:3, mpDrain:0.15, applies:S}, toque:{label:'Toque del Liche', mult:1.00},
+      $:{phases:[{below:0.50, msg:'pierde la paciencia: <b>las tumbas se abren</b> (fase 2).'}]}},
+  ],
+  forja: (S, w, T)=> [
+    {temple: riftWard('Temple', 0.30), golpe:{label:'Yunquazo', mult:1.00}},
+    {pinza:{label:'Pinza al Rojo', mult:1.10, cooldown:3, applies:S, debuffTarget:RIFT_WEAK(0.35)}, mordida:{label:'Mordida de Hierro', mult:1.00}},
+    {virote:{label:'Virote al Rojo', mult:1.25, cooldown:3, ignoreResist:0.40, applies:S}, disparo:{label:'Virote', mult:1.00}},
+    {avivar: riftCheer('Avivar las Brasas', 5), soplo:{label:'Soplo Ardiente', mult:0.90, applies:w}},
+    {martillazo:{label:'Martillazo', mult:1.50, cooldown:4, applies:RIFT_STUN(0.25)}, golpe:{label:'Golpe de Maza', mult:1.00, applies:w}},
+    {forjar: riftCall('Forjar un Autómata', T(0), 1, 0.07, 6), alrojo: riftRage('Al Rojo Vivo', 1.20), chispas: riftAoe('Lluvia de Chispas', 0.50, S), yunque:{label:'Yunque sobre la Cabeza', mult:1.60, cooldown:4, applies:RIFT_STUN(0.25)}, golpe:{label:'Martillo sin Rostro', mult:1.00, applies:w},
+      $:{phases:[{below:0.50, msg:'aviva la forja: <b>el hierro se pone al rojo</b> (fase 2).'}]}},
+  ],
+  hielo: (S, w, T)=> [
+    {coraza: riftWard('Coraza de Hielo', 0.30), golpe:{label:'Embestida Helada', mult:1.00, applies:w}},
+    {dentellada:{label:'Dentellada', mult:1.15, cooldown:2, bonusVsTargetStatus:{name:'Ralentizado', mult:1.35}}, mordisco:{label:'Mordisco de Escarcha', mult:1.00, applies:w}},
+    {granizada: riftAoe('Granizada', 0.40, S, 4), disparo:{label:'Granizo', mult:1.00}},
+    {ventisca:{label:'Velo de Ventisca', utility:'buff_allies', cooldown:5, condition:RIFT_GROUP, buffAllies:{name:'Velo de Ventisca', duration:2, evasionDelta:15}}, cura: riftHeal('Aliento Frío'), toque:{label:'Toque Helado', mult:0.90, applies:S}},
+    {abrazo:{label:'Abrazo del Oso', mult:1.30, cooldown:4, applies:RIFT_STUN(0.30)}, zarpazo:{label:'Zarpazo Glaciar', mult:1.45, cooldown:3, applies:S}, golpe:{label:'Zarpa', mult:1.00}},
+    {despertar: riftRage('Despertar', 1.25), pisoton: riftAoe('Pisotón Glaciar', 0.55, S), puno:{label:'Puño de Hielo', mult:1.55, cooldown:3, bonusVsTargetStatus:{name:'Ralentizado', mult:1.30}, applies:RIFT_STUN(0.20)}, golpe:{label:'Manotazo', mult:1.00, applies:w},
+      $:{phases:[{below:0.50, msg:'abre los ojos: <b>el Coloso despierta del todo</b> (fase 2).'}]}},
+  ],
+  espejos: (S, w, T)=> [
+    {reflejar: riftWard('Marco Cerrado', 0.30), golpe:{label:'Golpe de Marco', mult:1.00}},
+    {esquirla:{label:'Esquirla', mult:1.10, cooldown:2, applies:RIFT_BLEED(0.45)}, tajo:{label:'Tajo Quebrado', mult:1.00, applies:w}},
+    {lluvia: riftAoe('Lluvia de Cristal', 0.40, RIFT_BLEED(0.35), 4), disparo:{label:'Cristal', mult:1.00}},
+    {imagen:{label:'Imagen Falsa', utility:'buff_allies', cooldown:5, condition:RIFT_GROUP, buffAllies:{name:'Imagen Falsa', duration:2, evasionDelta:15}}, cura: riftHeal('Pulir'), toque:{label:'Azogue', mult:0.90, applies:S}},
+    {devuelto:{label:'Golpe Devuelto', mult:1.50, cooldown:3, applies:S}, guardia: riftWard('Guardia Espejada', 0.25), tajo:{label:'Tajo Espejado', mult:1.00}},
+    {copia:{label:'Otro Reflejo', utility:'summon', cooldown:5, summon:{tpl:T(1), count:2, maxAlive:2, oneHp:true}, selfBuff:{name:'Tras el Cristal', duration:2, evasionDelta:15}}, invertir: riftAoe('Mirada Invertida', 0.50, w), romper:{label:'Romper el Espejo', mult:1.55, cooldown:3, applies:S}, golpe:{label:'Tu Propio Golpe', mult:1.00, applies:RIFT_BLEED(0.30)},
+      $:{phases:[{below:0.50, msg:'se resquebraja: <b>ya no sabes cuál es el de verdad</b> (fase 2).'}]}},
+  ],
+  jardin: (S, w, T)=> [
+    {corteza:{label:'Corteza Viva', utility:'self_buff', cooldown:5, selfBuff:{name:'Corteza Viva', duration:3, incomingDmgReduction:0.20, regenPct:0.03}}, golpe:{label:'Ramazo Espinoso', mult:1.00, applies:w}},
+    {mordida:{label:'Mordida Voraz', mult:1.20, cooldown:2, bonusVsTargetStatus:{name:'Veneno', mult:1.30}}, bocado:{label:'Bocado', mult:1.00, applies:S}},
+    {semillas: riftAoe('Ráfaga de Semillas', 0.35, S, 4), disparo:{label:'Semilla', mult:1.00, applies:w}},
+    {polen:{label:'Polen Somnífero', mult:0.60, cooldown:4, applies:RIFT_STUN(0.30)}, cura: riftHeal('Rocío'), toque:{label:'Pétalo', mult:0.90, applies:w}},
+    {estrangular:{label:'Estrangular', mult:1.40, cooldown:3, applies:RIFT_WEAK(0.60)}, latigo:{label:'Latigazo', mult:1.00, applies:S}},
+    {brotar: riftCall('Brotar', T(1), 2, 0.05), raices:{label:'Raíces Profundas', utility:'self_heal', healPct:0.06, cooldown:6, condition:RIFT_HP(0.6)}, espinas: riftAoe('Lluvia de Espinas', 0.50, S), abrazo:{label:'Abrazo de la Madre', mult:1.50, cooldown:3, bonusVsTargetStatus:{name:'Veneno', mult:1.30}}, golpe:{label:'Espina', mult:1.00, applies:S},
+      $:{phases:[{below:0.50, msg:'florece: <b>el jardín entero tiene hambre</b> (fase 2).'}]}},
+  ],
+  tormenta: (S, w, T)=> [
+    {nube:{label:'Cuerpo de Niebla', utility:'self_buff', cooldown:5, selfBuff:{name:'Cuerpo de Niebla', duration:2, evasionDelta:20, incomingDmgReduction:0.15}}, golpe:{label:'Trueno Sordo', mult:1.00}},
+    {descarga:{label:'Descarga', mult:1.15, cooldown:3, applies:{name:'Paralisis', chance:0.35, duration:1}}, chispazo:{label:'Chispazo', mult:1.00}},
+    {lanza:{label:'Lanza del Rayo', mult:1.30, cooldown:3, ignoreResist:0.50}, disparo:{label:'Jabalina', mult:1.00, applies:w}},
+    {redoble: riftCheer('Redoble del Trueno', 5), baqueta:{label:'Baquetazo', mult:0.90, applies:RIFT_STUN(0.12)}},
+    {picado:{label:'Picado', mult:1.50, cooldown:3, bonusVsTargetStatus:{name:'Paralisis', mult:1.35}}, garras:{label:'Garras', mult:1.00, applies:S}},
+    {chispas: riftCall('Soltar Chispas', T(1), 2, 0.04), calma:{label:'La Calma', utility:'self_buff', cooldown:6, selfBuff:{name:'La Calma', duration:2, incomingDmgReduction:0.35}}, cadena: riftAoe('Rayo en Cadena', 0.55, S), trueno:{label:'Trueno', mult:1.60, cooldown:3, applies:RIFT_STUN(0.20)}, golpe:{label:'Relámpago', mult:1.00, applies:w},
+      $:{phases:[{below:0.50, msg:'se cierra sobre ti: <b>la tormenta deja de estar quieta</b> (fase 2).'}]}},
+  ],
+  nido: (S, w, T)=> [
+    {caparazon: riftWard('Caparazón Cerrado', 0.35), golpe:{label:'Cornada', mult:1.00}},
+    {aguijon:{label:'Aguijón', mult:1.10, cooldown:2, applies:S}, corte:{label:'Corte de Ala', mult:1.00, applies:RIFT_BLEED(0.25)}},
+    {acido:{label:'Escupitajo Ácido', mult:1.10, cooldown:3, applies:{name:'Corrosion', chance:0.55, duration:3}}, disparo:{label:'Ácido', mult:1.00, applies:w}},
+    {huevos: riftCall('Poner Huevos', T(1), 1, 0.50, 5), cura: riftHeal('Jalea'), toque:{label:'Picotazo', mult:0.90, applies:w}},
+    {guadana:{label:'Guadaña del Verdugo', mult:1.50, cooldown:3, bonusVsLowHp:{below:0.40, mult:1.40}}, tajo:{label:'Tajo de Mantis', mult:1.00, applies:RIFT_BLEED(0.35)}},
+    {enjambre: riftCall('Llamar al Enjambre', T(1), 2, 0.05), furia: riftRage('Furia de la Reina', 1.20, 0.4), chillido: riftAoe('Chillido', 0.50, RIFT_STUN(0.15)), real:{label:'Aguijón Real', mult:1.55, cooldown:3, applies:S, bonusVsTargetStatus:{name:'Veneno', mult:1.25}}, golpe:{label:'Mandíbulas', mult:1.00, applies:w},
+      $:{phases:[{below:0.50, msg:'chilla: <b>todo el nido la oye</b> (fase 2).'}]}},
+  ],
+  biblioteca: (S, w, T)=> [
+    {derrumbe:{label:'Derrumbe de Libros', mult:1.25, cooldown:4, applies:RIFT_STUN(0.20)}, golpe:{label:'Empujón', mult:1.00}},
+    {tinta:{label:'Mordisco de Tinta', mult:1.10, cooldown:3, mpDrain:0.12}, mordisco:{label:'Mordisco', mult:1.00, applies:w}},
+    {negra:{label:'Tinta Negra', mult:1.10, cooldown:3, applies:RIFT_BLIND(0.45)}, disparo:{label:'Plumazo', mult:1.00}},
+    {shh: riftAoe('Silencio en la Sala', 0.30, S, 5), cura: riftHeal('Remendar Páginas'), toque:{label:'Reprimenda', mult:0.90, applies:w}},
+    {aplastar:{label:'Aplastar', mult:1.50, cooldown:3, applies:RIFT_STUN(0.25)}, envolver:{label:'Envolver', mult:1.00, applies:RIFT_WEAK(0.40)}},
+    {tomos: riftCall('Abrir los Tomos', T(1), 2, 0.05), borrar:{label:'Borrar la Página', mult:1.35, cooldown:4, mpDrain:0.25, applies:{name:'Silencio', chance:0.60, duration:1}}, indice: riftAoe('Índice Prohibido', 0.50, w), catalogar:{label:'Catalogar', mult:1.20, cooldown:3, applies:RIFT_MARK(0.70)}, golpe:{label:'Sello de Lacre', mult:1.00},
+      $:{phases:[{below:0.50, msg:'cierra el libro: <b>tu nombre ya está escrito en él</b> (fase 2).'}]}},
+  ],
+  arena: (S, w, T)=> [
+    {muro: riftWard('Muro de Escudo', 0.30), golpe:{label:'Golpe de Escudo', mult:1.00, applies:RIFT_STUN(0.10)}},
+    {red:{label:'Red', mult:0.90, cooldown:4, applies:RIFT_SLOW(0.70)}, tridente:{label:'Tridente', mult:1.05, applies:S}},
+    {pedrada:{label:'Pedrada Certera', mult:1.30, cooldown:3, applies:RIFT_STUN(0.18)}, disparo:{label:'Pedrada', mult:1.00}},
+    {estandarte: riftCheer('Alzar el Estandarte', 5), cura: riftHeal('Vendar', 0.08), golpe:{label:'Astazo', mult:0.90}},
+    {salto:{label:'Salto del León', mult:1.50, cooldown:3, bonusVsLowHp:{below:0.40, mult:1.35}, applies:S}, zarpazo:{label:'Zarpazo', mult:1.00, applies:S}},
+    {saludo:{label:'Saludo al Público', utility:'self_buff', cooldown:6, selfBuff:{name:'Saludo al Público', duration:3, dmgMult:1.20}}, orgullo: riftRage('Orgullo del Campeón', 1.15, 0.35), barrido: riftAoe('Barrido de Arena', 0.50, S), final:{label:'Estocada Final', mult:1.50, cooldown:3, bonusVsLowHp:{below:0.35, mult:1.50}}, golpe:{label:'Tajo del Campeón', mult:1.00, applies:w},
+      $:{phases:[{below:0.50, msg:'levanta la espada: <b>la grada vacía ruge</b> (fase 2).'}]}},
+  ],
+  mina: (S, w, T)=> [
+    {cuarzo: riftWard('Piel de Cuarzo', 0.35), golpe:{label:'Puño de Roca', mult:1.00}},
+    {picazo:{label:'Picazo', mult:1.25, cooldown:3, ignoreResist:0.50}, golpe:{label:'Pico Oxidado', mult:1.00, applies:w}},
+    {esquirlas:{label:'Escupir Esquirlas', mult:1.10, cooldown:2, applies:RIFT_BLEED(0.50)}, disparo:{label:'Esquirla', mult:1.00}},
+    {destello: riftAoe('Destello', 0.30, RIFT_BLIND(0.35), 5), cura: riftHeal('Luz Tibia'), toque:{label:'Chispa', mult:0.90, applies:w}},
+    {emboscada:{label:'Emboscada', mult:1.60, cooldown:4, applies:S}, excavar:{label:'Excavar', utility:'self_buff', cooldown:4, selfBuff:{name:'Bajo Tierra', duration:1, evasionDelta:40}}, garra:{label:'Garra Talladora', mult:1.00, applies:RIFT_BLEED(0.30)}},
+    {vivas: riftCall('Esquirlas Vivas', T(2), 2, 0.04), cristalizar:{label:'Cristalizar', utility:'self_buff', cooldown:6, selfBuff:{name:'Cristalizar', duration:2, incomingDmgReduction:0.40}}, absorber:{label:'Absorber Sangre', utility:'self_heal', healPct:0.06, cooldown:6, condition:RIFT_HP(0.6)}, latido: riftAoe('Latido', 0.55, S), golpe:{label:'Pulso de Cuarzo', mult:1.15, applies:w},
+      $:{phases:[{below:0.50, msg:'late más deprisa: <b>la mina entera sangra</b> (fase 2).'}]}},
+  ],
+  mascaras: (S, w, T)=> [
+    {parada: riftWard('Parada', 0.30), golpe:{label:'Alabardazo', mult:1.00}},
+    {estocada:{label:'Estocada', mult:1.25, cooldown:2, ignoreResist:0.40}, floreo:{label:'Floreo', mult:1.00, applies:RIFT_BLEED(0.30)}},
+    {abanico: riftAoe('Abanico de Cuchillas', 0.40, RIFT_BLEED(0.40), 4), disparo:{label:'Varilla', mult:1.00, applies:w}},
+    {compas: riftCheer('Marcar el Compás', 5), cura: riftHeal('Nana'), nota:{label:'Nota Falsa', mult:0.90, applies:S}},
+    {ejecucion:{label:'Ejecución', mult:1.45, cooldown:3, bonusVsLowHp:{below:0.40, mult:1.60}}, hacha:{label:'Hachazo', mult:1.00, applies:RIFT_WEAK(0.35)}},
+    {ira:{label:'Máscara de Ira', utility:'self_buff', cooldown:6, selfBuff:{name:'Máscara de Ira', duration:3, dmgMult:1.25}}, llanto:{label:'Máscara de Llanto', utility:'self_heal', healPct:0.07, cooldown:7, condition:RIFT_HP(0.5)}, baile: riftAoe('El Último Baile', 0.50, S), beso:{label:'Beso sin Rostro', mult:1.40, cooldown:3, applies:{name:'Confusion', chance:0.55, duration:2, procChance:0.40}}, golpe:{label:'Abanicazo', mult:1.00, applies:w},
+      $:{phases:[{below:0.50, msg:'se cambia de máscara: <b>la corte entera se vuelve hacia ti</b> (fase 2).'}]}},
+  ],
+  tesoreria: (S, w, T)=> [
+    {cerrojo: riftWard('Echar el Cerrojo', 0.40), golpe:{label:'Portazo', mult:1.00}},
+    {tragar:{label:'Tragar', mult:1.30, cooldown:3, bonusVsTargetStatus:{name:'Marcado', mult:1.35}}, mordisco:{label:'Mordisco de Tapa', mult:1.00, applies:S}},
+    {lluvia: riftAoe('Lluvia de Monedas', 0.40, w, 4), disparo:{label:'Moneda', mult:1.00}},
+    {cobrar:{label:'Cobrar la Deuda', mult:1.00, cooldown:3, mpDrain:0.15, applies:S}, cura: riftHeal('Cuadrar las Cuentas'), toque:{label:'Plumazo', mult:0.90}},
+    {dorado:{label:'Golpe Dorado', mult:1.50, cooldown:3, bonusVsTargetStatus:{name:'Marcado', mult:1.30}}, guardia: riftWard('Armadura de Oro', 0.25), tajo:{label:'Tajo Pesado', mult:1.00}},
+    {guardia: riftCall('Guardia Comprada', T(2), 2, 0.05), tasar:{label:'Tasar', mult:0.90, cooldown:3, applies:{name:'Marcado', chance:0.80, duration:2, incomingDmgMult:1.30}}, avalancha: riftAoe('Avalancha de Oro', 0.55, w), intereses:{label:'Cobrar con Intereses', mult:1.45, cooldown:3, bonusVsTargetStatus:{name:'Marcado', mult:1.50}, mpDrain:0.15}, golpe:{label:'Bastonazo', mult:1.00},
+      $:{phases:[{below:0.50, msg:'abraza su oro: <b>nadie le va a quitar nada</b> (fase 2).'}]}},
+  ],
+  astillero: (S, w, T)=> [
+    {quilla: riftWard('Quilla Reforzada', 0.30), golpe:{label:'Embestida de Proa', mult:1.00}},
+    {abordaje:{label:'Abordaje', mult:1.30, cooldown:3, applies:RIFT_BLEED(0.40)}, tajo:{label:'Tajo Mojado', mult:1.00, applies:w}},
+    {canonazo: riftAoe('Cañonazo', 0.45, RIFT_STUN(0.10), 4), disparo:{label:'Pistoletazo', mult:1.00}},
+    {canto:{label:'Canto del Naufragio', mult:0.70, cooldown:4, applies:{name:'Confusion', chance:0.35, duration:2, procChance:0.35}}, cura: riftHeal('Marea Baja'), toque:{label:'Salpicadura', mult:0.90, applies:S}},
+    {latigo: riftCheer('¡A los Remos!', 5), gancho:{label:'Gancho', mult:1.45, cooldown:3, applies:S}, golpe:{label:'Rebencazo', mult:1.00}},
+    {tripulacion: riftCall('Llamar a la Tripulación', T(1), 2, 0.05), honor: riftRage('Hundirse con el Barco', 1.20, 0.4), andanada: riftAoe('Andanada', 0.55, S), sable:{label:'Sable del Capitán', mult:1.50, cooldown:3, applies:RIFT_BLEED(0.60)}, golpe:{label:'Tajo de Sable', mult:1.00, applies:w},
+      $:{phases:[{below:0.50, msg:'da la orden: <b>todos a cubierta</b> (fase 2).'}]}},
+  ],
+  circo: (S, w, T)=> [
+    {pesas:{label:'Levantar Pesas', utility:'self_buff', cooldown:5, selfBuff:{name:'Levantar Pesas', duration:3, dmgMult:1.20, incomingDmgReduction:0.15}}, golpe:{label:'Mazazo', mult:1.00}},
+    {pirueta:{label:'Pirueta', utility:'self_buff', cooldown:4, selfBuff:{name:'Pirueta', duration:2, evasionDelta:30}}, patada:{label:'Patada Giratoria', mult:1.10, applies:w}},
+    {cuchillos:{label:'Tres Cuchillos', mult:1.30, cooldown:3, ignoreResist:0.30, applies:RIFT_BLEED(0.50)}, disparo:{label:'Cuchillo', mult:1.00}},
+    {platillos: riftAoe('Platillazo', 0.30, RIFT_STUN(0.15), 5), cura: riftHeal('Aplausos'), toque:{label:'Chillido', mult:0.90, applies:S}},
+    {abrazo:{label:'Abrazo de Retazos', mult:1.45, cooldown:3, applies:RIFT_STUN(0.25)}, zarpa:{label:'Zarpa de Trapo', mult:1.00, applies:S}},
+    {numero: riftCall('Número Especial', T(1), 2, 0.05), funcion: riftCheer('¡Que Empiece la Función!', 6), final: riftAoe('Gran Final', 0.55, w), latigo:{label:'Látigo del Maestro', mult:1.45, cooldown:3, applies:{name:'Miedo', chance:0.55, duration:2, procChance:0.40}}, golpe:{label:'Bastonazo', mult:1.00, applies:w},
+      $:{phases:[{below:0.50, msg:'se quita el sombrero: <b>la función no ha terminado</b> (fase 2).'}]}},
+  ],
+  reloj: (S, w, T)=> [
+    {pendulo: riftWard('Vaivén', 0.30), golpe:{label:'Golpe de Péndulo', mult:1.00, applies:w}},
+    {agujas:{label:'Doce Agujas', mult:1.20, cooldown:2, applies:RIFT_BLEED(0.50)}, giro:{label:'Giro', mult:1.00}},
+    {cucu:{label:'¡Cucú!', mult:1.25, cooldown:3, applies:RIFT_STUN(0.18)}, disparo:{label:'Perdigón', mult:1.00, applies:w}},
+    {cuerda: riftCheer('Dar Cuerda', 5), cura: riftHeal('Engrasar'), toque:{label:'Llave Inglesa', mult:0.90}},
+    {campanada: riftAoe('Campanada', 0.45, RIFT_STUN(0.15), 4), badajo:{label:'Badajo', mult:1.45, cooldown:3, applies:S}, golpe:{label:'Golpe de Bronce', mult:1.00}},
+    {rebobinar:{label:'Rebobinar', utility:'self_heal', healPct:0.08, cooldown:7, condition:RIFT_HP(0.6)}, acelerar:{label:'Acelerar las Horas', utility:'self_buff', cooldown:6, selfBuff:{name:'Acelerar las Horas', duration:3, dmgMult:1.25}}, medianoche: riftAoe('Medianoche', 0.60, S, 5), detener:{label:'Detener el Tiempo', mult:1.30, cooldown:4, applies:{name:'Paralisis', chance:0.50, duration:1}}, golpe:{label:'Manecilla', mult:1.00, applies:w},
+      $:{phases:[{below:0.50, msg:'adelanta el reloj: <b>se te acaba el tiempo</b> (fase 2).'}]}},
+  ],
+  hongos: (S, w, T)=> [
+    {esponja:{label:'Carne Esponjosa', utility:'self_buff', cooldown:5, selfBuff:{name:'Carne Esponjosa', duration:3, incomingDmgReduction:0.20, regenPct:0.03}}, golpe:{label:'Cabezazo', mult:1.00, applies:w}},
+    {mohoso:{label:'Mordisco Mohoso', mult:1.20, cooldown:2, applies:S, bonusVsTargetStatus:{name:'Veneno', mult:1.25}}, mordisco:{label:'Mordisco', mult:1.00}},
+    {nube: riftAoe('Nube de Esporas', 0.35, S, 4), disparo:{label:'Espora', mult:1.00, applies:w}},
+    {brote:{label:'Esporas Curativas', utility:'buff_allies', cooldown:5, condition:RIFT_GROUP, buffAllies:{name:'Esporas Curativas', duration:3, regenPct:0.03}}, cura: riftHeal('Cataplasma'), toque:{label:'Bastón Podrido', mult:0.90, applies:S}},
+    {regenerar:{label:'Regenerar', utility:'self_buff', cooldown:5, condition:RIFT_HP(0.7), selfBuff:{name:'Regenerar', duration:3, regenPct:0.05}}, porrazo:{label:'Porrazo', mult:1.45, cooldown:3, applies:RIFT_STUN(0.20)}, golpe:{label:'Manotazo', mult:1.00, applies:w}},
+    {brote: riftCall('Brote', T(0), 2, 0.05), micelio:{label:'Red de Micelio', utility:'self_buff', cooldown:6, selfBuff:{name:'Red de Micelio', duration:3, regenPct:0.03, incomingDmgReduction:0.15}}, lluvia: riftAoe('Lluvia de Esporas', 0.50, S), pudrir:{label:'Pudrir', mult:1.50, cooldown:3, bonusVsTargetStatus:{name:'Veneno', mult:1.35}, applies:RIFT_WEAK(0.50)}, golpe:{label:'Zarcillo', mult:1.00, applies:S},
+      $:{phases:[{below:0.50, msg:'se extiende: <b>la cueva entera respira</b> (fase 2).'}]}},
+  ],
+  templo: (S, w, T)=> [
+    {arenisca: riftWard('Piel de Arenisca', 0.30), golpe:{label:'Lanzazo', mult:1.00}},
+    {vendas:{label:'Maldición de las Vendas', mult:1.10, cooldown:3, applies:S}, tajo:{label:'Tajo de Khopesh', mult:1.00, applies:RIFT_BLEED(0.25)}},
+    {enjambre:{label:'Flecha Escarabajo', mult:1.20, cooldown:3, applies:{name:'Corrosion', chance:0.45, duration:3}}, disparo:{label:'Flechazo', mult:1.00}},
+    {bendicion:{label:'Bendición del Sol', utility:'buff_allies', cooldown:5, condition:RIFT_GROUP, buffAllies:{name:'Bendición del Sol', duration:2, dmgMult:1.15}}, cura: riftHeal('Ungüento'), toque:{label:'Rayo de Sol', mult:0.90, applies:RIFT_BLIND(0.25)}},
+    {acertijo:{label:'Acertijo', mult:0.80, cooldown:4, applies:{name:'Confusion', chance:0.50, duration:2, procChance:0.40}}, zarpa:{label:'Zarpa de Piedra', mult:1.50, cooldown:3, applies:S}, golpe:{label:'Zarpazo', mult:1.00}},
+    {momias: riftCall('Alzar a la Guardia', T(1), 2, 0.05), sol: riftRage('Sol Muerto', 1.20, 0.4), plaga: riftAoe('Plaga', 0.50, S), juicio:{label:'Juicio del Sol Muerto', mult:1.55, cooldown:3, bonusVsTargetStatus:{name:'Debilitado', mult:1.35}}, golpe:{label:'Cayado', mult:1.00, applies:w},
+      $:{phases:[{below:0.50, msg:'alza el cayado: <b>el sol muerto se asoma</b> (fase 2).'}]}},
+  ],
+  sombras: (S, w, T)=> [
+    {engullir:{label:'Engullir la Luz', utility:'self_buff', cooldown:5, selfBuff:{name:'Engullir la Luz', duration:2, incomingDmgReduction:0.25, evasionDelta:10}}, golpe:{label:'Manotazo Oscuro', mult:1.00, applies:w}},
+    {emboscada:{label:'Emboscada', mult:1.40, cooldown:3, bonusVsTargetStatus:{name:'Ceguera', mult:1.40}}, tajo:{label:'Tajo en lo Oscuro', mult:1.00, applies:w}},
+    {mirada:{label:'Mirada Fija', mult:1.00, cooldown:3, applies:RIFT_MARK(0.65)}, disparo:{label:'Rayo del Ojo', mult:1.05}},
+    {apagar: riftAoe('Apagar las Velas', 0.30, S, 5), cura: riftHeal('Sombra Tibia'), toque:{label:'Soplo', mult:0.90, applies:w}},
+    {hueco:{label:'Tajo Hueco', mult:1.45, cooldown:3, ignoreResist:0.50}, vacio: riftWard('Armadura Vacía', 0.30), tajo:{label:'Tajo', mult:1.00, applies:w}},
+    {tentaculos: riftCall('Lo que Sale de la Fosa', T(1), 2, 0.05), fundirse:{label:'Fundirse en lo Oscuro', utility:'self_buff', cooldown:6, selfBuff:{name:'Fundirse en lo Oscuro', duration:2, evasionDelta:30}}, oscuridad: riftAoe('Oscuridad Total', 0.50, S), devorar:{label:'Devorar', mult:1.55, cooldown:3, bonusVsLowHp:{below:0.40, mult:1.40}}, golpe:{label:'Zarpa sin Forma', mult:1.00, applies:w},
+      $:{phases:[{below:0.50, msg:'sube desde el fondo: <b>ya no queda luz</b> (fase 2).'}]}},
+  ],
+  ceniza: (S, w, T)=> [
+    {manto: riftWard('Manto de Ceniza', 0.30), golpe:{label:'Golpe de Ceniza', mult:1.00, applies:w}},
+    {palma:{label:'Palma de Brasa', mult:1.20, cooldown:2, applies:S}, puno:{label:'Puño', mult:1.00}},
+    {incienso: riftAoe('Incienso Ardiente', 0.35, S, 4), disparo:{label:'Brasa', mult:1.00, applies:w}},
+    {campana: riftCheer('Tocar la Campana', 5), cura: riftHeal('Ceniza Tibia'), toque:{label:'Tañido', mult:0.90, applies:RIFT_STUN(0.10)}},
+    {sermon:{label:'Sermón de Carbón', mult:1.30, cooldown:3, applies:RIFT_MUTE(0.55)}, baculo:{label:'Báculo al Rojo', mult:1.45, cooldown:3, applies:S}, golpe:{label:'Golpe de Báculo', mult:1.00}},
+    {renacer:{label:'Renacer', utility:'self_heal', healPct:0.10, oncePerCombat:true, condition:RIFT_HP(0.30)}, arder: riftRage('Arder', 1.20), llamarada: riftAoe('Llamarada', 0.55, S), consumir:{label:'Consumir', mult:1.50, cooldown:3, bonusVsTargetStatus:{name:'Quemadura', mult:1.40}}, golpe:{label:'Lengua de Fuego', mult:1.00, applies:S},
+      $:{phases:[{below:0.50, msg:'se aviva: <b>la última llama no quiere apagarse</b> (fase 2).'}]}},
+  ],
+  observatorio: (S, w, T)=> [
+    {orbita:{label:'Órbita', utility:'self_buff', cooldown:5, selfBuff:{name:'Órbita', duration:2, incomingDmgReduction:0.30}}, golpe:{label:'Golpe de Esfera', mult:1.00}},
+    {estelar:{label:'Lanza Estelar', mult:1.25, cooldown:2, bonusVsTargetStatus:{name:'Marcado', mult:1.40}}, tajo:{label:'Tajo', mult:1.00, applies:w}},
+    {enfocar:{label:'Enfocar', mult:0.80, cooldown:3, applies:RIFT_MARK(0.80)}, rayo:{label:'Rayo de Lente', mult:1.10}},
+    {destino:{label:'Leer el Destino', utility:'buff_allies', cooldown:5, condition:RIFT_GROUP, buffAllies:{name:'Leer el Destino', duration:2, dmgMult:1.15, evasionDelta:10}}, cura: riftHeal('Buena Estrella'), toque:{label:'Polvo de Estrella', mult:0.90, applies:S}},
+    {impacto: riftAoe('Impacto', 0.50, RIFT_STUN(0.15), 4), estela:{label:'Estela Ardiente', mult:1.40, cooldown:3, applies:{name:'Quemadura', chance:0.50, duration:3, stack:true, maxStack:3}}, golpe:{label:'Embestida', mult:1.00}},
+    {cometa: riftCall('Llamar a un Cometa', T(1), 2, 0.05), alinear:{label:'Alinear los Planetas', utility:'self_buff', cooldown:6, selfBuff:{name:'Alinear los Planetas', duration:3, dmgMult:1.25}}, lluvia: riftAoe('Lluvia de Estrellas', 0.55, S), eclipse:{label:'Eclipse', mult:1.35, cooldown:4, applies:RIFT_BLIND(0.60)}, golpe:{label:'Señalar', mult:1.00, applies:S},
+      $:{phases:[{below:0.50, msg:'mira por el telescopio roto: <b>las estrellas le responden</b> (fase 2).'}]}},
+  ],
+};
 function riftTemplates(themeId){
   const t = RIFT_THEMES[themeId], S = t.status, m = t.mobs;
   if(t._tpl) return t._tpl;
   const weak = Object.assign({}, S, {chance: +(S.chance*0.6).toFixed(2)});
-  const healIf = (ctx)=> combat.enemies.some(e=> e.hp > 0 && e.hp < e.maxHP*0.7);
-  t._tpl = {
-    regular: [
-      {id:m[0][0], name:m[0][1], icon:'🛡️', hp:1.35, atk:0.92, res:rs(30,10,10,10,20), frontline:true, immuneRetroceso:true,
-        abilities:{golpe:{label:'Golpe', mult:1.00}, embestida:{label:'Embestida', mult:1.25, cooldown:4}}, aiPriority:['embestida','golpe']},
-      {id:m[1][0], name:m[1][1], icon:'⚔️', hp:0.95, atk:1.15, res:rs(5,5,5,5,5), frontline:true,
-        abilities:{golpe:{label:'Golpe', mult:1.00}, marca:{label:'Golpe Maldito', mult:0.90, cooldown:3, applies:S}}, aiPriority:['marca','golpe']},
-      {id:m[2][0], name:m[2][1], icon:'🏹', hp:0.85, atk:1.10, res:rs(0,10,10,5,0),
-        abilities:{disparo:{label:'Disparo', mult:1.00}, certero:{label:'Disparo Certero', mult:1.35, cooldown:4}}, aiPriority:['certero','disparo']},
-      {id:m[3][0], name:m[3][1], icon:'✨', hp:0.85, atk:0.92, res:rs(-5,15,15,10,0),
-        abilities:{toque:{label:'Toque', mult:0.95, applies:weak}, cura:{label:'Cura', utility:'heal_ally', healPct:0.10, cooldown:4, condition:healIf}}, aiPriority:['cura','toque']},
-    ],
-    elite: {id:m[4][0], name:m[4][1], icon:'☠️', hp:2.30, atk:1.28, res:rs(20,15,15,10,20), elite:true, frontline:true, immuneRetroceso:true,
-      abilities:{golpe:{label:'Golpe', mult:1.00}, brutal:{label:'Golpe Brutal', mult:1.45, cooldown:3, applies:S}}, aiPriority:['brutal','golpe']},
-    boss: {id:m[5][0], name:m[5][1], icon:'👑', hp:5.5, atk:1.8, res:rs(20,20,20,15,30), boss:true, frontline:true, immuneRetroceso:true, riftBoss:true,
-      phases:[{below:0.50, msg:'se desata: <b>el rift entero tiembla</b> (fase 2).'}],
-      abilities:{golpe:{label:'Golpe', mult:1.00}, barrido:{label:'Barrido del Rift', utility:'aoe', mult:0.55, rearMult:0.50, cooldown:4, applies:weak}, sentencia:{label:'Golpe del Guardián', mult:1.50, cooldown:3, applies:S}},
-      aiPriority:['barrido','sentencia','golpe']},
-  };
+  const base = [
+    {icon:'🛡️', hp:1.35, atk:0.92, res:rs(30,10,10,10,20), frontline:true, immuneRetroceso:true},
+    {icon:'⚔️', hp:0.95, atk:1.15, res:rs(5,5,5,5,5), frontline:true},
+    {icon:'🏹', hp:0.85, atk:1.10, res:rs(0,10,10,5,0)},
+    {icon:'✨', hp:0.85, atk:0.92, res:rs(-5,15,15,10,0)},
+    {icon:'☠️', hp:2.30, atk:1.28, res:rs(20,15,15,10,20), elite:true, frontline:true, immuneRetroceso:true},
+    {icon:'👑', hp:5.5, atk:1.8, res:rs(20,20,20,15,30), boss:true, frontline:true, immuneRetroceso:true, riftBoss:true},
+  ];
+  const tpls = [];
+  const kit = RIFT_KITS[themeId](S, weak, i=> i);
+  // Se arman en orden: las criaturas que un jefe invoca (T(i)) ya existen cuando le toca a él.
+  kit.forEach((k, i)=>{
+    const abilities = Object.assign({}, k), extra = abilities.$ || {};
+    delete abilities.$;
+    tpls[i] = Object.assign({id:m[i][0], name:m[i][1]}, base[i], extra, {abilities, aiPriority:Object.keys(abilities)});
+  });
+  tpls.forEach(tp=> Object.values(tp.abilities).forEach(ab=>{ if(ab.summon && typeof ab.summon.tpl === 'number') ab.summon.tpl = tpls[ab.summon.tpl]; }));
+  t._tpl = {regular: tpls.slice(0, 4), elite: tpls[4], boss: tpls[5]};
   return t._tpl;
 }
 // El grupo de cada etapa del rift: 0 y 1 son oleadas, 2 es el jefe.
@@ -6630,7 +6835,19 @@ function grantRiftRewards(node){
   keys[node.rift] = (keys[node.rift] || 0) + 1;
   for(let i = 0; i < RIFT_LOOT.rolls; i++){
     let tier = pickWeighted(RIFT_LOOT.tiers.map(([id, weight])=> ({tpl:id, weight})));
-    if(tier === 'ss' && !RIFT_SS_ENABLED) tier = 's';
+    if(tier === 'ss'){
+      // La pieza numerada se pide a la base (una por servidor y modo). Si no queda ninguna libre de este rift,
+      // o aún no hay piezas listas de su tema, cae un objeto de Rango S en su lugar.
+      tier = 's';
+      if(RIFT_SS_ENABLED && ssThemeReady(node.rift).length){
+        ssGrant(node.rift, 'rift').then(it=>{
+          if(it) return;
+          const alt = generateEquipOfRarity('legendario', state.dungeon ? state.dungeon.atFloor : 0);
+          if(alt){ addToInventory(alt); log(`El rift suelta además: ${alt.name}.`); save(); }
+        });
+        continue;
+      }
+    }
     let item;
     if(chance(RIFT_LOOT.stoneShare)){
       const pool = Object.values(SOUL_STONES).filter(s=> s.tier === (tier === 'a' ? 'A' : 'S'));
@@ -6640,6 +6857,450 @@ function grantRiftRewards(node){
   }
   log(`<b>Rift superado: ${t.name}.</b> Consigues una llave de este rift (tienes ${keys[node.rift]}) y: ${got.join(', ') || 'nada más'}.`);
   if(state.char.storyColumn) save();
+}
+// ============================================================
+// PIEZAS NUMERADAS, RANGO SS (diseño de ariochbu, 2026-10-11). Cien piezas con nombre propio, cinco por rift.
+// Cada una existe UNA sola vez por servidor y por modo de juego (normal, HardMode, Inmortal): el dueño queda
+// anotado en la base (tabla numbered_items, migración 0047) y la pieza vuelve a estar libre si su personaje
+// se borra. Base: la pieza de Rango S equivalente con +15% de estadísticas, sus efectos normales y un efecto
+// único. Se consiguen en los rifts (tirada SS del botín) o en la Fragua de Hodrak (fragmento + 25 llaves).
+// Los efectos únicos se programan por tandas: solo las piezas de SS_READY pueden salir.
+// ============================================================
+const SS_ITEMS = [
+  [1, "Daga de Jack", "arma", "cripta", "doblefilo", "El Sangrado que causas llega hasta 8 cargas y cada carga hace un 50% más de daño por turno."],
+  [2, "Corona que Falta", "casco", "cripta", "voluntad", "La primera vez que mueres en un combate, revives con el 30% de vida y todos tus estados negativos pasan al enemigo que te mató."],
+  [3, "Farol de la Plañidera", "arma2", "cripta", "paladin", "Toda curación que haces daña además al enemigo del frente por el 50% de lo curado."],
+  [4, "Grebas del Guardatumbas", "botas", "cripta", "voluntad", "Una vez por combate, el primer aliado que cae se levanta al inicio de tu siguiente turno con el 25% de vida."],
+  [5, "Sudario del Caballero Sepulto", "armadura", "cripta", "voluntad", "Por debajo del 30% de vida, ningún golpe puede quitarte más del 10% de tu vida máxima."],
+  [6, "Martillo sin Rostro", "arma", "forja", "pesada", "Machacar ya no consume el Tambaleo. Cada Machacar sobre un Tambaleante le deja Armadura Rota acumulable (-10 de resistencia física, hasta 5 veces)."],
+  [7, "Yunque de Bolsillo", "arma2", "forja", "paladin", "Tu escudo no se pierde al terminar el combate: lo conservas durante todo el nivel. Su tope sube al 60% de tu vida."],
+  [8, "Guanteletes de Tenaza", "guantes", "forja", "voluntad", "Tus golpes básicos no pueden fallar ni ser esquivados, e ignoran las reducciones de daño que el enemigo se aplica a sí mismo."],
+  [9, "Delantal de Escoria", "armadura", "forja", "voluntad", "Inmune a Quemadura. Cada vez que intentan quemarte ganas +8% de daño durante 2 turnos (acumula hasta 5 veces)."],
+  [10, "Fuelle del Errante", "amuleto", "forja", "soberano", "La Quemadura pasa de 3 a 6 cargas como máximo y no se apaga mientras sigas golpeando a ese enemigo."],
+  [11, "Vara de Hielo Negro", "arma", "hielo", "mago", "+30% de daño de hielo. Lanza de hielo golpea a toda la línea. Un enemigo Ralentizado que vuelve a recibir hielo queda Congelado: pierde su turno (una vez por enemigo)."],
+  [12, "Corazón del Coloso", "amuleto", "hielo", "voluntad", "Empiezas cada combate con un escudo de hielo del 25% de tu vida. Mientras dure, quien te golpee queda Ralentizado."],
+  [13, "Arco de Gina", "arma", "hielo", "tirador", "Lluvia de flechas aplica Ralentizado. Tus disparos contra enemigos Ralentizados son siempre críticos."],
+  [14, "Botas del Glaciar", "botas", "hielo", "voluntad", "No puedes ser Ralentizado ni Paralizado."],
+  [15, "Manto de Ventisca", "armadura", "hielo", "artemisa", "+25% de evasión mientras estés en la retaguardia. Cada golpe que esquivas cura un 5% al aliado más herido."],
+  [16, "Espejo de Azogue", "arma2", "espejos", "u", "La primera habilidad que cada enemigo te lanza se refleja contra él, con su daño y su estado."],
+  [17, "Máscara del Reflejo", "casco", "espejos", "voluntad", "Cada mejora que un enemigo se aplique a sí mismo te la aplicas tú también, con la misma duración."],
+  [18, "Lanza de Cristal", "arma", "espejos", "u:pesada,paladin", "Cada golpe crítico se repite al 50% sobre otro enemigo de la misma línea."],
+  [19, "Capa de Esquirlas", "armadura", "espejos", "guardian", "Devuelves el 30% del daño cuerpo a cuerpo que recibes. Si el atacante muere por ese reflejo, estalla y deja Sangrado a toda su línea."],
+  [20, "Anillo de los Dos Lados", "amuleto", "espejos", "voluntad", "Tu definitiva gana un uso más por bajada (4 en vez de 3), pero cada uso te cuesta el 10% de tu vida."],
+  [21, "Espina de Ximena", "arma", "jardin", "hechicero", "El Veneno pasa de 5 a 10 cargas como máximo y ya no se acaba de golpe: pierde una carga por turno."],
+  [22, "Semilla Glotona", "amuleto", "jardin", "eclipse", "Cada enemigo que muere envenenado te cura un 8% y pasa todas sus cargas al enemigo vivo más cercano."],
+  [23, "Guantes de Jardinera", "guantes", "jardin", "voluntad", "Tus pociones curan también a todo tu equipo, al 50%."],
+  [24, "Corona Somnífera", "casco", "jardin", "voluntad", "20% de que quien te golpee quede Dormido y pierda su siguiente turno. Cada jefe solo puede dormirse una vez."],
+  [25, "Raíces Andantes", "botas", "jardin", "voluntad", "Al final de cada turno te curas un 3% de vida; el doble si no has cambiado de fila en ese combate."],
+  [26, "Jabalina del Rayo", "arma", "tormenta", "tirador", "Disparo certero salta a 2 enemigos más con el 50% del daño; con el 100% si están Marcados."],
+  [27, "Tambor del Trueno", "arma2", "tormenta", "pesada", "Grito de guerra aturde 1 turno a todo el frente enemigo (una vez por combate) y cuesta la mitad."],
+  [28, "Ojo de la Tormenta", "amuleto", "tormenta", "voluntad", "Cada tercer turno tuyo cae un rayo sobre un enemigo al azar por el 150% de tu daño base. No puede fallar."],
+  [29, "Yelmo Alado", "casco", "tormenta", "voluntad", "Tienes una acción extra en el primer turno de cada combate."],
+  [30, "Plumas del Halcón", "botas", "tormenta", "voluntad", "Una vez por turno, cambiar de fila no gasta el turno y te da +50% de evasión hasta tu siguiente turno."],
+  [31, "Aguijón de la Reina", "arma", "nido", "doblefilo", "Cada golpe crítico hace nacer una Larva aliada (hasta 3) que ataca por el 20% de tu daño y muere de un golpe."],
+  [32, "Caparazón de Escarabajo", "armadura", "nido", "guardian", "El primer golpe que recibes en cada turno enemigo se reduce a la mitad."],
+  [33, "Huevo Ámbar", "amuleto", "nido", "voluntad", "Tienes una ranura más para Caídos equipados."],
+  [34, "Guadañas de Mantis", "guantes", "nido", "voluntad", "Tus golpes básicos pegan dos veces al 60%, y los dos aplican los efectos de golpe."],
+  [35, "Glándula Ácida", "arma2", "nido", "u:doblefilo,mago,hechicero", "Cada carga de Sangrado, Quemadura o Veneno le baja 5 puntos al enemigo la resistencia a ese mismo tipo de daño."],
+  [36, "Tomo Mordedor Domado", "arma2", "biblioteca", "u:mago,hechicero", "Cada cuarta habilidad que lanzas es gratis y hace +30% de daño."],
+  [37, "Pluma del Archivista", "arma", "biblioteca", "hechicero", "Miedo, Confusión y Silencio duran 1 turno más, y los jefes solo los resisten la mitad de lo normal."],
+  [38, "Lentes del Escriba", "casco", "biblioteca", "voluntad", "Ves la próxima acción de cada enemigo, dibujada encima de él en el combate. +15% de daño contra el que vaya a usar una habilidad."],
+  [39, "Marcapáginas de Tinta", "amuleto", "biblioteca", "voluntad", "Inmune a Silencio. Quien intente silenciarte queda Silenciado 2 turnos."],
+  [40, "Túnica de Pergamino", "armadura", "biblioteca", "voluntad", "Cada estado negativo distinto que tengas te da +6% de daño. Cada vez que pierdes uno te curas un 5%."],
+  [41, "Espada del Campeón", "arma", "arena", "pesada", "Cuando solo queda un enemigo en pie: +40% de daño y +20% de robo de vida."],
+  [42, "Red del Reciario", "arma2", "arena", "u", "Tu primer ataque de cada combate Inmoviliza al objetivo 2 turnos: no actúa ni esquiva. A los jefes, 1 turno."],
+  [43, "Laurel Dorado", "casco", "arena", "voluntad", "Cada enemigo que rematas te da +5% de daño y +5% de crítico (hasta 10 veces). La cuenta vale solo para la década en la que estás: al pasar a la siguiente empieza de cero. También se pierde si mueres."],
+  [44, "Brazal del Mirmillón", "guantes", "arena", "guardian", "Al Defender devuelves el golpe por el 100% de tu daño. Una vez cada 3 turnos, Defender no termina tu turno."],
+  [45, "Sandalias de Arena", "botas", "arena", "voluntad", "Con la vida completa: +25% de daño. Con menos del 30%: +25% de evasión."],
+  [46, "Pico del Minero Maldito", "arma", "mina", "u:pesada,paladin", "Tus golpes ignoran los escudos enemigos y la reducción de daño que tienen los jefes mientras viven sus invocaciones."],
+  [47, "Corazón de Cuarzo", "amuleto", "mina", "voluntad", "La curación que te sobra se convierte en escudo, hasta el 40% de tu vida."],
+  [48, "Linterna Viva", "arma2", "mina", "u", "El mapa del nivel se ve entero, sin niebla. Actúas siempre el primero en todos los combates."],
+  [49, "Garras de Topo", "guantes", "mina", "voluntad", "+50% de oro del laberinto y cada cofre da un objeto más. Tus golpes ignoran el 30% de la resistencia física del enemigo. Los guardianes de rift te dan el doble de llaves."],
+  [50, "Coraza de Esquirlas", "armadura", "mina", "bastion", "Cada vez que se rompe tu escudo estalla: 80% de tu daño base a todos los enemigos."],
+  [51, "Máscara de la Dama", "casco", "mascaras", "voluntad", "Llevas una máscara que cambia sola cada turno: Risa (+20% de daño), Llanto (+20% de curación recibida) o Ira (+20% de crítico)."],
+  [52, "Abanico de Cuchillas", "arma", "mascaras", "doblefilo", "Danza de cuchillas golpea a todos los enemigos de la línea elegida."],
+  [53, "Violín del Músico", "arma2", "mascaras", "u", "Tus aliados actúan dos veces en el primer turno de cada combate."],
+  [54, "Guantes del Duelista", "guantes", "mascaras", "voluntad", "Si golpeas a un enemigo que todavía no ha actuado en este turno, el golpe es crítico seguro."],
+  [55, "Capa de Baile", "armadura", "mascaras", "voluntad", "El primer golpe que te mataría en cada combate se desvía a un enemigo al azar."],
+  [56, "Cetro del Avaro", "arma", "tesoreria", "mago", "Tus habilidades gastan oro en vez de MP (10 de oro por punto) y hacen +25% de daño. Sin oro, vuelven a gastar MP."],
+  [57, "Moneda de Dos Caras", "amuleto", "tesoreria", "voluntad", "Al empezar cada combate se lanza la moneda: cara, +30% de daño; cruz, -30% de daño recibido."],
+  [58, "Cofre Mímico Domado", "arma2", "tesoreria", "u", "Una vez por combate se traga a un enemigo normal (ni élite ni jefe) y lo elimina. Su botín cae igual."],
+  [59, "Botas del Contable", "botas", "tesoreria", "voluntad", "No pagas el impuesto al volver a la ciudad y tus aliados no cobran sueldo."],
+  [60, "Armadura de Oro Macizo", "armadura", "tesoreria", "voluntad", "Recibes un 1% menos de daño por cada 5.000 de oro que lleves encima (tope 30%). Al morir pierdes el doble de oro."],
+  [61, "Sable del Capitán", "arma", "astillero", "u:pesada,doblefilo", "Los enemigos que matas se levantan 2 turnos como Tripulantes fantasma de tu lado (máximo 2 a la vez)."],
+  [62, "Ancla Oxidada", "arma2", "astillero", "u:pesada,paladin", "El enemigo que golpeas queda obligado a atacarte a ti durante 2 turnos, y de él recibes un 30% menos de daño."],
+  [63, "Sombrero de Tres Picos", "casco", "astillero", "voluntad", "Tus aliados usan tu probabilidad de crítico en vez de la suya."],
+  [64, "Farol de Popa", "amuleto", "astillero", "voluntad", "Una vez por nivel, al morir quedas 2 turnos como espectro: no te pueden dañar y sigues atacando. Si el combate se gana en ese tiempo, vives con 1 de vida."],
+  [65, "Botas de Cubierta", "botas", "astillero", "voluntad", "El daño de área que recibes se reduce un 40%."],
+  [66, "Látigo del Maestro", "arma", "circo", "hechicero", "Los enemigos con Miedo o Confusión ya no pierden el turno: atacan siempre a los suyos."],
+  [67, "Cuchillos del Lanzador", "arma", "circo", "tirador", "Lluvia de flechas lanza además 3 cuchillos a enemigos al azar con el 60% del daño. Pueden repetir objetivo."],
+  [68, "Nariz Roja", "casco", "circo", "voluntad", "15% de que cualquier golpe que recibas haga 0 de daño."],
+  [69, "Platillos del Mono", "arma2", "circo", "u", "Cada vez que usas una habilidad hay un 25% de que se lance dos veces, la segunda sin coste."],
+  [70, "Zapatos de Payaso", "botas", "circo", "voluntad", "Los enemigos tienen un 20% de fallar contra ti; el que falla tropieza y pierde su siguiente turno."],
+  [71, "Aguja Horaria", "arma", "reloj", "u:doblefilo,tirador", "Cada duodécimo golpe tuyo (la cuenta sigue de un combate a otro) hace daño ×4 y no puede fallar."],
+  [72, "Reloj de Arena Roto", "amuleto", "reloj", "voluntad", "Una vez por combate, al llegar a 0 de vida rebobinas: vuelves a la vida, el MP y los estados que tenías hace 2 turnos."],
+  [73, "Péndulo", "arma2", "reloj", "u", "Una vez por combate juegas dos turnos seguidos. Las habilidades de los enemigos tardan 1 turno más en volver a estar listas."],
+  [74, "Yelmo de Campanario", "casco", "reloj", "voluntad", "Cada 4 turnos suena la campana: los enemigos pierden sus mejoras y tu equipo pierde sus estados negativos."],
+  [75, "Cuerda del Relojero", "guantes", "reloj", "voluntad", "Los estados que aplicas duran el doble de turnos."],
+  [76, "Báculo de Micelio", "arma", "hongos", "hechicero", "El daño de tu Veneno cura al aliado más herido por el 30% de lo que quita."],
+  [77, "Sombrero de Seta", "casco", "hongos", "voluntad", "Al final de tu turno sueltas esporas: todo el frente enemigo recibe 1 carga de Veneno."],
+  [78, "Esporas del Chamán", "amuleto", "hongos", "gracia", "Toda curación que haces deja además Regeneración 3 turnos (3% de vida por turno)."],
+  [79, "Piel de Trol", "armadura", "hongos", "guardian", "Regeneras un 5% de vida cada turno. El daño de fuego la apaga 2 turnos."],
+  [80, "Puños de Moho", "guantes", "hongos", "voluntad", "Cada golpe básico le quita al enemigo un 3% de su vida máxima para el resto del combate (1% a los jefes; tope 30%)."],
+  [81, "Cayado del Faraón", "arma", "templo", "paladin", "Golpe consagrado golpea a toda la línea del frente y te cura por el total del daño hecho."],
+  [82, "Disco del Sol Muerto", "arma2", "templo", "paladin", "Muro de fe protege también a todo tu equipo, con la mitad del efecto."],
+  [83, "Vendas Eternas", "armadura", "templo", "voluntad", "Solo puedes tener un estado negativo a la vez: el nuevo sustituye al anterior."],
+  [84, "Escarabajo de Turquesa", "amuleto", "templo", "voluntad", "La primera vez que mueres en una bajada, revives con la vida completa."],
+  [85, "Máscara Funeraria", "casco", "templo", "voluntad", "Los enemigos Marcados o Debilitados no pueden recibir curación."],
+  [86, "Hoja Hueca", "arma", "sombras", "doblefilo", "Mientras estés en la retaguardia y quede un aliado vivo, los enemigos no pueden elegirte como objetivo. +25% de daño al primer golpe sobre cada enemigo."],
+  [87, "Vela Negra", "arma2", "sombras", "u", "Todos los enemigos empiezan el combate con Ceguera 2 turnos."],
+  [88, "Capucha del Apagavelas", "casco", "sombras", "voluntad", "Al matar a un enemigo no puedes recibir daño hasta tu siguiente turno."],
+  [89, "Guantes del Acechador", "guantes", "sombras", "voluntad", "Tus golpes críticos ignoran toda la resistencia del enemigo."],
+  [90, "Manto de la Fosa", "armadura", "sombras", "voluntad", "Empiezas cada combate con una Sombra Cazadora ya invocada."],
+  [91, "Bastón Anillado del Abad", "arma", "ceniza", "mago", "Bola de fuego rebota en hasta 3 enemigos; cada rebote deja una carga más de Quemadura."],
+  [92, "Cuentas de Brasa", "amuleto", "ceniza", "voluntad", "Cada habilidad distinta que usas seguida da +10% de daño (hasta +40%). Repetir habilidad reinicia la cuenta."],
+  [93, "Rueda de Oración", "arma2", "ceniza", "u", "Cada turno que Defiendes carga la rueda (hasta 3). Tu siguiente ataque suelta +50% de daño por carga."],
+  [94, "Sandalias de Ceniza", "botas", "ceniza", "guardian", "Todo enemigo que te golpea cuerpo a cuerpo recibe una carga de Quemadura."],
+  [95, "Túnica de la Última Llama", "armadura", "ceniza", "voluntad", "Una vez por combate, al bajar del 25% de vida estallas en llamas: daño a todos los enemigos y te curas un 30%."],
+  [96, "Catalejo del Astrónomo", "arma", "observatorio", "tirador", "Marca del cazador marca a todos los enemigos a la vez, y el daño extra contra Marcados sube de +20% a +35%."],
+  [97, "Carta Estelar", "arma2", "observatorio", "u", "Cada nivel del laberinto te toca un signo al azar de doce, cada uno con una ventaja fuerte distinta para ese nivel."],
+  [98, "Astrolabio", "amuleto", "observatorio", "voluntad", "+20% de crítico. Toda probabilidad de crítico por encima del 100% se convierte en daño crítico."],
+  [99, "Yelmo de Arioch", "casco", "observatorio", "voluntad", "+6% a todas tus estadísticas por cada aliado vivo; +12% por cada aliado caído."],
+  [100, "Estrella Fugaz", "guantes", "observatorio", "voluntad", "Una vez por bajada, al perder un combate puedes repetirlo desde el principio con todo tu equipo restaurado."],
+];
+const SS_BY_ID = {};
+SS_ITEMS.forEach(r=>{ SS_BY_ID[r[0]] = {n:r[0], name:r[1], slot:r[2], theme:r[3], base:r[4], text:r[5]}; });
+const SS_READY = new Set(Array.from({length:25}, (_, i)=> i + 1)); // tanda 1: rifts Cripta, Forja, Hielo, Espejos y Jardín
+const SS_STAT_MULT = 1.15;
+const SS_LOCAL = /^(localhost|127\.0\.0\.1)$/.test(location.hostname); // en pruebas locales no se toca la base
+function ssPad(n){ return String(n).padStart(3, '0'); }
+function ssArtPath(it){ return `src/assets/numerados/${ssPad(it.ssId)}.jpg?v=1`; }
+function ssText(it){ const d = SS_BY_ID[it.ssId]; return d ? d.text : ''; }
+// La pieza numerada n que lleva puesta el jugador (o null). Los efectos únicos solo valen equipados en él.
+function ssOn(n){
+  const eq = state && state.char && state.char.equip;
+  if(!eq) return null;
+  for(const slot of EQUIP_SLOTS){ const it = eq[slot]; if(it && it.ssId === n) return it; }
+  return null;
+}
+// Armas numeradas que sirven a varias sendas: dan el atributo de la senda de quien las lleva, con el valor
+// de la mejor arma de Rango S de esa senda y ranura, +15%.
+function ssScaleBonus(it){
+  const cat = WEAPON_CATALOG[state.char.style], pool = cat && cat[it.slot];
+  let best = 0;
+  if(pool) Object.keys(pool).forEach(name=>{ const e = weaponEntry(state.char.style, it.slot, name, 'legendario'); if(e) best = Math.max(best, e.value); });
+  return Math.round((best || 35)*SS_STAT_MULT);
+}
+function makeNumberedItem(n){
+  const d = SS_BY_ID[n];
+  if(!d) return null;
+  const up = v=> Math.round(v*SS_STAT_MULT);
+  let item;
+  if(d.slot === 'arma' || d.slot === 'arma2'){
+    if(d.base[0] === 'u'){
+      item = {kind:'equip', slot:d.slot, bonus:{stat:'scale', value:0}};
+      if(d.base.length > 2) item.ssStyles = d.base.slice(2).split(',');
+    } else {
+      item = makeWeaponItem(d.slot, d.base, 'legendario', Object.keys(WEAPON_CATALOG[d.base][d.slot])[0]);
+      if(item.bonus) item.bonus.value = up(item.bonus.value);
+    }
+  } else item = makeSetItem(d.base, d.slot, 'legendario');
+  if(!item) return null;
+  if(item.mods) Object.keys(item.mods).forEach(k=>{ item.mods[k] = up(item.mods[k]); });
+  item.name = d.name; item.rarity = 'ss'; item.ssId = n;
+  return item;
+}
+function ssAllItems(){
+  const c = state.char, out = [];
+  (c.inventory || []).forEach(it=> out.push(it));
+  EQUIP_SLOTS.forEach(s=>{ if(c.equip && c.equip[s]) out.push(c.equip[s]); });
+  ((c.stash && c.stash.items) || []).forEach(it=> out.push(it));
+  return out.filter(it=> it && it.ssId);
+}
+// Pide a la base una pieza libre de entre las candidatas. Devuelve su número o null (no queda ninguna).
+async function ssClaim(candidates, source){
+  if(!candidates.length) return null;
+  if(SS_LOCAL || simMode){ const mine = new Set(ssAllItems().map(it=> it.ssId)); const free = candidates.filter(n=> !mine.has(n)); return free.length ? pick(free) : null; }
+  if(!currentUser || !state.char.id) return null;
+  const { data, error } = await supabase.rpc('claim_numbered_item', {p_character_id: state.char.id, p_candidates: candidates, p_source: source});
+  if(error){ console.warn('No se pudo reclamar la pieza numerada:', error.message); return null; }
+  return data || null;
+}
+function ssThemeReady(theme){ return SS_ITEMS.filter(r=> r[3] === theme && SS_READY.has(r[0])).map(r=> r[0]); }
+async function ssGrant(theme, source){
+  const n = await ssClaim(ssThemeReady(theme), source);
+  if(!n) return null;
+  const item = makeNumberedItem(n);
+  addToInventory(item);
+  log(`<b style="color:#ff5a55">¡Pieza numerada!</b> Consigues <b>${item.name}</b> (N.º ${ssPad(n)}). No existe otra igual.`);
+  if(!simMode && !SS_LOCAL) await flushSave();
+  showSsReveal(item);
+  return item;
+}
+// Al entrar con un personaje: lo que diga la base manda. Si una pieza suya no llegó a guardarse, vuelve a la
+// mochila; si lleva una que la base no le reconoce, se retira.
+async function ssReconcile(){
+  if(SS_LOCAL || simMode || !currentUser || !state.char || !state.char.id) return;
+  const { data, error } = await supabase.from('numbered_items').select('num').eq('character_id', state.char.id);
+  if(error || !Array.isArray(data)) return;
+  const owned = new Set(data.map(r=> r.num)), c = state.char;
+  let changed = false;
+  const keep = it=> !(it && it.ssId && !owned.has(it.ssId));
+  const before = (c.inventory || []).length + ((c.stash && c.stash.items) || []).length;
+  c.inventory = (c.inventory || []).filter(keep);
+  if(c.stash && c.stash.items) c.stash.items = c.stash.items.filter(keep);
+  EQUIP_SLOTS.forEach(s=>{ if(c.equip[s] && !keep(c.equip[s])){ c.equip[s] = null; changed = true; } });
+  if(before !== c.inventory.length + ((c.stash && c.stash.items) || []).length) changed = true;
+  const have = new Set(ssAllItems().map(it=> it.ssId));
+  owned.forEach(n=>{ if(!have.has(n)){ const it = makeNumberedItem(n); if(it){ addToInventory(it); changed = true; } } });
+  if(changed){ save(); renderAll(); }
+}
+function showSsReveal(item){
+  if(simMode || document.querySelector('.mythic-ov')) return;
+  const ov = document.createElement('div');
+  ov.className = 'mythic-ov ss-ov';
+  ov.innerHTML = `<div class="mythic-rays"></div><div class="mythic-ring"></div>
+    <div class="mythic-stage">
+      <div class="mythic-kicker">Pieza numerada · N.º ${ssPad(item.ssId)} de 100</div>
+      <div class="mythic-rank">RANGO SS</div>
+      <div class="mythic-art ss-art"><img src="${ssArtPath(item)}" alt=""></div>
+      <h2>${item.name}</h2>
+      <p>${ssText(item)}</p>
+      <p class="ss-only">No existe otra igual en este mundo.</p>
+      <button class="btn-main">Continuar</button>
+    </div>${Array.from({length:26}, (_, i)=>`<i class="mythic-ember" style="--x:${(i*37)%100}%; --d:${(i%7)*0.45}s; --s:${3 + (i%5)}s"></i>`).join('')}`;
+  document.body.appendChild(ov);
+  ov.querySelector('button').onclick = ()=>{ ov.classList.add('out'); setTimeout(()=> ov.remove(), 450); renderAll(); };
+}
+// Aviso al resto de jugadores, como el de la invocación mítica: sale de la propia tabla de dueños.
+async function pollSsClaims(){
+  if(!currentUser || SS_LOCAL) return;
+  const key = 'ds_ss_seen', dayAgo = new Date(Date.now() - 24*3600*1000).toISOString();
+  let since = dayAgo;
+  try{ const v = localStorage.getItem(key); if(v && v > dayAgo) since = v; }catch(e){}
+  const { data, error } = await supabase.from('numbered_items').select('nickname, num, user_id, claimed_at').gt('claimed_at', since).order('claimed_at').limit(5);
+  if(error || !data || !data.length) return;
+  try{ localStorage.setItem(key, data[data.length-1].claimed_at); }catch(e){}
+  data.filter(row=> row.user_id !== currentUser.id).forEach((row, i)=> setTimeout(()=> showSsBanner(row), i*7500));
+}
+function showSsBanner(row){
+  const d = SS_BY_ID[row.num];
+  if(!d) return;
+  const el = document.createElement('div');
+  el.className = 'mythic-banner ss-banner';
+  el.innerHTML = `<img src="src/assets/numerados/${ssPad(row.num)}.jpg?v=1" alt=""><div><small>Pieza numerada · N.º ${ssPad(row.num)}</small><b></b><span>ha conseguido <em>${d.name}</em></span></div>`;
+  el.querySelector('b').textContent = row.nickname; // textContent: el apodo lo escribe un jugador
+  document.body.appendChild(el);
+  el.onclick = ()=> el.remove();
+  setTimeout(()=>{ if(el.parentNode) el.remove(); }, 7000);
+}
+
+// ---------- Efectos únicos, tanda 1 (piezas 001 a 025) ----------
+// combat.ssCtx = {enemy, aoe} mientras un enemigo resuelve su acción: dealDamageToPlayer sabe quién pega.
+function ssFired(key){ if(combat.tierSFired.has(key)) return true; combat.tierSFired.add(key); return false; }
+function ssHealPlayer(pct){
+  const d = derived(), before = state.char.curHP;
+  state.char.curHP = Math.min(d.maxHP, state.char.curHP + Math.max(1, Math.round(d.maxHP*pct)));
+  return state.char.curHP - before;
+}
+// 003 Farol de la Plañidera: lo que curas daña al enemigo del frente.
+function ssOnPlayerHeal(healed){
+  const it = healed > 0 && combat && !combat.over && ssOn(3);
+  if(!it) return;
+  const fi = frontEnemyIndex(), e = fi >= 0 ? combat.enemies[fi] : null;
+  if(!e || e.hp <= 0) return;
+  const dmg = Math.max(1, Math.round(healed*0.5));
+  e.hp = Math.max(0, e.hp - dmg);
+  log(`<b>${it.name}</b>: tu curación quema a ${e.name} por ${dmg}.`);
+}
+// Daño que entra al jugador: se ajusta antes del escudo. Devuelve la cantidad final (0 = anulado).
+function ssIncoming(amount){
+  const ctx = combat.ssCtx, enemy = ctx && ctx.enemy && ctx.enemy.hp > 0 ? ctx.enemy : null, d = derived();
+  // 012 Corazón del Coloso: mientras dure el escudo de hielo, quien te golpea queda Ralentizado.
+  if(combat.ssIceShield){
+    if(combat.playerShield > 0){ if(enemy) applyStatus(enemy, {name:'Ralentizado', duration:2}, false); }
+    else combat.ssIceShield = false;
+  }
+  // 005 Sudario del Caballero Sepulto
+  const sudario = state.char.curHP/d.maxHP < 0.30 && ssOn(5), tope = Math.max(1, Math.ceil(d.maxHP*0.10));
+  if(sudario && amount > tope){ amount = tope; log(`<b>${sudario.name}</b> amortigua el golpe: solo te quita ${tope}.`); }
+  if(enemy){
+    // 019 Capa de Esquirlas: devuelve el 30% del daño cuerpo a cuerpo.
+    const capa = ssOn(19);
+    if(capa && enemy.tpl && enemy.tpl.frontline && !ctx.aoe){
+      const back = Math.max(1, Math.round(amount*0.30));
+      enemy.hp = Math.max(0, enemy.hp - back);
+      log(`<b>${capa.name}</b> devuelve ${back} de daño a ${enemy.name}.`);
+      if(enemy.hp <= 0){
+        const line = lluviaLineIndices(combat.enemies.indexOf(enemy)).map(i=> combat.enemies[i]).filter(e=> e !== enemy && e.hp > 0);
+        line.forEach(e=> applyStatus(e, {name:'Sangrado', duration:3, stack:true, maxStack:3}, false));
+        if(line.length) log(`${enemy.name} estalla en esquirlas: ${line.map(e=> e.name).join(', ')} empieza${line.length > 1 ? 'n' : ''} a sangrar.`);
+      }
+    }
+    // 024 Corona Somnífera: 20% de dormir a quien te golpea (cada jefe, una sola vez).
+    const corona = ssOn(24);
+    if(corona && enemy.hp > 0 && !enemy.pendingStun && chance(0.20) && !((enemy.tpl.boss || enemy.tpl.elite) && enemy.ssSlept)){
+      enemy.ssSlept = true; enemy.pendingStun = true;
+      log(`<b>${corona.name}</b>: ${enemy.name} se queda dormido y perderá su próximo turno.`);
+    }
+  }
+  return amount;
+}
+// Golpe que mataría al jugador. Devuelve true si una pieza lo evita.
+function ssLethal(){
+  const ctx = combat.ssCtx, enemy = ctx && ctx.enemy && ctx.enemy.hp > 0 ? ctx.enemy : null;
+  const corona = ssOn(2);
+  if(corona && !ssFired('ss2')){
+    state.char.curHP = Math.max(1, Math.round(derived().maxHP*0.30));
+    const bad = combat.playerStatuses.filter(st=>{ const info = STATUS_INFO[st.name]; return info && !info.buff; });
+    combat.playerStatuses = combat.playerStatuses.filter(st=> !bad.includes(st));
+    if(enemy) bad.forEach(st=> enemy.statuses.push(Object.assign({}, st)));
+    log(`<b>${corona.name}</b>: caes… y te levantas con ${state.char.curHP} de vida.${enemy && bad.length ? ` Tus males pasan a ${enemy.name}.` : ''}`);
+    return true;
+  }
+  return false;
+}
+// 017 Máscara del Reflejo: copia en ti la mejora que un enemigo se pone a sí mismo.
+function ssMirrorBuff(buff){
+  const it = buff && ssOn(17);
+  if(!it) return;
+  const copy = {name:buff.name, duration:Math.min(buff.duration, 99)};
+  ['dmgMult', 'incomingDmgReduction', 'evasionDelta'].forEach(k=>{ if(buff[k]) copy[k] = buff[k]; });
+  if(Object.keys(copy).length < 3) return;
+  if(copy.incomingDmgReduction >= 1) copy.incomingDmgReduction = 0.5;
+  const ex = hasStatus(combat.playerStatuses, buff.name);
+  if(ex) Object.assign(ex, copy); else combat.playerStatuses.push(copy);
+  statusInfoFor(copy);
+  log(`<b>${it.name}</b> copia en ti <b>${buff.name}</b>.`);
+}
+// Al empezar cada combate.
+function ssCombatStart(){
+  const d = derived();
+  const yunque = ssOn(7);
+  if(yunque && state.dungeon.ssShield > 0){
+    combat.playerShield = Math.min(state.dungeon.ssShield, Math.round(d.maxHP*0.60));
+    log(`<b>${yunque.name}</b>: conservas tu escudo (${combat.playerShield}).`);
+  }
+  const corazon = ssOn(12);
+  if(corazon){
+    grantShield(true, null, Math.round(d.maxHP*0.25));
+    combat.ssIceShield = true;
+    log(`<b>${corazon.name}</b> te cubre con un escudo de hielo.`);
+  }
+}
+// Al final de cada ronda (después de los enemigos).
+function ssRoundEnd(){
+  if(!combat || combat.over) return;
+  const grebas = combat.ssRaise && ssOn(4);
+  if(combat.ssRaise){
+    const ally = combat.ssRaise; combat.ssRaise = null;
+    if(grebas && ally.hp <= 0){ ally.hp = Math.max(1, Math.round(ally.maxHP*0.25)); ally.statuses = []; log(`<b>${grebas.name}</b>: ${ally.name} se levanta con ${ally.hp} de vida.`); }
+  }
+  const raices = ssOn(25);
+  if(raices && state.char.curHP > 0){
+    const got = ssHealPlayer(combat.ssMoved ? 0.03 : 0.06);
+    if(got > 0) log(`<b>${raices.name}</b>: recuperas ${got} de vida.`);
+  }
+}
+// 022 Semilla Glotona: al morir un enemigo envenenado.
+function ssOnEnemyDeath(e){
+  const it = ssOn(22), v = it && hasStatus(e.statuses || [], 'Veneno');
+  if(!v) return;
+  const got = ssHealPlayer(0.08);
+  const alive = livingEnemies();
+  if(alive.length){
+    const idx = combat.enemies.indexOf(e);
+    const next = alive.reduce((a, b)=> Math.abs(combat.enemies.indexOf(b) - idx) < Math.abs(combat.enemies.indexOf(a) - idx) ? b : a);
+    const ex = hasStatus(next.statuses, 'Veneno');
+    if(ex){ ex.stacks = Math.min(ssOn(21) ? 10 : skillBonus('toque_venenoso', 'maxStack', 3), (ex.stacks || 1) + (v.stacks || 1)); ex.duration = Math.max(ex.duration, v.duration, 2); }
+    else next.statuses.push(Object.assign({}, v, {duration: Math.max(v.duration, 2)}));
+    log(`<b>${it.name}</b>: te curas ${got} y el veneno de ${e.name} pasa a ${next.name}.`);
+  } else if(got > 0) log(`<b>${it.name}</b>: te curas ${got}.`);
+}
+function ultimateMaxUses(){ return ULTIMATE_MAX_USES + (ssOn(20) ? 1 : 0); }
+
+// ============================================================
+// LA FRAGUA DE HODRAK (2026-10-11, pedido de ariochbu). Un enano herrero que intenta forjar una pieza numerada
+// con un Fragmento del Retornado (lo entrega el jefe del piso 100) y 25 llaves de un mismo rift. 10% de éxito;
+// los fallos se suman y el intento 25 sale seguro, con una pieza del rift de las llaves usadas. No se enseña
+// qué piezas hay: Hodrak solo dice lo que pide.
+// ============================================================
+const FRAGUA = {keys:25, chance:0.10, pity:25, bossKeys:5};
+let fraguaOpen = false, fraguaPick = null, fraguaBusy = false;
+function fraguaState(){ const sc = state.char.storyChoices || (state.char.storyChoices = {}); return sc; }
+function fraguaFragments(){ return fraguaState()._retFrag || 0; }
+function fraguaFails(){ return fraguaState()._fraguaFails || 0; }
+// Botín del jefe del piso 100: un fragmento y llaves de un rift al azar.
+function grantRetornadoSpoils(){
+  const sc = fraguaState(), keys = riftKeys(), theme = pick(Object.keys(RIFT_THEMES));
+  sc._retFrag = (sc._retFrag || 0) + 1;
+  keys[theme] = (keys[theme] || 0) + FRAGUA.bossKeys;
+  log(`De lo que queda del Retornado recoges un <b>Fragmento del Retornado</b> y ${FRAGUA.bossKeys} llaves de rift (${RIFT_THEMES[theme].name}). En la ciudad, un herrero enano sabrá qué hacer con ellos.`);
+}
+async function fraguaTry(theme){
+  if(fraguaBusy) return null;
+  const sc = fraguaState(), keys = riftKeys();
+  if(fraguaFragments() < 1 || (keys[theme] || 0) < FRAGUA.keys || !ssThemeReady(theme).length) return null;
+  fraguaBusy = true;
+  try{
+    const sure = fraguaFails() + 1 >= FRAGUA.pity;
+    if(!(sure || chance(FRAGUA.chance))){
+      sc._retFrag -= 1; keys[theme] -= FRAGUA.keys; sc._fraguaFails = fraguaFails() + 1;
+      log(`Hodrak golpea el fragmento hasta que se apaga. <b>La forja falla.</b> (${sc._fraguaFails} / ${FRAGUA.pity})`);
+      if(!SS_LOCAL) await flushSave();
+      return {ok:false};
+    }
+    const n = await ssClaim(ssThemeReady(theme), 'fragua');
+    if(!n) return {ok:false, none:true}; // no queda ninguna pieza libre de ese rift: no se gasta nada
+    sc._retFrag -= 1; keys[theme] -= FRAGUA.keys; sc._fraguaFails = 0;
+    const item = makeNumberedItem(n);
+    addToInventory(item);
+    log(`<b style="color:#ff5a55">Hodrak lo consigue.</b> Sale del yunque <b>${item.name}</b> (N.º ${ssPad(n)}). No existe otra igual.`);
+    if(!SS_LOCAL) await flushSave();
+    return {ok:true, item};
+  } finally { fraguaBusy = false; }
+}
+function renderFragua(){
+  const panel = document.getElementById('main-panel');
+  const keys = riftKeys(), frags = fraguaFragments(), fails = fraguaFails();
+  const mine = Object.keys(RIFT_THEMES).filter(id=> (keys[id] || 0) > 0);
+  if(fraguaPick && !(keys[fraguaPick] > 0)) fraguaPick = null;
+  const can = fraguaPick && frags >= 1 && keys[fraguaPick] >= FRAGUA.keys && ssThemeReady(fraguaPick).length > 0;
+  const why = !fraguaPick ? 'Elige las llaves de un rift.' : frags < 1 ? 'Te falta un Fragmento del Retornado.' : keys[fraguaPick] < FRAGUA.keys ? `Te faltan ${FRAGUA.keys - keys[fraguaPick]} llaves de ese rift.` : !ssThemeReady(fraguaPick).length ? 'Hodrak todavía no sabe leer esas llaves. Vuelve más adelante.' : '';
+  panel.innerHTML = `
+    <div class="rk-hero fg-hero">
+      <img class="rk-hero-art" src="src/assets/escenas/fragua.jpg?v=1" alt="" onerror="this.remove()">
+      <button class="reset-btn rk-close" id="btn-close-fragua">Cerrar</button>
+      <div class="rk-hero-txt"><h3>La Fragua de Hodrak</h3><p>«Tráeme un fragmento de lo que no debía volver y veinticinco llaves del mismo sitio. Con eso puedo <b>intentar</b> algo que no se ha forjado nunca. Intentar, he dicho.»</p></div>
+    </div>
+    <div class="fu-box fg-box">
+      <div class="fg-req">
+        <div class="fg-res ${frags >= 1 ? 'ok' : ''}"><b>${frags}</b><span>Fragmento del Retornado</span><small>Lo entrega el guardián del piso 100.</small></div>
+        <div class="fg-res ${fraguaPick && keys[fraguaPick] >= FRAGUA.keys ? 'ok' : ''}"><b>${fraguaPick ? keys[fraguaPick] : '—'} / ${FRAGUA.keys}</b><span>${fraguaPick ? `Llaves: ${RIFT_THEMES[fraguaPick].name}` : 'Llaves de un mismo rift'}</span><small>Cada rift superado deja una.</small></div>
+      </div>
+      <div class="fu-odds"><b>${Math.round(FRAGUA.chance*100)}%</b> de que la forja salga bien. Si falla, se pierden el fragmento y las llaves.</div>
+      <div class="fu-egg" style="--k:${Math.min(1, fails/FRAGUA.pity).toFixed(2)}; --nc:#e0393f">
+        <div class="fg-anvil"><i></i></div>
+        <div class="fu-egg-txt"><b>El yunque recuerda</b><span>Cada forja fallida lo calienta. ${fails} / ${FRAGUA.pity}</span>${fails + 1 >= FRAGUA.pity ? '<span class="fu-egg-warn">La próxima no puede fallar.</span>' : ''}</div>
+      </div>
+      <div class="fu-actions"><button class="btn-main" id="fg-go" ${can ? '' : 'disabled'}>Intentar la forja</button></div>
+      ${why ? `<p class="fg-why">${why}</p>` : ''}
+    </div>
+    ${mine.length ? `<div class="fg-keys">${mine.map(id=> `<button class="fg-key ${fraguaPick === id ? 'on' : ''}" data-fg-key="${id}"><img src="src/assets/fondos/rift_${id}.jpg?v=1" alt=""><b>${RIFT_THEMES[id].name}</b><span>${keys[id]} llave${keys[id] === 1 ? '' : 's'}</span></button>`).join('')}</div>`
+      : '<p class="inv-empty-msg">Aún no tienes llaves. Aparecen al superar un rift: la sala azul con un remolino, dentro del laberinto.</p>'}
+  `;
+  document.getElementById('btn-close-fragua').onclick = ()=>{ fraguaOpen = false; renderAll(); };
+  panel.querySelectorAll('[data-fg-key]').forEach(b=>{ b.onclick = ()=>{ fraguaPick = b.dataset.fgKey; renderFragua(); }; });
+  const go = document.getElementById('fg-go');
+  go.onclick = async ()=>{
+    go.disabled = true;
+    const theme = fraguaPick, res = await fraguaTry(theme);
+    renderSheet(); renderFragua();
+    if(!res) return;
+    if(res.ok) showSsReveal(res.item);
+    else if(res.none) showOverlay('La Fragua de Hodrak', '«Con esas llaves ya no queda nada que sacar. Todo lo que guardaba ese sitio tiene dueño.» Hodrak te devuelve el fragmento y las llaves.', ()=>{});
+    else showOverlay('La forja falla', `El fragmento se apaga sobre el yunque y las llaves se deshacen. Hodrak escupe al suelo. «Otra vez será.»<br><br>Forjas fallidas: <b>${fraguaFails()} / ${FRAGUA.pity}</b>`, ()=>{});
+  };
 }
 function nodeIcon(type){
   return {entrada:'🚪', combate:'⚔️', tesoro:'💰', descanso:'🔥', elite:'☠️', jefe:'🛡️', rift:'🌀'}[type] || '?';
@@ -6730,6 +7391,7 @@ function renderAll(){
     tabernaOpen = false;
     ofrendaOpen = false;
     fusionOpen = false;
+    fraguaOpen = false;
     checkinOpen = false;
     optionsOpen = false;
     renderCombat();
@@ -6751,6 +7413,8 @@ function renderAll(){
     renderOfrenda();
   } else if(fusionOpen){
     renderFusion();
+  } else if(fraguaOpen){
+    renderFragua();
   } else if(checkinOpen){
     renderCheckin();
   } else if(optionsOpen){
@@ -7151,8 +7815,10 @@ function itemBonusLines(item){
     if(!value) return;
     parts.push(`+${value}${MOD_IS_PERCENT.has(key)?'%':''} ${MOD_LABELS[key]||key}`);
   });
+  if(item.ssId && item.bonus && item.bonus.stat === 'scale' && state && state.char) parts.push(`+${ssScaleBonus(item)} ${STAT_LABELS[style().scaleStat] || 'al atributo de tu senda'} (el atributo de tu senda)`);
   const specials = item.specials || (item.special ? [item.special] : []);
   specials.forEach(sp=> parts.push(specialDisplayText(sp)));
+  if(item.ssId) parts.push(`<b class="ss-fx">Efecto único.</b> ${ssText(item)}`);
   return parts;
 }
 function itemBonusText(item){
@@ -7338,15 +8004,16 @@ function itemCardHTML(it){
   }
   const isStone = isSoulStoneLike(it);
   const color = isStone ? (SOUL_TIER_COLORS[it.tier]||'#9a958c') : RARITIES[it.rarity||'comun'].color;
-  const rankName = isStone ? `Piedra de alma · ${it.tier}` : RARITIES[it.rarity||'comun'].name;
+  const rankName = isStone ? `Piedra de alma · ${it.tier}` : it.ssId ? `Rango SS · Pieza numerada N.º ${ssPad(it.ssId)} de 100` : RARITIES[it.rarity||'comun'].name;
   const set = !isStone && it.setId ? SET_CATALOG[it.setId] : null;
   const subParts = isStone ? [] : [slotLabel(it.slot)];
   if(!isStone && it.styleId) subParts.push(SHOP_ROLE_LABELS[it.styleId] || it.styleId);
   if(set) subParts.push(`Conjunto: ${set.name}`);
+  if(it.ssStyles) subParts.push(it.ssStyles.map(st=> SHOP_ROLE_LABELS[st] || st).join(' / '));
   const lines = isStone ? (it.desc ? [it.desc] : []) : itemBonusLines(it);
   const minLvl = isStone ? stoneEquipMinLevel(it.tier) : gearEquipMinLevel(it.rarity);
   const setB = set && SET_BONUSES[it.setId];
-  return `<div class="pet-card item-card" style="--rc:${color}">
+  return `<div class="pet-card item-card ${it.ssId?'ss-card':''}" style="--rc:${color}">
     <div class="pet-card-art item">${itemArtTileHTML(it, 190, true)}</div>
     <div class="pet-card-body">
       <div class="pet-card-name">${it.name}</div>
@@ -7399,19 +8066,19 @@ function itemArtTileHTML(it, px, noZoom){
   const color = isStone ? (SOUL_TIER_COLORS[it.tier]||'#9a958c') : RARITIES[it.rarity||'comun'].color;
   const isHighTier = isStone ? ['A','S','SS'].includes(it.tier) : ['rango_a','legendario','ss'].includes(it.rarity);
   const glow = isHighTier ? `, 0 0 10px ${color}66` : '';
-  const artImg = isStone ? SOUL_STONE_ART[it.tier] : (weaponArtPath(it) || gearArtPath(it));
+  const artImg = isStone ? SOUL_STONE_ART[it.tier] : it.ssId ? ssArtPath(it) : (weaponArtPath(it) || gearArtPath(it));
   const shape = itemArtShape(it);
   let inner;
   if(artImg){
     const fallbackIcon = isStone ? '💎' : equipIcon(it);
-    inner = `<img src="${artImg}" alt="" style="width:100%; height:100%; object-fit:${artImg.includes('/arte/')?'cover':'contain'};" onerror="this.replaceWith(Object.assign(document.createElement('span'),{style:'font-size:${Math.round(px*0.55)}px', textContent:'${fallbackIcon}'}))">`;
+    inner = `<img src="${artImg}" alt="" style="width:100%; height:100%; object-fit:${/\/(arte|numerados)\//.test(artImg)?'cover':'contain'};" onerror="this.replaceWith(Object.assign(document.createElement('span'),{style:'font-size:${Math.round(px*0.55)}px', textContent:'${fallbackIcon}'}))">`;
   } else if(shape){
     inner = `<svg viewBox="0 0 24 24" width="${Math.round(px*0.62)}" height="${Math.round(px*0.62)}" fill="currentColor">${ITEM_ART_SHAPES[shape]}</svg>`;
   } else {
     inner = `<span style="font-size:${Math.round(px*0.55)}px;">${equipIcon(it)}</span>`;
   }
   const clean = !!artImg && artImg.includes('/arte/');
-  return `<div class="item-art-tile ${clean?'clean':''}" ${noZoom ? '' : `data-item-zoom="${registerItemZoom(it)}"`} style="width:${px}px; height:${px}px; color:${color}; --rc:${color}; box-shadow:0 0 0 2px ${color}55 inset${glow};">${inner}</div>`;
+  return `<div class="item-art-tile ${clean?'clean':''} ${it.ssId?'ss':''}" ${noZoom ? '' : `data-item-zoom="${registerItemZoom(it)}"`} style="width:${px}px; height:${px}px; color:${color}; --rc:${color}; box-shadow:0 0 0 2px ${color}55 inset${glow};">${inner}</div>`;
 }
 // Envuelve el tile de ícono + el bloque de texto existente (nombre/pill/
 // descripción) en una fila flex — el texto no cambia una letra, solo se le
@@ -7938,6 +8605,7 @@ const INVENTORY_CAP_OLD = 250;
 // uno raro habiendo uno común), después su valor de venta.
 const STONE_TIER_ORDER = ['E','F','D','C','B','A','S','SS'];
 function inventoryKeepScore(item){
+  if(item.ssId) return Infinity; // una pieza numerada nunca se vende sola
   const rank = item.kind==='soulstone' ? STONE_TIER_ORDER.indexOf(item.tier) : Object.keys(RARITIES).indexOf(item.rarity||'comun');
   return Math.max(0, rank)*100000 + itemSellValue(item);
 }
@@ -7950,6 +8618,7 @@ function makeRoomInInventory(incoming){
   const worst = leastValuableInInventory();
   const inValue = itemSellValue(incoming);
   const stackable = incoming.kind==='potion' || incoming.kind==='fragmento';
+  if(incoming.ssId && !worst) return true;
   if(!worst || (!stackable && inventoryKeepScore(incoming) <= inventoryKeepScore(worst))){
     state.char.gold += inValue;
     log(`No cabe nada más en la mochila (${INVENTORY_CAP} objetos): <b>${incoming.name||'el objeto'}</b> se vendió solo por ${inValue} de oro. Vende o guarda objetos en el Hogar.`);
@@ -8071,6 +8740,10 @@ function equipItem(uid){
     log(`<b>${item.name}</b> es un arma de ${SHOP_ROLE_LABELS[item.styleId]||item.styleId} — tu senda no puede usarla.`);
     return;
   }
+  if(item.ssStyles && !item.ssStyles.includes(state.char.style)){
+    log(`<b>${item.name}</b> solo responde a: ${item.ssStyles.map(st=> SHOP_ROLE_LABELS[st] || st).join(', ')}.`);
+    return;
+  }
   if(!meetsGearEquipLevel(item, state.char.level)){
     log(`<b>${item.name}</b> requiere nivel ${gearEquipMinLevel(item.rarity)} para equiparse.`);
     return;
@@ -8139,6 +8812,7 @@ function equipItemOnAlly(uid, allyId){
   const idx = state.char.inventory.findIndex(i=>i.kind==='equip' && i.uid===uid);
   if(idx<0) return;
   const item = state.char.inventory[idx];
+  if(item.ssId){ log(`<b>${item.name}</b> es una pieza numerada: solo la puedes llevar tú.`); return; }
   // Misma restricción que el jugador (equipItem): un arma comprada para un
   // rol no la puede llevar un aliado de otro rol. El equipo suelto de
   // combate/cofres nunca lleva styleId, así que sigue siendo universal.
@@ -8186,6 +8860,11 @@ function applyPotionEffect(potionId){
     const before = state.char.curHP;
     state.char.curHP = Math.min(d.maxHP, state.char.curHP+amt);
     log(`Bebes <b>${tpl.name}</b>. Recuperas ${state.char.curHP-before} de vida.`);
+    const jardinera = combat && combat.active && ssOn(23); // 023 Guantes de Jardinera
+    if(jardinera && livingAllies().length){
+      livingAllies().forEach(a=>{ a.hp = Math.min(a.maxHP, a.hp + Math.round(a.maxHP*tpl.effect.amount*0.5)); });
+      log(`<b>${jardinera.name}</b>: la poción alcanza también a tu equipo.`);
+    }
   } else if(tpl.effect.heal==='sta'){
     const amt = Math.round(d.maxSta*tpl.effect.amount);
     const before = state.char.curSta;
@@ -8247,7 +8926,7 @@ function seenOnce(k){
 }
 function closeAllPanels(){
   invOpen = false; homeOpen = false; shopOpen = false; rankingOpen = false; adminOpen = false;
-  missionsOpen = false; tabernaOpen = false; ofrendaOpen = false; checkinOpen = false; optionsOpen = false; fusionOpen = false;
+  missionsOpen = false; tabernaOpen = false; ofrendaOpen = false; checkinOpen = false; optionsOpen = false; fusionOpen = false; fraguaOpen = false;
 }
 // Lugares de la ciudad: clave del menú, panel que abre y su introducción de
 // primera visita (viñetas provisionales hasta que haya ilustraciones).
@@ -8271,6 +8950,10 @@ const CITY_PLACES = {
   fusion:  {name:'Crisol de los Caídos', ic:'🔥', open:()=>{ fusionOpen = true; }, img:'crisol', d:[63.0,26.0], m:[80.0,41.0], keeper:'La guardiana del Crisol',
             scene:'src/assets/escenas/crisol.jpg',
             intro:['Este es el Crisol. Su guardiana dice que los Caídos que se repiten no descansan.','Cuatro del mismo rango entran al fuego. A veces sale uno más fuerte… y a veces no.','No temas por los tuyos: el Crisol nunca toma el último de cada uno, solo los que te sobran.']},
+  // La Fragua de Hodrak (2026-10-11): el enano que intenta forjar piezas numeradas con llaves de rift.
+  fragua:  {name:'Fragua de Hodrak', ic:'⚒️', open:()=>{ fraguaOpen = true; fraguaPick = null; }, img:'fragua', d:[73.5,83.5], m:[27.0,91.0], keeper:'Hodrak Manoceniza',
+            scene:'src/assets/escenas/fragua.jpg',
+            intro:['Esa casa baja de piedra es de Hodrak Manoceniza. Llegó hace años desde las minas del norte y no ha vuelto a hablar de ellas.','No vende nada. Dice que solo enciende la forja para lo que merece la pena.','Si un día le llevas un fragmento del que volvió y las llaves de un rift, quizá te escuche. Quizá.']},
   checkin: {name:'Check-in diario', ic:'📅', open:()=>{ checkinOpen = true; }, img:'campanario', d:[81.2,40.5], m:[79.6,58.9], keeper:'El campanero',
             scene:null,
             intro:['El campanario marca los días. Cada día que vuelvas a la ciudad, el árbol te regalará ofrendas.','El primer día de cada mes empieza un calendario nuevo.']},
@@ -8286,7 +8969,7 @@ function navBadges(){
 function activeNavKey(){
   if(invOpen) return 'inv';
   if(homeOpen) return 'home'; if(shopOpen) return 'shop'; if(tabernaOpen) return 'taberna';
-  if(missionsOpen) return 'missions'; if(ofrendaOpen) return 'ofrenda'; if(fusionOpen) return 'fusion'; if(checkinOpen) return 'checkin';
+  if(missionsOpen) return 'missions'; if(ofrendaOpen) return 'ofrenda'; if(fusionOpen) return 'fusion'; if(fraguaOpen) return 'fragua'; if(checkinOpen) return 'checkin';
   if(rankingOpen) return 'ranking'; if(adminOpen) return 'admin'; if(optionsOpen) return 'options';
   ensureCityView();
   return cityView;
@@ -8331,6 +9014,7 @@ function renderSideNav(){
       ${item('missions','📜','Gremio',{badge:badges.missions})}
       ${item('ofrenda','🌳','Árbol de ofrendas',{badge:badges.ofrenda})}
       ${item('fusion','🔥','Crisol de los Caídos')}
+      ${item('fragua','⚒️','Fragua de Hodrak')}
       ${item('checkin','📅','Check-in diario',{badge:badges.checkin})}
     </div>
     <div class="sn-sec"><h5>Laberinto</h5>
@@ -8663,6 +9347,7 @@ function announceMythicSummon(petId){
 let mythicPollTimer = null;
 async function pollMythicSummons(){
   if(!currentUser) return;
+  pollSsClaims();
   const key = 'ds_mythic_seen', dayAgo = new Date(Date.now() - 24*3600*1000).toISOString();
   let since = dayAgo;
   try{ const v = localStorage.getItem(key); if(v && v > dayAgo) since = v; }catch(e){}
@@ -8685,6 +9370,7 @@ function showMythicBanner(row){
 function startMythicPolling(){
   if(mythicPollTimer) return;
   setTimeout(pollMythicSummons, 4000);
+  setTimeout(ssReconcile, 2500);
   mythicPollTimer = setInterval(pollMythicSummons, 120000);
 }
 // Revelado de la ofrenda al estilo MIR4 (2026-10-03, pedido explícito: "que
@@ -11776,6 +12462,7 @@ function startCombat(enemyGroup, node){
   const allyText = allies.length ? ` A tu lado: ${allies.map(a=>a.name).join(', ')}.` : '';
   log(`¡Emboscada! Te enfrentas a: ${enemyGroup.map(e=>e.name).join(', ')}.${allyText}`);
   applyChaosLaw();
+  ssCombatStart();
   if(node.type==='jefe' && state.dungeon.level === 100 && !(SIM_CELDA && SIM_CELDA.sombras === false)){ combat.celdaShadows = celdaShadowTpls(); celdaShadowTick(); }
   if(node.type==='jefe' && state.dungeon.level % 10 === 0){ stopDungeonAudio(); playBossAudio(); }
   renderAll();
@@ -11831,6 +12518,7 @@ function dealDamageToAlly(ally, amount){
   }
   if(amount>0) ally.hp = Math.max(0, ally.hp - amount);
   if(ally.guest && ally.hp<=0 && ally.lastWords){ log(ally.lastWords); ally.lastWords = null; }
+  if(ally.hp<=0 && !ally.guest && !ally.isShadow && ssOn(4) && !combat.tierSFired.has('ss4')){ combat.tierSFired.add('ss4'); combat.ssRaise = ally; } // 004 Grebas del Guardatumbas
   checkAllyFuriaContenidaTrigger(ally);
   if(shieldBroke && ally.hp>0) tryRenewShield(false, ally);
   checkUltimoBastion(false, ally);
@@ -12348,12 +13036,13 @@ function computeCritEvasion(){
   const furioso = hasStatus(combat.playerStatuses,'Furioso');
   if(furioso) ev += furioso.evasionDelta/100;
   (combat.playerStatuses||[]).forEach(st=>{ if(st.name!=='Furioso' && st.evasionDelta) ev += st.evasionDelta/100; });
+  if(combat.playerPos === 'retaguardia' && ssOn(15)) ev += 0.25; // 015 Manto de Ventisca
   if(combat.playerDefending) ev = Math.max(ev, 0.5);
   // Ralentizado: -20% de evasión plana mientras dure (corregido 2026-09-26:
   // el texto y el tooltip siempre dijeron -20%, el código aplicaba -15%).
   if(hasStatus(combat.playerStatuses,'Ralentizado')) ev -= 0.20;
   if(hasStatus(combat.playerStatuses,'Paralisis')) ev = 0; // indefenso: la Parálisis anula toda evasión, incluso defendiendo
-  return {crit:d.critChance, evasion:clamp(ev,0.02,0.6)};
+  return {crit:d.critChance, evasion:clamp(ev,0.02,ssOn(15) ? 0.75 : 0.6)};
 }
 
 // Bono de evasión por estado en un ENEMIGO (2026-09-25, décadas 21+: varias
@@ -12478,6 +13167,19 @@ const ARQUERO_PENETRACION = 10; // puntos de resistencia física que ignora el A
 const CLASS_STATUS_EDGE = {styles:['doblefilo','hechicero'], statuses:['Sangrado','Veneno','Miedo','Confusion'], resistFactor:0.5, flat:0.15};
 function applyStatus(target, statusDef, isPlayer){
   if(!statusDef) return false;
+  if(isPlayer && combat){
+    if((statusDef.name==='Ralentizado' || statusDef.name==='Paralisis') && ssOn(14)) return false; // 014 Botas del Glaciar
+    const delantal = statusDef.name==='Quemadura' && ssOn(9); // 009 Delantal de Escoria
+    if(delantal){
+      const ex = hasStatus(combat.playerStatuses, 'Escoria'), n = Math.min(5, ((ex && ex.stacks) || 0) + 1);
+      if(ex){ ex.stacks = n; ex.duration = 3; ex.dmgMult = 1 + 0.08*n; } else combat.playerStatuses.push({name:'Escoria', duration:3, stacks:n, dmgMult:1 + 0.08*n});
+      log(`<b>${delantal.name}</b>: el fuego no te prende y te enciende a ti (+${8*n}% de daño).`);
+      return false;
+    }
+  } else if(!isPlayer && target && target.tpl && statusDef.stack){
+    const cap = statusDef.name==='Sangrado' && ssOn(1) ? 8 : statusDef.name==='Quemadura' && ssOn(10) ? 6 : statusDef.name==='Veneno' && ssOn(21) ? 10 : 0;
+    if(cap) statusDef = Object.assign({}, statusDef, {maxStack:cap});
+  }
   if(SIM_NO_ALTERATIONS && statusDef.name === 'Corrupción') return false;
   if(statusDef.chance!==undefined){
     let effChance = statusDef.chance;
@@ -12789,6 +13491,7 @@ function applyEquippedSpecials(target, dmgDealt, skill){
       const before = state.char.curHP;
       state.char.curHP = Math.min(d.maxHP, state.char.curHP+heal);
       if(state.char.curHP>before) log(`<b>${it.name}</b> te devuelve ${state.char.curHP-before} de vida.`);
+      ssOnPlayerHeal(state.char.curHP-before);
     } else if(sp.type==='elemental_proc' && skill){
       if(skill.dmgType==='fuego' && chance(sp.chance)){
         applyStatus(target, {name:'Quemadura', duration:3}, false);
@@ -12900,8 +13603,8 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
   if(!isRepeat) trySummonShadow();
 
   if(skill.ultimate && !isRepeat){
-    const usesLeft = ULTIMATE_MAX_USES - (state.dungeon.ultimateUses||0);
-    if(usesLeft<=0){ log(`Ya usaste ${skill.name} las ${ULTIMATE_MAX_USES} veces permitidas en esta entrada al laberinto.`); return; }
+    const usesLeft = ultimateMaxUses() - (state.dungeon.ultimateUses||0);
+    if(usesLeft<=0){ log(`Ya usaste ${skill.name} las ${ultimateMaxUses()} veces permitidas en esta entrada al laberinto.`); return; }
     if((state.dungeon.ultimateCooldown||0) > 0){ log(`${skill.name} todavía se está enfriando (${state.dungeon.ultimateCooldown} turno(s) más).`); return; }
   }
 
@@ -12932,6 +13635,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
   }
   if(skill.utility==='reposition'){
     combat.playerPos = combat.playerPos==='frente' ? 'retaguardia' : 'frente';
+    combat.ssMoved = true;
     log(`Te mueves a ${combat.playerPos==='frente'?'el Frente':'la Retaguardia'}.`);
     await endPlayerTurn(); return;
   }
@@ -13005,6 +13709,8 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
   if(skill.ultimate){
     state.dungeon.ultimateUses = (state.dungeon.ultimateUses||0) + 1;
     state.dungeon.ultimateCooldown = ULTIMATE_COOLDOWN_TURNS;
+    const anillo = !isRepeat && ssOn(20); // 020 Anillo de los Dos Lados: un uso más, pero cada uso cuesta vida
+    if(anillo){ const cost = Math.round(d.maxHP*0.10); state.char.curHP = Math.max(1, state.char.curHP - cost); log(`<b>${anillo.name}</b> se cobra ${cost} de tu vida.`); }
   }
 
   // resolve target(s)
@@ -13046,6 +13752,10 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
     targets = livingEnemies();
   } else if(skill.targetMode==='self'){
     targets = [];
+  }
+  // 011 Vara de Hielo Negro: Lanza de hielo alcanza a toda la línea del objetivo.
+  if(skillId==='lanza_hielo' && targets.length===1 && targets[0].tpl && ssOn(11)){
+    targets = lluviaLineIndices(combat.enemies.indexOf(targets[0])).map(i=> combat.enemies[i]).filter(e=> e.hp>0);
   }
 
   if(skill.utility==='mark'){
@@ -13141,7 +13851,8 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
   const splashHits = []; // [{dmg, exclude}] salpicaduras de Artemisa, se resuelven tras el bucle
 
   targets.forEach(target=>{
-    if(ceguera && chance(ceguera.procChance||0.32)){
+    const tenaza = skillId==='ataque_basico' && !!ssOn(8); // 008 Guanteletes de Tenaza: el básico no falla ni se esquiva
+    if(!tenaza && ceguera && chance(ceguera.procChance||0.32)){
       log(`La Ceguera hace que tu golpe hacia ${target.name} no encuentre nada.`);
       return;
     }
@@ -13153,7 +13864,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
     // esquivar nada.
     if(target.tpl){
       const dodgeChance = hasStatus(target.statuses,'Paralisis') ? 0 : clamp((target.evasion||0) + enemyStatusEvasionBonus(target.statuses) + levelGapEvasionBonus(monsterLevel, state.char.level) - d.precision, 0.02, 0.85);
-      if(chance(dodgeChance)){
+      if(!tenaza && chance(dodgeChance)){
         log(`${target.name} esquiva tu ataque.`);
         return;
       }
@@ -13169,6 +13880,8 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
     // "+60%" es mi elección (no vino con un número exacto), fácil de ajustar
     // acá si en la práctica queda muy arriba o muy abajo del resto del kit.
     if(state.char.style==='tirador' && skillId==='ataque_basico') base *= 1.6;
+    if(skill.dmgType==='hielo' && ssOn(11)) base *= 1.30; // 011 Vara de Hielo Negro
+    const wasSlowed = !!hasStatus(target.statuses||[], 'Ralentizado');
     if(furioso) base *= (furioso.dmgMult||1);
     base *= statusStackDealtMult(combat.playerStatuses.filter(st=> st!==furioso));
     if(hasStatus(combat.playerStatuses,'Debilitado')) base *= 0.85; // te drenaron la fuerza: -15% de daño mientras dure
@@ -13240,7 +13953,13 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
       if(st){
         const bonusMult = skillId==='machacar' ? skillBonus('machacar','comboBonusMult', skill.consumes.bonusMult) : skill.consumes.bonusMult;
         base *= bonusMult;
-        removeStatus(target.statuses, skill.consumes.name);
+        // 006 Martillo sin Rostro: Machacar no gasta el Tambaleo y va rompiendo la armadura.
+        const martillo = skillId==='machacar' && ssOn(6);
+        if(martillo){
+          const ar = hasStatus(target.statuses, 'Armadura Rota'), n = Math.min(5, ((ar && ar.ssStacks) || 0) + 1);
+          if(ar){ ar.ssStacks = n; ar.stacks = n; ar.resPenalty = Math.max(ar.resPenalty||0, 10*n); ar.duration = 99; }
+          else target.statuses.push({name:'Armadura Rota', duration:99, resPenalty:10, ssStacks:1, stacks:1});
+        } else removeStatus(target.statuses, skill.consumes.name);
         // El aturdimiento del combo ya no es seguro (TANK_TUNE.comboStunChance).
         const stunned = chance(TANK_TUNE.comboStunChance);
         if(stunned) applyStatus(target, skill.consumes.applies, false);
@@ -13291,7 +14010,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
     }
     // Autobuffs defensivos del enemigo (Seda Protectora, Caparazón
     // Endurecido, etc. — ver utility:'self_buff' en resolveNewStyleEnemyMove).
-    (target.statuses||[]).forEach(st=>{ if(st.incomingDmgReduction) base *= (1 - st.incomingDmgReduction); });
+    if(!tenaza) (target.statuses||[]).forEach(st=>{ if(st.incomingDmgReduction) base *= (1 - st.incomingDmgReduction); });
     base *= enemyPassiveTakenMult(target);
 
     // Foco arcano Tier S ('foco_s'): cuando la habilidad consumió un estado
@@ -13303,6 +14022,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
 
     let isCrit = skill.guaranteedCrit ? true : chance(crit);
     if(combat.critNext && !isRepeat){ isCrit = true; combat.critNextUsed = true; }
+    if(wasSlowed && state.char.style==='tirador' && ssOn(13)) isCrit = true; // 013 Arco de Gina
     if(isCrit) base *= (1.5 + d.critDmgBonus);
 
     let ignore = skillId==='disparo_certero' ? skillBonus('disparo_certero','ignoreResist', skill.ignoreResist) : (skill.ignoreResist||0);
@@ -13373,6 +14093,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
       const beforeHeal = state.char.curHP;
       state.char.curHP = Math.min(d.maxHP, state.char.curHP+selfHeal);
       if(state.char.curHP>beforeHeal) log(`Recuperas ${state.char.curHP-beforeHeal} de vida.`);
+      ssOnPlayerHeal(state.char.curHP-beforeHeal);
       if(firstHealOfCast) graciaAfterHeal(playerHealSps, combat, 'Tú', amt=>gainPlayerSpirit(amt, 'Milagro'), {isPlayer:true, ally:null, maxHP:d.maxHP});
     }
 
@@ -13454,6 +14175,20 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
       }
     }
     applyEquippedSpecials(target, dmg, skill);
+    // Piezas numeradas, efectos al golpear.
+    if(target.tpl){
+      if(isCrit && ssOn(18)) splashHits.push({dmg: Math.max(1, Math.round(dmg*0.5)), exclude: target, line:true, single:true, label:'El filo de la Lanza de Cristal'});
+      if(target.hp>0){
+        const fuelle = ssOn(10) && hasStatus(target.statuses, 'Quemadura');
+        if(fuelle) fuelle.duration = Math.max(fuelle.duration, 3); // 010: la Quemadura no se apaga mientras sigas golpeando
+        if(skillId==='lluvia_flechas' && ssOn(13)) applyStatus(target, {name:'Ralentizado', duration:2}, false);
+        if(skill.dmgType==='hielo' && wasSlowed && !target.ssFrozen && ssOn(11)){
+          target.ssFrozen = true;
+          applyStatus(target, {name:'Aturdido', duration:1}, false);
+          log(`<b>Vara de Hielo Negro</b>: ${target.name} queda Congelado y pierde su turno.`);
+        }
+      }
+    }
     // Riposte (Duelista Veterano, Isla Paraíso): contraataque tras un golpe físico.
     const rip = target.tpl && target.tpl.riposte;
     if(rip && target.hp>0 && skill.dmgType==='fisico' && chance(rip.chance)){
@@ -14153,7 +14888,7 @@ function tickStatuses(list, ownerName, target){
       // stat de escalado de la senda) — así una herida sangrante pesa igual
       // sin importar quién la tenga, en vez de seguir el daño mágico de un
       // Mago/Hechicero.
-      const dmg = Math.max(1, Math.round(baseDamageFromStat(derived().fis)*(onEnemy ? DOT_ENEMY.Sangrado : 0.08)*(st.stacks||1)));
+      const dmg = Math.max(1, Math.round(baseDamageFromStat(derived().fis)*(onEnemy ? DOT_ENEMY.Sangrado*(ssOn(1) ? 1.5 : 1) : 0.08)*(st.stacks||1)));
       if(target){ target.hp = Math.max(0, target.hp-dmg); log(`${ownerName} sangra por ${dmg}.`); }
       else { dealDamageToPlayer(dmg); log(`Sangras por ${dmg}.`); }
     }
@@ -14181,9 +14916,10 @@ function tickStatuses(list, ownerName, target){
   return skip;
 }
 
-function decrementStatuses(list){
+function decrementStatuses(list, venenoLento){
   for(let i=list.length-1;i>=0;i--){
     list[i].duration -= 1;
+    if(venenoLento && list[i].name==='Veneno' && list[i].duration<=0 && (list[i].stacks||1) > 1){ list[i].stacks -= 1; list[i].duration = 1; }
     if(list[i].duration<=0) list.splice(i,1);
   }
 }
@@ -14237,7 +14973,8 @@ async function processEnemyTurns(){
   // this call was missing entirely before, so a player bitten by a spider never actually bled)
   tickStatuses(combat.playerStatuses, null, null);
   livingAllies().forEach(ally=> tickStatuses(ally.statuses, ally.name, ally));
-  combat.enemies.forEach(enemy=> decrementStatuses(enemy.statuses));
+  const espina = !!ssOn(21); // 021 Espina de Ximena: el Veneno pierde una carga por turno en vez de acabarse
+  combat.enemies.forEach(enemy=> decrementStatuses(enemy.statuses, espina));
   decrementStatuses(combat.playerStatuses);
   (combat.allies||[]).forEach(ally=> decrementStatuses(ally.statuses));
 
@@ -14284,6 +15021,7 @@ async function processEnemyTurns(){
   combat.enemies.forEach(e=>{
     if(e.pendingStun){ applyStatus(e, {name:'Aturdido', duration:1}, false); e.pendingStun = false; }
   });
+  ssRoundEnd();
 
   checkCombatEnd();
   renderAll();
@@ -14297,6 +15035,10 @@ const SUMMON_TEMPLATE = {id:'criatura_menor', name:'Criatura menor invocada', ic
 const MOVE_LABELS = {robar:'Robo', morder:'Mordisco', picar:'Picadura', debilitar:'Debilitar', aplastar:'Golpe brutal', paralizar:'Parálisis', cegar:'Cegar', atemorizar:'Atemorizar', confundir:'Confundir', maldicion_venenosa:'Maldición venenosa', curar_aliado:'Cura a un aliado'};
 
 function enemyAct(enemy){
+  combat.ssCtx = {enemy, aoe:false};
+  try{ enemyActInner(enemy); } finally { if(combat) combat.ssCtx = null; }
+}
+function enemyActInner(enemy){
   if(!enemy.cooldowns) enemy.cooldowns = {};
   Object.keys(enemy.cooldowns).forEach(k=> enemy.cooldowns[k] = Math.max(0, enemy.cooldowns[k]-1));
 
@@ -14349,6 +15091,7 @@ function enemyAct(enemy){
       enemy.usedOnce.add(id);
       const ex = hasStatus(enemy.statuses, ab.selfBuff.name);
       if(ex) Object.assign(ex, ab.selfBuff); else enemy.statuses.push(Object.assign({}, ab.selfBuff));
+      ssMirrorBuff(ab.selfBuff);
       log(`<b>${enemy.name}</b> entra en <b>${ab.label}</b>: ${statusEffectText(ab.selfBuff)} ${ab.selfBuff.duration >= STATUS_PERMANENT_TURNS ? 'hasta el final del combate' : `durante ${ab.selfBuff.duration} turnos`}.`);
     });
     enemy.pendingAbilityId = pickNewStyleAbilityId(enemy, newStyleCtx(enemy, target));
@@ -14360,6 +15103,12 @@ function enemyAct(enemy){
     log(`${enemy.name} ataca a ${target.kind==='ally' ? target.ally.name : 'ti'}, ¡pero esquiva!`);
     // Celeridad A/S/SS: tras esquivar, el siguiente golpe propio es crítico.
     if(target.kind==='player'){
+      const manto = ssOn(15), hurt = manto && livingAllies().filter(a=> a.hp < a.maxHP);
+      if(hurt && hurt.length){
+        const a = hurt.reduce((x, y)=> y.hp/y.maxHP < x.hp/x.maxHP ? y : x), before = a.hp;
+        a.hp = Math.min(a.maxHP, a.hp + Math.max(1, Math.round(a.maxHP*0.05)));
+        log(`<b>${manto.name}</b>: tu esquiva cura ${a.hp - before} a ${a.name}.`);
+      }
       const cel = stoneSpecials('celeridad_contraataque').sort((a,b)=>a.cooldown-b.cooldown)[0];
       if(cel && !combat.critNext && (combat.turnCount||0) >= (combat.celeridadReadyAt||0)){
         combat.critNext = true;
@@ -14758,6 +15507,7 @@ function processEnemyDeaths(){
   combat.enemies.forEach(e=>{
     if(e.hp>0 || e.deathProcessed) return;
     e.deathProcessed = true;
+    ssOnEnemyDeath(e);
     const sp = e.tpl && e.tpl.onDeathSpawn;
     if(sp && !e.summoned && livingEnemies().length < 6 && chance(sp.chance)){
       const child = makeEnemy(sp.tpl, state.dungeon.atFloor, state.dungeon.level);
@@ -14882,6 +15632,7 @@ function resolveNewStyleEnemyMove(enemy, target, enemyCrit){
     const existing = hasStatus(enemy.statuses, buff.name);
     if(existing) Object.assign(existing, buff);
     else enemy.statuses.push(Object.assign({}, buff));
+    ssMirrorBuff(buff);
     const buffText = statusEffectText(buff);
     log(`${enemy.name} usa ${ability.label}${buffText ? `: ${buffText} ${buff.duration >= STATUS_PERMANENT_TURNS ? 'hasta el final del combate' : `durante ${buff.duration} turnos`}` : ''}.`);
     applyDebuffTarget();
@@ -14928,6 +15679,7 @@ function resolveNewStyleEnemyMove(enemy, target, enemyCrit){
   // (jugador + aliados vivos) con la resistencia física de cada uno, y puede
   // aplicar un estado a cada golpeado (ej. Corrosión).
   if(ability.utility==='aoe'){
+    if(combat.ssCtx) combat.ssCtx.aoe = true;
     let base = enemy.atk * (ability.mult!=null ? ability.mult : 0.5);
     const fz = hasStatus(enemy.statuses,'Fortalecido');
     if(fz) base *= (1 + (fz.stacks||1)*0.04);
@@ -15005,6 +15757,17 @@ function resolveNewStyleEnemyMove(enemy, target, enemyCrit){
   const marked = ctx.targetStatuses.find(st=>st.name==='Marcado');
   if(marked) dmg = Math.round(dmg*(marked.incomingDmgMult||1.2));
 
+  // 016 Espejo de Azogue: la primera habilidad (no el golpe básico) que cada enemigo te lanza vuelve contra él.
+  const espejo = onPlayer && ability.cooldown && !enemy.ssMirrored && ssOn(16);
+  if(espejo){
+    enemy.ssMirrored = true;
+    const back = Math.max(1, Math.round(dmg*(1 - totalRes('fisico')/100))); // lo mismo que te habría quitado a ti
+    enemy.hp = Math.max(0, enemy.hp - back);
+    if(ability.applies && enemy.hp > 0) applyStatus(enemy, Object.assign({}, ability.applies, {chance:1}), false);
+    log(`${enemy.name} usa ${ability.label}… y <b>${espejo.name}</b> se lo devuelve: ${back} de daño.`);
+    combat.lastAction = {label:'¡Reflejado!', effects:[{targetKind:'enemy', key: combat.enemies.indexOf(enemy), amount:back, kind:'dmg'}]};
+    return;
+  }
   let finalDmg;
   if(onPlayer){
     let resVal = totalRes('fisico') - corrosionResPenalty(combat.playerStatuses);
@@ -15316,7 +16079,7 @@ async function simOneFight(cfg){
       // la habilidad de daño más fuerte que se pueda pagar y usar desde donde está
       const ok = (id)=>{
         const sk = SKILLS[id]; if(!sk || (!sk.mult && !SIM_UTILITY_SKILLS.has(id))) return false;
-        if(sk.ultimate && ((ULTIMATE_MAX_USES - (state.dungeon.ultimateUses||0)) <= 0 || (state.dungeon.ultimateCooldown||0) > 0)) return false;
+        if(sk.ultimate && ((ultimateMaxUses() - (state.dungeon.ultimateUses||0)) <= 0 || (state.dungeon.ultimateCooldown||0) > 0)) return false;
         if(sk.cost && (sk.cost.tipo === 'estamina' ? state.char.curSta : state.char.curSpi) < effectiveSkillCost(id, sk)) return false;
         if(sk.requiresPos && combat.playerPos !== sk.requiresPos && !sk.penaltyIfFrente) return false;
         return true;
@@ -15344,7 +16107,7 @@ async function simFightLoop(){
     else {
       const ok = (id)=>{
         const sk = SKILLS[id]; if(!sk || (!sk.mult && !SIM_UTILITY_SKILLS.has(id))) return false;
-        if(sk.ultimate && ((ULTIMATE_MAX_USES - (state.dungeon.ultimateUses||0)) <= 0 || (state.dungeon.ultimateCooldown||0) > 0)) return false;
+        if(sk.ultimate && ((ultimateMaxUses() - (state.dungeon.ultimateUses||0)) <= 0 || (state.dungeon.ultimateCooldown||0) > 0)) return false;
         if(sk.cost && (sk.cost.tipo === 'estamina' ? state.char.curSta : state.char.curSpi) < effectiveSkillCost(id, sk)) return false;
         if(sk.requiresPos && combat.playerPos !== sk.requiresPos && !sk.penaltyIfFrente) return false;
         return true;
@@ -15431,6 +16194,14 @@ if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
   window.__riftEntra = ()=>{ const dg = state.dungeon; let pos = null; dg.floors.forEach((fl, f)=> fl.forEach((n, i)=>{ if(n.type === 'rift') pos = [f, i]; })); dg.atFloor = pos[0]; dg.atNode = pos[1]; enterRift(dg.floors[pos[0]][pos[1]], pos[0]); };
   window.__riftGana = ()=>{ combat.enemies.forEach(e=>{ e.hp = 0; }); checkCombatEnd(); return combat ? {etapa: combat.node.riftStage, enemigos: combat.enemies.map(e=> e.name + ' ' + e.maxHP), over: combat.over} : 'sin combate'; };
   window.__rift = (v)=>{ if(v !== undefined) SIM_RIFT = v; return SIM_RIFT; };
+  // Piezas numeradas: __ssDar(n) la crea y la equipa; __ssVer(n) enseña el anuncio; __fragua({llaves, frag, fallos}) abre la fragua.
+  window.__ssDar = (...ns)=> ns.map(n=>{ const it = makeNumberedItem(n); if(!it) return null; ensureItemUid(it); state.char.equip[it.slot] = it; return it.name + ' ' + itemBonusLines(it).join(' | '); });
+  window.__ssVer = (n)=> showSsReveal(makeNumberedItem(n));
+  window.__ssTodas = ()=> SS_ITEMS.map(r=>{ const it = makeNumberedItem(r[0]); return it ? null : r[0]; }).filter(Boolean);
+  window.__fragua = (cfg)=>{ cfg = cfg || {}; window.__ficha({style: cfg.style || 'pesada', level:100}); const sc = fraguaState(); sc._riftKeys = cfg.llaves || {cripta:27, hielo:25, circo:30, mina:4}; sc._retFrag = cfg.frag === undefined ? 2 : cfg.frag; sc._fraguaFails = cfg.fallos || 0; flushSave = async ()=>{}; renderSheet = ()=>{}; fraguaOpen = true; renderFragua(); };
+  window.__ssCarta = (n)=>{ const it = makeNumberedItem(n); return itemCardHTML(it) + itemArtTileHTML(it, 64, true) + itemArtTileHTML(makeSetItem('voluntad', 'casco', 'legendario'), 64, true); };
+  window.__mapa = ()=>{ window.__ficha({style:'pesada', level:100}); cityView = 'map'; renderCityMap(); };
+  window.__ssLog = (n)=> state.log.slice(-(n || 12));
   window.__celdaG = CELDA_GUESTS; window.__creditos = ()=> showCredits(()=>{}); window.__modos = (on)=>{ MODES_UNLOCKED = on !== false; };
   window.__celda = (v)=>{ if(v !== undefined) SIM_CELDA = v; return SIM_CELDA; };
   window.__historia = (level)=> showStoryScenes(level, ()=>{});
@@ -15608,6 +16379,8 @@ function handleVictory(){
   log(`Victoria. +${myXpGain} experiencia, +${goldGain} de oro.`);
   combat.node.done = true;
   if(combat.node.type === 'rift') grantRiftRewards(combat.node);
+  if(combat.node.type === 'jefe' && state.dungeon.level === 100 && !simMode) grantRetornadoSpoils();
+  state.dungeon.ssShield = ssOn(7) ? (combat.playerShield || 0) : 0; // 007 Yunque de Bolsillo
 
   // La experiencia no se reparte: cada aliado recibe el mismo xpGain completo
   // que tú, no una fracción — así todos evolucionan al mismo ritmo que el equipo.
@@ -16086,10 +16859,10 @@ function renderCombat(){
     if(sk.requiresPos && combat.playerPos!==sk.requiresPos && !sk.penaltyIfFrente) disabled = true;
     let costText = sk.cost ? `${sk.cost.valor} ${COST_LABELS[sk.cost.tipo] || sk.cost.tipo}` : 'Gratis';
     if(sk.ultimate){
-      const usesLeft = ULTIMATE_MAX_USES - (state.dungeon.ultimateUses||0);
+      const usesLeft = ultimateMaxUses() - (state.dungeon.ultimateUses||0);
       const cooldown = state.dungeon.ultimateCooldown||0;
       if(usesLeft<=0 || cooldown>0) disabled = true;
-      costText = cooldown>0 ? `Enfriando (${cooldown} turno${cooldown===1?'':'s'})` : `${usesLeft}/${ULTIMATE_MAX_USES} usos`;
+      costText = cooldown>0 ? `Enfriando (${cooldown} turno${cooldown===1?'':'s'})` : `${usesLeft}/${ultimateMaxUses()} usos`;
     }
     return {sk, disabled, costText};
   }
@@ -16479,7 +17252,7 @@ document.querySelectorAll('#city-nav .nav-btn').forEach(btn=>{
     if(!state) return;
     if(combat && combat.active) return;
     const key = btn.dataset.nav;
-    invOpen = false; homeOpen = false; shopOpen = false; rankingOpen = false; adminOpen = false; missionsOpen = false; tabernaOpen = false; ofrendaOpen = false; checkinOpen = false; fusionOpen = false;
+    invOpen = false; homeOpen = false; shopOpen = false; rankingOpen = false; adminOpen = false; missionsOpen = false; tabernaOpen = false; ofrendaOpen = false; checkinOpen = false; fusionOpen = false; fraguaOpen = false;
     if(key==='home') homeOpen = true;
     else if(key==='shop') shopOpen = true;
     else if(key==='taberna') tabernaOpen = true;
