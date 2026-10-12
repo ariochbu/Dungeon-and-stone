@@ -32,7 +32,7 @@ const chibiImgs = {}; // key -> Image (cargando o lista)
 function chibiAnimFor(key){
   const meta = CHIBI[key];
   if(!meta) return null;
-  if(!chibiImgs[key]){ chibiImgs[key] = new Image(); chibiImgs[key].src = `src/assets/chibi/${key}.png?v=10`; }
+  if(!chibiImgs[key]){ chibiImgs[key] = new Image(); chibiImgs[key].src = `src/assets/chibi/${key}.png?v=11`; }
   const img = chibiImgs[key];
   return img.complete && img.naturalWidth > 0 ? new SpriteAnim(img, sheetFromMeta(meta)) : null;
 }
@@ -479,7 +479,7 @@ function syncBattleStage(container, combat, playerInfo, onTargetClick){
     if(!a){ a = makeActor(k); actors.set(k, a); }
     a.baseX = enemyPos[i].x; a.baseY = enemyPos[i].y; a.x = a.baseX; a.y = a.baseY;
     Object.assign(a, {
-      vanish:false, kind:'enemy', refIdx:i, name: en.name, icon: en.icon, nameMaxW: enemyPos[i].nameMaxW, sprite: spriteFor('enemy', en), chibiKey: enemyChibiKey(en), awakened: !!(en.tpl && en.tpl.awakened), sizeMul: en.tpl && en.tpl.stageSize ? en.tpl.stageSize : en.tpl && en.tpl.awakened ? 1.75 : en.tpl && en.tpl.boss ? 1.3 : (en.tpl && en.tpl.elite ? 1.12 : (en.tpl && en.tpl.decoy ? 0.9 : (en.summoned ? 0.8 : 1))),
+      vanish:false, kind:'enemy', refIdx:i, intent: en.ssIntent ? en.ssIntent.label : null, intentHot: !!(en.ssIntent && en.ssIntent.special), name: en.name, icon: en.icon, nameMaxW: enemyPos[i].nameMaxW, sprite: spriteFor('enemy', en), chibiKey: enemyChibiKey(en), awakened: !!(en.tpl && en.tpl.awakened), sizeMul: en.tpl && en.tpl.stageSize ? en.tpl.stageSize : en.tpl && en.tpl.awakened ? 1.75 : en.tpl && en.tpl.boss ? 1.3 : (en.tpl && en.tpl.elite ? 1.12 : (en.tpl && en.tpl.decoy ? 0.9 : (en.summoned ? 0.8 : 1))),
       role: roleFor('enemy', en), hp: en.hp, maxHP: en.maxHP, alive: en.hp>0, showResources:false,
       statuses: en.statuses||[],
       // Con pendingTargetFilter==='front' (2026-09-25: elegir a cuál de 2+
@@ -755,6 +755,8 @@ function drawActorHud(a, cx, cy){
   ctx.strokeStyle = 'rgba(0,0,0,0.85)'; ctx.lineWidth = 3;
   const nameY = cy - (a.anim ? 64*CHIBI_SCALE : STATIC_SIZE*0.92)*(a.sizeMul||1) - 5;
   ctx.strokeText(fitText(a.name||'', a.nameMaxW), cx, nameY); ctx.fillText(fitText(a.name||'', a.nameMaxW), cx, nameY);
+  // Lentes del Escriba: la próxima acción del enemigo, encima de su nombre.
+  if(a.intent){ const iy = nameY - Math.round(13*Math.min(uiScale, 1.45)); ctx.fillStyle = a.intentHot ? '#ffb347' : '#cfd6e6'; const it = '» ' + fitText(a.intent, (a.nameMaxW||90)*1.25); ctx.strokeText(it, cx, iy); ctx.fillText(it, cx, iy); }
   ctx.restore();
   drawBar(cx-22, by, 44, 5, (a.hp||0)/(a.maxHP||1), (a.hp/a.maxHP)<0.3 ? '#b24444' : '#8c2f2f');
   // Escudo (2026-09-25, pedido explícito): franja morada pegada justo

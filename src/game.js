@@ -2,8 +2,8 @@
 
 import { supabase } from './supabaseClient.js';
 import * as auth from './auth.js';
-import { syncBattleStage, playBattleAnim } from './battleStage.js?v=117';
-import { mountLabyrinth } from './labyrinthMap.js?v=11';
+import { syncBattleStage, playBattleAnim } from './battleStage.js?v=118';
+import { mountLabyrinth } from './labyrinthMap.js?v=12';
 import { installIconizer } from './icons.js?v=2';
 installIconizer(); // ningún emoji llega a pantalla: se cambian por los iconos del juego (ver icons.js)
 import { CLASS_SPRITES, ENEMY_SPRITES, playerSpriteFor, playerIllustrationFor, enemySpriteFor, ALLY_TEMPLATE_SPRITES } from './battleSprites.js?v=94';
@@ -3083,7 +3083,7 @@ const ENEMY_RACE_TAG = {};
 // recién cuando el piso 60 ya se limpió) (5), +1 en piso 80 (6), +1 en
 // piso 90 (7 en total, tope).
 function maxPetSlots(){
-  let n = 3;
+  let n = 3 + (ssOn(33) ? 1 : 0); // 033 Huevo Ámbar
   if(state.char.level >= 30) n += 1;
   const maxLvl = state.char.maxLevelUnlocked||1;
   if(maxLvl >= 61) n += 1;
@@ -4246,7 +4246,7 @@ const SHOP_POTION_PRICES = {vida_menor:12, vida_mayor:30, estamina:12, espiritu:
 
 function dealDamageToPlayer(amount){
   if(amount<=0) return;
-  if(combat){ amount = ssIncoming(amount); if(amount<=0) return; }
+  if(combat){ amount = ssIncoming2(amount); if(amount<=0) return; amount = ssIncoming(amount); if(amount<=0) return; }
   let shieldBroke = false;
   if(combat && combat.playerShield>0){
     const absorbed = Math.min(combat.playerShield, amount);
@@ -4256,7 +4256,7 @@ function dealDamageToPlayer(amount){
   }
   if(amount>0){
     const wouldBeLethal = combat && (state.char.curHP - amount) <= 0;
-    if(!(wouldBeLethal && (ssLethal() || checkPetRevive()))) state.char.curHP = Math.max(0, state.char.curHP - amount);
+    if(!(wouldBeLethal && (ssLethal() || ssLethal2(amount) || checkPetRevive()))) state.char.curHP = Math.max(0, state.char.curHP - amount);
   }
   checkPetShieldOnHit();
   checkFuriaContenidaTrigger();
@@ -4264,6 +4264,7 @@ function dealDamageToPlayer(amount){
   if(shieldBroke && state.char.curHP>0) tryRenewShield(true, null);
   checkUltimoBastion(true, null);
   checkVitalidadHeal();
+  ssAfterDamage(shieldBroke);
 }
 // Habilidades únicas de mascota Épico+ (ver PET_CATALOG unique.effect) —
 // mismo choke point que checkFuriaContenidaTrigger (dealDamageToPlayer es
@@ -5572,7 +5573,8 @@ const HP_PER_LEVEL = {pesada:20, tirador:10, doblefilo:10, mago:10, sacerdote:10
 // Espíritu; lo único que cambia para Mago acá es que Agilidad (no ya
 // Habilidad) rige su crítico/evasión, igual que para el resto.
 function derived(){
-  const fis = baseStat('fis'), esp = baseStat('esp'), hab = baseStat('hab'), agi = baseStat('agi'), vig = baseStat('vig');
+  const am = ssAriochMult(); // 099 Yelmo de Arioch
+  const fis = Math.round(baseStat('fis')*am), esp = Math.round(baseStat('esp')*am), hab = Math.round(baseStat('hab')*am), agi = Math.round(baseStat('agi')*am), vig = Math.round(baseStat('vig')*am);
   let maxHP = Math.round((HP_BASE + state.char.level * ((CLASS_REDESIGN ? HP_PER_LEVEL_REDESIGN : HP_PER_LEVEL)[state.char.style]||40)) * classCurve('hp'));
   // MP (barra "MP", internamente curSta) ahora la alimenta SOLO Habilidad —
   // antes era fis×3+hab×2. Efecto esperado y ya avisado: Guerrero/Arquero/
@@ -6832,7 +6834,7 @@ function riftAdvance(){
 }
 function grantRiftRewards(node){
   const t = RIFT_THEMES[node.rift], keys = riftKeys(), got = [];
-  keys[node.rift] = (keys[node.rift] || 0) + 1;
+  keys[node.rift] = (keys[node.rift] || 0) + (ssOn(49) ? 2 : 1); // 049 Garras de Topo: el doble de llaves
   for(let i = 0; i < RIFT_LOOT.rolls; i++){
     let tier = pickWeighted(RIFT_LOOT.tiers.map(([id, weight])=> ({tpl:id, weight})));
     if(tier === 'ss'){
@@ -6970,7 +6972,7 @@ const SS_ITEMS = [
 ];
 const SS_BY_ID = {};
 SS_ITEMS.forEach(r=>{ SS_BY_ID[r[0]] = {n:r[0], name:r[1], slot:r[2], theme:r[3], base:r[4], text:r[5]}; });
-const SS_READY = new Set(Array.from({length:25}, (_, i)=> i + 1)); // tanda 1: rifts Cripta, Forja, Hielo, Espejos y Jardín
+const SS_READY = new Set(Array.from({length:100}, (_, i)=> i + 1)); // las cien tienen su efecto programado (2026-10-11)
 const SS_STAT_MULT = 1.15;
 const SS_LOCAL = /^(localhost|127\.0\.0\.1)$/.test(location.hostname); // en pruebas locales no se toca la base
 function ssPad(n){ return String(n).padStart(3, '0'); }
@@ -7015,6 +7017,7 @@ function ssAllItems(){
   (c.inventory || []).forEach(it=> out.push(it));
   EQUIP_SLOTS.forEach(s=>{ if(c.equip && c.equip[s]) out.push(c.equip[s]); });
   ((c.stash && c.stash.items) || []).forEach(it=> out.push(it));
+  (c.allies || []).forEach(row=> EQUIP_SLOTS.forEach(s=>{ if(row.equip && row.equip[s]) out.push(row.equip[s]); }));
   return out.filter(it=> it && it.ssId);
 }
 // Pide a la base una pieza libre de entre las candidatas. Devuelve su número o null (no queda ninguna).
@@ -7050,6 +7053,7 @@ async function ssReconcile(){
   c.inventory = (c.inventory || []).filter(keep);
   if(c.stash && c.stash.items) c.stash.items = c.stash.items.filter(keep);
   EQUIP_SLOTS.forEach(s=>{ if(c.equip[s] && !keep(c.equip[s])){ c.equip[s] = null; changed = true; } });
+  (c.allies || []).forEach(row=> EQUIP_SLOTS.forEach(s=>{ if(row.equip && row.equip[s] && !keep(row.equip[s])){ row.equip[s] = null; changed = true; } }));
   if(before !== c.inventory.length + ((c.stash && c.stash.items) || []).length) changed = true;
   const have = new Set(ssAllItems().map(it=> it.ssId));
   owned.forEach(n=>{ if(!have.has(n)){ const it = makeNumberedItem(n); if(it){ addToInventory(it); changed = true; } } });
@@ -7103,9 +7107,18 @@ function ssHealPlayer(pct){
   state.char.curHP = Math.min(d.maxHP, state.char.curHP + Math.max(1, Math.round(d.maxHP*pct)));
   return state.char.curHP - before;
 }
-// 003 Farol de la Plañidera: lo que curas daña al enemigo del frente.
-function ssOnPlayerHeal(healed){
-  const it = healed > 0 && combat && !combat.over && ssOn(3);
+// Cada vez que te curas con una habilidad o con robo de vida. intended = lo que habría curado sin el tope de vida.
+function ssOnPlayerHeal(healed, intended){
+  if(!combat || combat.over) return;
+  const d = derived();
+  // 047 Corazón de Cuarzo: la curación que sobra se vuelve escudo (hasta el 40% de tu vida).
+  const cuarzo = (intended || 0) > healed && ssOn(47);
+  if(cuarzo){ const room = Math.round(d.maxHP*0.40) - (combat.playerShield || 0), add = Math.min(room, intended - healed); if(add > 0){ grantShield(true, null, add); log(`<b>${cuarzo.name}</b>: la curación que sobra se vuelve escudo (+${add}).`); } }
+  if(!(healed > 0)) return;
+  // 078 Esporas del Chamán
+  if(ssOn(78)){ const ex = hasStatus(combat.playerStatuses, 'Regeneración'); if(ex) ex.duration = 3; else combat.playerStatuses.push({name:'Regeneración', duration:3}); STATUS_INFO['Regeneración'] = {buff:true, desc:'Recupera un 3% de vida cada turno.'}; }
+  // 003 Farol de la Plañidera: lo que curas daña al enemigo del frente.
+  const it = ssOn(3);
   if(!it) return;
   const fi = frontEnemyIndex(), e = fi >= 0 ? combat.enemies[fi] : null;
   if(!e || e.hp <= 0) return;
@@ -7176,6 +7189,7 @@ function ssMirrorBuff(buff){
 // Al empezar cada combate.
 function ssCombatStart(){
   const d = derived();
+  ssCombatStart2();
   const yunque = ssOn(7);
   if(yunque && state.dungeon.ssShield > 0){
     combat.playerShield = Math.min(state.dungeon.ssShield, Math.round(d.maxHP*0.60));
@@ -7191,6 +7205,7 @@ function ssCombatStart(){
 // Al final de cada ronda (después de los enemigos).
 function ssRoundEnd(){
   if(!combat || combat.over) return;
+  ssRoundEnd2();
   const grebas = combat.ssRaise && ssOn(4);
   if(combat.ssRaise){
     const ally = combat.ssRaise; combat.ssRaise = null;
@@ -7218,6 +7233,417 @@ function ssOnEnemyDeath(e){
   } else if(got > 0) log(`<b>${it.name}</b>: te curas ${got}.`);
 }
 function ultimateMaxUses(){ return ULTIMATE_MAX_USES + (ssOn(20) ? 1 : 0); }
+
+// ---------- Efectos únicos, tandas 2 a 4 (piezas 026 a 100) ----------
+// Textos que cambian respecto a la propuesta: en este juego el jugador siempre actúa antes que los enemigos,
+// así que "actúas el primero" no hacía nada (014, 048) y 054 habría sido crítico siempre. 058 y 073 no tienen
+// botón propio: se activan solas.
+const SS_TEXT_FIX = {
+  14:'No puedes ser Ralentizado ni Paralizado. El enemigo que lo intenta queda Ralentizado 2 turnos.',
+  48:'El mapa del nivel se ve entero, sin niebla. Todos los enemigos empiezan cada combate Marcados 2 turnos.',
+  54:'Tus golpes contra un enemigo que todavía no ha actuado en ese combate son críticos seguros.',
+  58:'Al empezar cada combate se traga a un enemigo normal (ni élite ni jefe) y lo elimina. Su botín cae igual.',
+  73:'En tu tercer turno de cada combate juegas dos veces seguidas. Las habilidades de los enemigos tardan 1 turno más en volver a estar listas.',
+  31:'Cada golpe crítico hace nacer una Larva (hasta 3) que muerde al final de tu turno por el 20% de tu daño. Un golpe en área contra ti las mata.',
+  61:'Los enemigos que matas se levantan 2 turnos como Tripulantes fantasma (máximo 2 a la vez) y golpean al final de tu turno por el 30% de tu daño.',
+  91:'Bola de fuego rebota en hasta 3 enemigos más con la mitad del daño; cada rebote deja una carga de Quemadura.',
+  97:'Cada nivel del laberinto te toca un signo al azar de doce, cada uno con una ventaja distinta para ese nivel.',
+};
+Object.keys(SS_TEXT_FIX).forEach(n=>{ if(SS_BY_ID[n]) SS_BY_ID[n].text = SS_TEXT_FIX[n]; });
+function ssSc(){ return state.char.storyChoices || (state.char.storyChoices = {}); }
+function ssNegatives(list){ return (list || []).filter(st=>{ const info = STATUS_INFO[st.name]; return info && !info.buff; }); }
+function ssHitEnemy(e, dmg, effects){
+  dmg = Math.max(1, Math.round(dmg));
+  e.hp = Math.max(0, e.hp - dmg);
+  if(effects) effects.push({targetKind:'enemy', key: combat.enemies.indexOf(e), amount:dmg, kind:'dmg'});
+  return dmg;
+}
+// 097 Carta Estelar: un signo por nivel del laberinto.
+const SS_SIGNS = [
+  ['Carnero', '+25% de daño'], ['Toro', '-25% de daño recibido'], ['Gemelos', '25% de lanzar dos veces tus habilidades'], ['Cangrejo', 'escudo del 30% de tu vida al empezar cada combate'],
+  ['León', '+25% de crítico'], ['Doncella', 'recuperas un 5% de vida cada turno'], ['Balanza', '+12% de daño y -12% de daño recibido'], ['Escorpión', 'tus golpes envenenan'],
+  ['Arquero', 'tus golpes no se pueden esquivar y hacen +10% de daño'], ['Cabra', '+25% de evasión'], ['Aguador', 'recuperas un 10% de MP cada turno'], ['Peces', '15% de que un golpe recibido no te haga nada'],
+];
+function ssSign(){
+  const it = state.dungeon && ssOn(97);
+  if(!it) return -1;
+  if(state.dungeon.ssSign === undefined){
+    state.dungeon.ssSign = rnd(0, 11);
+    log(`<b>${it.name}</b>: en este nivel te rige <b>${SS_SIGNS[state.dungeon.ssSign][0]}</b> (${SS_SIGNS[state.dungeon.ssSign][1]}).`);
+  }
+  return state.dungeon.ssSign;
+}
+// 043 Laurel Dorado: remates de la década en curso.
+function ssLaurel(){
+  if(!ssOn(43) || !state.dungeon) return 0;
+  const sc = ssSc(), dec = decadeIndexForLevel(state.dungeon.level);
+  if(!sc._laurel || sc._laurel.dec !== dec) sc._laurel = {dec, n:0};
+  return sc._laurel.n;
+}
+// 099 Yelmo de Arioch: multiplicador de todas las estadísticas según los aliados.
+function ssAriochMult(){
+  if(!ssOn(99)) return 1;
+  let alive = 0, fallen = 0;
+  if(combat && combat.active) (combat.allies || []).forEach(a=>{ if(a.guest || a.isShadow) return; if(a.hp > 0) alive++; else fallen++; });
+  else alive = (state.char.allies || []).length;
+  return 1 + 0.06*alive + 0.12*fallen;
+}
+function ssCritBonus(){
+  let c = 0;
+  if(ssOn(98)) c += 0.20;
+  c += 0.05*Math.min(10, ssLaurel());
+  (combat.playerStatuses || []).forEach(st=>{ if(st.critDelta) c += st.critDelta; });
+  if(ssSign() === 4) c += 0.25;
+  return c;
+}
+function ssEvasionBonus(){
+  let ev = 0;
+  if(ssOn(45) && state.char.curHP/derived().maxHP < 0.30) ev += 0.25;
+  if(ssSign() === 9) ev += 0.25;
+  return ev;
+}
+// Golpe que no puede fallar ni ser esquivado (071 cada duodécimo golpe; signo del Arquero).
+function ssSureHit(target){
+  let sure = ssSign() === 8;
+  if(target.tpl && ssOn(71)){
+    const sc = ssSc();
+    sc._aguja = (sc._aguja || 0) + 1;
+    if(sc._aguja % 12 === 0){ combat.ssAgujaBig = true; sure = true; }
+  }
+  return sure;
+}
+// Multiplicador de daño propio contra un objetivo.
+function ssOutMult(skillId, skill, target){
+  let m = 1;
+  const d = derived(), basic = skillId === 'ataque_basico';
+  if(combat.ssAgujaBig){ combat.ssAgujaBig = false; m *= 4; log('<b>Aguja Horaria</b>: suena la hora. Este golpe hace daño ×4.'); }
+  if(basic && ssOn(34)) m *= 0.6;
+  if(ssOn(41) && livingEnemies().length === 1) m *= 1.40;
+  m *= 1 + 0.05*Math.min(10, ssLaurel());
+  if(ssOn(45) && state.char.curHP >= d.maxHP) m *= 1.25;
+  if(target.tpl && !target.ssHit86 && ssOn(86)) m *= 1.25;
+  if(ssOn(92)) m *= 1 + 0.10*Math.min(4, combat.ssChainN || 0);
+  if(combat.ssWheel && ssOn(93)){ m *= 1 + 0.5*combat.ssWheel; combat.ssWheelUsed = true; }
+  if(target.ssIntent && target.ssIntent.special && ssOn(38)) m *= 1.15;
+  if(ssOn(40)) m *= 1 + 0.06*new Set(ssNegatives(combat.playerStatuses).map(st=> st.name)).size;
+  if(!basic && combat.ssAvaro) m *= 1.25;
+  if(!basic && combat.ssTomoBoost) m *= 1.30;
+  const sign = ssSign();
+  if(sign === 0) m *= 1.25; else if(sign === 6) m *= 1.12; else if(sign === 8) m *= 1.10;
+  return m;
+}
+// Pago de una habilidad. Devuelve true si se pagó con oro (056 Cetro del Avaro).
+function ssPay(skill, paid){
+  combat.ssAvaro = false; combat.ssTomoBoost = false;
+  if(ssOn(36)){ combat.ssTomoBoost = (combat.ssTomo || 0) % 4 === 3; combat.ssTomo = (combat.ssTomo || 0) + 1; }
+  if(paid > 0 && skill.cost.tipo === 'estamina' && ssOn(56) && state.char.gold >= paid*10){ state.char.gold -= paid*10; combat.ssAvaro = true; return true; }
+  return false;
+}
+function ssGoldCovers(skillId, skill){ return skill.cost.tipo === 'estamina' && !!ssOn(56) && state.char.gold >= effectiveSkillCost(skillId, skill)*10; }
+function ssDoubleCast(){ return (ssOn(69) && chance(0.25)) || (ssSign() === 2 && chance(0.25)); }
+// Al lanzar (no en la repetición gratuita).
+function ssCastStart(skillId, isRepeat){
+  if(isRepeat) return;
+  combat.ssHood = false;
+  if(ssOn(92)){ combat.ssChainN = combat.ssLastSkill && combat.ssLastSkill !== skillId ? (combat.ssChainN || 0) + 1 : 0; combat.ssLastSkill = skillId; }
+}
+function ssCastEnd(skillId, skill, isRepeat, effects){
+  if(!combat || combat.over) return;
+  if(combat.ssWheelUsed){ combat.ssWheel = 0; combat.ssWheelUsed = false; }
+  // 067 Cuchillos del Lanzador
+  const cuchillos = !isRepeat && skillId === 'lluvia_flechas' && ssOn(67);
+  if(cuchillos){
+    let total = 0, n = 0;
+    for(let i = 0; i < 3; i++){
+      const alive = livingEnemies();
+      if(!alive.length) break;
+      const e = pick(alive);
+      total += ssHitEnemy(e, skillBaseDamage()*skill.mult*0.6*(1 - Math.max(0, effectiveEnemyRes(e, 'fisico'))/100), effects); n++;
+    }
+    if(n) log(`<b>${cuchillos.name}</b>: ${n} cuchillos más, ${total} de daño en total.`);
+  }
+  if(isRepeat){ combat.ssAvaro = false; combat.ssTomoBoost = false; }
+}
+function ssAfterHit(skillId, skill, target, dmg, isCrit, effects, isRepeat){
+  if(!target.tpl) return;
+  const d = derived(), basic = skillId === 'ataque_basico', dead = target.hp <= 0;
+  target.ssHit86 = true;
+  const espada = ssOn(41);
+  if(espada && livingEnemies().length <= 1){ const before = state.char.curHP; state.char.curHP = Math.min(d.maxHP, state.char.curHP + Math.round(dmg*0.20)); if(state.char.curHP > before) log(`<b>${espada.name}</b> te devuelve ${state.char.curHP - before} de vida.`); }
+  const red = !dead && ssOn(42);
+  if(red && !ssFired('ss42')){
+    const turns = target.tpl.boss ? 1 : 2;
+    applyStatus(target, {name:'Aturdido', duration:turns}, false); applyStatus(target, {name:'Paralisis', duration:turns}, false);
+    log(`<b>${red.name}</b>: ${target.name} queda Inmovilizado ${turns} turno${turns > 1 ? 's' : ''}.`);
+  }
+  if(!dead && ssOn(62)) target.ssAnchor = (combat.turnCount || 0) + 2;
+  const moho = !dead && basic && ssOn(80);
+  if(moho){
+    if(!target.ssMaxHP0) target.ssMaxHP0 = target.maxHP;
+    const cut = Math.round(target.ssMaxHP0*(target.tpl.boss ? 0.01 : 0.03));
+    if(target.maxHP - cut >= target.ssMaxHP0*0.70){ target.maxHP -= cut; target.hp = Math.min(target.hp, target.maxHP); }
+  }
+  if(!dead && ssSign() === 7) applyStatus(target, {name:'Veneno', duration:3, stack:true, maxStack:3}, false);
+  const aguijon = isCrit && ssOn(31);
+  if(aguijon && (combat.ssLarvas || 0) < 3){ combat.ssLarvas = (combat.ssLarvas || 0) + 1; log(`<b>${aguijon.name}</b>: nace una Larva (${combat.ssLarvas} / 3).`); }
+  // Rebotes: 026 Jabalina del Rayo (Disparo certero) y 091 Bastón Anillado (Bola de fuego).
+  const jab = !isRepeat && skillId === 'disparo_certero' && ssOn(26), bas = !isRepeat && skillId === 'bola_fuego' && ssOn(91);
+  if(jab || bas){
+    const others = livingEnemies().filter(e=> e !== target).sort(()=> Math.random() - 0.5).slice(0, jab ? 2 : 3);
+    others.forEach(e=>{
+      const got = ssHitEnemy(e, dmg*(jab && hasStatus(e.statuses, 'Marcado') ? 1 : 0.5), effects);
+      if(bas && e.hp > 0) applyStatus(e, {name:'Quemadura', duration:3, stack:true, maxStack: skillBonus('bola_fuego', 'maxStack', 3)}, false);
+      log(`<b>${(jab || bas).name}</b> rebota en ${e.name}: ${got} de daño.`);
+    });
+  }
+  if(dead){
+    if(ssOn(43)){ ssLaurel(); const L = ssSc()._laurel; if(L.n < 10){ L.n++; log(`<b>Laurel Dorado</b>: ${L.n} / 10 remates en esta década.`); } }
+    const capucha = ssOn(88);
+    if(capucha){ combat.ssHood = true; log(`<b>${capucha.name}</b>: nadie puede tocarte hasta tu próximo turno.`); }
+    const sable = !target.summoned && ssOn(61);
+    if(sable){ combat.ssCrew = (combat.ssCrew || []).filter(c=> c.until > combat.turnCount); if(combat.ssCrew.length < 2){ combat.ssCrew.push({name:target.name, until:(combat.turnCount || 0) + 2}); log(`<b>${sable.name}</b>: ${target.name} se levanta como Tripulante fantasma.`); } }
+  }
+}
+// Al Defender. Devuelve true si el turno NO termina (044, una vez cada 3 turnos).
+function ssOnDefend(){
+  combat.ssDefTurn = combat.turnCount || 0;
+  if(ssOn(93)) combat.ssWheel = Math.min(3, (combat.ssWheel || 0) + 1);
+  const brazal = ssOn(44);
+  if(brazal && (combat.turnCount || 0) >= (combat.ssBrazalAt || 0)){
+    combat.ssBrazalAt = (combat.turnCount || 0) + 3; combat.ssDefHold = true;
+    log(`<b>${brazal.name}</b>: te cubres sin perder el turno.`);
+    return true;
+  }
+  return false;
+}
+function ssDefending(){ return combat.ssDefHold || combat.ssDefTurn === (combat.turnCount || 0) - 1; }
+// Al Reposicionarse. Devuelve true si el turno NO termina (030, una vez por turno).
+function ssOnReposition(){
+  const plumas = ssOn(30);
+  if(!plumas || combat.ssRepoTurn === (combat.turnCount || 0)) return false;
+  combat.ssRepoTurn = combat.turnCount || 0;
+  const ex = hasStatus(combat.playerStatuses, 'Plumas del Halcón');
+  if(ex) ex.duration = 1; else combat.playerStatuses.push({name:'Plumas del Halcón', duration:1, evasionDelta:50});
+  statusInfoFor({name:'Plumas del Halcón', evasionDelta:50});
+  log(`<b>${plumas.name}</b>: te mueves sin gastar el turno.`);
+  return true;
+}
+// Fin de tu turno (antes de aliados y enemigos). Devuelve true si te toca jugar otra vez.
+function ssTurnEnd(){
+  const t = combat.turnCount, d = derived(), base = skillBaseDamage();
+  combat.ssDefHold = false;
+  // 072 Reloj de Arena Roto: foto del estado al terminar cada turno.
+  if(ssOn(72)){ (combat.ssSnaps || (combat.ssSnaps = [])).push({hp:state.char.curHP, sta:state.char.curSta, spi:state.char.curSpi, st:combat.playerStatuses.map(s=> Object.assign({}, s))}); if(combat.ssSnaps.length > 3) combat.ssSnaps.shift(); }
+  const ojo = t % 3 === 0 && ssOn(28);
+  if(ojo && livingEnemies().length){ const e = pick(livingEnemies()), got = ssHitEnemy(e, base*1.5); log(`<b>${ojo.name}</b>: un rayo cae sobre ${e.name} (${got} de daño).`); }
+  const seta = ssOn(77);
+  if(seta){ const front = livingFrontlineEnemyIndices().map(i=> combat.enemies[i]); front.forEach(e=> applyStatus(e, {name:'Veneno', duration:3, stack:true, maxStack:3}, false)); if(front.length) log(`<b>${seta.name}</b> suelta esporas sobre el frente enemigo.`); }
+  if(combat.ssLarvas && livingEnemies().length){ const fi = frontEnemyIndex(), e = combat.enemies[fi >= 0 ? fi : combat.enemies.indexOf(livingEnemies()[0])]; if(e && e.hp > 0){ const got = ssHitEnemy(e, base*0.20*combat.ssLarvas); log(`${combat.ssLarvas > 1 ? 'Tus ' + combat.ssLarvas + ' Larvas muerden' : 'Tu Larva muerde'} a ${e.name}: ${got} de daño.`); } }
+  if(combat.ssCrew && combat.ssCrew.length){
+    combat.ssCrew = combat.ssCrew.filter(c=> c.until > t - 1);
+    combat.ssCrew.forEach(c=>{ const alive = livingEnemies(); if(!alive.length) return; const e = pick(alive), got = ssHitEnemy(e, base*0.30); log(`El fantasma de ${c.name} golpea a ${e.name}: ${got} de daño.`); });
+    combat.ssCrew = combat.ssCrew.filter(c=> c.until > t);
+  }
+  const yelmo = t % 4 === 0 && ssOn(74);
+  if(yelmo){
+    combat.enemies.forEach(e=>{ if(e.hp > 0) e.statuses = e.statuses.filter(st=>{ const info = statusInfoFor(st); return !(info && info.buff) || st.immune; }); });
+    const clean = list=>{ ssNegatives(list).forEach(st=> removeStatus(list, st.name)); };
+    clean(combat.playerStatuses); livingAllies().forEach(a=> clean(a.statuses));
+    log(`<b>${yelmo.name}</b>: suena la campana. Los enemigos pierden sus mejoras y tu grupo sus males.`);
+  }
+  ssMaskRotate();
+  const sign = ssSign();
+  if(sign === 10) state.char.curSta = Math.min(d.maxSta, state.char.curSta + Math.round(d.maxSta*0.10));
+  const alado = t === 1 && ssOn(29);
+  if(alado){ log(`<b>${alado.name}</b>: actúas otra vez.`); return true; }
+  const pendulo = t === 3 && ssOn(73);
+  if(pendulo){ log(`<b>${pendulo.name}</b>: el tiempo vuelve atrás un instante. Juegas otro turno.`); return true; }
+  return false;
+}
+// 051 Máscara de la Dama: cambia sola cada turno.
+function ssMaskRotate(){
+  const it = ssOn(51);
+  if(!it) return;
+  const masks = [{name:'Máscara de Risa', dmgMult:1.20}, {name:'Máscara de Llanto', healMult:1.20}, {name:'Máscara de Furia', critDelta:0.20}];
+  masks.forEach(m=> removeStatus(combat.playerStatuses, m.name));
+  const m = masks[(combat.ssMaskI = ((combat.ssMaskI === undefined ? rnd(0, 2) : combat.ssMaskI + 1) % 3))];
+  combat.playerStatuses.push(Object.assign({duration:99}, m));
+  STATUS_INFO[m.name] = {buff:true, desc: m.dmgMult ? '+20% de daño.' : m.healMult ? '+20% de curación recibida.' : '+20% de crítico.'};
+}
+// Sombra Cazadora ya invocada (090 Manto de la Fosa).
+function ssSpawnShadow(srcName){
+  if((combat.allies || []).some(a=> a.isShadow && a.hp > 0) || 1 + (combat.allies || []).length >= 6) return;
+  const hp = Math.max(1, Math.round(derived().maxHP*0.5));
+  combat.allies.unshift({id:'shadow_' + Date.now(), templateId:'sombra_cazadora', chibiKey:`${state.char.style}_${state.char.race}`, pale:true, name:'Sombra Cazadora', icon:'🌑', role:'sombra',
+    frontline:true, pos:'frente', level:state.char.level, maxHP:hp, hp, maxMP:0, mp:0, maxSpirit:0, spirit:0, atk:0, statuses:[], shield:0, skillCooldown:999, specials:[], isShadow:true,
+    res:{fisico:10, fuego:10, hielo:10, veneno:10, aturdimiento:10}});
+  log(`<b>${srcName}</b>: una <b>Sombra Cazadora</b> entra contigo al combate.`);
+}
+function ssCombatStart2(){
+  const d = derived();
+  combat.ssInit = combat.enemies.map(e=> ({tpl:e.tpl, maxHP:e.maxHP, atk:e.atk}));
+  const sign = ssSign();
+  if(sign === 3) grantShield(true, null, Math.round(d.maxHP*0.30));
+  const linterna = ssOn(48);
+  if(linterna) combat.enemies.forEach(e=> e.statuses.push({name:'Marcado', duration:2}));
+  const vela = ssOn(87);
+  if(vela){ combat.enemies.forEach(e=> e.statuses.push({name:'Ceguera', duration:2, procChance:0.32})); log(`<b>${vela.name}</b>: los enemigos empiezan a ciegas.`); }
+  const moneda = ssOn(57);
+  if(moneda){
+    const cara = chance(0.5), st = cara ? {name:'Moneda: cara', duration:99, dmgMult:1.30} : {name:'Moneda: cruz', duration:99, incomingDmgReduction:0.30};
+    combat.playerStatuses.push(st); statusInfoFor(st);
+    log(`<b>${moneda.name}</b> cae de ${cara ? 'cara: +30% de daño' : 'cruz: -30% de daño recibido'} en este combate.`);
+  }
+  const cofre = ssOn(58);
+  if(cofre){
+    const pool = combat.enemies.filter(e=> e.hp > 0 && !e.tpl.boss && !e.tpl.elite && !e.tpl.decoy && !e.tpl.decadeBossOf);
+    if(pool.length && combat.enemies.length > 1){ const e = pick(pool); e.hp = 0; log(`<b>${cofre.name}</b> se traga a ${e.name} de un bocado.`); }
+  }
+  const manto = ssOn(90);
+  if(manto) ssSpawnShadow(manto.name);
+  ssMaskRotate();
+  ssPlanIntents();
+}
+// 038 Lentes del Escriba: lo que hará cada enemigo en su próximo turno.
+function ssPlanIntents(){
+  if(!combat || combat.over) return;
+  const on = !!ssOn(38);
+  combat.enemies.forEach(e=>{
+    e.ssIntent = null;
+    if(!on || e.hp <= 0 || (e.tpl && e.tpl.decoy)) return;
+    if(!e.tpl.abilities){ e.ssIntent = {label:'¿?', special:false}; return; }
+    const real = e.cooldowns || {}, sim = {};
+    Object.keys(real).forEach(k=>{ sim[k] = Math.max(0, real[k] - 1); });
+    e.cooldowns = sim;
+    let id = null;
+    try{ id = pickNewStyleAbilityId(e, newStyleCtx(e, frontlineTarget())); } catch(err){ id = null; }
+    e.cooldowns = real;
+    const ab = id && e.tpl.abilities[id];
+    if(ab) e.ssIntent = {id, label:ab.label, special: !!(ab.cooldown || ab.utility)};
+  });
+}
+function ssPlanned(enemy, target){
+  const p = enemy.ssIntent, ab = p && p.id && enemy.tpl.abilities[p.id];
+  if(!ab || enemy.cooldowns[p.id] > 0) return null;
+  if(ab.oncePerCombat && enemy.usedOnce && enemy.usedOnce.has(p.id)) return null;
+  if(ab.condition && !ab.condition(newStyleCtx(enemy, target))) return null;
+  if((ab.utility === 'heal_ally' || ab.utility === 'self_heal') && enemyHealLocked()) return null;
+  if(ab.utility === 'summon' && livingEnemies().length >= 6) return null;
+  return p.id;
+}
+// A quién pega un enemigo: 062 Ancla Oxidada lo ata a ti; 086 Hoja Hueca te esconde en la retaguardia.
+function ssRetarget(enemy, target){
+  if(enemy.ssAnchor > (combat.turnCount || 0) && ssOn(62)) return {kind:'player'};
+  if(target.kind === 'player' && combat.playerPos === 'retaguardia' && ssOn(86)){ const others = livingAllies(); if(others.length) return {kind:'ally', ally: pick(others)}; }
+  return target;
+}
+// El golpe del enemigo no llega: su propia Ceguera (087) o un tropiezo (070 Zapatos de Payaso).
+function ssEnemyWhiff(enemy, target){
+  const blind = hasStatus(enemy.statuses, 'Ceguera');
+  if(blind && chance(blind.procChance || 0.32)){ log(`${enemy.name} golpea a ciegas y no encuentra a nadie.`); combat.lastAction = {label:'Ceguera (falla)', effects:[]}; return true; }
+  const zap = target.kind === 'player' && ssOn(70);
+  if(zap && chance(0.20)){ enemy.pendingStun = true; log(`${enemy.name} falla contra ti, tropieza con tus <b>${zap.name}</b> y perderá su próximo turno.`); combat.lastAction = {label:'¡Tropieza!', effects:[]}; return true; }
+  return false;
+}
+function ssNoHeal(e){ return !!ssOn(85) && (!!hasStatus(e.statuses || [], 'Marcado') || isEnemyWeakened(e)); }
+// 076 Báculo de Micelio: el daño de tu Veneno cura al más herido del grupo.
+function ssOnVenenoTick(dmg){
+  const it = ssOn(76);
+  if(!it) return;
+  const d = derived(), heal = Math.max(1, Math.round(dmg*0.30));
+  let best = {pct: state.char.curHP/d.maxHP, ally:null};
+  livingAllies().forEach(a=>{ if(a.hp/a.maxHP < best.pct) best = {pct:a.hp/a.maxHP, ally:a}; });
+  if(best.pct >= 1) return;
+  if(best.ally) best.ally.hp = Math.min(best.ally.maxHP, best.ally.hp + heal); else state.char.curHP = Math.min(d.maxHP, state.char.curHP + heal);
+}
+// Reducciones y reacciones de las tandas 2 a 4 al daño que entra. Devuelve la cantidad (0 = anulado).
+function ssIncoming2(amount){
+  const ctx = combat.ssCtx, enemy = ctx && ctx.enemy && ctx.enemy.hp > 0 ? ctx.enemy : null, d = derived();
+  if(combat.ssHood) return 0;
+  if(combat.ssSpecterUntil !== undefined && (combat.turnCount || 0) <= combat.ssSpecterUntil) return 0;
+  const sign = ssSign();
+  if(enemy){
+    const nariz = ssOn(68);
+    if(nariz && chance(0.15)){ log(`<b>${nariz.name}</b>: el golpe de ${enemy.name} no te hace nada.`); return 0; }
+    if(sign === 11 && chance(0.15)){ log(`<b>Peces</b>: el golpe de ${enemy.name} resbala.`); return 0; }
+    if(ssOn(32) && combat.ssShellTurn !== combat.turnCount){ combat.ssShellTurn = combat.turnCount; amount = Math.ceil(amount*0.5); }
+    if(enemy.ssAnchor > (combat.turnCount || 0) && ssOn(62)) amount = Math.ceil(amount*0.70);
+    if(ctx.aoe && ssOn(65)) amount = Math.ceil(amount*0.60);
+    const melee = enemy.tpl && enemy.tpl.frontline && !ctx.aoe;
+    if(melee && ssOn(94)) applyStatus(enemy, {name:'Quemadura', duration:3, stack:true, maxStack:3}, false);
+    const brazal = ssDefending() && ssOn(44);
+    if(brazal){ const got = ssHitEnemy(enemy, skillBaseDamage()); log(`<b>${brazal.name}</b>: devuelves el golpe a ${enemy.name} (${got} de daño).`); }
+  }
+  if(ssOn(60)) amount = Math.ceil(amount*(1 - Math.min(0.30, Math.floor(state.char.gold/5000)*0.01)));
+  if(sign === 1) amount = Math.ceil(amount*0.75); else if(sign === 6) amount = Math.ceil(amount*0.88);
+  return Math.max(1, amount);
+}
+function ssAfterDamage(shieldBroke){
+  if(!combat || combat.over || state.char.curHP <= 0) return;
+  const d = derived(), base = skillBaseDamage();
+  const coraza = shieldBroke && ssOn(50);
+  if(coraza){ livingEnemies().forEach(e=> ssHitEnemy(e, base*0.80)); log(`<b>${coraza.name}</b>: tu escudo estalla en esquirlas contra todos los enemigos.`); }
+  const tunica = state.char.curHP/d.maxHP < 0.25 && ssOn(95);
+  if(tunica && !ssFired('ss95')){ livingEnemies().forEach(e=> ssHitEnemy(e, base)); const got = ssHealPlayer(0.30); log(`<b>${tunica.name}</b>: estallas en llamas. Todos los enemigos arden y recuperas ${got} de vida.`); }
+}
+// Golpes mortales, tandas 2 a 4. Devuelve true si una pieza lo evita.
+function ssLethal2(amount){
+  const d = derived();
+  const capa = ssOn(55);
+  if(capa && livingEnemies().length && !ssFired('ss55')){ const e = pick(livingEnemies()), got = ssHitEnemy(e, amount); log(`<b>${capa.name}</b>: el golpe que te mataba se desvía hacia ${e.name} (${got} de daño).`); return true; }
+  const reloj = ssOn(72);
+  if(reloj && combat.ssSnaps && combat.ssSnaps.length && !ssFired('ss72')){
+    const s = combat.ssSnaps[Math.max(0, combat.ssSnaps.length - 2)];
+    state.char.curHP = Math.max(1, s.hp); state.char.curSta = s.sta; state.char.curSpi = s.spi; combat.playerStatuses = s.st.map(x=> Object.assign({}, x));
+    log(`<b>${reloj.name}</b>: la arena sube. Vuelves a como estabas hace dos turnos (${state.char.curHP} de vida).`);
+    return true;
+  }
+  const farol = state.dungeon && !state.dungeon.ssFarol && ssOn(64);
+  if(farol){
+    state.dungeon.ssFarol = true; combat.ssSpecterUntil = (combat.turnCount || 0) + 2; combat.ssSpecterEnd = true; state.char.curHP = 1;
+    log(`<b>${farol.name}</b>: mueres… y sigues en pie como espectro durante 2 turnos. Gana el combate antes de que se apague.`);
+    return true;
+  }
+  const escarabajo = state.dungeon && !state.dungeon.ssScarab && ssOn(84);
+  if(escarabajo){ state.dungeon.ssScarab = true; state.char.curHP = d.maxHP; log(`<b>${escarabajo.name}</b> se rompe: revives con la vida completa.`); return true; }
+  return false;
+}
+// Final de ronda, tandas 2 a 4.
+function ssRoundEnd2(){
+  if(!combat || combat.over) return;
+  const d = derived();
+  if(combat.ssSpecterEnd && (combat.turnCount || 0) > combat.ssSpecterUntil){ combat.ssSpecterEnd = false; combat.ssSpecterUntil = undefined; state.char.curHP = 0; log('El farol se apaga. El espectro se deshace.'); return; }
+  if(state.char.curHP <= 0) return;
+  let pct = 0;
+  const regen = hasStatus(combat.playerStatuses, 'Regeneración');
+  if(regen) pct += 0.03;
+  if(ssOn(79) && (combat.turnCount || 0) >= (combat.ssTrolOff || 0)) pct += 0.05;
+  if(ssSign() === 5) pct += 0.05;
+  if(pct > 0){ const got = ssHealPlayer(pct); if(got > 0) log(`Te regeneras ${got} de vida.`); }
+  ssPlanIntents();
+}
+// 040 Túnica de Pergamino: al perder un estado negativo te curas.
+function ssOnStatusesExpire(before){
+  const it = ssOn(40);
+  if(!it) return;
+  const lost = before - ssNegatives(combat.playerStatuses).length;
+  if(lost > 0 && state.char.curHP > 0){ const got = ssHealPlayer(0.05*lost); if(got > 0) log(`<b>${it.name}</b>: te libras de un mal y recuperas ${got} de vida.`); }
+}
+// 100 Estrella Fugaz: una vez por bajada, el combate perdido se repite desde el principio.
+function ssRetryFight(){
+  const it = state.dungeon && !state.dungeon.ssStar && combat.ssInit && ssOn(100);
+  if(!it) return false;
+  state.dungeon.ssStar = true;
+  const node = combat.node, init = combat.ssInit, d = derived();
+  const group = init.map(x=>{ const e = makeEnemy(x.tpl, state.dungeon.atFloor, state.dungeon.level); e.maxHP = x.maxHP; e.hp = x.maxHP; e.atk = x.atk; return e; });
+  state.char.curHP = d.maxHP; state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi;
+  ['allyHP', 'allyMP', 'allySpirit'].forEach(k=>{ if(state.dungeon[k]) state.dungeon[k] = {}; });
+  log(`<b>${it.name}</b> cruza el techo del laberinto. El combate vuelve a empezar, con todo tu grupo en pie.`);
+  startCombat(group, node);
+  combat.allies.forEach(a=>{ if(!a.guest){ a.hp = a.maxHP; a.statuses = []; } });
+  renderAll();
+  return true;
+}
 
 // ============================================================
 // LA FRAGUA DE HODRAK (2026-10-11, pedido de ariochbu). Un enano herrero que intenta forjar una pieza numerada
@@ -8812,7 +9238,6 @@ function equipItemOnAlly(uid, allyId){
   const idx = state.char.inventory.findIndex(i=>i.kind==='equip' && i.uid===uid);
   if(idx<0) return;
   const item = state.char.inventory[idx];
-  if(item.ssId){ log(`<b>${item.name}</b> es una pieza numerada: solo la puedes llevar tú.`); return; }
   // Misma restricción que el jugador (equipItem): un arma comprada para un
   // rol no la puede llevar un aliado de otro rol. El equipo suelto de
   // combate/cofres nunca lleva styleId, así que sigue siendo universal.
@@ -10284,7 +10709,7 @@ function payAlliesOnExit(){
   allies.forEach(row=>{
     if(row.satisfaction===undefined || row.satisfaction===null) row.satisfaction = ALLY_SATISFACTION_DEFAULT;
     if(row.missed_payments===undefined || row.missed_payments===null) row.missed_payments = 0;
-    const wage = allyWage(row);
+    const wage = ssOn(59) ? 0 : allyWage(row); // 059 Botas del Contable
     if(state.char.gold >= wage){
       state.char.gold -= wage;
       row.missed_payments = 0;
@@ -11550,6 +11975,7 @@ function renderMap(){
   mountLabyrinth(document.getElementById('labyrinth-mount'), dg, {
     level: dg.level, race: state.char.race, style: state.char.style,
     isReachable: (f, n)=> isNodeReachable(dg, f, n),
+    noFog: !!ssOn(48), // 048 Linterna Viva
     onEnter: (f, n)=> enterNode(f, n),
     previewIds: (node, f)=> roomPreviewIds(node.type, dg, f),
     spriteUrl: (id)=> ENEMY_SPRITES[id] || null,
@@ -11763,9 +12189,10 @@ function enterNode(f,n){
     // (ver rewardMult en handleVictory) ya escalaba bien con dg.level; los
     // cofres ahora usan el mismo +8% por piso real.
     const rewardMult = 1 + (dg.level-1)*0.08;
-    const gold = Math.round((rnd(8,18) + f*3) * rewardMult * (1 + titlePerks().gold));
+    const gold = Math.round((rnd(8,18) + f*3) * rewardMult * (1 + titlePerks().gold) * (ssOn(49) ? 1.5 : 1));
     state.char.gold += gold;
     let msg = `Encuentras un cofre. +${gold} de oro.`;
+    if(ssOn(49)){ const extra = generateLoot(f, dg.level||1); if(extra){ addToInventory(extra); msg += ` Tus Garras de Topo sacan algo más: <b>${extra.kind==='potion' ? POTION_TEMPLATES[extra.potionId].name : extra.name}</b>.`; } }
     if(chance(0.6)){
       // El rango del botín (ver GEAR_TIER_MIN_LEVEL) gatea por el piso REAL
       // en el que estás peleando ahora mismo (dg.level) — no por
@@ -12672,6 +13099,10 @@ function effectiveEnemyRes(enemy, resKey){
     if(mal) maleficio = mal.perStatus * Math.min(3, negativeStatusCount(enemy));
   }
   const quebranto = hasStatus(enemy.statuses, 'Quebranto');
+  if(state && state.char && enemy.tpl && ssOn(35)){
+    const dot = hasStatus(enemy.statuses, resKey==='fisico' ? 'Sangrado' : resKey==='fuego' ? 'Quemadura' : resKey==='veneno' ? 'Veneno' : '-');
+    if(dot) maleficio += 5*(dot.stacks || 1);
+  }
   return base - (blessed ? 20 : 0) - (ruina ? (ruina.resPenalty||0) : 0) - (quebranto ? (quebranto.resPenalty||0) : 0) - maleficio;
 }
 // Mermado (armas de Paladín/Hechicero/Sacerdote, 2026-10-02): el enemigo pega
@@ -12921,7 +13352,8 @@ function hiddenFrontGuard(isPlayer){ return isPlayer ? 1 : (1-HIDDEN_FRONT_GUARD
 const ENEMY_CRIT_MULT = 1.3;
 function healMultiplierFor(statuses){
   const c = hasStatus(statuses, 'Corrosion');
-  return c ? c.healMult : 1;
+  const mask = hasStatus(statuses, 'Máscara de Llanto'); // 051
+  return (c ? c.healMult : 1) * (mask ? mask.healMult : 1);
 }
 
 function hasStatus(list, name){ return list.find(s=>s.name===name); }
@@ -13037,12 +13469,14 @@ function computeCritEvasion(){
   if(furioso) ev += furioso.evasionDelta/100;
   (combat.playerStatuses||[]).forEach(st=>{ if(st.name!=='Furioso' && st.evasionDelta) ev += st.evasionDelta/100; });
   if(combat.playerPos === 'retaguardia' && ssOn(15)) ev += 0.25; // 015 Manto de Ventisca
+  ev += ssEvasionBonus();
   if(combat.playerDefending) ev = Math.max(ev, 0.5);
   // Ralentizado: -20% de evasión plana mientras dure (corregido 2026-09-26:
   // el texto y el tooltip siempre dijeron -20%, el código aplicaba -15%).
   if(hasStatus(combat.playerStatuses,'Ralentizado')) ev -= 0.20;
   if(hasStatus(combat.playerStatuses,'Paralisis')) ev = 0; // indefenso: la Parálisis anula toda evasión, incluso defendiendo
-  return {crit:d.critChance, evasion:clamp(ev,0.02,ssOn(15) ? 0.75 : 0.6)};
+  const critRaw = d.critChance + ssCritBonus(); // 098 Astrolabio: lo que pasa del 100% se vuelve daño crítico
+  return {crit:Math.min(1, critRaw), critOver: ssOn(98) ? Math.max(0, critRaw - 1) : 0, evasion:clamp(ev,0.02,ssOn(15) ? 0.75 : 0.6)};
 }
 
 // Bono de evasión por estado en un ENEMIGO (2026-09-25, décadas 21+: varias
@@ -13168,7 +13602,17 @@ const CLASS_STATUS_EDGE = {styles:['doblefilo','hechicero'], statuses:['Sangrado
 function applyStatus(target, statusDef, isPlayer){
   if(!statusDef) return false;
   if(isPlayer && combat){
-    if((statusDef.name==='Ralentizado' || statusDef.name==='Paralisis') && ssOn(14)) return false; // 014 Botas del Glaciar
+    if((statusDef.name==='Ralentizado' || statusDef.name==='Paralisis') && ssOn(14)){ // 014 Botas del Glaciar
+      const src = combat.ssCtx && combat.ssCtx.enemy;
+      if(src && src.hp > 0 && !hasStatus(src.statuses, 'Ralentizado')){ src.statuses.push({name:'Ralentizado', duration:2}); log(`<b>Botas del Glaciar</b>: el frío vuelve contra ${src.name}.`); }
+      return false;
+    }
+    if(statusDef.name==='Silencio' && ssOn(39)){ // 039 Marcapáginas de Tinta
+      const src = combat.ssCtx && combat.ssCtx.enemy;
+      if(src && src.hp > 0){ const ex = hasStatus(src.statuses, 'Silencio'); if(ex) ex.duration = 2; else src.statuses.push({name:'Silencio', duration:2}); log(`<b>Marcapáginas de Tinta</b>: ${src.name} se queda sin voz.`); }
+      return false;
+    }
+    if(statusDef.name==='Quemadura' && ssOn(79)) combat.ssTrolOff = (combat.turnCount || 0) + 2; // 079 Piel de Trol
     const delantal = statusDef.name==='Quemadura' && ssOn(9); // 009 Delantal de Escoria
     if(delantal){
       const ex = hasStatus(combat.playerStatuses, 'Escoria'), n = Math.min(5, ((ex && ex.stacks) || 0) + 1);
@@ -13179,6 +13623,13 @@ function applyStatus(target, statusDef, isPlayer){
   } else if(!isPlayer && target && target.tpl && statusDef.stack){
     const cap = statusDef.name==='Sangrado' && ssOn(1) ? 8 : statusDef.name==='Quemadura' && ssOn(10) ? 6 : statusDef.name==='Veneno' && ssOn(21) ? 10 : 0;
     if(cap) statusDef = Object.assign({}, statusDef, {maxStack:cap});
+  }
+  if(!isPlayer && target && target.tpl && combat){
+    const info = STATUS_INFO[statusDef.name];
+    // 037 Pluma del Archivista: +1 turno a Miedo, Confusión y Silencio; los jefes los resisten la mitad.
+    if(['Miedo','Confusion','Silencio'].includes(statusDef.name) && ssOn(37)) statusDef = Object.assign({}, statusDef, {duration:(statusDef.duration || 1) + 1, ssHalfResist:!!target.tpl.boss});
+    // 075 Cuerda del Relojero: los estados negativos que pones duran el doble (no los que quitan el turno).
+    if(info && !info.buff && !['Aturdido','Tambaleo'].includes(statusDef.name) && statusDef.duration < 50 && ssOn(75)) statusDef = Object.assign({}, statusDef, {duration: statusDef.duration*2});
   }
   if(SIM_NO_ALTERATIONS && statusDef.name === 'Corrupción') return false;
   if(statusDef.chance!==undefined){
@@ -13213,7 +13664,7 @@ function applyStatus(target, statusDef, isPlayer){
       const edge = state.char && CLASS_STATUS_EDGE.styles.includes(state.char.style) && CLASS_STATUS_EDGE.statuses.includes(statusDef.name);
       const qb = hasStatus(target.statuses||[], 'Quebranto');
       const resist = (isMental ? (target.mentalResist||0) : (target.statusResist||0)) * (qb ? 1 - (qb.mentalPenalty||0) : 1);
-      effChance *= 1 - resist*(edge ? CLASS_STATUS_EDGE.resistFactor : 1);
+      effChance *= 1 - resist*(edge ? CLASS_STATUS_EDGE.resistFactor : 1)*(statusDef.ssHalfResist ? 0.5 : 1);
       if(edge) effChance = Math.min(0.95, effChance + CLASS_STATUS_EDGE.flat);
     }
     // Amuleto Tier S ('amuleto_s'): +10% de resistencia adicional a
@@ -13242,6 +13693,10 @@ function applyStatus(target, statusDef, isPlayer){
       const ex = hasStatus(list,'Voluntad');
       if(ex) ex.duration = 4; else list.push({name:'Voluntad', duration:4, value:vol.value});
     }
+  }
+  // 083 Vendas Eternas: solo un estado negativo a la vez; el nuevo sustituye al anterior.
+  if(isPlayer && combat && STATUS_INFO[statusDef.name] && !STATUS_INFO[statusDef.name].buff && ssOn(83)){
+    for(let i = list.length - 1; i >= 0; i--){ const info = STATUS_INFO[list[i].name]; if(info && !info.buff && list[i].name !== statusDef.name) list.splice(i, 1); }
   }
   const existing = list.find(s=>s.name===statusDef.name);
   if(existing && statusDef.stack){
@@ -13491,7 +13946,7 @@ function applyEquippedSpecials(target, dmgDealt, skill){
       const before = state.char.curHP;
       state.char.curHP = Math.min(d.maxHP, state.char.curHP+heal);
       if(state.char.curHP>before) log(`<b>${it.name}</b> te devuelve ${state.char.curHP-before} de vida.`);
-      ssOnPlayerHeal(state.char.curHP-before);
+      ssOnPlayerHeal(state.char.curHP-before, heal);
     } else if(sp.type==='elemental_proc' && skill){
       if(skill.dmgType==='fuego' && chance(sp.chance)){
         applyStatus(target, {name:'Quemadura', duration:3}, false);
@@ -13580,7 +14035,9 @@ function controlDiscountFor(skillId){
 }
 function effectiveSkillCost(skillId, skill){
   if(!skill || !skill.cost) return 0;
+  if(combat && (combat.ssTomo || 0) % 4 === 3 && ssOn(36)) return 0; // 036 Tomo Mordedor Domado: cada cuarta habilidad es gratis
   let v = Math.max(0, skill.cost.valor - controlDiscountFor(skillId));
+  if(skillId==='grito_guerra' && ssOn(27)) v = Math.ceil(v/2); // 027 Tambor del Trueno
   if(skill.cost.tipo==='espiritu' && combat && combat.espHalfNext) v = Math.ceil(v/2); // Piedra de Voluntad A+
   return v;
 }
@@ -13620,7 +14077,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
   // resource check
   if(skill.cost && !isRepeat){
     const pool = skill.cost.tipo==='estamina' ? state.char.curSta : state.char.curSpi;
-    if(pool < effectiveSkillCost(skillId, skill)){ log('No tienes recursos suficientes para eso.'); return; }
+    if(pool < effectiveSkillCost(skillId, skill) && !ssGoldCovers(skillId, skill)){ log('No tienes recursos suficientes para eso.'); return; }
   }
   if(skill.requiresPos && combat.playerPos !== skill.requiresPos && !skill.penaltyIfFrente){
     log(`Necesitas estar en ${skill.requiresPos==='frente'?'el Frente':'la Retaguardia'} para usar ${skill.name}.`);
@@ -13631,12 +14088,14 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
   if(skill.utility==='defend'){
     combat.playerDefending = true;
     log('Te preparas para recibir el próximo golpe.');
+    if(ssOnDefend()) return;
     await endPlayerTurn(); return;
   }
   if(skill.utility==='reposition'){
     combat.playerPos = combat.playerPos==='frente' ? 'retaguardia' : 'frente';
     combat.ssMoved = true;
     log(`Te mueves a ${combat.playerPos==='frente'?'el Frente':'la Retaguardia'}.`);
+    if(ssOnReposition()) return;
     await endPlayerTurn(); return;
   }
   // Escudo del Juramento (Paladín) — reusa el mismo pozo de escudo genérico
@@ -13658,7 +14117,8 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
   if(skill.cost && !isRepeat){
     const discount = controlDiscountFor(skillId);
     const paid = effectiveSkillCost(skillId, skill);
-    if(skill.cost.tipo==='estamina') state.char.curSta -= paid;
+    if(ssPay(skill, paid)) log(`<b>Cetro del Avaro</b>: pagas ${paid*10} de oro en vez de MP.`);
+    else if(skill.cost.tipo==='estamina') state.char.curSta -= paid;
     else state.char.curSpi -= paid;
     if(skill.cost.tipo==='espiritu'){
       if(combat.espHalfNext){ combat.espHalfNext = false; log(`<b>Piedra de Voluntad</b>: ${skill.name} te costó la mitad de Espíritu.`); }
@@ -13713,6 +14173,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
     if(anillo){ const cost = Math.round(d.maxHP*0.10); state.char.curHP = Math.max(1, state.char.curHP - cost); log(`<b>${anillo.name}</b> se cobra ${cost} de tu vida.`); }
   }
 
+  ssCastStart(skillId, isRepeat);
   // resolve target(s)
   let targets = [];
   const resolvedMode = resolvedTargetMode(skill);
@@ -13754,9 +14215,15 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
     targets = [];
   }
   // 011 Vara de Hielo Negro: Lanza de hielo alcanza a toda la línea del objetivo.
-  if(skillId==='lanza_hielo' && targets.length===1 && targets[0].tpl && ssOn(11)){
+  if(targets.length===1 && targets[0].tpl && ((skillId==='lanza_hielo' && ssOn(11)) || (skillId==='danza_cuchillas' && ssOn(52)))){
     targets = lluviaLineIndices(combat.enemies.indexOf(targets[0])).map(i=> combat.enemies[i]).filter(e=> e.hp>0);
   }
+  // 081 Cayado del Faraón: Golpe consagrado alcanza a todo el frente enemigo.
+  if(skillId==='golpe_consagrado' && targets.length===1 && targets[0].tpl && ssOn(81)){
+    const front = livingFrontlineEnemyIndices().map(i=> combat.enemies[i]);
+    if(front.includes(targets[0])) targets = front;
+  }
+  if(skillId==='marca_cazador' && ssOn(96)) targets = livingEnemies(); // 096 Catalejo del Astrónomo
 
   if(skill.utility==='mark'){
     let applyDef = skill.applies;
@@ -13782,6 +14249,18 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
     if(existingBuff) existingBuff.duration = effectiveDuration;
     else combat.playerStatuses.push(Object.assign({}, applySelfDef, {duration: effectiveDuration}));
     log(`Usas ${skill.name}. Te sientes más fuerte.`);
+    const tambor = skillId==='grito_guerra' && ssOn(27);
+    if(tambor && !ssFired('ss27')){
+      const front = livingFrontlineEnemyIndices().map(i=> combat.enemies[i]);
+      front.forEach(e=> applyStatus(e, {name:'Aturdido', duration:1}, false));
+      if(front.length) log(`<b>${tambor.name}</b>: tu grito aturde a todo el frente enemigo.`);
+    }
+    const disco = skillId==='muro_de_fe' && ssOn(82);
+    if(disco && livingAllies().length){
+      const half = (applySelfDef.incomingDmgReduction || 0)/2;
+      livingAllies().forEach(a=>{ const ex = hasStatus(a.statuses, 'Égida'); if(ex){ ex.duration = effectiveDuration; ex.incomingDmgReduction = Math.max(ex.incomingDmgReduction || 0, half); } else a.statuses.push({name:'Égida', duration:effectiveDuration, incomingDmgReduction:half}); });
+      log(`<b>${disco.name}</b>: tu Muro de Fe cubre también a tu grupo.`);
+    }
     // Maza del Guardián (Paladín, 2026-10-02): probabilidad de que Muro de
     // Fe dure 1 turno más y, en Tier S, Espíritu al usarlo.
     if(skillId==='muro_de_fe'){
@@ -13829,7 +14308,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
     return;
   }
 
-  const {crit} = computeCritEvasion();
+  const {crit, critOver} = computeCritEvasion();
   const furioso = hasStatus(combat.playerStatuses,'Furioso');
   const raceObj = race();
   const ceguera = hasStatus(combat.playerStatuses,'Ceguera');
@@ -13852,7 +14331,8 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
 
   targets.forEach(target=>{
     const tenaza = skillId==='ataque_basico' && !!ssOn(8); // 008 Guanteletes de Tenaza: el básico no falla ni se esquiva
-    if(!tenaza && ceguera && chance(ceguera.procChance||0.32)){
+    const sure = ssSureHit(target) || tenaza;
+    if(!sure && ceguera && chance(ceguera.procChance||0.32)){
       log(`La Ceguera hace que tu golpe hacia ${target.name} no encuentre nada.`);
       return;
     }
@@ -13864,7 +14344,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
     // esquivar nada.
     if(target.tpl){
       const dodgeChance = hasStatus(target.statuses,'Paralisis') ? 0 : clamp((target.evasion||0) + enemyStatusEvasionBonus(target.statuses) + levelGapEvasionBonus(monsterLevel, state.char.level) - d.precision, 0.02, 0.85);
-      if(!tenaza && chance(dodgeChance)){
+      if(!sure && chance(dodgeChance)){
         log(`${target.name} esquiva tu ataque.`);
         return;
       }
@@ -13881,6 +14361,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
     // acá si en la práctica queda muy arriba o muy abajo del resto del kit.
     if(state.char.style==='tirador' && skillId==='ataque_basico') base *= 1.6;
     if(skill.dmgType==='hielo' && ssOn(11)) base *= 1.30; // 011 Vara de Hielo Negro
+    base *= ssOutMult(skillId, skill, target);
     const wasSlowed = !!hasStatus(target.statuses||[], 'Ralentizado');
     if(furioso) base *= (furioso.dmgMult||1);
     base *= statusStackDealtMult(combat.playerStatuses.filter(st=> st!==furioso));
@@ -14001,17 +14482,18 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
       }
     }
     // marked passive (all incoming dmg +20%)
-    if(hasStatus(target.statuses,'Marcado')) base *= 1.2;
+    if(hasStatus(target.statuses,'Marcado')) base *= ssOn(96) ? 1.35 : 1.2;
     // Pasiva "mientras viva el acompañante" (2026-09-25, Matriarca Telaraña
     // "Reina del Nido"): reduce el daño que RECIBE este enemigo mientras su
     // compañero siga con vida — desaparece apenas el jugador lo derrota.
-    if(target.tpl && target.tpl.passiveWhileCompanionAlive && target.companionRef && target.companionRef.hp>0){
+    const pico = !!ssOn(46); // 046 Pico del Minero Maldito: ignora las reducciones por compañeros o invocaciones vivas
+    if(!pico && target.tpl && target.tpl.passiveWhileCompanionAlive && target.companionRef && target.companionRef.hp>0){
       base *= (1 - target.tpl.passiveWhileCompanionAlive.reduccion);
     }
     // Autobuffs defensivos del enemigo (Seda Protectora, Caparazón
     // Endurecido, etc. — ver utility:'self_buff' en resolveNewStyleEnemyMove).
     if(!tenaza) (target.statuses||[]).forEach(st=>{ if(st.incomingDmgReduction) base *= (1 - st.incomingDmgReduction); });
-    base *= enemyPassiveTakenMult(target);
+    if(!pico) base *= enemyPassiveTakenMult(target);
 
     // Foco arcano Tier S ('foco_s'): cuando la habilidad consumió un estado
     // (cualquiera de los combos de arriba dejó comboText), +10% de daño más
@@ -14023,7 +14505,8 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
     let isCrit = skill.guaranteedCrit ? true : chance(crit);
     if(combat.critNext && !isRepeat){ isCrit = true; combat.critNextUsed = true; }
     if(wasSlowed && state.char.style==='tirador' && ssOn(13)) isCrit = true; // 013 Arco de Gina
-    if(isCrit) base *= (1.5 + d.critDmgBonus);
+    if(target.tpl && !target.ssActed && ssOn(54)) isCrit = true; // 054 Guantes del Duelista
+    if(isCrit) base *= (1.5 + d.critDmgBonus + (critOver || 0));
 
     let ignore = skillId==='disparo_certero' ? skillBonus('disparo_certero','ignoreResist', skill.ignoreResist) : (skill.ignoreResist||0);
     // Carcaj Tier S ('carcaj_s'): el flag lo deja armado playerUseSkill justo
@@ -14057,6 +14540,8 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
     // Penetración por nivel (2026-09-16): además de la del equipo, todo golpe
     // penetra un poco más a medida que subes de nivel, sin importar el tipo.
     if(resKey) resVal -= d.penetracionNivel*100;
+    if(resKey==='fisico' && resVal>0 && ssOn(49)) resVal *= 0.70; // 049 Garras de Topo
+    if(isCrit && resVal>0 && ssOn(89)) resVal = 0; // 089 Guantes del Acechador
     let dmg = base*(1-resVal/100)*outgoingLevelDiffMult;
     if(hasStatus(target.statuses,'Paralisis')) dmg *= 1.25; // indefenso: mismo trato que recibe el jugador
     if(skill.penaltyIfFrente && combat.playerPos==='frente') dmg *= (1-skill.penaltyIfFrente);
@@ -14077,6 +14562,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
       : {targetKind:'ally', key: target.id, amount:dmg, kind:'dmg'});
     if(skill.selfHealPctOfDmg && !(skillId==='drenaje_de_esencia' && skillBonus('drenaje_de_esencia','healPct',0) <= 0)){
       let healPct = skillId==='golpe_consagrado' ? skillBonus('golpe_consagrado','healPct', skill.selfHealPctOfDmg) : skillId==='drenaje_de_esencia' ? skillBonus('drenaje_de_esencia','healPct',0) : skill.selfHealPctOfDmg;
+      if(skillId==='golpe_consagrado' && ssOn(81)) healPct = 1; // 081 Cayado del Faraón
       // Sello de la Sentencia épico+: Golpe Consagrado cura más contra un
       // enemigo debilitado (puntos porcentuales sumados al % base).
       if(skillId==='golpe_consagrado' && targetWasWeakened){
@@ -14093,7 +14579,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
       const beforeHeal = state.char.curHP;
       state.char.curHP = Math.min(d.maxHP, state.char.curHP+selfHeal);
       if(state.char.curHP>beforeHeal) log(`Recuperas ${state.char.curHP-beforeHeal} de vida.`);
-      ssOnPlayerHeal(state.char.curHP-beforeHeal);
+      ssOnPlayerHeal(state.char.curHP-beforeHeal, selfHeal);
       if(firstHealOfCast) graciaAfterHeal(playerHealSps, combat, 'Tú', amt=>gainPlayerSpirit(amt, 'Milagro'), {isPlayer:true, ally:null, maxHP:d.maxHP});
     }
 
@@ -14175,6 +14661,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
       }
     }
     applyEquippedSpecials(target, dmg, skill);
+    ssAfterHit(skillId, skill, target, dmg, isCrit, turnEffects, isRepeat);
     // Piezas numeradas, efectos al golpear.
     if(target.tpl){
       if(isCrit && ssOn(18)) splashHits.push({dmg: Math.max(1, Math.round(dmg*0.5)), exclude: target, line:true, single:true, label:'El filo de la Lanza de Cristal'});
@@ -14199,6 +14686,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
     }
   });
   if(combat.critNextUsed){ combat.critNext = false; combat.critNextUsed = false; }
+  ssCastEnd(skillId, skill, isRepeat, turnEffects);
   splashHits.forEach(sh=>{
     let pool = livingEnemies().filter(e=>e!==sh.exclude);
     if(sh.line) pool = lluviaLineIndices(combat.enemies.indexOf(sh.exclude)).map(i=> combat.enemies[i]).filter(e=> e!==sh.exclude && e.hp>0);
@@ -14245,8 +14733,12 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
     };
     // Incluye la Piedra de Instinto A+ (doble lanzamiento, mismo mecanismo).
     const equipSpecials = specialsFromEquip(state.char.equip).concat(stoneSpecials('doble_encantamiento'));
-    if(canRepeat && skill.cost && equipSpecials.some(sp=>sp.type==='doble_encantamiento' && chance(sp.chance))){
+    if(canRepeat && skill.cost && (equipSpecials.some(sp=>sp.type==='doble_encantamiento' && chance(sp.chance)) || ssDoubleCast())){
       log(`Tu arma realiza un <b>doble encantamiento</b>: ${skill.name} se relanza sin costo.`);
+      await repeatAndClose();
+      return;
+    }
+    if(canRepeat && skillId==='ataque_basico' && ssOn(34)){ // 034 Guadañas de Mantis: el básico pega dos veces
       await repeatAndClose();
       return;
     }
@@ -14309,10 +14801,19 @@ async function endPlayerTurn(){
   const myCombat = combat;
   combat.turnCount = (combat.turnCount||0) + 1;
   if(state.dungeon && state.dungeon.ultimateCooldown>0) state.dungeon.ultimateCooldown--;
+  const again = ssTurnEnd(); // efectos de fin de turno de las piezas numeradas; true = turno extra (029, 073)
   checkCombatEnd();
-  if(!combat || combat.over) return;
+  if(!combat || combat.over || combat !== myCombat) return;
+  if(again){ renderCombat(); return; }
   await resolveAllyTurns();
   if(combat !== myCombat) return;
+  if(combat.turnCount === 1 && !combat.over && ssOn(53)){ // 053 Violín del Músico: los aliados actúan dos veces en el primer turno
+    checkCombatEnd();
+    if(!combat || combat.over) return;
+    log('<b>Violín del Músico</b>: tu grupo repite el compás.');
+    await resolveAllyTurns();
+    if(combat !== myCombat) return;
+  }
   checkCombatEnd();
   if(!combat || combat.over) return;
   await processEnemyTurns();
@@ -14721,6 +15222,7 @@ function resolveOneAllyTurn(ally){
     }
 
     let dmg = ally.atk;
+    if(ssOn(63) && chance(computeCritEvasion().crit)) dmg *= 1.5; // 063 Sombrero de Tres Picos: tu crítico vale para tus aliados
     if(hasStatus(ally.statuses,'Debilitado')) dmg *= 0.85;
     const inspirado = hasStatus(ally.statuses,'Inspirado');
     if(inspirado) dmg *= (inspirado.dmgMult||1);
@@ -14898,6 +15400,7 @@ function tickStatuses(list, ownerName, target){
       const dmg = Math.max(1, Math.round(baseDamageFromStat(derived().hab)*(onEnemy ? DOT_ENEMY.Veneno : 0.06)*(st.stacks||1)));
       if(target){
         target.hp = Math.max(0, target.hp-dmg); log(`${ownerName} sufre el veneno por ${dmg}.`);
+        if(onEnemy) ssOnVenenoTick(dmg);
         if(onEnemy && saviaPodridaActive() && (st.stacks||1) >= skillBonus('toque_venenoso','maxStack',3)){
           const brotes = combat.enemies.filter(e=> e.hp>0 && e.summoned && e!==target);
           brotes.forEach(e=>{ e.hp = Math.max(0, e.hp - Math.ceil(e.maxHP*SAVIA_PODRIDA.witherPct)); });
@@ -14942,7 +15445,7 @@ async function processEnemyTurns(){
   // y aura de la Sacerdotisa de las Mareas (auraRegenPct, a todo su grupo).
   const auraRegen = combat.enemies.filter(e=>e.hp>0 && e.tpl && e.tpl.auraRegenPct).reduce((m,e)=>Math.max(m, e.tpl.auraRegenPct), 0);
   combat.enemies.forEach(enemy=>{
-    if(enemy.hp<=0 || enemy.hp>=enemy.maxHP || (enemy.tpl && enemy.tpl.decoy)) return;
+    if(enemy.hp<=0 || enemy.hp>=enemy.maxHP || (enemy.tpl && enemy.tpl.decoy) || ssNoHeal(enemy)) return;
     const pct = (enemy.statuses||[]).reduce((sum,st)=>sum+(st.regenPct||0), 0) + auraRegen;
     if(pct>0){
       const before = enemy.hp;
@@ -14975,7 +15478,9 @@ async function processEnemyTurns(){
   livingAllies().forEach(ally=> tickStatuses(ally.statuses, ally.name, ally));
   const espina = !!ssOn(21); // 021 Espina de Ximena: el Veneno pierde una carga por turno en vez de acabarse
   combat.enemies.forEach(enemy=> decrementStatuses(enemy.statuses, espina));
+  const negBefore = ssNegatives(combat.playerStatuses).length;
   decrementStatuses(combat.playerStatuses);
+  ssOnStatusesExpire(negBefore);
   (combat.allies||[]).forEach(ally=> decrementStatuses(ally.statuses));
 
   // Regeneración de MP/Espíritu del jugador cada ciclo de turno — antes era
@@ -15039,6 +15544,7 @@ function enemyAct(enemy){
   try{ enemyActInner(enemy); } finally { if(combat) combat.ssCtx = null; }
 }
 function enemyActInner(enemy){
+  enemy.ssActed = true;
   if(!enemy.cooldowns) enemy.cooldowns = {};
   Object.keys(enemy.cooldowns).forEach(k=> enemy.cooldowns[k] = Math.max(0, enemy.cooldowns[k]-1));
 
@@ -15049,13 +15555,14 @@ function enemyActInner(enemy){
   // tenía ningún efecto real. Se tira ACÁ, antes de elegir objetivo/bifurcar
   // entre el sistema viejo y el nuevo de IA, para cubrir ambos por igual.
   const enemyMiedo = hasStatus(enemy.statuses,'Miedo');
-  if(enemyMiedo && chance(enemyMiedo.procChance||0.4)){
+  const latigo = !!ssOn(66); // 066 Látigo del Maestro: con Miedo o Confusión ya no pierden el turno, pegan a los suyos
+  if(!latigo && enemyMiedo && chance(enemyMiedo.procChance||0.4)){
     log(`${enemy.name} está paralizado por el Miedo y pierde su turno.`);
     combat.lastAction = {label:'Miedo (pierde turno)', effects:[]};
     return;
   }
   const enemyConfusion = hasStatus(enemy.statuses,'Confusion');
-  if(enemyConfusion && chance(enemyConfusion.procChance||0.35)){
+  if((latigo && (enemyConfusion || enemyMiedo)) || (enemyConfusion && chance(enemyConfusion.procChance||0.35))){
     // 2026-10-08 (pedido explícito): el golpe ya no se pierde — va contra otro
     // enemigo al azar o, si está solo, contra sí mismo. Golpe básico físico.
     const others = combat.enemies.filter(e=> e !== enemy && e.hp > 0);
@@ -15067,7 +15574,7 @@ function enemyActInner(enemy){
     return;
   }
 
-  const target = gameMode() === 'hardmode' ? hardmodeTarget(enemy) : frontlineTarget();
+  const target = ssRetarget(enemy, gameMode() === 'hardmode' ? hardmodeTarget(enemy) : frontlineTarget());
   // La Precisión del enemigo contrarresta la evasión de quien lo recibe —
   // mismo criterio en espejo que ya usa el jugador contra la evasión de un
   // enemigo (ver d.precision en playerUseSkill), ahora también del otro
@@ -15094,10 +15601,11 @@ function enemyActInner(enemy){
       ssMirrorBuff(ab.selfBuff);
       log(`<b>${enemy.name}</b> entra en <b>${ab.label}</b>: ${statusEffectText(ab.selfBuff)} ${ab.selfBuff.duration >= STATUS_PERMANENT_TURNS ? 'hasta el final del combate' : `durante ${ab.selfBuff.duration} turnos`}.`);
     });
-    enemy.pendingAbilityId = pickNewStyleAbilityId(enemy, newStyleCtx(enemy, target));
+    enemy.pendingAbilityId = ssPlanned(enemy, target) || pickNewStyleAbilityId(enemy, newStyleCtx(enemy, target));
     const ab = enemy.tpl.abilities[enemy.pendingAbilityId];
     utilityMove = !!(ab && ab.utility);
   }
+  if(!utilityMove && ssEnemyWhiff(enemy, target)){ delete enemy.pendingAbilityId; return; }
   if(!utilityMove && chance(evasion)){
     delete enemy.pendingAbilityId;
     log(`${enemy.name} ataca a ${target.kind==='ally' ? target.ally.name : 'ti'}, ¡pero esquiva!`);
@@ -15286,6 +15794,19 @@ function enemyActInner(enemy){
   // afligen al jugador afligen a quien esté en el frente, sea quien sea.
   const onPlayer = target.kind==='player';
   const applyToTarget = (statusDef)=> onPlayer ? applyStatus(null, statusDef, true) : applyStatus(target.ally, statusDef, false);
+  // 016 Espejo de Azogue también con los movimientos especiales de las décadas viejas.
+  const OLD_MIRROR = {robar:null, aplastar:null, maldicion_venenosa:null, morder:{name:'Sangrado', duration:2, stack:true, maxStack:3}, picar:{name:'Veneno', duration:2, stack:true, maxStack:3},
+    debilitar:{name:'Debilitado', duration:2}, paralizar:{name:'Paralisis', duration:2}, cegar:{name:'Ceguera', duration:2, procChance:0.32}, atemorizar:{name:'Miedo', duration:2, procChance:0.4}, confundir:{name:'Confusion', duration:2, procChance:0.35}};
+  const espejoViejo = onPlayer && move && (move in OLD_MIRROR) && !enemy.ssMirrored && ssOn(16);
+  if(espejoViejo){
+    enemy.ssMirrored = true;
+    const back = Math.max(1, Math.round(dmg*({aplastar:1.4, robar:0.6, debilitar:0.6, atemorizar:0.7, confundir:0.7, maldicion_venenosa:1.15}[move] || 1)*(1 - totalRes('fisico')/100)));
+    enemy.hp = Math.max(0, enemy.hp - back);
+    if(OLD_MIRROR[move] && enemy.hp > 0) applyStatus(enemy, Object.assign({}, OLD_MIRROR[move]), false);
+    log(`${enemy.name} usa ${moveLabel}… y <b>${espejoViejo.name}</b> se lo devuelve: ${back} de daño.`);
+    combat.lastAction = {label:'¡Reflejado!', effects:[{targetKind:'enemy', key: combat.enemies.indexOf(enemy), amount:back, kind:'dmg'}]};
+    return;
+  }
   if(move==='robar'){ text='intenta robar tu oro'; dmg = Math.round(dmg*0.6); }
   if(move==='morder'){ text='muerde y desgarra, dejando una herida sangrante'; applyToTarget({name:'Sangrado', duration:2, stack:true, maxStack:3}); }
   if(move==='picar'){ text='clava un aguijón cargado de veneno'; applyToTarget({name:'Veneno', duration:2, stack:true, maxStack:3}); }
@@ -15543,6 +16064,7 @@ function pickNewStyleAbilityId(enemy, ctx){
     if(ab.oncePerCombat && enemy.usedOnce && enemy.usedOnce.has(id)) continue;
     if(ab.condition && !ab.condition(ctx)) continue;
     if((ab.utility==='heal_ally' || ab.utility==='self_heal') && enemyHealLocked()) continue;
+    if(ab.utility==='self_heal' && ssNoHeal(enemy)) continue; // 085 Máscara Funeraria
     // Invocación sin espacio (ya tiene el máximo de copias/señuelos vivos):
     // se salta para no desperdiciar el turno.
     if(ab.utility==='summon' && ab.summon){
@@ -15588,7 +16110,7 @@ function resolveNewStyleEnemyMove(enemy, target, enemyCrit){
   const chosenId = enemy.pendingAbilityId || pickNewStyleAbilityId(enemy, ctx);
   delete enemy.pendingAbilityId;
   const ability = tpl.abilities[chosenId];
-  if(ability.cooldown) enemy.cooldowns[chosenId] = ability.cooldown;
+  if(ability.cooldown) enemy.cooldowns[chosenId] = ability.cooldown + (ssOn(73) ? 1 : 0); // 073 Péndulo
   if(ability.oncePerCombat) enemy.usedOnce.add(chosenId);
   const applyDebuffTarget = ()=>{
     if(!ability.debuffTarget) return;
@@ -15661,7 +16183,7 @@ function resolveNewStyleEnemyMove(enemy, target, enemyCrit){
   // del combate, así sirve sin importar cómo se armó el grupo.
   if(ability.utility==='heal_ally'){
     combat.enemyHealReadyAt = combat.turnCount + ENEMY_HEAL_LOCK.turns;
-    const candidates = combat.enemies.filter(e=>e!==enemy && e.hp>0 && e.hp<e.maxHP);
+    const candidates = combat.enemies.filter(e=>e!==enemy && e.hp>0 && e.hp<e.maxHP && !ssNoHeal(e));
     if(candidates.length){
       const woundedTarget = candidates.reduce((a,b)=> (b.hp/b.maxHP) < (a.hp/a.maxHP) ? b : a);
       const healAmt = Math.max(1, Math.round(woundedTarget.maxHP * (ability.healPct||0.10)));
@@ -16201,6 +16723,8 @@ if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
   window.__fragua = (cfg)=>{ cfg = cfg || {}; window.__ficha({style: cfg.style || 'pesada', level:100}); const sc = fraguaState(); sc._riftKeys = cfg.llaves || {cripta:27, hielo:25, circo:30, mina:4}; sc._retFrag = cfg.frag === undefined ? 2 : cfg.frag; sc._fraguaFails = cfg.fallos || 0; flushSave = async ()=>{}; renderSheet = ()=>{}; fraguaOpen = true; renderFragua(); };
   window.__ssCarta = (n)=>{ const it = makeNumberedItem(n); return itemCardHTML(it) + itemArtTileHTML(it, 64, true) + itemArtTileHTML(makeSetItem('voluntad', 'casco', 'legendario'), 64, true); };
   window.__mapa = ()=>{ window.__ficha({style:'pesada', level:100}); cityView = 'map'; renderCityMap(); };
+  window.__ssUsa = async (sid)=>{ if(!combat || combat.over) return 'fin'; const sk = SKILLS[sid], m = resolvedTargetMode(sk); await guardedPlayerUseSkill(sid, m === 'any' ? autoPickEnemyIndex() : null); return combat && !combat.over ? 'sigue' : 'fin'; };
+  window.__ssSkills = ()=> Object.keys(SKILLS).filter(k=> SKILLS[k].style === state.char.style || (style().skills || []).includes(k));
   window.__ssLog = (n)=> state.log.slice(-(n || 12));
   window.__celdaG = CELDA_GUESTS; window.__creditos = ()=> showCredits(()=>{}); window.__modos = (on)=>{ MODES_UNLOCKED = on !== false; };
   window.__celda = (v)=>{ if(v !== undefined) SIM_CELDA = v; return SIM_CELDA; };
@@ -16306,6 +16830,7 @@ function checkCombatEnd(){
   spreadVenenoFromDead();
   if(!combat || combat.over) return;
   if(state.char.curHP<=0){
+    if(!simMode && ssRetryFight()) return; // 100 Estrella Fugaz
     combat.over = true;
     syncAllyHPToDungeon();
     if(simMode){ simOutcome = 'loss'; return; }
@@ -16372,7 +16897,7 @@ function handleVictory(){
   // Las invocaciones/señuelos no cuentan para la recompensa (2026-10-02).
   const rewardEnemyCount = Math.max(1, combat.enemies.filter(e=>!e.summoned).length);
   const xpGain = Math.max(1, Math.round(perKillXP * xpGroupMultiplier(rewardEnemyCount) * (race().id==='humano'?1.1:1) * xpGapMultiplier() * earlyXpBoost(level) * XP_GLOBAL_BOOST));
-  const goldGain = Math.round((rnd(6,14)*rewardEnemyCount + (isBoss?60:isElite?20:0)) * rewardMult * (1 + titlePerks().gold));
+  const goldGain = Math.round((rnd(6,14)*rewardEnemyCount + (isBoss?60:isElite?20:0)) * rewardMult * (1 + titlePerks().gold) * (ssOn(49) ? 1.5 : 1));
   const myXpGain = Math.max(1, Math.round(xpGain * (1 + titlePerks().xp))); // el bono del título es solo del jugador
   state.char.xp += myXpGain;
   state.char.gold += goldGain;
@@ -16569,7 +17094,9 @@ function handleVictory(){
         // generateDungeon(1) nunca pasa por este bloque).
         const prevUltimateUses = state.dungeon.ultimateUses || 0;
         const prevUltimateCooldown = state.dungeon.ultimateCooldown || 0;
+        const prevSs = {ssScarab: state.dungeon.ssScarab, ssStar: state.dungeon.ssStar}; // piezas de "una vez por bajada"
         state.dungeon = generateDungeon(clearedLevel+1);
+        Object.assign(state.dungeon, prevSs);
         state.dungeon.ultimateUses = prevUltimateUses;
         state.dungeon.ultimateCooldown = prevUltimateCooldown;
         updateRecord(clearedLevel+1, 0);
@@ -16581,7 +17108,7 @@ function handleVictory(){
       }});
     }
     buttons.push({label:'Retirarse a la ciudad', primary:!canContinue, onClick:()=>{
-      const tax = Math.round(state.char.gold*0.1 * (1 - titlePerks().tax));
+      const tax = ssOn(59) ? 0 : Math.round(state.char.gold*0.1 * (1 - titlePerks().tax)); // 059 Botas del Contable
       state.char.gold -= tax;
       log(`Regresas a la ciudad conservando tu botín. Se te cobran ${tax} de oro en impuestos.`);
       combat = null;
@@ -16633,9 +17160,11 @@ function handleDefeat(){
     deleteCharacterById(id).then(()=> showOverlay('Aquí termina', `<b>${name}</b> cae en el piso ${lvl} del laberinto y no vuelve a levantarse. En el modo Inmortal solo hay una vida: el personaje ha sido eliminado.`, ()=>{ playLoginAudio(); enterGame(); }));
     return;
   }
-  const lostItems = state.char.inventory.filter(i=>i.kind==='equip').length;
-  state.char.inventory = state.char.inventory.filter(i=>i.kind!=='equip');
-  state.char.gold = Math.round(state.char.gold*(1-DEFEAT_GOLD_LOSS_PCT/100));
+  // Las piezas numeradas no se pierden al caer: su dueño está anotado en la base.
+  const lostItems = state.char.inventory.filter(i=>i.kind==='equip' && !i.ssId).length;
+  state.char.inventory = state.char.inventory.filter(i=>i.kind!=='equip' || i.ssId);
+  state.char.gold = Math.round(state.char.gold*(1-Math.min(100, DEFEAT_GOLD_LOSS_PCT*(ssOn(60) ? 2 : 1))/100)); // 060 Armadura de Oro Macizo: pierdes el doble
+  if(state.char.storyChoices) delete state.char.storyChoices._laurel; // 043 Laurel Dorado
   const d = derived();
   state.char.curHP = Math.round(d.maxHP*0.5);
   state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi;
@@ -17097,7 +17626,7 @@ async function mountCreationChibi(hero, styleId, raceId){
     const meta = creationChibiIndex[key];
     if(!meta || !img0 || !img0.isConnected) return;
     const sheet = new Image();
-    await new Promise((res, rej)=>{ sheet.onload = res; sheet.onerror = rej; sheet.src = `src/assets/chibi/${key}.png?v=5`; });
+    await new Promise((res, rej)=>{ sheet.onload = res; sheet.onerror = rej; sheet.src = `src/assets/chibi/${key}.png?v=6`; });
     if(!img0.isConnected) return;
     const cv = document.createElement('canvas');
     cv.className = 'cr-sprite cr-chibi';
@@ -17633,7 +18162,7 @@ async function mountCampChibi(fig, styleId, raceId){
     const meta = creationChibiIndex[key];
     if(!meta || !img0 || !img0.isConnected) return;
     const sheet = new Image();
-    await new Promise((res, rej)=>{ sheet.onload = res; sheet.onerror = rej; sheet.src = `src/assets/chibi/${key}.png?v=5`; });
+    await new Promise((res, rej)=>{ sheet.onload = res; sheet.onerror = rej; sheet.src = `src/assets/chibi/${key}.png?v=6`; });
     if(!img0.isConnected) return;
     const cv = document.createElement('canvas');
     cv.width = meta.cw; cv.height = meta.ch;

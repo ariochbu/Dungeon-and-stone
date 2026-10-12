@@ -187,7 +187,7 @@ MIRA_IZQUIERDA = {'enemigo_' + n for n in (
     'tirador_bestia', 'doblefilo_draconido', 'paladin_draconido', 'doblefilo_enano', 'paladin_enano', 'pesada_enano',
     'tirador_enano', 'doblefilo_hada', 'paladin_hada', 'pesada_hada', 'tirador_hada', 'paladin_humano',
     'tirador_humano', 'aliado_aldric', 'aliado_delyth', 'aliado_eira', 'aliado_fennwick', 'aliado_kael',
-    'aliado_lyra', 'aliado_neira', 'aliado_vex',
+    'aliado_lyra', 'aliado_neira', 'aliado_vex', 'pesada_humano',
 }
 # Retratos de monstruos: quedan mirando a la IZQUIERDA (hacia el grupo). Acá
 # los que llegaron mirando a la derecha.

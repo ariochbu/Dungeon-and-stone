@@ -32,7 +32,7 @@ function img(src){
   return i.complete && i.naturalWidth > 0 ? i : null;
 }
 function chibiAnim(key){
-  const meta = CHIBI[key], image = meta && img(`src/assets/chibi/${key}.png?v=5`);
+  const meta = CHIBI[key], image = meta && img(`src/assets/chibi/${key}.png?v=6`);
   return image ? new SpriteAnim(image, sheetFromMeta(meta)) : null;
 }
 
@@ -186,7 +186,7 @@ function drawRoom(m, t, dt){
   const here = m.f === dg.atFloor && m.n === dg.atNode, visited = !!dg.visited[m.f + '-' + m.n];
   const reach = !walking && opts.isReachable(m.f, m.n);
   const isRift = node.type === 'rift' && !node.done;
-  const hidden = m.f > dg.atFloor + 1 && !isRift; // niebla: más allá del piso siguiente no se ve (un rift se ve siempre)
+  const hidden = !opts.noFog && m.f > dg.atFloor + 1 && !isRift; // niebla: más allá del piso siguiente no se ve (un rift se ve siempre)
   roundRect(x, y, w, h, 6);
   ctx.fillStyle = hidden ? 'rgba(8,6,10,0.72)' : here ? 'rgba(255,255,255,0.10)' : visited ? 'rgba(8,6,10,0.55)' : 'rgba(8,6,10,0.34)';
   ctx.fill();
