@@ -5503,7 +5503,16 @@ GUARDIAN_VS_CLASS[9] = {pesada:0.58, paladin:1.32, doblefilo:0.76, tirador:0.60,
 BOSS_VS_CLASS[100] = {pesada:1.52, paladin:1.50, doblefilo:0.78, tirador:0.78, mago:0.69, hechicero:0.77,
   baluarte:1.54, verdugo:1.50, custodio:1.50, inquisidor:1.50, danzante:0.79, ejecutor:0.76, ballestero:0.73, francotirador:0.83, piromante:0.64, criomante:0.74, plaguero:0.74, maldecidor:0.80};
 ENEMY_VS_CLASS[8] = ENEMY_VS_CLASS_81.mult; BOSS_VS_CLASS[90] = ENEMY_VS_CLASS_81.boss90; GUARDIAN_VS_CLASS[8] = ENEMY_VS_CLASS_81.guardian;
+// SIN MODIFICADORES INVISIBLES (2026-10-16, pedido de ariochbu; rama sin-invisibles). Con NO_HIDDEN = true se apagan todos
+// los ajustes por senda o por posición que el jugador no ve: las tablas de daño recibido por senda (ENEMY_VS_CLASS,
+// GUARDIAN_VS_CLASS, BOSS_VS_CLASS, ENEMY_VS_CLASS_81 y boss90), el castigo al frente (GUARDIAN_VS_FRONT, _81,
+// COMMON_VS_TANK, _81, VS_FRONT_BOSS, VS_FRONT_CARCELERO), la guardia oculta de los aliados de frente (HIDDEN_FRONT_GUARD),
+// la penetración propia del Arquero (ARQUERO_PENETRACION), la ventaja de estados de Asesino y Hechicero
+// (CLASS_STATUS_EDGE) y la perforación de bloqueo por nivel (TANK_TUNE.blockPierce). Lo visible no cambia.
+// Por defecto false: el juego queda igual. En localhost: __sinInvisibles(true|false).
+let NO_HIDDEN = false;
 function enemyVsClassMult(){
+  if(NO_HIDDEN) return 1;
   const lvl = (state.dungeon && state.dungeon.level) || 0, st = state.char.style, prof = myProfession();
   if(lvl < 1 || lvl > 100 || (lvl <= 40 && !BETA_BALANCE)) return 1;
   if(lvl <= 2) return 1;
@@ -5514,6 +5523,7 @@ function enemyVsClassMult(){
   return of(ENEMY_VS_CLASS[d]) * (combat && combat.node && combat.node.type === 'jefe' ? of(GUARDIAN_VS_CLASS[d]) : 1);
 }
 function guardianVsFront(enemy){
+  if(NO_HIDDEN) return null;
   const lvl = (state.dungeon && state.dungeon.level) || 0;
   const [G, C] = lvl >= GUARDIAN_VS_FRONT_81.from ? [GUARDIAN_VS_FRONT_81, COMMON_VS_TANK_81] : [GUARDIAN_VS_FRONT, COMMON_VS_TANK];
   if(lvl < G.from || lvl > G.to || lvl % 10 === 0 || !enemy.tpl) return null;
@@ -5540,6 +5550,7 @@ function enemyHealLocked(){
 // Valores elegidos tras medir el 2026-10-09 (Guerrero 93% → ~66% y Paladín 76% → ~64% en pisos 65-77).
 const TANK_TUNE = {comboStunChance:0.35, blockPierce:{from:1, perLevel:0.0075, max:0.8}};
 function blockPierceChance(){
+  if(NO_HIDDEN) return 0;
   const lvl = (state.dungeon && state.dungeon.level) || 1, B = TANK_TUNE.blockPierce;
   return Math.max(0, Math.min(B.max, (lvl - B.from) * B.perLevel));
 }
@@ -13141,7 +13152,9 @@ let SIM_REAR_LAST = false; // variante en pruebas (solo localhost): con aliados 
 // a 1 de vida; spread: de 61 en adelante el enemigo reparte sus golpes entre la fila del frente (como en 1-60) en vez de
 // ir siempre al primer aliado de frente; rearAoe: parte del área de jefes y guardianes que llega a los aliados de atrás.
 // reviveAfter: un aliado caído vuelve con el 30% de su vida tras esas rondas (una vez por combate; 0 = no).
-const ALLY_TEST = {hpMult:1, lastBreath:false, spread:false, rearAoe:1, reviveAfter:0};
+// parity: el aliado usa las defensas del jugador con su equipo: resistencia mágica del conjunto contra golpes
+// elementales y reducción de daño por Vigor (0,2% por punto, tope 25%), contando 1 de Vigor por nivel (estimación).
+const ALLY_TEST = {hpMult:1, lastBreath:false, spread:false, rearAoe:1, reviveAfter:0, parity:false};
 function frontlineTarget(){
   // Pisos 1-60 (pedido explícito 2026-09-28): IA propia de los enemigos —
   // acaban SÍ o SÍ con toda la línea frontal antes de tocar la retaguardia.
@@ -13181,6 +13194,7 @@ function dealDamageToAlly(ally, amount){
     amount -= absorbed;
     shieldBroke = ally.shield<=0;
   }
+  if(amount>0 && ally.vigRed) amount = Math.max(1, Math.round(amount*(1 - ally.vigRed)));
   if(amount>0 && simMode && ALLY_TEST.lastBreath && ally.hp > 1 && amount >= ally.hp && !ally.simLastBreath){ ally.simLastBreath = true; amount = ally.hp - 1; }
   if(amount>0 && combat){ const u = allyStatFor(ally); u.taken += Math.min(amount, ally.hp); if(ally.hp - amount <= 0 && u.diedRound == null) u.diedRound = combat.turnCount || 0; }
   if(amount>0) ally.hp = Math.max(0, ally.hp - amount);
@@ -13315,7 +13329,9 @@ function makeCombatAlly(row){
     // (ver allyMaybeSelfPreserve) y ya no ser el objetivo prioritario.
     pos: tpl.frontline ? 'frente' : 'retaguardia',
     maxHP, hp, maxMP, mp, maxSpirit, spirit, atk, statuses:[], shield:0, skillCooldown: 1, // 1: no usan su habilidad en el primer turno
-    res, specials, mentalResist, statusResist
+    res, specials, mentalResist, statusResist,
+    resMagica: simMode && ALLY_TEST.parity ? clamp(equipModsSum(equip,'res_magica'), -60, 80) : 0,
+    vigRed: simMode && ALLY_TEST.parity ? clamp((lvl + equipModsSum(equip,'vig'))*0.002, 0, 0.25) : 0
   };
 }
 const ALLY_SKILL_COOLDOWN = 3; // cada cuántos turnos propios repite su habilidad
@@ -13583,7 +13599,7 @@ function corrosionResPenalty(statuses){
 // para que el retiro de la bonificación de arriba solo le pese al Guerrero.
 // A propósito NO se muestra en ninguna parte (ni estado, ni ficha, ni texto).
 const HIDDEN_FRONT_GUARD = 0.10;
-function hiddenFrontGuard(isPlayer){ return isPlayer ? 1 : (1-HIDDEN_FRONT_GUARD); } // el Paladín la tuvo unas horas; ariochbu se la quitó el mismo 2026-10-08
+function hiddenFrontGuard(isPlayer){ return isPlayer || NO_HIDDEN ? 1 : (1-HIDDEN_FRONT_GUARD); } // el Paladín la tuvo unas horas; ariochbu se la quitó el mismo 2026-10-08
 // Crítico de enemigo (pedido explícito 2026-09-28) — antes NINGÚN enemigo
 // criteaba. Multiplicador conservador a propósito (el jugador usa 1.5x+
 // bono): mejor que arranque sobrio y lo subamos si en la práctica se siente
@@ -13901,7 +13917,7 @@ function applyStatus(target, statusDef, isPlayer){
       // les opone la mitad de su resistencia y parten con +15 puntos de
       // probabilidad (tope 95%). Antes un jefe (resistencia mental 50%) dejaba
       // el Miedo del Hechicero en ~40%.
-      const edge = state.char && CLASS_STATUS_EDGE.styles.includes(state.char.style) && CLASS_STATUS_EDGE.statuses.includes(statusDef.name);
+      const edge = !NO_HIDDEN && state.char && CLASS_STATUS_EDGE.styles.includes(state.char.style) && CLASS_STATUS_EDGE.statuses.includes(statusDef.name);
       const qb = hasStatus(target.statuses||[], 'Quebranto');
       const resist = (isMental ? (target.mentalResist||0) : (target.statusResist||0)) * (qb ? 1 - (qb.mentalPenalty||0) : 1);
       effChance *= 1 - resist*(edge ? CLASS_STATUS_EDGE.resistFactor : 1)*(statusDef.ssHalfResist ? 0.5 : 1);
@@ -14781,7 +14797,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
     // Arquero (2026-10-08, pedido explícito): penetración de armadura propia de
     // la senda — sus golpes físicos ignoran 10 puntos de resistencia física.
     // Era la clase que peor rendía contra jefes muy acorazados (Storm Gush).
-    if(state.char.style==='tirador' && resKey==='fisico') resVal -= ARQUERO_PENETRACION;
+    if(!NO_HIDDEN && state.char.style==='tirador' && resKey==='fisico') resVal -= ARQUERO_PENETRACION;
     specialsFromEquip(state.char.equip).forEach(sp=>{
       if(sp.type==='penetracion_armadura' && resKey==='fisico') resVal -= sp.value*100;
       if(sp.type==='penetracion_magica' && resKey && resKey!=='fisico') resVal -= sp.value*100;
@@ -16161,7 +16177,7 @@ function enemyActInner(enemy){
     const ally = target.ally;
     const allyResKey = elementalType || 'fisico';
     const allyBendicion = hasStatus(ally.statuses,'Bendición');
-    let allyDmg = dmg*(1-(((ally.res && ally.res[allyResKey])||0) + (allyBendicion?allyBendicion.resBonus||0:0) - (elementalType?0:corrosionResPenalty(ally.statuses)))/100);
+    let allyDmg = dmg*(1-(((ally.res && ally.res[allyResKey])||0) + (elementalType ? (ally.resMagica||0) : 0) + (allyBendicion?allyBendicion.resBonus||0:0) - (elementalType?0:corrosionResPenalty(ally.statuses)))/100);
     if(enemyCrit) allyDmg *= ENEMY_CRIT_MULT;
     if(hasStatus(ally.statuses,'Paralisis')) allyDmg *= 1.25; // indefenso: igual que al jugador
     if(ally.pos==='frente') allyDmg *= hiddenFrontGuard(false);
@@ -16519,7 +16535,7 @@ function resolveNewStyleEnemyMove(enemy, target, enemyCrit){
     }
     livingAllies().filter(a=> !frontOnly || a.pos==='frente').forEach(ally=>{
       const aRes = ((ally.res && ally.res.fisico)||0) - corrosionResPenalty(ally.statuses);
-      const aDmg = Math.max(1, Math.round(base*(1-aRes/100)*(ally.pos==='frente' ? 1 : rearFactor*(simMode && enemy.tpl.boss ? ALLY_TEST.rearAoe : 1))));
+      const aDmg = Math.max(1, Math.round(base*(1-aRes/100)*(ally.pos==='frente' ? 1 : rearFactor*(simMode && enemy.tpl.boss && frontAlive ? ALLY_TEST.rearAoe : 1))));
       dealDamageToAlly(ally, aDmg);
       if(ability.applies) applyStatus(ally, Object.assign({}, ability.applies), false);
       effects.push({targetKind:'ally', key:ally.id, amount:aDmg, kind:'dmg'});
@@ -16547,7 +16563,7 @@ function resolveNewStyleEnemyMove(enemy, target, enemyCrit){
   // "+X% si el objetivo está por debajo del Y% de vida" (PDFs de décadas
   // 3 y 4 — auditoría 2026-10-02: antes solo existía como condición de uso
   // y el +X% se perdía).
-  const vsFront = tpl.vsFront || guardianVsFront(enemy);
+  const vsFront = NO_HIDDEN ? null : (tpl.vsFront || guardianVsFront(enemy));
   if(vsFront && (onPlayer ? (combat.playerPos==='frente' && (!vsFront.tanksOnly || state.char.style==='pesada' || state.char.style==='paladin')) : target.ally.pos==='frente')){
     dmg = Math.round(dmg*vsFront.dmgMult);
     if(vsFront.armorBreak){
@@ -16727,7 +16743,7 @@ function simBuildState(cfg){
   const st = {char:{
     id:'sim', slotNumber:1, nickname:'Sim', role:'player', race: cfg.race || 'humano', style: cfg.style,
     level, xp:0, gold:0, missionCurrency:0, curHP:1, curSta:1, curSpi:1,
-    equip, inventory:[{kind:'potion', potionId:'vida_mayor', qty: cfg.potions == null ? 3 : cfg.potions}], itemCounter:0,
+    equip, inventory: cfg.potionsAll ? Object.keys(POTION_TEMPLATES).map(id=> ({kind:'potion', potionId:id, qty: cfg.potionsAll})) : [{kind:'potion', potionId:'vida_mayor', qty: cfg.potions == null ? 3 : cfg.potions}], itemCounter:0,
     maxLevelUnlocked: cfg.dungeonLevel, checkpointLevel: cfg.dungeonLevel, record:{level:cfg.dungeonLevel, floorIdx:0},
     stash:{gold:0, items:[]}, soulSlots, pityGear:0, pityStone:0,
     pets:{owned:{}, equipped:[], pendingFreePulls:0}, checkin:{day:0, lastClaimDate:null}, allies,
@@ -16910,6 +16926,7 @@ function simFightKind(){
 // costando: en el turno en que se mueve, el de Frente pierde su kit y el de Retaguardia queda expuesto.
 function simDefaultArm(situation){
   const st = state.char.style, hpPct = state.char.curHP/(derived().maxHP || 1);
+  if(situation.startsWith('antidoto:')) return /Paralisis|Miedo|Confusion|Silencio|x3/.test(situation) ? 'beber' : 'seguir';
   switch(situation){
     case 'telarana': return st === 'pesada' ? 'salir' : 'quedarse';
     case 'marea': return (st === 'pesada' || st === 'paladin') ? 'defender' : 'ignorar';
@@ -16920,6 +16937,8 @@ function simDefaultArm(situation){
     case 'coste': return st === 'pesada' ? 'gastar' : 'ahorrar';
     case 'definitiva': return 'usar';
     case 'sinpociones': return 'defender';
+    case 'vida': return hpPct < 0.35 ? 'beber' : 'seguir';
+    case 'mp': case 'espiritu': return 'beber';
   }
   return null;
 }
@@ -16928,7 +16947,7 @@ function simChoose(situation, arms){
   const def = simDefaultArm(situation);
   if(def && arms.includes(def) && arms[0] !== def) arms = [def].concat(arms.filter(a=> a !== def));
   if(!SIM_AI.learn) return arms[0];
-  if(!combat.simCtx) combat.simCtx = `${state.char.style}|d${decadeIndexForLevel((state.dungeon && state.dungeon.level) || 1)}|${simFightKind()}`;
+  if(!combat.simCtx) combat.simCtx = `${SIM_AI.tag ? SIM_AI.tag + '|' : ''}${state.char.style}|d${decadeIndexForLevel((state.dungeon && state.dungeon.level) || 1)}|${simFightKind()}`;
   const key = combat.simCtx + '|' + situation, T = simLearnTable(), row = T[key] || (T[key] = {});
   let arm;
   const untried = arms.filter(a=> !row[a] || !row[a][0]);
@@ -17022,6 +17041,35 @@ function simRuleTarget(idx, skillId){
   if(pool.includes(idx)) return idx;
   return pool.slice().sort((a, b)=> combat.enemies[a].hp - combat.enemies[b].hp)[0];
 }
+// CONSUMIBLES (2026-10-16, rama sin-invisibles). Beber gasta el turno, como en el juego (usePotionInCombat). Con la
+// mochila de siempre (3 de vida mayor) se porta como antes: bebe por debajo del 35% de vida. Con todas las pociones
+// (cfg.potionsAll) decide con la tabla de aprendizaje: vida (por debajo del 60%), antídoto según el peor estado que
+// lleve, y MP o Espíritu cuando no le alcanza para su habilidad. El antídoto quita TODOS los estados, también los buenos.
+const SIM_BAD_STATUS = ['Paralisis', 'Miedo', 'Confusion', 'Silencio', 'Corrupción', 'Veneno', 'Quemadura', 'Sangrado', 'Enredado', 'Debilitado', 'Ceguera', 'Armadura Rota', 'Corrosion', 'Marcado', 'Ralentizado'];
+function simHasPotion(id){ return state.char.inventory.some(i=> i.kind === 'potion' && i.potionId === id && i.qty > 0); }
+function simPotionChoice(d){
+  if(decreeOn('sinpociones')) return null;
+  const hpPct = state.char.curHP / (d.maxHP || 1);
+  const many = simHasPotion('antidoto') || simHasPotion('vida_menor') || simHasPotion('estamina');
+  if(!many) return (simHasPotion('vida_mayor') && hpPct < 0.35) ? 'vida_mayor' : null;   // mochila vieja: como siempre
+  if(hpPct < 0.6 && simChoose('vida', ['beber', 'seguir']) === 'beber'){
+    if(hpPct < 0.45 && simHasPotion('vida_mayor')) return 'vida_mayor';
+    if(simHasPotion('vida_menor')) return 'vida_menor';
+    if(simHasPotion('vida_mayor')) return 'vida_mayor';
+  }
+  const bad = SIM_BAD_STATUS.find(n=> hasStatus(combat.playerStatuses || [], n));
+  if(bad && simHasPotion('antidoto')){
+    const st = hasStatus(combat.playerStatuses, bad), tag = bad + (st && st.stacks >= 3 ? 'x3' : '');
+    if(simChoose('antidoto:' + tag, ['beber', 'seguir']) === 'beber') return 'antidoto';
+  }
+  const skills = style().skills.map(id=> SKILLS[id]).filter(sk=> sk && sk.cost);
+  const cheapest = (tipo)=> Math.min(...skills.filter(sk=> sk.cost.tipo === tipo).map(sk=> sk.cost.valor));
+  const needMP = skills.some(sk=> sk.cost.tipo === 'estamina') && state.char.curSta < cheapest('estamina');
+  const needSP = skills.some(sk=> sk.cost.tipo === 'espiritu') && state.char.curSpi < cheapest('espiritu');
+  if(needMP && simHasPotion('estamina') && simChoose('mp', ['beber', 'seguir']) === 'beber') return 'estamina';
+  if(needSP && simHasPotion('espiritu') && simChoose('espiritu', ['beber', 'seguir']) === 'beber') return 'espiritu';
+  return null;
+}
 // Un turno del jugador simulado (lo comparten simOneFight, simFightLoop y por tanto niveles y rifts).
 async function simPlayTurn(skillIds){
   const tc = combat.turnCount, d = derived();
@@ -17030,9 +17078,9 @@ async function simPlayTurn(skillIds){
     await playerUseSkill(tactic, null);
     if(!combat || combat.over || simOutcome || combat.turnCount !== tc) return;
   }
-  const potion = !decreeOn('sinpociones') && state.char.inventory.find(i=> i.kind === 'potion' && i.potionId === 'vida_mayor' && i.qty > 0);
-  if(potion && state.char.curHP / d.maxHP < 0.35){
-    await usePotionInCombat('vida_mayor');
+  const drink = simPotionChoice(d);
+  if(drink){
+    await usePotionInCombat(drink);
     if(!combat || combat.over || simOutcome || combat.turnCount !== tc) return;
   }
   // la habilidad que elija la rotación entre las que se puedan pagar y usar desde donde está
@@ -17236,6 +17284,7 @@ if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
   window.__sim = simRun; window.__simLevel = simLevels;
   // IA del simulador v2: __simIA({rules, learn, eps, persist}) cambia los interruptores y devuelve cómo quedan;
   // __simAprende() devuelve la tabla aprendida (con medias), __simAprende('borrar') la vacía.
+  window.__sinInvisibles = (on)=>{ if(on !== undefined) NO_HIDDEN = !!on; return NO_HIDDEN; };
   window.__simIA = (cfg)=>{ if(cfg) Object.assign(SIM_AI, cfg); return Object.assign({}, SIM_AI); };
   // Aliados en prueba (solo simulador): __aliados({hpMult, lastBreath, spread, rearAoe}); sin argumentos, cómo están.
   window.__aliados = (cfg)=>{ if(cfg) Object.assign(ALLY_TEST, cfg); return Object.assign({}, ALLY_TEST); };

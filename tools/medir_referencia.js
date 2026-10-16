@@ -34,7 +34,20 @@ const save = ()=>{ try{ localStorage.setItem(KEY, JSON.stringify(W.REF.data)); }
 // una celda: clave -> {por variante (senda o senda:profesión): [intentos, éxitos, llega, guardián intentos, guardián ganados]}
 function cell(key){ return W.REF.data[key] || (W.REF.data[key] = {}); }
 function variants(lv, prof){ return prof ? CLS.flatMap(st=> PROFS[st].map(p=> st + ':' + p)) : CLS; }
-const cfgOf = (v, lv, extra)=> Object.assign({style: v.split(':')[0], profession: v.split(':')[1] || null, level: lv, dungeonLevel: lv, n: 1, beta: true}, W.refFor(lv), extra || {});
+// VARIANTE (rama sin-invisibles): opts.variante = {noHidden, ally:{hpMult, parity, rearAoe…}, potionsAll, learn, tag}.
+let VAR = {};
+const cfgOf = (v, lv, extra)=> Object.assign({style: v.split(':')[0], profession: v.split(':')[1] || null, level: lv, dungeonLevel: lv, n: 1, beta: true}, W.refFor(lv), VAR.potionsAll ? {potionsAll: VAR.potionsAll} : {}, extra || {});
+// Calentamiento: recorridos y combates que no cuentan, para que la tabla de aprendizaje de la variante arranque entrenada.
+async function warmUp(n){
+  for(let i = 0; i < n; i++) for(const lv of [15, 25, 35, 45, 55, 65, 75, 85, 95]) for(const st of CLS){
+    W.REF.prog = `calentando ${i} ${lv} ${st}`; await yieldNow();
+    await race(W.__simLevel(cfgOf(st, lv)), 30000);
+  }
+  for(let i = 0; i < n; i++) for(const lv of [20, 30, 40, 50, 60, 70, 80, 90, 100]) for(const st of CLS){
+    if(i % 2 === 0) await yieldNow();
+    await race(W.__sim(cfgOf(st, lv, {node:'jefe'})), 10000);
+  }
+}
 async function runLevel(key, lv, prof, total){
   const vs = variants(lv, prof), per = Math.ceil(total / vs.length), c = cell(key);
   for(const v of vs){
@@ -66,7 +79,12 @@ async function runBoss(key, lv, prof, total){
 W.medirReferencia = async (opts)=>{
   opts = opts || {};
   if(opts.key && opts.key !== KEY){ KEY = opts.key; W.REF.data = load(); }
-  W.__simIA({rules:true, learn:false});
+  VAR = opts.variante || {};
+  if(W.__sinInvisibles) W.__sinInvisibles(!!VAR.noHidden);
+  if(W.__aliados) W.__aliados(Object.assign({hpMult:1, lastBreath:false, spread:false, rearAoe:1, reviveAfter:0, parity:false}, VAR.ally || {}));
+  W.__simIA({rules:true, learn: VAR.learn != null ? !!VAR.learn : false, eps: VAR.eps || 0.10, persist:false, tag: VAR.tag || ''});
+  if(VAR.warm){ await warmUp(VAR.warm); }
+  if(W.__simAliadosUtil) W.__simAliadosUtil(true);
   W.__alter && W.__alter(true);
   const N = opts.n || 204;          // 204 = 34 por senda o 17 por profesión
   const NB = opts.nb || 300;        // jefes: 50 por senda o 25 por profesión
@@ -84,6 +102,7 @@ W.medirReferencia = async (opts)=>{
       if(d >= 8) await runLevel('nivel ' + lv + ' prof', lv, true, N);
     }
   }
+  if(W.__simAliadosUtil){ W.REF.util = W.__simAliadosUtil(); try{ localStorage.setItem(KEY + '.util', JSON.stringify(W.REF.util)); }catch(e){} }
   W.REF.done = true; W.REF.prog = 'terminado';
 };
 W.refFusionar = (otra)=>{ let o = {}; try{ o = JSON.parse(localStorage.getItem(otra)) || {}; }catch(e){} Object.assign(W.REF.data, o); save(); return Object.keys(o).length; };
