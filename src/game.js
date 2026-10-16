@@ -9407,6 +9407,7 @@ function usePotionOutOfCombat(potionId){
 
 async function usePotionInCombat(potionId){
   if(!combat || combat.over) return;
+  if(decreeOn('sinpociones')){ log('El <b>Decreto: Sin pociones</b> no te deja beber en este combate.'); return; }
   if(applyPotionEffect(potionId)){
     await endPlayerTurn();
   }
@@ -12955,7 +12956,7 @@ const DECADE_RULES = {
   3: {name:'Espejismo', icon:'🏝️', intro:'En la corte del Usurpador nadie es quien dice ser. No todos los que te rodean son reales.',
       text:'En cada combate (salvo contra el Usurpador) aparece un enemigo de más que es un <b>espejismo</b>: una copia de otro que no hace daño y se deshace al primer golpe. No se distingue a simple vista; no gastes en él lo mejor que tienes.'},
   4: {name:'Decreto', icon:'⚖️', intro:'En esta isla manda una ley que nadie escribió. Cada combate trae su propio decreto.',
-      text:'Al empezar cada combate se dicta un decreto que dura toda la pelea: <b>Doble coste</b> (tus habilidades cuestan el doble), <b>Curas a medias</b> (toda curación vale la mitad) o <b>Muralla</b> (los enemigos reciben un 30% menos de daño las 2 primeras rondas).'},
+      text:'Al empezar cada combate se dicta un <b>decreto</b> que dura toda la pelea (contra el jefe de la isla, dos). Puede ser cualquiera de estos: Doble coste, Triple coste de MP, Curas a medias, Muralla, Tributo de vida, Filo, Baluarte (su retaguardia es inmune mientras quede alguien en su frente), Anclado (no puedes moverte), Desgaste, Sin pociones o Vigilia (se curan cada ronda). Se anuncia al empezar y lo ves como un estado tuyo.'},
   5: {name:'Marea', icon:'🌊', intro:'El agua sube y baja con un ritmo propio. Escucha la marea.',
       text:'Cada 4 rondas una ola barre el Frente y te quita el 8% de tu vida máxima, salvo que estés en la Retaguardia o te hayas defendido esa ronda. Una ronda antes se oye crecer.'},
   6: {name:'Ley del Caos', icon:'🌀', intro:'Aquí el caos cambia las reglas en cada combate… pero nunca las oculta.',
@@ -12967,17 +12968,37 @@ const DECADE_RULES = {
   9: {name:'Condena', icon:'⛓️', intro:'En la Celda nadie conserva todo lo que trae. Algo tuyo quedará encadenado.',
       text:'En cada combate una de tus habilidades queda <b>encadenada</b> y no se puede usar. Se ve desde el principio en tu menú de habilidades.'},
 };
-const DECREES = [
-  {id:'costes', name:'Decreto: Doble coste', text:'tus habilidades cuestan el doble'},
-  {id:'curas', name:'Decreto: Curas a medias', text:'toda curación vale la mitad'},
-  {id:'muralla', name:'Decreto: Muralla', text:'los enemigos reciben un 30% menos de daño las 2 primeras rondas'},
+// DECREE_CFG: cuántos decretos a la vez, si entran los dos nuevos (tributo, filo) y si van en versión fuerte.
+// Decidido por ariochbu (2026-10-16): un decreto duro por combate y dos contra el jefe de la década.
+let DECREE_CFG = {count:1, bossCount:2, extra:true, extra2:true, strong:true, force:null};
+const DECREES_ALL = [
+  {id:'costes', name:'Decreto: Doble coste', text:'tus habilidades cuestan el doble', strongText:'tus habilidades cuestan dos veces y media'},
+  {id:'curas', name:'Decreto: Curas a medias', text:'toda curación vale la mitad', strongText:'toda curación vale menos de un tercio'},
+  {id:'muralla', name:'Decreto: Muralla', text:'los enemigos reciben un 30% menos de daño las 2 primeras rondas', strongText:'los enemigos reciben un 45% menos de daño las 3 primeras rondas'},
+  {id:'tributo', extra:true, name:'Decreto: Tributo', text:'pagas el 10% de tu vida al empezar', strongText:'pagas el 18% de tu vida al empezar'},
+  {id:'filo', extra:true, name:'Decreto: Filo', text:'los enemigos pegan un 15% más', strongText:'los enemigos pegan un 25% más'},
+  // Tanda 2 (ariochbu, 2026-10-16): triple coste, baluarte, anclado y desgaste son suyos; sin pociones y vigilia, míos.
+  {id:'triple', extra2:true, name:'Decreto: Triple coste', text:'tus habilidades de MP cuestan el triple', excludes:'costes'},
+  {id:'baluarte', extra2:true, name:'Decreto: Baluarte', text:'la retaguardia enemiga es inmune mientras quede alguien en su frente'},
+  {id:'anclado', extra2:true, name:'Decreto: Anclado', text:'no puedes cambiar de posición'},
+  {id:'desgaste', extra2:true, name:'Decreto: Desgaste', text:'cada ronda tú y tus aliados perdéis el 1% de la vida', strongText:'cada ronda tú y tus aliados perdéis el 2% de la vida'},
+  {id:'sinpociones', extra2:true, name:'Decreto: Sin pociones', text:'no puedes usar pociones'},
+  {id:'vigilia', extra2:true, name:'Decreto: Vigilia', text:'los enemigos recuperan el 3% de su vida cada ronda', strongText:'los enemigos recuperan el 4% de su vida cada ronda'},
 ];
+const DECREES = DECREES_ALL; // para los textos de estado
+function decreeOn(id){ return !!(combat && combat.decrees && combat.decrees.includes(id)); }
+function decreeBulwark(t){
+  if(!decreeOn('baluarte') || !t || !t.tpl) return false;
+  const i = combat.enemies.indexOf(t), front = livingFrontlineEnemyIndices();
+  return i >= 0 && front.length > 0 && !front.includes(i);
+}
 function ruleDecade(){ return state.dungeon && combat && !SIM_NO_ALTERATIONS ? decadeIndexForLevel(state.dungeon.level || 1) : -1; }
 function ruleStatusInfo(){
   Object.assign(STATUS_INFO, {
     'Enredado': {buff:false, desc:'Telaraña: no puedes cambiar de posición y recibes un 15% más de daño.'},
     'Furia de la manada': {buff:true, desc:'Manada: pega más por cada compañero caído en este combate.'},
-    'Muralla': {buff:true, desc:'Decreto: recibe un 30% menos de daño.'},
+    'Muralla': {buff:true, desc:'Decreto: recibe menos daño las primeras rondas.'},
+    'Filo': {buff:true, desc:'Decreto: pega más fuerte durante todo el combate.'},
     'Espejismo': {buff:true, desc:'Salón del Usurpador: uno de estos enemigos no es real.'},
   });
   DECREES.forEach(dc=>{ STATUS_INFO[dc.name] = {buff:false, desc:`Decreto de la isla para este combate: ${dc.text}.`}; });
@@ -12987,11 +13008,21 @@ function decadeRulesCombatStart(){
   ruleStatusInfo();
   combat.ruleRound = 0; combat.burnPos = {pos: combat.playerPos, rounds: 0};
   if(dIdx === 4){
-    const dc = pick(DECREES);
-    combat.decree = dc.id;
-    combat.playerStatuses.push({name: dc.name, duration:99, decree:true});
-    if(dc.id === 'muralla') combat.enemies.forEach(e=>{ if(e.hp > 0) e.statuses.push({name:'Muralla', duration:2, incomingDmgReduction:0.30}); });
-    log(`<b>${dc.name}</b>: ${dc.text}.`);
+    const strong = DECREE_CFG.strong;
+    let pool = DECREES_ALL.filter(dc=> (!dc.extra || DECREE_CFG.extra) && (!dc.extra2 || DECREE_CFG.extra2));
+    if(DECREE_CFG.force) pool = DECREES_ALL.filter(dc=> dc.id === DECREE_CFG.force);
+    combat.decrees = [];
+    const bossFight = combat.node && combat.node.type === 'jefe' && state.dungeon.level % 10 === 0;
+    for(let i = 0; i < (DECREE_CFG.force ? 1 : bossFight ? DECREE_CFG.bossCount : DECREE_CFG.count) && pool.length; i++){
+      const dc = pool.splice(rnd(0, pool.length - 1), 1)[0];
+      pool = pool.filter(o=> o.id !== dc.excludes && o.excludes !== dc.id); // doble y triple coste no van juntos
+      combat.decrees.push(dc.id);
+      combat.playerStatuses.push({name: dc.name, duration:99, decree:true});
+      if(dc.id === 'muralla') combat.enemies.forEach(e=>{ if(e.hp > 0) e.statuses.push({name:'Muralla', duration: strong ? 3 : 2, incomingDmgReduction: strong ? 0.45 : 0.30}); });
+      if(dc.id === 'tributo'){ const d = derived(), pay = Math.round(d.maxHP*(strong ? 0.18 : 0.10)); state.char.curHP = Math.max(1, state.char.curHP - pay); }
+      if(dc.id === 'filo') combat.enemies.forEach(e=>{ if(e.hp > 0) e.statuses.push({name:'Filo', duration:99, dmgMult: strong ? 1.25 : 1.15}); });
+      log(`<b>${dc.name}</b>: ${strong && dc.strongText ? dc.strongText : dc.text}.`);
+    }
   }
   if(dIdx === 3){
     // El espejismo es un enemigo DE MÁS (copia de uno real): convertir a uno real en falso hacía la isla más fácil.
@@ -13025,6 +13056,14 @@ function decadeRulesRoundEnd(){
       if(safe) log('La ola barre el Frente' + (combat.playerPos !== 'frente' ? ', pero estás atrás.' : ' y la aguantas defendiéndote.'));
       else { const dmg = Math.max(1, Math.round(d.maxHP*0.08)); dealDamageToPlayer(dmg); log(`La ola barre el Frente: <b>${dmg}</b> de daño.`); }
     }
+  }
+  if(dIdx === 4){
+    if(decreeOn('desgaste')){
+      const k = DECREE_CFG.strong ? 0.02 : 0.01;
+      dealDamageToPlayer(Math.max(1, Math.round(d.maxHP*k)));
+      livingAllies().forEach(a=>{ a.hp = Math.max(1, a.hp - Math.max(1, Math.round(a.maxHP*k))); });
+    }
+    if(decreeOn('vigilia')) combat.enemies.forEach(e=>{ if(e.hp > 0 && e.hp < e.maxHP && !e.mirage) e.hp = Math.min(e.maxHP, e.hp + Math.round(e.maxHP*(DECREE_CFG.strong ? 0.04 : 0.03))); });
   }
   if(dIdx === 8){
     const bp = combat.burnPos;
@@ -13618,7 +13657,7 @@ const ENEMY_CRIT_MULT = 1.3;
 function healMultiplierFor(statuses){
   const c = hasStatus(statuses, 'Corrosion');
   const mask = hasStatus(statuses, 'Máscara de Llanto'); // 051
-  return (c ? c.healMult : 1) * (mask ? mask.healMult : 1) * (combat && combat.decree === 'curas' ? 0.5 : 1); // Decreto (41-50)
+  return (c ? c.healMult : 1) * (mask ? mask.healMult : 1) * (decreeOn('curas') ? (DECREE_CFG.strong ? 0.30 : 0.5) : 1); // Decreto (41-50)
 }
 
 function hasStatus(list, name){ return list.find(s=>s.name===name); }
@@ -14304,7 +14343,8 @@ function effectiveSkillCost(skillId, skill){
   let v = Math.max(0, skill.cost.valor - controlDiscountFor(skillId));
   if(skillId==='grito_guerra' && ssOn(27)) v = Math.ceil(v/2); // 027 Tambor del Trueno
   if(skill.cost.tipo==='espiritu' && combat && combat.espHalfNext) v = Math.ceil(v/2); // Piedra de Voluntad A+
-  if(combat && combat.decree === 'costes') v *= 2; // Decreto (41-50)
+  if(decreeOn('costes')) v = Math.ceil(v*(DECREE_CFG.strong ? 2.5 : 2)); // Decreto (41-50)
+  if(decreeOn('triple') && skill.cost.tipo === 'estamina') v *= 3;
   return v;
 }
 
@@ -14361,6 +14401,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
   }
   if(skill.utility==='reposition'){
     if(hasStatus(combat.playerStatuses, 'Enredado')){ log('Estás <b>Enredado</b> en la telaraña: no puedes cambiar de posición.'); return; }
+    if(decreeOn('anclado')){ log('El <b>Decreto: Anclado</b> te impide cambiar de posición en este combate.'); return; }
     combat.playerPos = combat.playerPos==='frente' ? 'retaguardia' : 'frente';
     combat.ssMoved = true;
     log(`Te mueves a ${combat.playerPos==='frente'?'el Frente':'la Retaguardia'}.`);
@@ -14819,6 +14860,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
     // Ley del Caos de inmunidad: el golpe no entra. Antes la resistencia 100 se quedaba en ~70-90 porque las
     // penetraciones (Arquero, equipo, nivel) se le restaban después (encontrado el 2026-10-16).
     if(target.tpl && lawImmune(target.statuses, resKey==='fisico' ? 'fisico' : 'magico')){ dmg = 0; log(`${target.name} es inmune a ese tipo de golpe (Ley del Caos).`); }
+    if(decreeBulwark(target)){ dmg = 0; log(`${target.name} está a cubierto tras su frente (Decreto: Baluarte).`); }
     target.hp = Math.max(0, target.hp - dmg);
     // Reflejo de daño (2026-09-25, pedido explícito, "Espejo Viviente" y
     // similares): "100 de daño con 20% de reflejo = 20 de daño reflectado" —
@@ -15578,7 +15620,7 @@ function resolveOneAllyTurn(ally){
     // Mismo trato de brecha de nivel que el jugador — un aliado usa el
     // nivel DE SU DUEÑO como referencia, no tiene el suyo propio para esto.
     dmg = Math.max(1, Math.round(dmg*(1-resVal/100)*levelDiffDamageMult(state.char.level, monsterEffectiveLevel())));
-    if(lawImmune(enemyTarget.statuses, resKey==='fisico' ? 'fisico' : 'magico')) dmg = 0; // Ley del Caos: ver playerUseSkill
+    if(lawImmune(enemyTarget.statuses, resKey==='fisico' ? 'fisico' : 'magico') || decreeBulwark(enemyTarget)) dmg = 0; // Ley del Caos / Baluarte: ver playerUseSkill
     enemyTarget.hp = Math.max(0, enemyTarget.hp - dmg);
     log(skillText
       ? `<b>${ally.name}</b> ${skillText} ${enemyTarget.name}: ${dmg} de daño.`
@@ -16874,7 +16916,7 @@ async function simOneFight(cfg){
   while(combat && !combat.over && !simOutcome && guard++ < 400){
     const tc = combat.turnCount, d = derived();
     const potion = state.char.inventory.find(i=> i.kind === 'potion' && i.potionId === 'vida_mayor' && i.qty > 0);
-    if(potion && state.char.curHP / d.maxHP < 0.35){ await usePotionInCombat('vida_mayor'); }
+    if(potion && !decreeOn('sinpociones') && state.char.curHP / d.maxHP < 0.35){ await usePotionInCombat('vida_mayor'); }
     else {
       // la habilidad de daño más fuerte que se pueda pagar y usar desde donde está
       const ok = (id)=>{
@@ -16904,7 +16946,7 @@ async function simFightLoop(){
   while(combat && !combat.over && !simOutcome && guard++ < 400){
     const tc = combat.turnCount, d = derived();
     const potion = state.char.inventory.find(i=> i.kind === 'potion' && i.potionId === 'vida_mayor' && i.qty > 0);
-    if(potion && state.char.curHP / d.maxHP < 0.35){ await usePotionInCombat('vida_mayor'); }
+    if(potion && !decreeOn('sinpociones') && state.char.curHP / d.maxHP < 0.35){ await usePotionInCombat('vida_mayor'); }
     else {
       const ok = (id)=>{
         if(combat.chained === id) return false;
@@ -17045,6 +17087,7 @@ if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
   window.__celdaVer = (level, cfg)=>{ const {st} = simBuildState(Object.assign({style:'pesada', level:100, dungeonLevel:level}, cfg || {})); state = st; state.log = []; const d = derived(); state.char.curHP = d.maxHP; state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi; save = ()=>{}; lsGet = ()=> null; lsSet = ()=>{}; const dg = Object.assign(generateDungeon(level), {allyHP:{}, allyMP:{}, allySpirit:{}}); state.dungeon = dg; showScreen('screen-game'); const f = dg.floors.length - 1; dg.atFloor = f; dg.atNode = 0; startCombat(buildEncounterGroup('jefe', f, level), dg.floors[f][0]); };
   window.__riftVer = (theme, level, cfg)=>{ const {st} = simBuildState(Object.assign({style:'pesada', level: level, dungeonLevel: level}, cfg || {})); state = st; state.log = []; const d = derived(); state.char.curHP = d.maxHP; state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi; save = ()=>{}; SIM_RIFT = {theme, force:true}; const dg = Object.assign(generateDungeon(level), {allyHP:{}, allyMP:{}, allySpirit:{}}); state.dungeon = dg; showScreen('screen-game'); let pos = null; dg.floors.forEach((fl, f)=> fl.forEach((n, i)=>{ if(n.type === 'rift') pos = [f, i]; })); if(cfg && cfg.cerca && pos){ dg.atFloor = pos[0] - 1; dg.atNode = 0; for(let f = 0; f < pos[0]; f++) dg.visited[f + '-0'] = true; } renderAll(); return pos; };
   // Castigo por caer: __muerte(nivel, piso) mata al personaje ahí; __bolsa() enseña la bolsa; __nivel(n) entra al nivel n.
+  window.__decreto = (cfg)=>{ if(cfg) Object.assign(DECREE_CFG, cfg); return DECREE_CFG; };
   window.__votos = (v)=>{ if(v){ state.dungeon.vows = v; renderAll(); return vowsLine(); } showVowsOverlay(p=> console.log('votos', p)); };
   window.__muerte = (lvl, floor)=>{ state.dungeon.level = lvl; state.dungeon.atFloor = floor || 0; handleDefeat(); };
   window.__bolsa = ()=> ({bag: lostBag(), inv: state.char.inventory.filter(i=> i.kind === 'equip').length, gold: state.char.gold});
