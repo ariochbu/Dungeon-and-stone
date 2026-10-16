@@ -5,6 +5,13 @@ incluidas). Escrito el 2026-10-16. **No cambia nada del juego**: es un informe c
 local (navegador contra `python -m http.server`, sin iniciar sesión, todo en `simMode`). No se tocó la base de datos, Supabase,
 `main` ni el despliegue.
 
+**Segunda parte:** `plan-reestructuracion.md` (en esta misma rama) trae lo siguiente:
+- las tablas completas de crecimiento por nivel, hoy y propuestas;
+- el plan paso a paso con tiempos;
+- los objetivos por rango de equipo y los cambios de kit por senda;
+- la lista de constantes que se borran o se fusionan y la reorganización del código;
+- el simulador nuevo, que ya se mueve, se defiende, lee las reglas y aprende, con sus medidas.
+
 Convenciones del documento:
 
 - **[fuente]**: dato tomado de la fuente enlazada.
