@@ -59,55 +59,7 @@ W.search = async (fn, lv, target, base, set, n, steps, lo0, hi0)=>{
 W.BOSS_BASE = {10:{hp:0.24,atk:0.50},20:{hp:0.80,atk:0.80},30:{hp:1.05,atk:1.00},40:{hp:0.87,atk:0.82},50:{hp:1.42,atk:1.45},60:{hp:1.85,atk:2.05},70:{hp:1.90,atk:2.10},80:{hp:1.89,atk:2.04}};
 W.BOSS_TARGET = {10:65,20:65,30:65,40:65,50:60,60:50,70:40,80:30};
 W.setBoss = (lv)=> (hp, atk)=> (lv <= 40 ? W.__simTuneBeta : W.__simTune)(lv, hp, atk);
-// Daño de una senda en el nivel lv (índice lv/10) hasta que ESA senda quede en el objetivo.
-W.fitClass = async (st, lv, target, n)=>{
-  const idx = lv / 10, arr = W.__classDmg[st];
-  let lo = 0.5, hi = 1.7, v = arr[idx], pct = null;
-  for(let i = 0; i < 5; i++){
-    arr[idx] = +v.toFixed(3);
-    let w = 0, k = 0;
-    for(let j = 0; j < n; j++){ const r = await W.fight(st, lv); if(r === null) continue; k++; w += r; }
-    pct = k ? Math.round(w / k * 100) : null;
-    if(pct === null || Math.abs(pct - target) <= 6) break;
-    if(pct > target) hi = v; else lo = v;            // gana de más → menos daño
-    v = Math.sqrt(lo * hi);
-  }
-  arr[idx] = +v.toFixed(3);
-  return {v: +v.toFixed(2), pct};
-};
-W.calibBosses = async (levels)=>{
-  W.calib = W.calib || {};
-  for(const lv of levels){
-    const t = W.BOSS_TARGET[lv], rec = {};
-    rec.a = await W.search(W.fight, lv, t, W.BOSS_BASE[lv], W.setBoss(lv), 20, 6);
-    rec.cls = {};
-    for(const st of W.CLS) rec.cls[st] = await W.fitClass(st, lv, t, 24);
-    rec.b = await W.search(W.fight, lv, t, {hp: rec.a.hp, atk: rec.a.atk}, W.setBoss(lv), 30, 5, 0.75, 1.33);
-    rec.final = await W.measure(W.fight, lv, 30);
-    W.calib[lv] = rec; W.calibStep = lv;
-  }
-  W.calibDone = true;
-};
-
-// ---- Segunda vuelta: daño de clase suavizado, jefes otra vez y pisos ----
-// Valores por nivel [1,10,...,80] tras suavizar el ajuste senda a senda.
-W.CLASS_DMG_SMOOTH = {
-  pesada:    [1, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.70],
-  paladin:   [1, 0.80, 0.85, 0.90, 0.85, 0.90, 0.80, 0.85, 0.95],
-  doblefilo: [1, 1.10, 1.15, 1.10, 1.05, 1.00, 1.00, 1.05, 1.20],
-  tirador:   [1, 1.12, 1.10, 1.10, 1.12, 1.10, 1.20, 1.15, 1.15],
-  mago:      [1, 1.15, 0.85, 0.85, 1.00, 0.95, 1.20, 1.20, 1.00],
-  hechicero: [1, 1.30, 1.30, 1.40, 1.30, 1.30, 1.60, 1.67, 1.67],
-};
-W.calibBosses2 = async (start)=>{
-  Object.keys(W.CLASS_DMG_SMOOTH).forEach(st=> W.CLASS_DMG_SMOOTH[st].forEach((v, i)=>{ W.__classDmg[st][i] = v; }));
-  W.calib2 = {};
-  for(const lv of [10, 20, 30, 40, 50, 60, 70, 80]){
-    const rec = await W.search(W.fight, lv, W.BOSS_TARGET[lv], start[lv], W.setBoss(lv), 30, 6, 0.7, 1.45);
-    rec.final = await W.measure(W.fight, lv, 40);
-    W.calib2[lv] = rec; W.calibStep = 'b' + lv;
-  }
-};
+// (fitClass, calibBosses y calibBosses2 ajustaban la curva de daño por clase, borrada el 2026-10-16.)
 // Pisos: un factor por década sobre normales, élites y guardianes a la vez.
 W.FLOOR_BASE = [
   {regular:[1, 1], elite:[1, 1], guardian:[0.60, 0.70]},
@@ -144,7 +96,6 @@ W.calibFloors = async ()=>{
     W.calibStep = 'f' + dec;
   }
 };
-W.calibAll2 = async (start)=>{ W.calibDone = false; await W.calibBosses2(start); await W.calibFloors(); W.calibDone = true; };
 
 // ---- Tercera vuelta (2026-10-08): pisos 21-80 con los objetivos de ariochbu ----
 // 1-20: 90% (no se tocan), 21-40: 80%, 41-60: 70%, 61-80: 60%. Se mide SIN

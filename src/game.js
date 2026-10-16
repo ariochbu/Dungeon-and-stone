@@ -5383,8 +5383,7 @@ function slotLabel(slot){
 // nivel y la identidad de clase la "corregía" CLASS_CURVE, que acabó
 // invirtiéndola (Guerrero con la mitad de vida que un Mago). Reparto aprobado
 // por ariochbu: mismo total (5 puntos por nivel), repartido según la senda.
-// Con CLASS_REDESIGN la vida ya no pasa por CLASS_CURVE.
-let CLASS_REDESIGN = true;
+// La curva por clase vieja (CLASS_CURVE) y su interruptor se borraron el 2026-10-16 (código muerto).
 const CLASS_GROWTH = {
   // Guerrero, Paladín y Hechicero ajustados por ariochbu el 2026-10-08 (ya no suman 5 exactos).
   pesada:    {fis:1.2, hab:0.5, esp:0.7, agi:0.6, vig:1.6},
@@ -5396,7 +5395,7 @@ const CLASS_GROWTH = {
   hechicero: {fis:0.4, hab:1.4, esp:1.2, agi:0.6, vig:1.0},
 };
 function statGrowth(key){
-  const g = CLASS_REDESIGN && state.char && CLASS_GROWTH[state.char.style];
+  const g = state.char && CLASS_GROWTH[state.char.style];
   return g ? g[key] : 1;
 }
 // Vida por nivel con el rediseño: Guerrero 100, Paladín ~90, Asesino ~70,
@@ -5591,7 +5590,7 @@ const HP_PER_LEVEL = {pesada:20, tirador:10, doblefilo:10, mago:10, sacerdote:10
 function derived(){
   const am = ssAriochMult(); // 099 Yelmo de Arioch
   const fis = Math.round(baseStat('fis')*am), esp = Math.round(baseStat('esp')*am), hab = Math.round(baseStat('hab')*am), agi = Math.round(baseStat('agi')*am), vig = Math.round(baseStat('vig')*am);
-  let maxHP = Math.round((HP_BASE + state.char.level * ((CLASS_REDESIGN ? HP_PER_LEVEL_REDESIGN : HP_PER_LEVEL)[state.char.style]||40)) * classCurve('hp'));
+  let maxHP = Math.round(HP_BASE + state.char.level * (HP_PER_LEVEL_REDESIGN[state.char.style]||40));
   // MP (barra "MP", internamente curSta) ahora la alimenta SOLO Habilidad —
   // antes era fis×3+hab×2. Efecto esperado y ya avisado: Guerrero/Arquero/
   // Asesino, que hoy no invierten nada en Habilidad, van a notar su MP más
@@ -5706,79 +5705,8 @@ function scaleStatValue(){
 function baseDamageFromStat(statVal){
   return 8 + statVal*2.2 + state.char.level*1.5;
 }
-// Equilibrio de clases (2026-10-02): multiplicadores de vida y daño por
-// clase en cada década (niveles 10, 20, 30, 40, 50 y 60, interpolados
-// linealmente entre medio), calibrados con simulaciones contra los jefes de
-// década (ver DECADE_BOSS_TUNING) para que todas las clases rindan parecido
-// en cada tramo del laberinto.
-const CLASS_CURVE_LEVELS = [1,10,20,30,40,50,60,70,80,90,100]; // nivel 1 = neutro (sin ajuste)
-const CLASS_CURVE = {
-  pesada:    {hp:[1.00,0.85,0.77,0.69,0.62,0.55,0.49,0.49,0.49,0.49], dmg:[1.00,0.92,0.88,0.83,0.79,0.74,0.70,0.70,0.70,0.70]},
-  tirador:   {hp:[1.00,0.69,0.77,0.87,0.98,1.10,1.24,1.24,1.24,1.24], dmg:[1.00,0.83,0.88,0.93,0.99,1.05,1.11,1.11,1.11,1.11]},
-  doblefilo: {hp:[1.00,1.06,1.02,0.99,0.96,0.93,0.90,0.90,0.90,0.90], dmg:[1.00,1.03,1.01,0.99,0.98,0.96,0.95,0.95,0.95,0.95]},
-  mago:      {hp:[1.00,1.02,1.40,1.10,1.00,0.95,1.60,1.60,1.60,1.60], dmg:[1.00,1.01,1.25,1.03,0.97,0.93,1.14,1.14,1.14,1.14]}, // refuerzo vs Matriarca (20) y Storm Gush (60): sin resistencia física, caía ante paralisis/golpes en área
-  paladin:   {hp:[1.00,1.19,1.10,1.02,0.95,0.88,0.81,0.81,0.81,0.81], dmg:[1.00,1.09,1.05,1.01,0.97,0.94,0.90,0.90,0.90,0.90]},
-  // Hechicero 60/70/80 (2026-10-08, pedido explícito): con 0.95/0.97 ganaba 0% a Storm Gush y ~0-7% a los
-  // jefes del 70 y 80. Medido con 50 combates: 70 → 40%, 80 → 30%; el 60 queda cerca del 50% (1.35/1.18 daba 34%, 1.5/1.25 daba 63%).
-  hechicero: {hp:[1.00,0.55,0.60,0.67,0.76,0.85,1.43,1.65,1.88,1.88], dmg:[1.00,0.73,0.77,0.82,0.87,0.92,1.22,1.30,1.39,1.39]},
-};
-// Curva de la BETA (con BETA_ALLY_UNLOCKS): en las décadas 0-3 se juega con
-// menos aliados (0-3), así que las clases frágiles necesitan otro ajuste;
-// niveles 50 y 60 (4 aliados) quedan iguales que en CLASS_CURVE.
-const CLASS_CURVE_BETA = {
-  // Recalibrada 2026-10-04 con el simulador (pedido de ariochbu): Ogro sin
-  // aliados y equipo raro/piedras C; Matriarca 1 aliado, Riakis 2 y Usurpador 3
-  // con rango B/piedras B. Cada senda queda cerca del 65% contra su jefe.
-  // El mago gana a Matriarca y Riakis casi siempre aunque se le baje la curva
-  // (a distancia y con un tanque delante); no se le recortó más para no
-  // hundirlo en los pisos normales.
-  pesada:    {hp:[1.00,0.43,0.58,0.56,0.61,0.55,0.49,0.49,0.49,0.49], dmg:[1.00,0.59,0.76,0.74,0.61,0.74,0.70,0.70,0.70,0.70]},
-  tirador:   {hp:[1.00,1.15,0.83,0.92,1.69,1.10,1.24,1.24,1.24,1.24], dmg:[1.00,1.06,0.91,0.96,1.30,1.05,1.11,1.11,1.11,1.11]},
-  doblefilo: {hp:[1.00,1.22,1.27,1.57,1.34,0.93,0.90,0.90,0.90,0.90], dmg:[1.00,1.11,1.10,1.25,1.05,0.96,0.95,0.95,0.95,0.95]},
-  mago:      {hp:[1.00,0.93,0.70,0.75,0.70,0.95,1.60,1.60,1.60,1.60], dmg:[1.00,0.97,0.85,0.85,0.81,0.93,1.14,1.14,1.14,1.14]},
-  paladin:   {hp:[1.00,0.58,0.67,0.75,0.64,0.88,0.81,0.81,0.81,0.81], dmg:[1.00,0.76,0.82,0.86,0.79,0.94,0.90,0.90,0.90,0.90]},
-  // Hechicero 60/70/80 (2026-10-08, pedido explícito): con 0.95/0.97 ganaba 0% a Storm Gush y ~0-7% a los
-  // jefes del 70 y 80. Medido con 50 combates: 70 → 40%, 80 → 30%; el 60 queda cerca del 50% (1.35/1.18 daba 34%, 1.5/1.25 daba 63%).
-  hechicero: {hp:[1.00,1.25,1.37,1.23,1.21,0.85,1.43,1.65,1.88,1.88], dmg:[1.00,1.10,1.16,0.85,1.11,0.92,1.22,1.30,1.39,1.39]},
-};
-// Multiplicador de DAÑO por senda y nivel con el rediseño (la vida queda en 1):
-// un valor por cada nivel de CLASS_CURVE_LEVELS, interpolado entre medio.
-const CLASS_DMG_REDESIGN = {
-  // x1 para todas las sendas en todos los niveles (decisión de ariochbu,
-  // 2026-10-08): la tabla calibrada jefe a jefe subía y bajaba sin lógica
-  // (Guerrero 0.65, Hechicero hasta 1.67). El equilibrio va en atributos,
-  // habilidades y en el propio jefe. Se deja la estructura por si hace falta.
-  pesada:    [1,1,1,1,1,1,1,1,1,1],
-  paladin:   [1,1,1,1,1,1,1,1,1,1],
-  doblefilo: [1,1,1,1,1,1,1,1,1,1],
-  tirador:   [1,1,1,1,1,1,1,1,1,1],
-  mago:      [1,1,1,1,1,1,1,1,1,1],
-  hechicero: [1,1,1,1,1,1,1,1,1,1],
-};
-function curveAt(v){
-  const L = CLASS_CURVE_LEVELS, lvl = state.char.level||1;
-  // Si la tabla trae menos columnas que CLASS_CURVE_LEVELS se repite la última
-  // (al añadir el nivel 90 una tabla corta daba NaN y el daño mataba de un golpe).
-  const at = (i)=> v[Math.min(i, v.length-1)];
-  if(lvl <= L[0]) return at(0);
-  for(let i=1;i<L.length;i++){
-    if(lvl <= L[i]) return at(i-1) + (at(i)-at(i-1)) * (lvl-L[i-1])/(L[i]-L[i-1]);
-  }
-  return v[v.length-1];
-}
-function classCurve(kind){
-  if(CLASS_REDESIGN) return kind === 'dmg' ? curveAt(CLASS_DMG_REDESIGN[state.char.style] || [1]) : 1;
-  const c = (BETA_BALANCE ? CLASS_CURVE_BETA : CLASS_CURVE)[state.char.style];
-  if(!c) return 1;
-  const v = c[kind], L = CLASS_CURVE_LEVELS, lvl = state.char.level||1;
-  if(lvl <= L[0]) return v[0];
-  for(let i=1;i<L.length;i++){
-    if(lvl <= L[i]) return v[i-1] + (v[i]-v[i-1]) * (lvl-L[i-1])/(L[i]-L[i-1]);
-  }
-  return v[v.length-1];
-}
 function skillBaseDamage(){
-  return baseDamageFromStat(scaleStatValue()) * classCurve('dmg');
+  return baseDamageFromStat(scaleStatValue());
 }
 
 /* ============================================================
@@ -13641,7 +13569,6 @@ function corrosionResPenalty(statuses){
 // plano adicional, siempre, se suma multiplicativamente con cualquier otra
 // reducción (Armadura/Maza/Furioso/Bendición/Tier S, etc.) — no la
 // reemplaza. No aplica a Retaguardia.
-const FRONTLINE_DAMAGE_REDUCTION = 0; // era 0.10; retirada por decisión de ariochbu (2026-10-08): el frente ya no recibe menos daño por estar al frente
 // Guardia interna (pedido explícito de ariochbu, 2026-10-08): los aliados del
 // frente y el Paladín al frente traen un -10% de daño recibido incorporado,
 // para que el retiro de la bonificación de arriba solo le pese al Guerrero.
@@ -16161,7 +16088,7 @@ function enemyActInner(enemy){
     if(enemyCrit) finalDmg *= ENEMY_CRIT_MULT;
     if(state.char.race==='enano') finalDmg -= 2;
     if(combat.playerDefending) finalDmg *= 0.5;
-    if(combat.playerPos==='frente') finalDmg *= (1-FRONTLINE_DAMAGE_REDUCTION) * hiddenFrontGuard(true);
+    if(combat.playerPos==='frente') finalDmg *= hiddenFrontGuard(true);
     const furiosoBuff = hasStatus(combat.playerStatuses,'Furioso');
     if(furiosoBuff && furiosoBuff.incomingDmgReduction) finalDmg *= (1 - furiosoBuff.incomingDmgReduction);
     finalDmg *= playerStatusIncomingMult(); // Muro de Fe y otros buffs defensivos propios
@@ -16202,7 +16129,7 @@ function enemyActInner(enemy){
     let allyDmg = dmg*(1-(((ally.res && ally.res[allyResKey])||0) + (allyBendicion?allyBendicion.resBonus||0:0) - (elementalType?0:corrosionResPenalty(ally.statuses)))/100);
     if(enemyCrit) allyDmg *= ENEMY_CRIT_MULT;
     if(hasStatus(ally.statuses,'Paralisis')) allyDmg *= 1.25; // indefenso: igual que al jugador
-    if(ally.pos==='frente') allyDmg *= (1-FRONTLINE_DAMAGE_REDUCTION) * hiddenFrontGuard(false);
+    if(ally.pos==='frente') allyDmg *= hiddenFrontGuard(false);
     (ally.specials||[]).forEach(sp=>{ if(sp.type==='reduccion_dano') allyDmg *= (1-sp.value); });
     const allyFuriosoDef = hasStatus(ally.statuses,'Furioso');
     if(allyFuriosoDef && allyFuriosoDef.incomingDmgReduction) allyDmg *= (1 - allyFuriosoDef.incomingDmgReduction);
@@ -16624,7 +16551,7 @@ function resolveNewStyleEnemyMove(enemy, target, enemyCrit){
     if(enemyCrit) finalDmg *= ENEMY_CRIT_MULT;
     if(state.char.race==='enano') finalDmg -= 2;
     if(combat.playerDefending) finalDmg *= 0.5;
-    if(combat.playerPos==='frente') finalDmg *= (1-FRONTLINE_DAMAGE_REDUCTION) * hiddenFrontGuard(true);
+    if(combat.playerPos==='frente') finalDmg *= hiddenFrontGuard(true);
     const furiosoBuff = hasStatus(combat.playerStatuses,'Furioso');
     if(furiosoBuff && furiosoBuff.incomingDmgReduction) finalDmg *= (1 - furiosoBuff.incomingDmgReduction);
     finalDmg *= playerStatusIncomingMult();
@@ -16661,7 +16588,7 @@ function resolveNewStyleEnemyMove(enemy, target, enemyCrit){
     let allyDmg = dmg*(1-resVal/100);
     if(enemyCrit) allyDmg *= ENEMY_CRIT_MULT;
     if(hasStatus(ally.statuses,'Paralisis')) allyDmg *= 1.25;
-    if(ally.pos==='frente') allyDmg *= (1-FRONTLINE_DAMAGE_REDUCTION) * hiddenFrontGuard(false);
+    if(ally.pos==='frente') allyDmg *= hiddenFrontGuard(false);
     (ally.specials||[]).forEach(sp=>{ if(sp.type==='reduccion_dano') allyDmg *= (1-sp.value); });
     const allyFuriosoDef = hasStatus(ally.statuses,'Furioso');
     if(allyFuriosoDef && allyFuriosoDef.incomingDmgReduction) allyDmg *= (1 - allyFuriosoDef.incomingDmgReduction);
@@ -17395,11 +17322,9 @@ if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
       state.char.pets = {owned:{}, equipped:[]}; combat = null;
       const d = derived(), r = (v)=> Math.round(v*10)/10;
       return {nivel: level, fis: r(d.fis), hab: r(d.hab), esp: r(d.esp), agi: r(d.agi), vig: r(d.vig), vida: Math.round(d.maxHP), mp: Math.round(d.maxSta), espiritu: Math.round(d.maxSpi),
-        danoBase: Math.round(skillBaseDamage()), critico: r(d.critChance*100), evasion: r(d.evasionBase*100), curvaVida: r(classCurve('hp')*100)/100, curvaDano: r(classCurve('dmg')*100)/100};
+        danoBase: Math.round(skillBaseDamage()), critico: r(d.critChance*100), evasion: r(d.evasionBase*100)};
     } finally { state = saved.state; combat = saved.combat; simMode = saved.sim; }
   };
-  window.__redesign = (on)=>{ if(on !== undefined) CLASS_REDESIGN = !!on; return CLASS_REDESIGN; };
-  window.__classDmg = CLASS_DMG_REDESIGN;
   window.__alter = (on)=>{ if(on !== undefined) SIM_NO_ALTERATIONS = !on; return !SIM_NO_ALTERATIONS; };
   window.__rearLast = (on)=>{ if(on !== undefined) SIM_REAR_LAST = !!on; return SIM_REAR_LAST; };
   window.__skills = SKILLS; // para forzar al simulador a usar una habilidad concreta al probarla
@@ -17428,13 +17353,11 @@ if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
   window.__creation = (step, st, r)=>{ crStep = step || 2; if(st) selStyle = st; if(r) selRace = r; showScreen('screen-create'); renderCreation(); };
   window.__simTuneBeta = (level, hp, atk)=>{ BETA_DECADE_BOSS_TUNING[level] = {hp, atk}; return BETA_DECADE_BOSS_TUNING[level]; };
   window.__simScaleBeta = (dec, kind, hp, atk)=>{ BETA_ENEMY_SCALE[dec] = Object.assign(BETA_ENEMY_SCALE[dec] && !BETA_ENEMY_SCALE[dec].hp ? BETA_ENEMY_SCALE[dec] : {}, {[kind]: {hp, atk}}); return BETA_ENEMY_SCALE; };
-  window.__simCurveBeta = (styleId, idx, hp, dmg)=>{ CLASS_CURVE_BETA[styleId].hp[idx] = hp; CLASS_CURVE_BETA[styleId].dmg[idx] = dmg; return CLASS_CURVE_BETA[styleId]; };
   // multiplicadores temporales de vida/ataque para mobs que no son jefe de década, por década (índice 4 = 41-50, 5 = 51-60)
   window.__simScale = (dec, kind, hp, atk)=>{ DECADE_ENEMY_TUNING[dec] = Object.assign(DECADE_ENEMY_TUNING[dec] || {}, {[kind]: {hp, atk}}); return DECADE_ENEMY_TUNING; };
   // ajuste temporal de un jefe de década para probar valores sin editar el archivo
   window.__simTune = (level, hp, atk)=>{ DECADE_BOSS_TUNING[level] = {hp, atk}; return DECADE_BOSS_TUNING[level]; };
   // ídem para la curva de una senda en un punto de nivel (índice 5 = nivel 50, 6 = nivel 60)
-  window.__simCurve = (styleId, idx, hp, dmg)=>{ CLASS_CURVE[styleId].hp[idx] = hp; CLASS_CURVE[styleId].dmg[idx] = dmg; return CLASS_CURVE[styleId]; };
 }
 // Contagio (pedido de ariochbu, 2026-10-08): cuando muere un enemigo envenenado
 // —por golpe o por el propio Veneno— y el jugador es Hechicero, el Veneno pasa
