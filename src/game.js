@@ -4258,6 +4258,7 @@ const SHOP_POTION_PRICES = {vida_menor:12, vida_mayor:30, estamina:12, espiritu:
 
 function dealDamageToPlayer(amount){
   if(amount<=0) return;
+  if(combat && hasStatus(combat.playerStatuses, 'Enredado')) amount = Math.round(amount*1.15); // Telaraña (11-20)
   if(combat){ amount = ssIncoming2(amount); if(amount<=0) return; amount = ssIncoming(amount); if(amount<=0) return; }
   let shieldBroke = false;
   if(combat && combat.playerShield>0){
@@ -6500,7 +6501,8 @@ function visualThreat(level, charLevel){
 // larga que lo que le tocaría por fórmula normal.
 function isParaisoDecade(level){ return decadeIndexForLevel(level)===4; }
 
-function generateDungeon(level){
+function generateDungeon(level, vows){
+  if(vows && vows.length) state.dungeon = {vows}; // vowOn() se consulta mientras se arma el nivel (Llamada del rift)
   const numFloors = numFloorsForLevel(level) + (isParaisoDecade(level) ? 3 : 0);
   const laneCount = laneCountForLevel(level);
   const paraiso = isParaisoDecade(level);
@@ -6531,12 +6533,12 @@ function generateDungeon(level){
     floors.push(nodes);
   }
   // Rift: una sala intermedia al azar pasa a ser rift (ver RIFT_CHANCE_PER_DECADE)
-  const riftChance = SIM_RIFT && SIM_RIFT.force ? 1 : 1 - Math.pow(1 - RIFT_CHANCE_PER_DECADE, 1/10);
+  const riftChance = SIM_RIFT && SIM_RIFT.force ? 1 : 1 - Math.pow(1 - RIFT_CHANCE_PER_DECADE*(vowOn('rift') ? 2 : 1), 1/10);
   if(RIFTS_HERE && !simMode && numFloors > 3 && chance(riftChance)){
     const f = rnd(1, numFloors - 2), n = rnd(0, floors[f].length - 1);
     floors[f][n] = {type:'rift', done:false, rift: riftPickTheme(), riftStage:0};
   }
-  return {floors, atFloor:0, atNode:0, visited:{'0-0':true}, level};
+  return {floors, atFloor:0, atNode:0, visited:{'0-0':true}, level, vows: vows && vows.length ? vows : undefined};
 }
 
 // ============================================================
@@ -6880,6 +6882,7 @@ function riftAdvance(){
 // Los aliados caídos siguen caídos.
 const RIFT_BREATHER = 0.05;
 function riftBreather(){
+  if(vowOn('rift')) return; // voto Llamada del rift: sin respiro
   const d = derived(), k = RIFT_BREATHER;
   if(state.char.curHP > 0) state.char.curHP = Math.min(d.maxHP, state.char.curHP + Math.round(d.maxHP*k));
   state.char.curSta = Math.min(d.maxSta, state.char.curSta + Math.round(d.maxSta*k));
@@ -6894,7 +6897,7 @@ function riftBreather(){
 }
 function grantRiftRewards(node){
   const t = RIFT_THEMES[node.rift], keys = riftKeys(), got = [];
-  keys[node.rift] = (keys[node.rift] || 0) + (ssOn(49) ? 2 : 1); // 049 Garras de Topo: el doble de llaves
+  keys[node.rift] = (keys[node.rift] || 0) + (ssOn(49) ? 2 : 1) + (vowOn('rift') ? 1 : 0); // 049 Garras de Topo: el doble de llaves; voto Llamada del rift: +1
   for(let i = 0; i < RIFT_LOOT.rolls; i++){
     let tier = pickWeighted(RIFT_LOOT.tiers.map(([id, weight])=> ({tpl:id, weight})));
     if(tier === 'ss'){
@@ -7571,7 +7574,7 @@ const INTENTS_FOR_NEWBIES_UNTIL = 20;
 function newbieIntents(){ return gameMode() === 'normal' && !!state.dungeon && state.dungeon.level <= INTENTS_FOR_NEWBIES_UNTIL; }
 function ssPlanIntents(){
   if(!combat || combat.over) return;
-  const lentes = !!ssOn(38), on = lentes || newbieIntents();
+  const lentes = !!ssOn(38), on = (lentes || newbieIntents()) && !vowOn('silencio');
   combat.enemies.forEach(e=>{
     e.ssIntent = null;
     if(!on || e.hp <= 0 || (e.tpl && e.tpl.decoy)) return;
@@ -7593,7 +7596,7 @@ function ssPlanned(enemy, target){
   if(ab.oncePerCombat && enemy.usedOnce && enemy.usedOnce.has(p.id)) return null;
   if(ab.condition && !ab.condition(newStyleCtx(enemy, target))) return null;
   if((ab.utility === 'heal_ally' || ab.utility === 'self_heal') && enemyHealLocked()) return null;
-  if(ab.utility === 'summon' && livingEnemies().length >= 6) return null;
+  if(ab.utility === 'summon' && livingEnemies().length >= enemyCap()) return null;
   return p.id;
 }
 // A quién pega un enemigo: 062 Ancla Oxidada lo ata a ti; 086 Hoja Hueca te esconde en la retaguardia.
@@ -9770,6 +9773,11 @@ function renderCityDungeonEntry(){
     </div>
   `;
   const enterDungeonAt = (startLevel)=>{
+    if(vowsUnlocked() && !enterDungeonAt.vowsPicked){
+      showVowsOverlay(picked=>{ enterDungeonAt.vowsPicked = picked; enterDungeonAt(startLevel); });
+      return;
+    }
+    const pickedVows = enterDungeonAt.vowsPicked || []; enterDungeonAt.vowsPicked = null;
     showOverlay(
       'Antes de entrar',
       `Una vez dentro no podrás retirarte hasta vencer al guardián del nivel o caer en el intento. Si mueres, ${deathPenaltyText(startLevel)} — lo que ya tienes equipado y lo que guardaste en el Hogar está a salvo.`,
@@ -9777,7 +9785,8 @@ function renderCityDungeonEntry(){
         stopLoginAudio();
         const d = derived();
         state.char.curHP = d.maxHP; state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi;
-        state.dungeon = generateDungeon(startLevel);
+        state.dungeon = generateDungeon(startLevel, pickedVows);
+        if(pickedVows.length) log(`Juras ${pickedVows.length > 1 ? 'tus votos' : 'tu voto'}: <b>${vowsLine()}</b>.`);
         levelPenaltyNotice(startLevel);
         cityView = 'map'; // al volver a la ciudad se ve el mapa
         playDungeonAudio(startLevel);
@@ -12054,10 +12063,12 @@ function renderMap(){
   // reglas no cambian: mismas salas, misma isNodeReachable, mismo enterNode.
   document.getElementById('main-panel').innerHTML = `<h3 style="color:var(--bronze-light); margin-bottom:6px;">El laberinto — Nivel ${dg.level}</h3>
   <p style="color:var(--text-dim); font-size:0.85em; margin-top:0;">Toca una sala iluminada para avanzar; arrastra para mirar el resto. Amenaza: ⚠ ${th} · ${dg.floors.length} pisos.</p>
+  <div class="map-rules"><button class="btn-main dr-btn" id="decade-rules-btn">Reglas de la década: ${DECADE_RULES[decadeIndexForLevel(dg.level)].name}</button>${vowsLine() ? `<span class="vows-line">Votos: ${vowsLine()}</span>` : ''}</div>
   <div id="labyrinth-mount"></div>
   <div class="map-legend">
     <span>⚔ Normal</span><span>☠ Élite</span><span>♛ Guardián</span><span>💰 Tesoro</span><span>🔥 Descanso</span><span>? Sin explorar</span>
   </div>`;
+  document.getElementById('decade-rules-btn').onclick = ()=> showDecadeRules(dg.level);
   mountLabyrinth(document.getElementById('labyrinth-mount'), dg, {
     level: dg.level, race: state.char.race, style: state.char.style,
     isReachable: (f, n)=> isNodeReachable(dg, f, n),
@@ -12192,7 +12203,7 @@ function buildEncounterGroup(nodeType, f, level){
     for(let i=0;i<count;i++) group.push(makeEnemy(pick(templates), f, level));
     // Escolta propia del guardián (lecciones de 1-9): goblins de la década con una parte de su fuerza.
     (group[0] && group[0].tpl.lessonEscort || []).forEach(es=>{
-      const t = bestiary.regular.find(r=> r.id === es.id); if(!t || group.length >= 6) return;
+      const t = bestiary.regular.find(r=> r.id === es.id); if(!t || group.length >= enemyCap()) return;
       const e = makeEnemy(t, f, level);
       e.maxHP = Math.max(1, Math.round(e.maxHP*es.hp)); e.hp = e.maxHP; e.atk = Math.max(1, Math.round(e.atk*es.atk));
       group.push(e);
@@ -12230,13 +12241,17 @@ function buildEncounterGroup(nodeType, f, level){
   // usa 'invocar').
   if(nodeType==='elite' && bestiary.eliteCompanions){
     group.slice().forEach(elite=>{
-      if(!elite.tpl.elite || group.length>=6) return;
+      if(!elite.tpl.elite || group.length>=enemyCap()) return;
       const companionTpl = pickWeighted(bestiary.eliteCompanions);
       const companion = makeEnemy(companionTpl, f, level);
       group.push(companion);
       elite.companionRef = companion;
       companion.companionRef = elite;
     });
+  }
+  // Voto Codicia: cada élite trae un acompañante más de su década.
+  if(nodeType==='elite' && vowOn('codicia')){
+    group.filter(e=> e.tpl.elite).forEach(()=>{ if(group.length < enemyCap()) group.push(makeEnemy(pick(bestiary.regular), f, level)); });
   }
   // Escolta de los guardianes "fáciles" de 61-79 (ver GUARDIAN_ESCORT).
   if(nodeType==='jefe' && !isDecadeFinal){
@@ -12322,7 +12337,8 @@ function enterNode(f,n){
     renderAll();
   } else if(node.type==='descanso'){
     const d = derived();
-    state.char.curHP = d.maxHP;
+    const half = vowOn('sangre'); // voto Sangre fría: la hoguera cura la mitad de la vida
+    state.char.curHP = half ? Math.min(d.maxHP, state.char.curHP + Math.round(d.maxHP*0.5)) : d.maxHP;
     state.char.curSta = d.maxSta;
     state.char.curSpi = d.maxSpi;
     // La hoguera restaura TODO a full de forma automática: vida, MP y
@@ -12334,11 +12350,11 @@ function enterNode(f,n){
     if(!state.dungeon.allyMP) state.dungeon.allyMP = {};
     if(!state.dungeon.allySpirit) state.dungeon.allySpirit = {};
     (state.char.allies||[]).forEach(row=>{
-      state.dungeon.allyHP[row.id] = allyMaxHP(row);
+      state.dungeon.allyHP[row.id] = half ? Math.min(allyMaxHP(row), (state.dungeon.allyHP[row.id] != null ? state.dungeon.allyHP[row.id] : allyMaxHP(row)) + Math.round(allyMaxHP(row)*0.5)) : allyMaxHP(row);
       state.dungeon.allyMP[row.id] = allyMaxMP(row);
       state.dungeon.allySpirit[row.id] = allyMaxSpirit(row);
     });
-    log('Una hoguera olvidada. Vida, MP y espíritu restaurados por completo, para ti y para todo tu equipo.');
+    log(half ? 'Una hoguera olvidada. Por tu voto, solo recuperas la mitad de la vida; el MP y el espíritu, por completo.' : 'Una hoguera olvidada. Vida, MP y espíritu restaurados por completo, para ti y para todo tu equipo.');
     node.done = true;
     advanceMissionsFor('rest_bonfires', 1);
     renderAll();
@@ -12924,6 +12940,155 @@ function applyChaosLaw(){
   STATUS_INFO[law.name] = {buff:true, desc:`Ley del Caos de este combate: ${law.text}. Dura todo el combate.`};
   log(`⚠ <b>${law.name.replace('Ley: ', 'Ley del Caos — ')}</b>: ${target.name} ${law.text}.`);
 }
+// ============================================================
+// REGLAS DE DÉCADA (ariochbu, 2026-10-16). Cada década del laberinto cambia una regla del combate, para que la
+// dificultad venga de jugar distinto y no solo de números más altos. Al entrar a una década habla el laberinto
+// y en el mapa queda el botón «Reglas de la década». 61-70 (Ley del Caos) y 71-80 (Corrupción) ya existían.
+// Las reglas que dependen de la posición solo afectan al jugador: los aliados no pueden moverse.
+// ============================================================
+const DECADE_RULES = {
+  0: {name:'Sin reglas', icon:'🌲', intro:'', text:'El Bosque Goblin todavía no cambia las reglas: es el lugar donde se aprende a pelear.'},
+  1: {name:'Telaraña', icon:'🕸️', intro:'Los hilos tiemblan bajo tus pies. Quien se quede delante, quedará atrapado.',
+      text:'Cada 3 rondas, si estás en el Frente quedas <b>Enredado</b> 2 rondas: no puedes cambiar de posición y recibes un 15% más de daño. Una ronda antes, los hilos tiemblan.'},
+  2: {name:'Manada', icon:'🐺', intro:'Huele a sangre. Aquí las bestias no huyen cuando cae una de ellas: se enfurecen.',
+      text:'Cada vez que muere un enemigo, los que quedan vivos pegan un 10% más hasta el final del combate (se acumula). Piensa a quién dejas para el final.'},
+  3: {name:'Decreto', icon:'⚖️', intro:'El Usurpador dicta la ley en estos salones. Cada combate trae su propio decreto.',
+      text:'Al empezar cada combate se dicta un decreto que dura toda la pelea: <b>Doble coste</b> (tus habilidades cuestan el doble), <b>Curas a medias</b> (toda curación vale la mitad) o <b>Muralla</b> (los enemigos reciben un 30% menos de daño las 2 primeras rondas).'},
+  4: {name:'Espejismo', icon:'🏝️', intro:'El calor dobla el aire. No todo lo que ves en esta isla es real.',
+      text:'En cada combate (salvo contra el jefe de la isla) aparece un enemigo de más que es un <b>espejismo</b>: una copia de otro que no hace daño y se deshace al primer golpe. No se distingue a simple vista; no gastes en él lo mejor que tienes.'},
+  5: {name:'Marea', icon:'🌊', intro:'El agua sube y baja con un ritmo propio. Escucha la marea.',
+      text:'Cada 4 rondas una ola barre el Frente y te quita el 8% de tu vida máxima, salvo que estés en la Retaguardia o te hayas defendido esa ronda. Una ronda antes se oye crecer.'},
+  6: {name:'Ley del Caos', icon:'🌀', intro:'Aquí el caos cambia las reglas en cada combate… pero nunca las oculta.',
+      text:'En cada combate un enemigo recibe una Ley: esquiva más, pega más, o es <b>inmune a los golpes físicos</b> o <b>a los mágicos</b> (las inmunidades nunca le tocan a un guardián ni a un jefe). El daño por turno sí atraviesa la inmunidad.'},
+  7: {name:'Corrupción', icon:'🍂', intro:'El bosque está muerto, pero algo en él sigue creciendo. Y quiere crecer dentro de ti.',
+      text:'Muchos enemigos aplican <b>Corrupción</b>: por cada carga haces un 3% más de daño y recibes un 4% más (hasta x10, dura todo el combate).'},
+  8: {name:'Suelo ardiente', icon:'🔥', intro:'La piedra arde. Quien se queda quieto aquí, se quema.',
+      text:'Si pasas 3 rondas seguidas en la misma posición, el suelo te aplica <b>Quemadura</b>. Una ronda antes empieza a humear. Cambiar de posición reinicia la cuenta. A tus aliados no les afecta.'},
+  9: {name:'Condena', icon:'⛓️', intro:'En la Celda nadie conserva todo lo que trae. Algo tuyo quedará encadenado.',
+      text:'En cada combate una de tus habilidades queda <b>encadenada</b> y no se puede usar. Se ve desde el principio en tu menú de habilidades.'},
+};
+const DECREES = [
+  {id:'costes', name:'Decreto: Doble coste', text:'tus habilidades cuestan el doble'},
+  {id:'curas', name:'Decreto: Curas a medias', text:'toda curación vale la mitad'},
+  {id:'muralla', name:'Decreto: Muralla', text:'los enemigos reciben un 30% menos de daño las 2 primeras rondas'},
+];
+function ruleDecade(){ return state.dungeon && combat && !SIM_NO_ALTERATIONS ? decadeIndexForLevel(state.dungeon.level || 1) : -1; }
+function ruleStatusInfo(){
+  Object.assign(STATUS_INFO, {
+    'Enredado': {buff:false, desc:'Telaraña: no puedes cambiar de posición y recibes un 15% más de daño.'},
+    'Furia de la manada': {buff:true, desc:'Manada: pega más por cada compañero caído en este combate.'},
+    'Muralla': {buff:true, desc:'Decreto: recibe un 30% menos de daño.'},
+    'Espejismo': {buff:true, desc:'Isla Paraíso: uno de estos enemigos no es real.'},
+  });
+  DECREES.forEach(dc=>{ STATUS_INFO[dc.name] = {buff:false, desc:`Decreto del Usurpador de este combate: ${dc.text}.`}; });
+}
+function decadeRulesCombatStart(){
+  const dIdx = ruleDecade(); if(dIdx < 0) return;
+  ruleStatusInfo();
+  combat.ruleRound = 0; combat.burnPos = {pos: combat.playerPos, rounds: 0};
+  if(dIdx === 3){
+    const dc = pick(DECREES);
+    combat.decree = dc.id;
+    combat.playerStatuses.push({name: dc.name, duration:99, decree:true});
+    if(dc.id === 'muralla') combat.enemies.forEach(e=>{ if(e.hp > 0) e.statuses.push({name:'Muralla', duration:2, incomingDmgReduction:0.30}); });
+    log(`<b>${dc.name}</b>: ${dc.text}.`);
+  }
+  if(dIdx === 4){
+    // El espejismo es un enemigo DE MÁS (copia de uno real): convertir a uno real en falso hacía la isla más fácil.
+    const pool = combat.enemies.filter(e=> e.hp > 0 && !(e.tpl && (e.tpl.boss || e.tpl.decoy)) && !e.summoned);
+    if(pool.length && combat.enemies.length < enemyCap()){
+      const src = pick(pool), m = makeEnemy(src.tpl, state.dungeon.atFloor, state.dungeon.level);
+      m.maxHP = src.maxHP; m.hp = src.hp; m.atk = src.atk; m.mirage = true;
+      combat.enemies.splice(rnd(0, combat.enemies.length), 0, m);
+      log('El aire tiembla de calor: <b>uno de tus enemigos es un espejismo</b>.');
+    }
+  }
+  if(dIdx === 9){
+    const own = style().skills.filter(id=> SKILLS[id] && !SKILLS[id].ultimate);
+    if(own.length){ combat.chained = pick(own); log(`<b>Condena</b>: tu habilidad <b>${SKILLS[combat.chained].name}</b> queda encadenada en este combate.`); }
+  }
+}
+function decadeRulesRoundEnd(){
+  const dIdx = ruleDecade(); if(dIdx < 0 || combat.over || state.char.curHP <= 0) return;
+  const r = ++combat.ruleRound, d = derived();
+  if(dIdx === 1){
+    if(r % 3 === 2 && combat.playerPos === 'frente') log('<i>Los hilos tiemblan bajo el Frente…</i>');
+    if(r % 3 === 0 && combat.playerPos === 'frente'){
+      applyStatus(null, {name:'Enredado', duration:2}, true);
+      log('La telaraña se cierra: quedas <b>Enredado</b>.');
+    }
+  }
+  if(dIdx === 5){
+    const safe = combat.playerPos !== 'frente' || combat.ruleDefended;
+    if(r % 4 === 3) log('<i>Se oye crecer la marea…</i>');
+    if(r % 4 === 0){
+      if(safe) log('La ola barre el Frente' + (combat.playerPos !== 'frente' ? ', pero estás atrás.' : ' y la aguantas defendiéndote.'));
+      else { const dmg = Math.max(1, Math.round(d.maxHP*0.08)); dealDamageToPlayer(dmg); log(`La ola barre el Frente: <b>${dmg}</b> de daño.`); }
+    }
+  }
+  if(dIdx === 8){
+    const bp = combat.burnPos;
+    if(bp.pos === combat.playerPos) bp.rounds++; else { bp.pos = combat.playerPos; bp.rounds = 1; }
+    if(bp.rounds % 3 === 2) log('<i>El suelo bajo tus pies empieza a humear…</i>');
+    if(bp.rounds % 3 === 0){ applyStatus(null, {name:'Quemadura', chance:1, duration:3, stack:true, maxStack:3}, true); log('El suelo arde: te <b>quemas</b> por quedarte quieto.'); }
+  }
+  combat.ruleDefended = false;
+}
+// Al morir un enemigo: los espejismos se deshacen con el primer golpe y la manada se enfurece.
+function decadeRulesDeaths(){
+  if(!combat) return;
+  combat.enemies.forEach(e=>{ if(e.mirage && e.hp > 0 && e.hp < e.maxHP){ e.hp = 0; e.mirageGone = true; log(`${e.name} era un <b>espejismo</b> y se deshace en el aire.`); } });
+  if(ruleDecade() !== 2) return;
+  combat.enemies.forEach(e=>{
+    if(e.hp > 0 || e.manadaCounted || e.summoned || e.mirage) return;
+    e.manadaCounted = true;
+    const alive = combat.enemies.filter(o=> o.hp > 0);
+    alive.forEach(o=>{
+      const st = hasStatus(o.statuses, 'Furia de la manada');
+      if(st){ st.stacks = (st.stacks || 1) + 1; st.dmgMult = 1 + 0.10*st.stacks; }
+      else o.statuses.push({name:'Furia de la manada', duration:99, stacks:1, dmgMult:1.10});
+    });
+    if(alive.length) log(`Cae ${e.name}: <b>la manada se enfurece</b>.`);
+  });
+}
+function showDecadeRules(level){
+  const dIdx = decadeIndexForLevel(level), r = DECADE_RULES[dIdx];
+  showOverlay(`${DECADE_GATE_NAMES[dIdx*10 + 1] || 'Década'} — ${r.name}`, r.text, ()=>{});
+}
+
+// ============================================================
+// VOTOS DE LA BAJADA (ariochbu, 2026-10-16), como el Calor de Hades: castigos que eliges al entrar a cambio
+// de un premio. Se desbloquean al vencer al Ogro, hasta 3 a la vez, y duran hasta volver a la ciudad.
+// ============================================================
+const VOWS = [
+  {id:'sangre', name:'Sangre fría', pain:'Las hogueras curan solo la mitad de la vida.', prize:'+15% de oro'},
+  {id:'piedad', name:'Sin piedad', pain:'Los enemigos empiezan cada combate Fortalecidos (+12% de daño).', prize:'+20% de experiencia'},
+  {id:'codicia', name:'Codicia', pain:'Cada élite trae un acompañante más (hasta 10 enemigos por combate).', prize:'+1 tirada de botín por élite'},
+  {id:'silencio', name:'Silencio', pain:'No ves lo que harán los enemigos ni los números de su vida.', prize:'+10% de botín'},
+  {id:'soledad', name:'Soledad', pain:'Bajas con un aliado menos.', prize:'+25% de oro y experiencia', needsAlly:true},
+  {id:'rift', name:'Llamada del rift', pain:'Los rifts salen el doble de seguido, pero sin respiro entre oleadas.', prize:'+1 llave por rift'},
+];
+const VOWS_MAX = 3;
+function vowsUnlocked(){ return myBossesBeaten() >= 1; }
+function vowOn(id){ return !!(state.dungeon && state.dungeon.vows && state.dungeon.vows.includes(id)); }
+function enemyCap(){ return vowOn('codicia') ? 10 : 6; }
+function vowGoldMult(){ return (vowOn('sangre') ? 1.15 : 1) * (vowOn('soledad') ? 1.25 : 1); }
+function vowXpMult(){ return (vowOn('piedad') ? 1.20 : 1) * (vowOn('soledad') ? 1.25 : 1); }
+function vowsLine(){ const v = (state.dungeon && state.dungeon.vows) || []; return v.length ? v.map(id=> (VOWS.find(x=> x.id === id) || {}).name).join(' · ') : ''; }
+function showVowsOverlay(onGo){
+  const div = document.createElement('div');
+  div.className = 'overlay-msg';
+  const hasAlly = (state.char.allies || []).length > 0;
+  div.innerHTML = `<div class="overlay-card vows-card"><h2>Votos de la bajada</h2>
+    <p>Puedes jurar hasta ${VOWS_MAX} votos para esta bajada. Cada uno la hace más dura a cambio de un premio, y duran hasta que vuelvas a la ciudad.</p>
+    <div class="vows-list">${VOWS.map(v=>{ const off = v.needsAlly && !hasAlly; return `<label class="vow ${off ? 'off' : ''}"><input type="checkbox" value="${v.id}" ${off ? 'disabled' : ''}><span><b>${v.name}</b><small>${v.pain}</small><em>${off ? 'Necesitas al menos un aliado' : v.prize}</em></span></label>`; }).join('')}</div>
+    <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap;"><button class="btn-main" id="vows-go">Entrar</button></div></div>`;
+  document.body.appendChild(div);
+  const boxes = [...div.querySelectorAll('input[type=checkbox]')];
+  const sync = ()=>{ const n = boxes.filter(b=> b.checked).length; boxes.forEach(b=>{ if(!b.checked) b.disabled = n >= VOWS_MAX || (VOWS.find(v=> v.id === b.value).needsAlly && !hasAlly); }); div.querySelector('#vows-go').textContent = n ? `Entrar con ${n} voto${n > 1 ? 's' : ''}` : 'Entrar sin votos'; };
+  boxes.forEach(b=> b.onchange = sync); sync();
+  div.querySelector('#vows-go').onclick = ()=>{ const picked = boxes.filter(b=> b.checked).map(b=> b.value); div.remove(); onGo(picked); };
+}
 // Estados genéricos sobre el jugador y sus aliados: dmgMult (p. ej. una Ley
 // del Caos) y los que escalan por carga (Corrupción). Furioso/Inspirado
 // tienen su propia lógica y no pasan por acá.
@@ -12944,7 +13109,7 @@ function startCombat(enemyGroup, node){
   // makeCombatAlly recupera la vida con la que cada aliado terminó su último
   // combate en este mismo nivel (ver syncAllyHPToDungeon) - un aliado
   // derribado sigue fuera de combate hasta avanzar de nivel, no revive aquí.
-  const allies = (state.char.allies||[]).map(makeCombatAlly);
+  const allies = (state.char.allies||[]).slice(0, vowOn('soledad') ? Math.max(0, (state.char.allies||[]).length - 1) : undefined).map(makeCombatAlly);
   if(node.type==='jefe' && state.dungeon.level === 100) celdaGuestAllies().forEach(g=> allies.push(g));
   combat = {
     active:true,
@@ -12987,6 +13152,8 @@ function startCombat(enemyGroup, node){
   const allyText = allies.length ? ` A tu lado: ${allies.map(a=>a.name).join(', ')}.` : '';
   log(`¡Emboscada! Te enfrentas a: ${enemyGroup.map(e=>e.name).join(', ')}.${allyText}`);
   applyChaosLaw();
+  decadeRulesCombatStart();
+  if(vowOn('piedad')) combat.enemies.forEach(e=>{ if(e.hp > 0) e.statuses.push({name:'Fortalecido', duration:99, stacks:3, stack:true}); });
   ssCombatStart();
   if(node.type==='jefe' && state.dungeon.level === 100 && !(SIM_CELDA && SIM_CELDA.sombras === false)){ combat.celdaShadows = celdaShadowTpls(); celdaShadowTick(); }
   if(node.type==='jefe' && state.dungeon.level % 10 === 0){ stopDungeonAudio(); playBossAudio(); }
@@ -13451,7 +13618,7 @@ const ENEMY_CRIT_MULT = 1.3;
 function healMultiplierFor(statuses){
   const c = hasStatus(statuses, 'Corrosion');
   const mask = hasStatus(statuses, 'Máscara de Llanto'); // 051
-  return (c ? c.healMult : 1) * (mask ? mask.healMult : 1);
+  return (c ? c.healMult : 1) * (mask ? mask.healMult : 1) * (combat && combat.decree === 'curas' ? 0.5 : 1); // Decreto (31-40)
 }
 
 function hasStatus(list, name){ return list.find(s=>s.name===name); }
@@ -14137,6 +14304,7 @@ function effectiveSkillCost(skillId, skill){
   let v = Math.max(0, skill.cost.valor - controlDiscountFor(skillId));
   if(skillId==='grito_guerra' && ssOn(27)) v = Math.ceil(v/2); // 027 Tambor del Trueno
   if(skill.cost.tipo==='espiritu' && combat && combat.espHalfNext) v = Math.ceil(v/2); // Piedra de Voluntad A+
+  if(combat && combat.decree === 'costes') v *= 2; // Decreto del Usurpador (31-40)
   return v;
 }
 
@@ -14157,6 +14325,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
   const d = derived();
   if(!isRepeat) trySummonShadow();
 
+  if(!isRepeat && combat.chained === skillId){ log(`<b>${skill.name}</b> está encadenada en este combate (Condena).`); return; }
   if(skill.ultimate && !isRepeat){
     const usesLeft = ultimateMaxUses() - (state.dungeon.ultimateUses||0);
     if(usesLeft<=0){ log(`Ya usaste ${skill.name} las ${ultimateMaxUses()} veces permitidas en esta entrada al laberinto.`); return; }
@@ -14185,11 +14354,13 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
   // utility skills
   if(skill.utility==='defend'){
     combat.playerDefending = true;
+    combat.ruleDefended = true; // Marea (51-60)
     log('Te preparas para recibir el próximo golpe.');
     if(ssOnDefend()) return;
     await endPlayerTurn(); return;
   }
   if(skill.utility==='reposition'){
+    if(hasStatus(combat.playerStatuses, 'Enredado')){ log('Estás <b>Enredado</b> en la telaraña: no puedes cambiar de posición.'); return; }
     combat.playerPos = combat.playerPos==='frente' ? 'retaguardia' : 'frente';
     combat.ssMoved = true;
     log(`Te mueves a ${combat.playerPos==='frente'?'el Frente':'la Retaguardia'}.`);
@@ -14645,6 +14816,9 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
     if(skill.penaltyIfFrente && combat.playerPos==='frente') dmg *= (1-skill.penaltyIfFrente);
     dmg = Math.max(1, Math.round(dmg));
     if(target.defending) dmg = Math.round(dmg*0.5);
+    // Ley del Caos de inmunidad: el golpe no entra. Antes la resistencia 100 se quedaba en ~70-90 porque las
+    // penetraciones (Arquero, equipo, nivel) se le restaban después (encontrado el 2026-10-16).
+    if(target.tpl && lawImmune(target.statuses, resKey==='fisico' ? 'fisico' : 'magico')){ dmg = 0; log(`${target.name} es inmune a ese tipo de golpe (Ley del Caos).`); }
     target.hp = Math.max(0, target.hp - dmg);
     // Reflejo de daño (2026-09-25, pedido explícito, "Espejo Viviente" y
     // similares): "100 de daño con 20% de reflejo = 20 de daño reflectado" —
@@ -15404,6 +15578,7 @@ function resolveOneAllyTurn(ally){
     // Mismo trato de brecha de nivel que el jugador — un aliado usa el
     // nivel DE SU DUEÑO como referencia, no tiene el suyo propio para esto.
     dmg = Math.max(1, Math.round(dmg*(1-resVal/100)*levelDiffDamageMult(state.char.level, monsterEffectiveLevel())));
+    if(lawImmune(enemyTarget.statuses, resKey==='fisico' ? 'fisico' : 'magico')) dmg = 0; // Ley del Caos: ver playerUseSkill
     enemyTarget.hp = Math.max(0, enemyTarget.hp - dmg);
     log(skillText
       ? `<b>${ally.name}</b> ${skillText} ${enemyTarget.name}: ${dmg} de daño.`
@@ -15626,6 +15801,7 @@ async function processEnemyTurns(){
   combat.enemies.forEach(e=>{
     if(e.pendingStun){ applyStatus(e, {name:'Aturdido', duration:1}, false); e.pendingStun = false; }
   });
+  decadeRulesRoundEnd();
   ssRoundEnd();
 
   checkCombatEnd();
@@ -15645,6 +15821,7 @@ function enemyAct(enemy){
 }
 function enemyActInner(enemy){
   enemy.ssActed = true;
+  if(enemy.mirage){ log(`${enemy.name} ataca… y su golpe te atraviesa sin hacer nada.`); combat.lastAction = {label:'…', effects:[]}; return; } // Espejismo (41-50)
   if(!enemy.cooldowns) enemy.cooldowns = {};
   Object.keys(enemy.cooldowns).forEach(k=> enemy.cooldowns[k] = Math.max(0, enemy.cooldowns[k]-1));
 
@@ -16108,7 +16285,7 @@ function applyEnemyGroupBuff(caster, b){
 }
 function summonEnemies(caster, spec){
   const alive = combat.enemies.filter(e=>e.summoner===caster && e.hp>0).length;
-  const room = Math.min(spec.count||1, (spec.maxAlive||spec.count||1) - alive, 6 - livingEnemies().length);
+  const room = Math.min(spec.count||1, (spec.maxAlive||spec.count||1) - alive, enemyCap() - livingEnemies().length);
   const out = [];
   for(let i=0;i<room;i++){
     const e = makeEnemy(spec.tpl, state.dungeon.atFloor, state.dungeon.level);
@@ -16125,12 +16302,13 @@ function summonEnemies(caster, spec){
 // Muertes con efecto (Garvel: 30% de dejar un Garvel pequeño). Se llama
 // desde checkCombatEnd, antes de decidir si el combate terminó.
 function processEnemyDeaths(){
+  decadeRulesDeaths();
   combat.enemies.forEach(e=>{
     if(e.hp>0 || e.deathProcessed) return;
     e.deathProcessed = true;
     ssOnEnemyDeath(e);
     const sp = e.tpl && e.tpl.onDeathSpawn;
-    if(sp && !e.summoned && livingEnemies().length < 6 && chance(sp.chance)){
+    if(sp && !e.summoned && livingEnemies().length < enemyCap() && chance(sp.chance)){
       const child = makeEnemy(sp.tpl, state.dungeon.atFloor, state.dungeon.level);
       child.summoned = true;
       combat.enemies.push(child);
@@ -16169,7 +16347,7 @@ function pickNewStyleAbilityId(enemy, ctx){
     // se salta para no desperdiciar el turno.
     if(ab.utility==='summon' && ab.summon){
       const alive = combat.enemies.filter(e=>e.summoner===enemy && e.hp>0).length;
-      if(alive >= (ab.summon.maxAlive||ab.summon.count||1) || livingEnemies().length >= 6) continue;
+      if(alive >= (ab.summon.maxAlive||ab.summon.count||1) || livingEnemies().length >= enemyCap()) continue;
     }
     return id;
   }
@@ -16700,6 +16878,7 @@ async function simOneFight(cfg){
     else {
       // la habilidad de daño más fuerte que se pueda pagar y usar desde donde está
       const ok = (id)=>{
+        if(combat.chained === id) return false;
         const sk = SKILLS[id]; if(!sk || (!sk.mult && !SIM_UTILITY_SKILLS.has(id))) return false;
         if(sk.ultimate && ((ultimateMaxUses() - (state.dungeon.ultimateUses||0)) <= 0 || (state.dungeon.ultimateCooldown||0) > 0)) return false;
         if(sk.cost && (sk.cost.tipo === 'estamina' ? state.char.curSta : state.char.curSpi) < effectiveSkillCost(id, sk)) return false;
@@ -16728,6 +16907,7 @@ async function simFightLoop(){
     if(potion && state.char.curHP / d.maxHP < 0.35){ await usePotionInCombat('vida_mayor'); }
     else {
       const ok = (id)=>{
+        if(combat.chained === id) return false;
         const sk = SKILLS[id]; if(!sk || (!sk.mult && !SIM_UTILITY_SKILLS.has(id))) return false;
         if(sk.ultimate && ((ultimateMaxUses() - (state.dungeon.ultimateUses||0)) <= 0 || (state.dungeon.ultimateCooldown||0) > 0)) return false;
         if(sk.cost && (sk.cost.tipo === 'estamina' ? state.char.curSta : state.char.curSpi) < effectiveSkillCost(id, sk)) return false;
@@ -16865,6 +17045,7 @@ if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
   window.__celdaVer = (level, cfg)=>{ const {st} = simBuildState(Object.assign({style:'pesada', level:100, dungeonLevel:level}, cfg || {})); state = st; state.log = []; const d = derived(); state.char.curHP = d.maxHP; state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi; save = ()=>{}; lsGet = ()=> null; lsSet = ()=>{}; const dg = Object.assign(generateDungeon(level), {allyHP:{}, allyMP:{}, allySpirit:{}}); state.dungeon = dg; showScreen('screen-game'); const f = dg.floors.length - 1; dg.atFloor = f; dg.atNode = 0; startCombat(buildEncounterGroup('jefe', f, level), dg.floors[f][0]); };
   window.__riftVer = (theme, level, cfg)=>{ const {st} = simBuildState(Object.assign({style:'pesada', level: level, dungeonLevel: level}, cfg || {})); state = st; state.log = []; const d = derived(); state.char.curHP = d.maxHP; state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi; save = ()=>{}; SIM_RIFT = {theme, force:true}; const dg = Object.assign(generateDungeon(level), {allyHP:{}, allyMP:{}, allySpirit:{}}); state.dungeon = dg; showScreen('screen-game'); let pos = null; dg.floors.forEach((fl, f)=> fl.forEach((n, i)=>{ if(n.type === 'rift') pos = [f, i]; })); if(cfg && cfg.cerca && pos){ dg.atFloor = pos[0] - 1; dg.atNode = 0; for(let f = 0; f < pos[0]; f++) dg.visited[f + '-0'] = true; } renderAll(); return pos; };
   // Castigo por caer: __muerte(nivel, piso) mata al personaje ahí; __bolsa() enseña la bolsa; __nivel(n) entra al nivel n.
+  window.__votos = (v)=>{ if(v){ state.dungeon.vows = v; renderAll(); return vowsLine(); } showVowsOverlay(p=> console.log('votos', p)); };
   window.__muerte = (lvl, floor)=>{ state.dungeon.level = lvl; state.dungeon.atFloor = floor || 0; handleDefeat(); };
   window.__bolsa = ()=> ({bag: lostBag(), inv: state.char.inventory.filter(i=> i.kind === 'equip').length, gold: state.char.gold});
   window.__nivel = (n, floor)=>{ const d = derived(); state.char.curHP = d.maxHP; state.dungeon = generateDungeon(n); levelPenaltyNotice(n); if(floor != null){ state.dungeon.atFloor = floor; checkLostBag(); } renderAll(); return window.__bolsa(); };
@@ -17050,10 +17231,10 @@ function handleVictory(){
   const rewardMult = 1 + (level-1)*0.08; // los niveles más duros pagan algo mejor (solo aplica al oro)
   const perKillXP = isBoss ? guardianXP(level) : isElite ? eliteXP(level) : mobXP(level);
   // Las invocaciones/señuelos no cuentan para la recompensa (2026-10-02).
-  const rewardEnemyCount = Math.max(1, combat.enemies.filter(e=>!e.summoned).length);
+  const rewardEnemyCount = Math.max(1, combat.enemies.filter(e=>!e.summoned && !e.mirage).length);
   const xpGain = Math.max(1, Math.round(perKillXP * xpGroupMultiplier(rewardEnemyCount) * (race().id==='humano'?1.1:1) * xpGapMultiplier() * earlyXpBoost(level) * XP_GLOBAL_BOOST));
-  const goldGain = Math.round((rnd(6,14)*rewardEnemyCount + (isBoss?60:isElite?20:0)) * rewardMult * (1 + titlePerks().gold) * (ssOn(49) ? 1.5 : 1));
-  const myXpGain = Math.max(1, Math.round(xpGain * (1 + titlePerks().xp))); // el bono del título es solo del jugador
+  const goldGain = Math.round((rnd(6,14)*rewardEnemyCount + (isBoss?60:isElite?20:0)) * rewardMult * (1 + titlePerks().gold) * (ssOn(49) ? 1.5 : 1) * vowGoldMult());
+  const myXpGain = Math.max(1, Math.round(xpGain * (1 + titlePerks().xp) * vowXpMult())); // el bono del título es solo del jugador
   state.char.xp += myXpGain;
   state.char.gold += goldGain;
   log(`Victoria. +${myXpGain} experiencia, +${goldGain} de oro.`);
@@ -17117,7 +17298,9 @@ function handleVictory(){
   // suelta su piedra de alma garantizada (los "despertados" de La Celda).
   const isCeldaGuardian = isBoss && !isDecadeFinal && level >= 91 && level <= 99;
   const stonesAllowedThisFight = isDecadeFinal || isRiftBoss || isCeldaGuardian;
-  const rollCount = rewardEnemyCount * (isDecadeFinal ? 2 : 1);
+  const rollCount = rewardEnemyCount * (isDecadeFinal ? 2 : 1)
+    + (vowOn('codicia') ? combat.enemies.filter(e=> e.tpl && e.tpl.elite && !e.summoned).length : 0) // voto Codicia
+    + (vowOn('silencio') && chance(0.10*rewardEnemyCount) ? 1 : 0); // voto Silencio
   // El jefe de década del piso 10 es la única excepción al piso mínimo de
   // Raro/Único (C/B): es el primer vistazo real a esos rangos, incluso para
   // un personaje que llega ahí todavía por debajo del nivel 11.
@@ -17249,8 +17432,8 @@ function handleVictory(){
         // generateDungeon(1) nunca pasa por este bloque).
         const prevUltimateUses = state.dungeon.ultimateUses || 0;
         const prevUltimateCooldown = state.dungeon.ultimateCooldown || 0;
-        const prevSs = {ssScarab: state.dungeon.ssScarab, ssStar: state.dungeon.ssStar}; // piezas de "una vez por bajada"
-        state.dungeon = generateDungeon(clearedLevel+1);
+        const prevSs = {ssScarab: state.dungeon.ssScarab, ssStar: state.dungeon.ssStar, vows: state.dungeon.vows, decadeIntro: state.dungeon.decadeIntro}; // piezas de "una vez por bajada" y votos
+        state.dungeon = generateDungeon(clearedLevel+1, prevSs.vows);
         Object.assign(state.dungeon, prevSs);
         state.dungeon.ultimateUses = prevUltimateUses;
         state.dungeon.ultimateCooldown = prevUltimateCooldown;
@@ -17329,14 +17512,22 @@ function checkLostBag(){
 }
 // Avisos al entrar por primera vez a los tramos 11-20 y 21+ (una sola vez por personaje).
 function levelPenaltyNotice(level){
-  if(gameMode() !== 'normal') return;
+  // Al entrar a una década (cada vez, no solo la primera) habla el laberinto y anuncia su regla.
+  const dIdx = decadeIndexForLevel(level), rule = DECADE_RULES[dIdx], pages = [];
+  if(state.dungeon && state.dungeon.decadeIntro !== dIdx && rule.intro){
+    pages.push({who:'El laberinto', img:'src/assets/escenas/laberinto.jpg?v=1', text:`<i>${rule.intro}</i><br><br><b>${rule.name}.</b> En el mapa, «Reglas de la década» te dice qué cambia.`});
+    log(`<b>${rule.name}</b>: ${rule.text}`);
+  }
+  if(state.dungeon) state.dungeon.decadeIntro = dIdx;
+  const speakIntro = ()=>{ if(pages.length) showSpeech(pages, null, 'Continuar'); };
+  if(gameMode() !== 'normal'){ speakIntro(); return; }
   const bag = lostBag();
   if(bag && bag.level === level) log(`Tu bolsa con ${bag.items.length} objeto(s) te espera en el piso ${bag.floor + 1} de este nivel.`);
   const key = level >= 21 ? 'perdida21' : level >= 11 ? 'perdida11' : null;
-  if(!key || (level !== 11 && level !== 21) || seenOnce(key)) return;
+  if(!key || (level !== 11 && level !== 21) || seenOnce(key)){ speakIntro(); return; }
   const text = level >= 21 ? 'El ambiente se ha vuelto más pesado. Aquí abajo el laberinto ya no perdona.' : 'El aire se espesa. El laberinto empieza a cobrarse lo que dejas atrás.';
   log(`<i>${text}</i>`);
-  showSpeech([{who:'El laberinto', img:'src/assets/escenas/laberinto.jpg?v=1', text:`<i>${text}</i>`}], ()=> showOverlay('Ajuste de pérdida', level >= 21
+  showSpeech([{who:'El laberinto', img:'src/assets/escenas/laberinto.jpg?v=1', text:`<i>${text}</i>`}].concat(pages), ()=> showOverlay('Ajuste de pérdida', level >= 21
     ? `Desde el nivel 21, si caes, pierdes el <b>${DEFEAT_GOLD_LOSS_PCT}% de tu oro y todo el equipo de la mochila</b>. Lo equipado y lo guardado en el Hogar sigue a salvo.`
     : `Desde el nivel 11, si caes, pierdes el <b>40% de tu oro</b> y el equipo de la mochila queda en una <b>bolsa</b> en el piso donde caíste. Vuelve a ese nivel y llega a ese piso para recuperarla; si caes antes, se pierde.`, ()=>{}), 'Continuar');
 }
@@ -17440,6 +17631,7 @@ const TUTORIAL_SLIDES = [
   {title:'El laberinto', body:'Cada nivel es un mapa de salas. Toca una sala iluminada para avanzar: hay combates, élites, cofres y hogueras donde descansar, y al final te espera un guardián. Cada diez niveles, un jefe de década; vencerlo abre un punto de entrada nuevo.'},
   {title:'Si caes', art:'src/assets/escenas/hogar.jpg', body:'Quien muere abajo pierde parte de su oro y, más hondo, lo que llevaba encima; los primeros niveles son más clementes. Lo que guardes en tu Hogar —equipo, pociones y oro— está a salvo pase lo que pase. Guarda antes de arriesgar.'},
   {title:'El combate', body:'Se pelea por turnos. Hay dos posiciones: el Frente recibe los golpes y permite los ataques cuerpo a cuerpo; la Retaguardia favorece los ataques a distancia. Los enemigos también se reparten así: primero hay que abrirse paso por su frente.'},
+  {title:'Cada década, sus reglas', body:'Desde el nivel 11, cada década del laberinto cambia una regla del combate: telarañas que atrapan al que va delante, bestias que se enfurecen, decretos, espejismos, mareas… Al entrar, el laberinto te lo anuncia, y en el mapa el botón «Reglas de la década» te recuerda qué cambia. Tras vencer al Ogro podrás además jurar votos al bajar: castigos que eliges a cambio de más premio.'},
   {title:'MP, Espíritu y defensa', body:'El MP paga casi todas las habilidades de ataque; el Espíritu, las del Paladín y las de apoyo. Si la cosa se tuerce, Defenderse te da media oportunidad de esquivar y reduce a la mitad el golpe que entre.'},
   {title:'Tu senda crece contigo', body:'Al nivel 30 tus tres habilidades se vuelven más fuertes. Al 60 despiertas tu definitiva: muy poderosa, con tres usos por bajada. Y quien derrota al guardián del nivel 80 absorbe su corazón y elige una profesión, para siempre.'},
   {title:'Equipo y piedras', art:'src/assets/escenas/tienda.jpg', body:'En «Personaje e inventario» cada objeto tiene su botón de Equipar, y cada pieza puesta, el de Desequipar. Las piedras de alma se engarzan aparte. Gerd, en la Tienda, vende lo básico y compra lo que subas.'},
@@ -17608,7 +17800,8 @@ function renderCombat(){
       if(pool < effectiveSkillCost(sk.id, sk)) disabled = true;
     }
     if(sk.requiresPos && combat.playerPos!==sk.requiresPos && !sk.penaltyIfFrente) disabled = true;
-    let costText = sk.cost ? `${sk.cost.valor} ${COST_LABELS[sk.cost.tipo] || sk.cost.tipo}` : 'Gratis';
+    let costText = sk.cost ? `${effectiveSkillCost(sk.id, sk)} ${COST_LABELS[sk.cost.tipo] || sk.cost.tipo}` : 'Gratis';
+    if(combat.chained === sid){ disabled = true; costText = 'Encadenada'; }
     if(sk.ultimate){
       const usesLeft = ultimateMaxUses() - (state.dungeon.ultimateUses||0);
       const cooldown = state.dungeon.ultimateCooldown||0;
@@ -17665,7 +17858,7 @@ function renderCombat(){
           <span class="phud-icon hp">${PHUD_ICON_HP}</span>
           <div class="phud-bar">
             <div class="phud-fill hp ${(targetEnemy.hp/targetEnemy.maxHP)<0.3?'low':''}" style="width:${Math.max(0,targetEnemy.hp/targetEnemy.maxHP*100)}%"></div>
-            <span class="phud-num">${Math.max(0,targetEnemy.hp)} / ${targetEnemy.maxHP}</span>
+            <span class="phud-num">${vowOn('silencio') ? '¿? / ¿?' : `${Math.max(0,targetEnemy.hp)} / ${targetEnemy.maxHP}`}</span>
           </div>
         </div>
         ${targetEnemy.statuses && targetEnemy.statuses.length ? `<div class="phud-statuses">${renderStatusChips(targetEnemy.statuses)}</div>` : ''}
@@ -17685,11 +17878,6 @@ function renderCombat(){
         </div>
       </div>
     </div>
-    <div class="pos-toggle" style="margin-bottom:2px;">
-      <span class="pos-pill ${combat.playerPos==='frente'?'active':''}">Frente</span>
-      <span class="pos-pill ${combat.playerPos==='retaguardia'?'active':''}">Retaguardia</span>
-    </div>
-    <div class="pos-hint" style="font-size:0.7em; color:var(--text-dim); margin:2px 0 8px;">Frente: exige la mayoría de habilidades físicas de golpe. Retaguardia: mejor para habilidades a distancia.</div>
     <div class="phud-wrap">
       <div class="phud">
         <div class="phud-portrait">${playerSprite ? `<img src="${playerSprite}" alt="">` : `<span class="phud-emoji">${race().icon}</span>`}</div>

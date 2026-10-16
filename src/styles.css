@@ -2353,3 +2353,17 @@ button.cron-card:hover{ transform:translateY(-2px); border-color:var(--bronze); 
 .tb-sep span{ font-size:0.56em; letter-spacing:0.06em; text-transform:uppercase; color:#a59a86; white-space:nowrap; }
 @keyframes tbNow{ 0%, 100%{ transform:translateY(0); } 50%{ transform:translateY(2px); } }
 @media (max-width:640px){ .tb-cell{ width:24px; height:24px; border-width:1px; } .tb-cell.now{ width:32px; height:32px; } .tb-cell.next{ width:20px; height:20px; } .tb-round, .tb-sep span{ display:none; } .turn-bar{ gap:3px; padding:3px 5px; } }
+
+/* ---------- Reglas de década y votos ---------- */
+.map-rules{ display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:0 0 8px; }
+.dr-btn{ font-size:0.82em; padding:5px 10px; }
+.vows-line{ font-size:0.78em; color:#e8a46a; letter-spacing:0.02em; }
+.vows-card{ max-width:560px; max-height:92vh; overflow-y:auto; }
+.vows-list{ display:flex; flex-direction:column; gap:6px; margin:10px 0 14px; text-align:left; }
+.vow{ display:flex; gap:10px; align-items:flex-start; padding:8px 10px; border:1px solid rgba(201,161,74,0.35); border-radius:6px; background:rgba(0,0,0,0.25); cursor:pointer; }
+.vow input{ margin-top:4px; accent-color:#c9a14a; }
+.vow span{ display:flex; flex-direction:column; gap:2px; }
+.vow small{ color:var(--text-dim); font-size:0.82em; }
+.vow em{ font-style:normal; color:#8fd18f; font-size:0.82em; }
+.vow.off{ opacity:0.5; cursor:not-allowed; }
+.vow.off em{ color:var(--text-dim); }
