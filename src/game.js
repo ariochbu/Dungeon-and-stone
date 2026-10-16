@@ -6847,7 +6847,7 @@ function buildRiftGroup(node, f, level){
 function riftKeys(){ const sc = state.char.storyChoices || (state.char.storyChoices = {}); return sc._riftKeys || (sc._riftKeys = {}); }
 function enterRift(node, f){
   const t = RIFT_THEMES[node.rift], dec = decadeIndexForLevel(state.dungeon.level);
-  showChoiceOverlay('Un rift', `El aire se pliega sobre sí mismo y deja ver otro lugar: <b>${t.name}</b>.<br><br><b style="color:#ff8a7a">Peligro.</b> Lo que hay dentro pelea como el final de esta década (nivel ${dec*10 + 10}), en dos oleadas y un guardián, sin descanso entre ellas. Una vez dentro no hay vuelta atrás.`, [
+  showChoiceOverlay('Un rift', `El aire se pliega sobre sí mismo y deja ver otro lugar: <b>${t.name}</b>.<br><br><b style="color:#ff8a7a">Peligro.</b> Lo que hay dentro pelea como el final de esta década (nivel ${dec*10 + 10}), en dos oleadas y un guardián, con apenas un respiro entre ellas. Una vez dentro no hay vuelta atrás.`, [
     {label:'Entrar al rift', primary:true, onClick: ()=>{ node.riftStage = 0; startCombat(buildRiftGroup(node, f, state.dungeon.level), node); }},
     {label:'Pasar de largo', onClick: ()=>{ node.done = true; log('Dejas el rift atrás. El remolino se cierra sin hacer ruido.'); save(); renderAll(); }},
   ]);
@@ -6858,10 +6858,27 @@ function riftAdvance(){
   if(node.type !== 'rift' || node.riftStage >= 2) return false;
   node.riftStage++;
   syncAllyHPToDungeon();
+  riftBreather();
   const f = state.dungeon.atFloor;
-  log(node.riftStage === 2 ? `Las oleadas ceden. Del fondo del rift sale <b>${RIFT_THEMES[node.rift].mobs[5][1]}</b>.` : 'La primera oleada cae. Llega otra.');
+  log((node.riftStage === 2 ? `Las oleadas ceden. Del fondo del rift sale <b>${RIFT_THEMES[node.rift].mobs[5][1]}</b>.` : 'La primera oleada cae. Llega otra.') + ' Recuperáis un poco el aliento.');
   startCombat(buildRiftGroup(node, f, state.dungeon.level), node);
   return true;
+}
+// Respiro entre oleadas (ariochbu, 2026-10-15): cada uno recupera el 5% de su vida, MP y espíritu máximos.
+// Los aliados caídos siguen caídos.
+const RIFT_BREATHER = 0.05;
+function riftBreather(){
+  const d = derived(), k = RIFT_BREATHER;
+  if(state.char.curHP > 0) state.char.curHP = Math.min(d.maxHP, state.char.curHP + Math.round(d.maxHP*k));
+  state.char.curSta = Math.min(d.maxSta, state.char.curSta + Math.round(d.maxSta*k));
+  state.char.curSpi = Math.min(d.maxSpi, state.char.curSpi + Math.round(d.maxSpi*k));
+  const dg = state.dungeon;
+  (state.char.allies||[]).forEach(row=>{
+    if(!dg.allyHP || !(dg.allyHP[row.id] > 0)) return;
+    dg.allyHP[row.id] = Math.min(allyMaxHP(row), dg.allyHP[row.id] + Math.round(allyMaxHP(row)*k));
+    if(dg.allyMP && dg.allyMP[row.id] != null) dg.allyMP[row.id] = Math.min(allyMaxMP(row), dg.allyMP[row.id] + Math.round(allyMaxMP(row)*k));
+    if(dg.allySpirit && dg.allySpirit[row.id] != null) dg.allySpirit[row.id] = Math.min(allyMaxSpirit(row), dg.allySpirit[row.id] + Math.round(allyMaxSpirit(row)*k));
+  });
 }
 function grantRiftRewards(node){
   const t = RIFT_THEMES[node.rift], keys = riftKeys(), got = [];
@@ -7536,13 +7553,17 @@ function ssCombatStart2(){
   ssPlanIntents();
 }
 // 038 Lentes del Escriba: lo que hará cada enemigo en su próximo turno.
+// Intenciones a la vista en los niveles 1-20 del modo normal (ariochbu, 2026-10-15), como en Slay the Spire: el
+// jugador nuevo ve venir el golpe fuerte y aprende a Defenderse. Los golpes fuertes se anuncian con «Prepara».
+const INTENTS_FOR_NEWBIES_UNTIL = 20;
+function newbieIntents(){ return gameMode() === 'normal' && !!state.dungeon && state.dungeon.level <= INTENTS_FOR_NEWBIES_UNTIL; }
 function ssPlanIntents(){
   if(!combat || combat.over) return;
-  const on = !!ssOn(38);
+  const lentes = !!ssOn(38), on = lentes || newbieIntents();
   combat.enemies.forEach(e=>{
     e.ssIntent = null;
     if(!on || e.hp <= 0 || (e.tpl && e.tpl.decoy)) return;
-    if(!e.tpl.abilities){ e.ssIntent = {label:'¿?', special:false}; return; }
+    if(!e.tpl.abilities){ if(lentes) e.ssIntent = {label:'¿?', special:false}; return; }
     const real = e.cooldowns || {}, sim = {};
     Object.keys(real).forEach(k=>{ sim[k] = Math.max(0, real[k] - 1); });
     e.cooldowns = sim;
@@ -7550,7 +7571,8 @@ function ssPlanIntents(){
     try{ id = pickNewStyleAbilityId(e, newStyleCtx(e, frontlineTarget())); } catch(err){ id = null; }
     e.cooldowns = real;
     const ab = id && e.tpl.abilities[id];
-    if(ab) e.ssIntent = {id, label:ab.label, special: !!(ab.cooldown || ab.utility)};
+    const heavy = ab && !ab.utility && (ab.mult || 1) >= 1.3;
+    if(ab) e.ssIntent = {id, label: heavy ? `Prepara ${ab.label}` : ab.label, special: !!(ab.cooldown || ab.utility)};
   });
 }
 function ssPlanned(enemy, target){
@@ -9731,19 +9753,20 @@ function renderCityDungeonEntry(){
       </div>
     </div>
     <div class="lb-warn">
-      <b>☠ Si mueres dentro</b> pierdes el equipo suelto de tu mochila y el <b>${DEFEAT_GOLD_LOSS_PCT}%</b> de tu oro. Lo que llevas equipado y lo guardado en el Hogar está a salvo.
+      <b>☠ Si mueres dentro</b> ${gameMode() === 'normal' ? `en los niveles 1-10 ${deathPenaltyText(1)}; en los 11-20 ${deathPenaltyText(11)}; desde el 21 ${deathPenaltyText(21)}` : deathPenaltyText(99)}. Lo que llevas equipado y lo guardado en el Hogar está a salvo.
       <span>Si te retiras tras vencer a un guardián, conservas todo.</span>
     </div>
   `;
   const enterDungeonAt = (startLevel)=>{
     showOverlay(
       'Antes de entrar',
-      `Una vez dentro no podrás retirarte hasta vencer al guardián del nivel o caer en el intento. Si mueres, pierdes el equipo suelto que llevas en la mochila y el ${DEFEAT_GOLD_LOSS_PCT}% de tu oro — lo que ya tienes equipado y lo que guardaste en el Hogar está a salvo.`,
+      `Una vez dentro no podrás retirarte hasta vencer al guardián del nivel o caer en el intento. Si mueres, ${deathPenaltyText(startLevel)} — lo que ya tienes equipado y lo que guardaste en el Hogar está a salvo.`,
       ()=>{
         stopLoginAudio();
         const d = derived();
         state.char.curHP = d.maxHP; state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi;
         state.dungeon = generateDungeon(startLevel);
+        levelPenaltyNotice(startLevel);
         cityView = 'map'; // al volver a la ciudad se ve el mapa
         playDungeonAudio(startLevel);
         // La "Descansar" de la ciudad se quitó por redundante (2026-09-25,
@@ -12222,6 +12245,7 @@ function enterNode(f,n){
   updateRecord(dg.level, f);
   dg.visited[f+'-'+n] = true;
   const node = dg.floors[f][n];
+  checkLostBag();
   save();
   if(advancedFloor) advanceMissionsFor('clear_floors', 1);
 
@@ -16772,6 +16796,7 @@ async function simRiftOnce(cfg){
     if(!won){ out.stuck = !simOutcome; return out; }
     out.won++; out.hpPct.push(state.char.curHP / (derived().maxHP || 1));
     syncAllyHPToDungeon();
+    riftBreather();
   }
   return out;
 }
@@ -16816,6 +16841,10 @@ if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
   window.__ficha = (cfg)=>{ const {st} = simBuildState(Object.assign({style:'tirador', level:80, dungeonLevel:80}, cfg)); st.dungeon = null; st.char.gold = cfg.gold || 0; state = st; const d = derived(); state.char.curHP = d.maxHP; state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi; fichaTab = 'profesion'; fichaHostEl = null; save = ()=>{}; renderAll = ()=>{}; renderFicha(); };
   window.__celdaVer = (level, cfg)=>{ const {st} = simBuildState(Object.assign({style:'pesada', level:100, dungeonLevel:level}, cfg || {})); state = st; state.log = []; const d = derived(); state.char.curHP = d.maxHP; state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi; save = ()=>{}; lsGet = ()=> null; lsSet = ()=>{}; const dg = Object.assign(generateDungeon(level), {allyHP:{}, allyMP:{}, allySpirit:{}}); state.dungeon = dg; showScreen('screen-game'); const f = dg.floors.length - 1; dg.atFloor = f; dg.atNode = 0; startCombat(buildEncounterGroup('jefe', f, level), dg.floors[f][0]); };
   window.__riftVer = (theme, level, cfg)=>{ const {st} = simBuildState(Object.assign({style:'pesada', level: level, dungeonLevel: level}, cfg || {})); state = st; state.log = []; const d = derived(); state.char.curHP = d.maxHP; state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi; save = ()=>{}; SIM_RIFT = {theme, force:true}; const dg = Object.assign(generateDungeon(level), {allyHP:{}, allyMP:{}, allySpirit:{}}); state.dungeon = dg; showScreen('screen-game'); let pos = null; dg.floors.forEach((fl, f)=> fl.forEach((n, i)=>{ if(n.type === 'rift') pos = [f, i]; })); if(cfg && cfg.cerca && pos){ dg.atFloor = pos[0] - 1; dg.atNode = 0; for(let f = 0; f < pos[0]; f++) dg.visited[f + '-0'] = true; } renderAll(); return pos; };
+  // Castigo por caer: __muerte(nivel, piso) mata al personaje ahí; __bolsa() enseña la bolsa; __nivel(n) entra al nivel n.
+  window.__muerte = (lvl, floor)=>{ state.dungeon.level = lvl; state.dungeon.atFloor = floor || 0; handleDefeat(); };
+  window.__bolsa = ()=> ({bag: lostBag(), inv: state.char.inventory.filter(i=> i.kind === 'equip').length, gold: state.char.gold});
+  window.__nivel = (n, floor)=>{ const d = derived(); state.char.curHP = d.maxHP; state.dungeon = generateDungeon(n); levelPenaltyNotice(n); if(floor != null){ state.dungeon.atFloor = floor; checkLostBag(); } renderAll(); return window.__bolsa(); };
   window.__riftEntra = ()=>{ const dg = state.dungeon; let pos = null; dg.floors.forEach((fl, f)=> fl.forEach((n, i)=>{ if(n.type === 'rift') pos = [f, i]; })); dg.atFloor = pos[0]; dg.atNode = pos[1]; enterRift(dg.floors[pos[0]][pos[1]], pos[0]); };
   window.__riftGana = ()=>{ combat.enemies.forEach(e=>{ e.hp = 0; }); checkCombatEnd(); return combat ? {etapa: combat.node.riftStage, enemigos: combat.enemies.map(e=> e.name + ' ' + e.maxHP), over: combat.over} : 'sin combate'; };
   window.__rift = (v)=>{ if(v !== undefined) SIM_RIFT = v; return SIM_RIFT; };
@@ -17207,6 +17236,7 @@ function handleVictory(){
         state.char.curHP = d.maxHP; state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi;
         playDungeonAudio(clearedLevel+1);
         log(`Avanzas al nivel ${clearedLevel+1} del laberinto.`);
+        levelPenaltyNotice(clearedLevel+1);
         renderAll(); save();
       }});
     }
@@ -17248,11 +17278,65 @@ function handleVictory(){
 // (petición del 2026-09-14) para que la economía de aliados y el gasto en
 // pociones durante una corrida difícil pesen de verdad.
 const DEFEAT_GOLD_LOSS_PCT = 60;
+// Castigo por caer según el nivel (ariochbu, 2026-10-15, solo modo normal): los primeros niveles son la escuela.
+//   1-10  pierdes el 25% del oro y conservas el equipo de la mochila.
+//   11-20 pierdes el 40% del oro; el equipo de la mochila queda en una bolsa en el piso donde caíste. Si vuelves
+//         a ese nivel y llegas a ese piso, la recuperas; si caes antes, se pierde.
+//   21+   como siempre: el 60% del oro y todo el equipo de la mochila.
+// HardMode e Inmortal no cambian.
+function deathPenalty(level){
+  if(gameMode() === 'normal' && level <= 10) return {gold:25, gear:'keep'};
+  if(gameMode() === 'normal' && level <= 20) return {gold:40, gear:'bag'};
+  return {gold:DEFEAT_GOLD_LOSS_PCT, gear:'lose'};
+}
+function deathPenaltyText(level){
+  const p = deathPenalty(level);
+  return p.gear === 'keep' ? `pierdes el <b>${p.gold}%</b> de tu oro; el equipo de la mochila se queda contigo`
+    : p.gear === 'bag' ? `pierdes el <b>${p.gold}%</b> de tu oro y el equipo de la mochila queda en una bolsa donde caigas: si vuelves y llegas a ese piso, la recuperas`
+    : `pierdes el equipo suelto de tu mochila y el <b>${p.gold}%</b> de tu oro`;
+}
+// Bolsa perdida (niveles 11-20): {level, floor, items}. Vive en story_choices para que viaje con el personaje.
+function lostBag(){ const sc = state.char.storyChoices; return sc && sc._bag; }
+function checkLostBag(){
+  const bag = lostBag(), dg = state.dungeon;
+  if(!bag || !dg || dg.level !== bag.level || dg.atFloor < bag.floor) return;
+  delete state.char.storyChoices._bag;
+  bag.items.forEach(it=> addToInventory(it));
+  log(`<b>Encuentras tu bolsa</b> donde caíste. Recuperas ${bag.items.length} objeto(s) de equipo.`);
+}
+// Avisos al entrar por primera vez a los tramos 11-20 y 21+ (una sola vez por personaje).
+function levelPenaltyNotice(level){
+  if(gameMode() !== 'normal') return;
+  const bag = lostBag();
+  if(bag && bag.level === level) log(`Tu bolsa con ${bag.items.length} objeto(s) te espera en el piso ${bag.floor + 1} de este nivel.`);
+  const key = level >= 21 ? 'perdida21' : level >= 11 ? 'perdida11' : null;
+  if(!key || (level !== 11 && level !== 21) || seenOnce(key)) return;
+  const text = level >= 21 ? 'El ambiente se ha vuelto más pesado. Aquí abajo el laberinto ya no perdona.' : 'El aire se espesa. El laberinto empieza a cobrarse lo que dejas atrás.';
+  log(`<i>${text}</i>`);
+  showSpeech([{who:'El laberinto', img:'src/assets/escenas/laberinto.jpg?v=1', text:`<i>${text}</i>`}], ()=> showOverlay('Ajuste de pérdida', level >= 21
+    ? `Desde el nivel 21, si caes, pierdes el <b>${DEFEAT_GOLD_LOSS_PCT}% de tu oro y todo el equipo de la mochila</b>. Lo equipado y lo guardado en el Hogar sigue a salvo.`
+    : `Desde el nivel 11, si caes, pierdes el <b>40% de tu oro</b> y el equipo de la mochila queda en una <b>bolsa</b> en el piso donde caíste. Vuelve a ese nivel y llega a ese piso para recuperarla; si caes antes, se pierde.`, ()=>{}), 'Continuar');
+}
 // Bug corregido 2026-10-02: la derrota se aplicaba recién al pulsar
 // "Continuar". Si el jugador recargaba en esa pantalla, volvía al combate con
 // 0 de vida (combate recuperado) y podía tomarse una poción para "revivir"
 // sin perder nada. Ahora la derrota se aplica y se guarda AL INSTANTE; el
 // aviso solo informa.
+// Registro de muertes para encontrar dónde se atasca la gente (migración 0048). Si la tabla aún no existe, falla en silencio.
+function reportDeath(level, floor){
+  try{
+    if(simMode || !supabase || !state.char || !state.char.id) return;
+    const killers = combat && combat.enemies ? combat.enemies.map(e=> e.name).slice(0, 8) : [];
+    const eq = state.char.equip || {};
+    const rar = Object.values(eq).filter(Boolean).map(i=> i.rarity).filter(Boolean);
+    supabase.from('death_log').insert({
+      character_id: state.char.id, mode: gameMode(), style: state.char.style, race: state.char.race,
+      char_level: state.char.level, dungeon_level: level, floor, node_type: combat && combat.node ? combat.node.type : null,
+      enemies: killers, allies: (combat && combat.allies ? combat.allies.length : 0), turns: combat ? (combat.turnCount || 0) : 0,
+      gear: rar
+    }).then(r=>{ if(r && r.error) console.warn('death_log', r.error.message); }, ()=>{});
+  }catch(e){}
+}
 function handleDefeat(){
   stopBossAudio();
   if(gameMode() === 'inmortal'){
@@ -17264,9 +17348,17 @@ function handleDefeat(){
     return;
   }
   // Las piezas numeradas no se pierden al caer: su dueño está anotado en la base.
-  const lostItems = state.char.inventory.filter(i=>i.kind==='equip' && !i.ssId).length;
-  state.char.inventory = state.char.inventory.filter(i=>i.kind!=='equip' || i.ssId);
-  state.char.gold = Math.round(state.char.gold*(1-Math.min(100, DEFEAT_GOLD_LOSS_PCT*(ssOn(60) ? 2 : 1))/100)); // 060 Armadura de Oro Macizo: pierdes el doble
+  const fellLevel = (state.dungeon && state.dungeon.level) || 1, fellFloor = (state.dungeon && state.dungeon.atFloor) || 0;
+  const pen = deathPenalty(fellLevel);
+  const sc = state.char.storyChoices || (state.char.storyChoices = {});
+  const oldBag = sc._bag; delete sc._bag; // caer otra vez antes de recuperarla: la bolsa anterior se pierde
+  const loose = state.char.inventory.filter(i=>i.kind==='equip' && !i.ssId);
+  let lostItems = 0, bagged = 0;
+  if(pen.gear === 'bag' && loose.length){ sc._bag = {level:fellLevel, floor:fellFloor, items:loose}; bagged = loose.length; }
+  else if(pen.gear === 'lose') lostItems = loose.length;
+  if(pen.gear !== 'keep') state.char.inventory = state.char.inventory.filter(i=>i.kind!=='equip' || i.ssId);
+  state.char.gold = Math.round(state.char.gold*(1-Math.min(100, pen.gold*(ssOn(60) ? 2 : 1))/100)); // 060 Armadura de Oro Macizo: pierdes el doble
+  reportDeath(fellLevel, fellFloor);
   if(state.char.storyChoices) delete state.char.storyChoices._laurel; // 043 Laurel Dorado
   const d = derived();
   state.char.curHP = Math.round(d.maxHP*0.5);
@@ -17274,11 +17366,15 @@ function handleDefeat(){
   state.dungeon = null;
   payAlliesOnExit();
   flushSave();
-  showOverlay('Caído en el laberinto', `Tu cuerpo cede y el laberinto te expulsa antes del final. Pierdes el equipo suelto que llevabas en la mochila y el ${DEFEAT_GOLD_LOSS_PCT}% de tu oro. Lo que hayas guardado en el Hogar sigue a salvo.`, ()=>{
+  const penText = pen.gear === 'keep' ? `Pierdes el ${pen.gold}% de tu oro. El laberinto aún es clemente: el equipo de tu mochila se queda contigo.`
+    : pen.gear === 'bag' ? `Pierdes el ${pen.gold}% de tu oro.${bagged ? ` El equipo de tu mochila (${bagged}) queda en una bolsa en el piso ${fellFloor + 1} del nivel ${fellLevel}: vuelve y llega hasta allí para recuperarla.` : ''}`
+    : `Pierdes el equipo suelto que llevabas en la mochila y el ${pen.gold}% de tu oro.`;
+  showOverlay('Caído en el laberinto', `Tu cuerpo cede y el laberinto te expulsa antes del final. ${penText}${oldBag ? ' La bolsa que habías dejado antes se pierde para siempre.' : ''} Lo que hayas guardado en el Hogar sigue a salvo.`, ()=>{
     combat = null;
     stopDungeonAudio();
     playLoginAudio();
     if(lostItems>0) log(`Pierdes ${lostItems} objeto(s) de equipo que llevabas en la mochila.`);
+    if(oldBag) log(`Tu bolsa del nivel ${oldBag.level} (${oldBag.items.length} objeto(s)) se pierde.`);
     renderAll();
     save();
   });
@@ -17319,7 +17415,7 @@ const TUTORIAL_SLIDES = [
   {title:'Bienvenido, viajero', art:'src/assets/bienvenida/escena_1.jpg', body:'Soy el Cronista. Llevo la cuenta de todos los que bajan al laberinto… y de los pocos que vuelven. Te cuento lo esencial; puedes saltarlo y volver a oírme cuando quieras desde «¿Cómo jugar?».'},
   {title:'La Última Ciudad', art:'src/assets/ciudad/mapa.jpg', body:'Esta ciudad es tu refugio entre una bajada y otra. Toca un edificio del mapa, o usa el menú, para ir a cada lugar. Cada vez que entras al laberinto, tú y tus aliados salís con la vida y el MP completos.'},
   {title:'El laberinto', body:'Cada nivel es un mapa de salas. Toca una sala iluminada para avanzar: hay combates, élites, cofres y hogueras donde descansar, y al final te espera un guardián. Cada diez niveles, un jefe de década; vencerlo abre un punto de entrada nuevo.'},
-  {title:'Si caes', art:'src/assets/escenas/hogar.jpg', body:'Quien muere abajo pierde lo que llevaba encima. Lo que guardes en tu Hogar —equipo, pociones y oro— está a salvo pase lo que pase. Guarda antes de arriesgar.'},
+  {title:'Si caes', art:'src/assets/escenas/hogar.jpg', body:'Quien muere abajo pierde parte de su oro y, más hondo, lo que llevaba encima; los primeros niveles son más clementes. Lo que guardes en tu Hogar —equipo, pociones y oro— está a salvo pase lo que pase. Guarda antes de arriesgar.'},
   {title:'El combate', body:'Se pelea por turnos. Hay dos posiciones: el Frente recibe los golpes y permite los ataques cuerpo a cuerpo; la Retaguardia favorece los ataques a distancia. Los enemigos también se reparten así: primero hay que abrirse paso por su frente.'},
   {title:'MP, Espíritu y defensa', body:'El MP paga casi todas las habilidades de ataque; el Espíritu, las del Paladín y las de apoyo. Si la cosa se tuerce, Defenderse te da media oportunidad de esquivar y reduce a la mitad el golpe que entre.'},
   {title:'Tu senda crece contigo', body:'Al nivel 30 tus tres habilidades se vuelven más fuertes. Al 60 despiertas tu definitiva: muy poderosa, con tres usos por bajada. Y quien derrota al guardián del nivel 80 absorbe su corazón y elige una profesión, para siempre.'},
