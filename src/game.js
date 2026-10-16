@@ -13136,6 +13136,12 @@ function livingAllies(){ return (combat.allies||[]).filter(a=>a.hp>0); }
 // blanco directo salvo que de verdad no quede nadie más vivo al lado.
 let BOSS_AOE_REAR_FACTOR = 1; // 1 = sin cambio (en pruebas, ver __rearAoe)
 let SIM_REAR_LAST = false; // variante en pruebas (solo localhost): con aliados vivos, al jugador de retaguardia no lo eligen
+// ALIADOS EN PRUEBA (solo simulador, localhost; ver tools/mediciones/aliados-2026-10-16.md). Con los valores por defecto
+// no cambia nada. hpMult: vida de los aliados; lastBreath: una vez por combate, el golpe que mataría a un aliado lo deja
+// a 1 de vida; spread: de 61 en adelante el enemigo reparte sus golpes entre la fila del frente (como en 1-60) en vez de
+// ir siempre al primer aliado de frente; rearAoe: parte del área de jefes y guardianes que llega a los aliados de atrás.
+// reviveAfter: un aliado caído vuelve con el 30% de su vida tras esas rondas (una vez por combate; 0 = no).
+const ALLY_TEST = {hpMult:1, lastBreath:false, spread:false, rearAoe:1, reviveAfter:0};
 function frontlineTarget(){
   // Pisos 1-60 (pedido explícito 2026-09-28): IA propia de los enemigos —
   // acaban SÍ o SÍ con toda la línea frontal antes de tocar la retaguardia.
@@ -13144,7 +13150,7 @@ function frontlineTarget(){
   // Retaguardia, solo se vuelve blanco cuando no queda nadie al frente.
   // Sombra Cazadora y Brann con Muralla Viviente activa siguen atrayendo la
   // atención por encima del resto de la fila (su texto ya lo prometía).
-  if(state.dungeon && (state.dungeon.level||1) <= 60){
+  if(state.dungeon && ((state.dungeon.level||1) <= 60 || (simMode && ALLY_TEST.spread))){
     const allies = livingAllies();
     const front = allies.filter(a=>a.pos==='frente').map(a=>({kind:'ally', ally:a}));
     if(combat.playerPos==='frente') front.push({kind:'player'});
@@ -13175,6 +13181,7 @@ function dealDamageToAlly(ally, amount){
     amount -= absorbed;
     shieldBroke = ally.shield<=0;
   }
+  if(amount>0 && simMode && ALLY_TEST.lastBreath && ally.hp > 1 && amount >= ally.hp && !ally.simLastBreath){ ally.simLastBreath = true; amount = ally.hp - 1; }
   if(amount>0) ally.hp = Math.max(0, ally.hp - amount);
   if(ally.guest && ally.hp<=0 && ally.lastWords){ log(ally.lastWords); ally.lastWords = null; }
   if(ally.hp<=0 && !ally.guest && !ally.isShadow && ssOn(4) && !combat.tierSFired.has('ss4')){ combat.tierSFired.add('ss4'); combat.ssRaise = ally; } // 004 Grebas del Guardatumbas
@@ -13240,6 +13247,7 @@ function allyMaxHP(row){
   maxHP += equipModsSum(equip, 'maxhp_flat'); // Casco (nuevo): HP real, sin el ×8 de arriba
   maxHP += equipModsSum(equip, 'vig') * 3; // Vigor de piezas de conjunto: mismo +3 HP/punto que el jugador
   allySocketedStones(row).forEach(s=>{ if(s.bonus && s.bonus.stat==='maxhp') maxHP += s.bonus.value*8; }); // Vitalidad
+  if(simMode && ALLY_TEST.hpMult !== 1) maxHP = Math.round(maxHP*ALLY_TEST.hpMult);
   return maxHP;
 }
 // MP y Espíritu de un aliado: mismo pool de nivel para los dos, más lo que
@@ -16484,7 +16492,7 @@ function resolveNewStyleEnemyMove(enemy, target, enemyCrit){
     }
     livingAllies().filter(a=> !frontOnly || a.pos==='frente').forEach(ally=>{
       const aRes = ((ally.res && ally.res.fisico)||0) - corrosionResPenalty(ally.statuses);
-      const aDmg = Math.max(1, Math.round(base*(1-aRes/100)*(ally.pos==='frente' ? 1 : rearFactor)));
+      const aDmg = Math.max(1, Math.round(base*(1-aRes/100)*(ally.pos==='frente' ? 1 : rearFactor*(simMode && enemy.tpl.boss ? ALLY_TEST.rearAoe : 1))));
       dealDamageToAlly(ally, aDmg);
       if(ability.applies) applyStatus(ally, Object.assign({}, ability.applies), false);
       effects.push({targetKind:'ally', key:ally.id, amount:aDmg, kind:'dmg'});
@@ -16869,19 +16877,20 @@ function simFightKind(){
   if(es.some(e=> e.tpl.elite)) return 'elite';
   return 'normal';
 }
-// Opción por defecto (sin aprendizaje) de cada situación. Sale de la tabla que aprendió el propio simulador en
-// 15-85 (2026-10-16, ver plan-reestructuracion.md): reaccionar siempre era peor que no hacerlo en Telaraña y Suelo
-// ardiente, porque moverse gasta el turno; en la Marea solo le compensa defenderse al Guerrero.
+// Opción por defecto (sin aprendizaje) de cada situación. Sale de la tabla que aprendió el propio simulador
+// (segunda vuelta, 2026-10-16, ya con el movimiento gratis una vez por turno: 25 recorridos por senda en 15, 35, 45,
+// 47, 55, 85 y 95 y 10 combates por jefe; ver tools/mediciones/referencia-2026-10-16.md). Aun gratis, moverse sigue
+// costando: en el turno en que se mueve, el de Frente pierde su kit y el de Retaguardia queda expuesto.
 function simDefaultArm(situation){
   const st = state.char.style, hpPct = state.char.curHP/(derived().maxHP || 1);
   switch(situation){
-    case 'telarana': return 'quedarse';
-    case 'marea': return st === 'pesada' ? 'defender' : 'ignorar';
-    case 'suelo': return 'ignorar';
+    case 'telarana': return st === 'pesada' ? 'salir' : 'quedarse';
+    case 'marea': return (st === 'pesada' || st === 'paladin') ? 'defender' : 'ignorar';
+    case 'suelo': return st === 'hechicero' ? 'mover' : 'ignorar';
     case 'prepara': return hpPct < 0.5 ? 'defender' : 'ignorar';
-    case 'espejismo': return st === 'doblefilo' ? 'gastar' : 'esperar';
-    case 'muralla': return (st === 'pesada' || st === 'doblefilo') ? 'pegar' : 'esperar';
-    case 'coste': return 'ahorrar';
+    case 'espejismo': return (st === 'doblefilo' || st === 'paladin') ? 'gastar' : 'esperar';
+    case 'muralla': return 'pegar';
+    case 'coste': return st === 'pesada' ? 'gastar' : 'ahorrar';
     case 'definitiva': return 'usar';
     case 'sinpociones': return 'defender';
   }
@@ -17021,6 +17030,13 @@ async function simPlayCombat(){
   let guard = 0;
   while(combat && !combat.over && !simOutcome && guard++ < 400){
     await simPlayTurn(skillIds);
+    // registro de bajas de aliados (ronda en que cae cada uno), para el estudio de aliados
+    if(combat) (combat.allies || []).forEach(a=>{
+      if(a.hp <= 0 && a.simDeadAt == null) a.simDeadAt = combat.turnCount;
+      if(ALLY_TEST.reviveAfter && a.hp <= 0 && !a.simRevived && a.simDeadAt != null && combat.turnCount - a.simDeadAt >= ALLY_TEST.reviveAfter && !a.guest && !a.isShadow){
+        a.simRevived = true; a.hp = Math.max(1, Math.round(a.maxHP*0.30)); a.statuses = [];
+      }
+    });
     checkCombatEnd();
   }
   const res = simOutcome === 'win' ? 'win' : simOutcome === 'loss' ? 'loss' : 'stuck';
@@ -17038,7 +17054,8 @@ async function simOneFight(cfg){
   const node = state.dungeon.floors[0][0], f = numFloorsForLevel(cfg.dungeonLevel) - 1;
   startCombat(buildEncounterGroup(node.type, f, cfg.dungeonLevel), node);
   const res = await simPlayCombat();
-  return {win: res === 'win', stuck: res === 'stuck', turns: combat ? combat.turnCount : 0, hp: d0.maxHP, boss: combat && combat.enemies[0] ? {name: combat.enemies[0].name, maxHP: combat.enemies[0].maxHP, atk: combat.enemies[0].atk} : null};
+  const allies = combat ? (combat.allies || []).filter(a=> !a.guest && !a.isShadow).map(a=>({name: a.name, role: a.role, front: !!a.frontline, maxHP: a.maxHP, vivo: a.hp > 0, deadAt: a.simDeadAt != null ? a.simDeadAt : (a.hp <= 0 ? combat.turnCount : null)})) : [];
+  return {win: res === 'win', stuck: res === 'stuck', turns: combat ? combat.turnCount : 0, hp: d0.maxHP, allies, boss: combat && combat.enemies[0] ? {name: combat.enemies[0].name, maxHP: combat.enemies[0].maxHP, atk: combat.enemies[0].atk} : null};
 }
 // Juega un combate ya iniciado hasta que termina (misma política que simOneFight). Dentro de un nivel o un rift.
 async function simFightLoop(){
@@ -17170,7 +17187,7 @@ async function simRun(cfg){
       catch(e){ errores++; simNoteError('combate', cfg, e); continue; }
       last = r; done++; if(r.win) wins++; if(r.stuck) atascados++; turns += r.turns;
     }
-    return {style: cfg.style, level: cfg.level, dungeonLevel: cfg.dungeonLevel, n: done, winRate: done ? Math.round(wins/done*100) : null, avgTurns: done ? +(turns/done).toFixed(1) : null, playerHP: last && last.hp, boss: last && last.boss, errores, atascados};
+    return {style: cfg.style, level: cfg.level, dungeonLevel: cfg.dungeonLevel, n: done, winRate: done ? Math.round(wins/done*100) : null, avgTurns: done ? +(turns/done).toFixed(1) : null, playerHP: last && last.hp, boss: last && last.boss, allies: last && last.allies, errores, atascados};
   } finally { simMode = false; BETA_BALANCE = saved.beta; state = saved.state; combat = saved.combat; }
 }
 if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
@@ -17178,6 +17195,8 @@ if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
   // IA del simulador v2: __simIA({rules, learn, eps, persist}) cambia los interruptores y devuelve cómo quedan;
   // __simAprende() devuelve la tabla aprendida (con medias), __simAprende('borrar') la vacía.
   window.__simIA = (cfg)=>{ if(cfg) Object.assign(SIM_AI, cfg); return Object.assign({}, SIM_AI); };
+  // Aliados en prueba (solo simulador): __aliados({hpMult, lastBreath, spread, rearAoe}); sin argumentos, cómo están.
+  window.__aliados = (cfg)=>{ if(cfg) Object.assign(ALLY_TEST, cfg); return Object.assign({}, ALLY_TEST); };
   window.__simAprende = (cmd)=>{
     if(cmd === 'borrar'){ SIM_LEARN = {}; simLearnSave(); return {}; }
     const T = simLearnTable(), out = {};
