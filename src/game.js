@@ -17270,6 +17270,85 @@ if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
   window.__celdaVer = (level, cfg)=>{ const {st} = simBuildState(Object.assign({style:'pesada', level:100, dungeonLevel:level}, cfg || {})); state = st; state.log = []; const d = derived(); state.char.curHP = d.maxHP; state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi; save = ()=>{}; lsGet = ()=> null; lsSet = ()=>{}; const dg = Object.assign(generateDungeon(level), {allyHP:{}, allyMP:{}, allySpirit:{}}); state.dungeon = dg; showScreen('screen-game'); const f = dg.floors.length - 1; dg.atFloor = f; dg.atNode = 0; startCombat(buildEncounterGroup('jefe', f, level), dg.floors[f][0]); };
   window.__riftVer = (theme, level, cfg)=>{ const {st} = simBuildState(Object.assign({style:'pesada', level: level, dungeonLevel: level}, cfg || {})); state = st; state.log = []; const d = derived(); state.char.curHP = d.maxHP; state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi; save = ()=>{}; SIM_RIFT = {theme, force:true}; const dg = Object.assign(generateDungeon(level), {allyHP:{}, allyMP:{}, allySpirit:{}}); state.dungeon = dg; showScreen('screen-game'); let pos = null; dg.floors.forEach((fl, f)=> fl.forEach((n, i)=>{ if(n.type === 'rift') pos = [f, i]; })); if(cfg && cfg.cerca && pos){ dg.atFloor = pos[0] - 1; dg.atNode = 0; for(let f = 0; f < pos[0]; f++) dg.visited[f + '-0'] = true; } renderAll(); return pos; };
   // Castigo por caer: __muerte(nivel, piso) mata al personaje ahí; __bolsa() enseña la bolsa; __nivel(n) entra al nivel n.
+  // ---- PASO 0 DE LA REESTRUCTURACIÓN (2026-10-16): foto de estadísticas y partida con semilla ----
+  // __simSemilla(n): Math.random con semilla (mulberry32) mientras simMode; __simSemilla(null) la quita.
+  // __snapshot({save:'base'}) guarda la foto en este navegador; __snapshot({compare:'base'}) dice qué cambió.
+  // Antes y después de cada paso de la reestructuración la foto tiene que salir idéntica.
+  const mulberry32 = (a)=> ()=>{ a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+  const realRandom = Math.random;
+  const strHash = (str)=>{ let h = 2166136261; for(let i = 0; i < str.length; i++){ h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0).toString(16); };
+  window.__simSemilla = (n)=>{ Math.random = n == null ? realRandom : mulberry32(n); return n; };
+  window.__derivedDe = (st, race, L, g, seed)=>{ const saved = {state, sim: simMode}; simMode = true; try{ Math.random = mulberry32(seed || 1); state = simBuildState({style:st, race, level:L, dungeonLevel:L, gear:g, stoneTier: L >= 20 ? 'A' : 'E', petRarity:'none', allies:0}).st; ensureSoulSlots(); return {d: JSON.parse(JSON.stringify(derived())), stones: (state.char.soulSlots||[]).map(x=> x && x.name), equip: Object.values(state.char.equip).map(i=> i && (i.name + ':' + JSON.stringify(i.mods||{}) + JSON.stringify(i.bonus||{})))}; } finally { Math.random = realRandom; simMode = saved.sim; state = saved.state; } };
+  window.__snapshot = async (opts)=>{
+    opts = opts || {};
+    const saved = {state, combat, beta: BETA_BALANCE, sim: simMode};
+    const out = {enemigos:{}, jugador:{}, partidas:{}};
+    simMode = true;
+    try{
+      // 1) Enemigos: cada plantilla de cada década, en cada nivel de su década, primer y último piso, alfa y beta.
+      for(const beta of [true, false]){
+        BETA_BALANCE = beta;
+        for(let L = 1; L <= 100; L++){
+          state = simBuildState({style:'pesada', level:L, dungeonLevel:L, gear:'rango_a', stoneTier:'A', petRarity:'none', allies:0}).st;
+          const dIdx = decadeIndexForLevel(L), b = DECADE_BESTIARY[dIdx];
+          const tpls = [].concat(b.regular || [], b.elite || [], b.guardians || [], Object.values(b.guardianByFloor || {}), b.decadeBoss ? [b.decadeBoss] : []);
+          const floors = [0, numFloorsForLevel(L) - 1];
+          tpls.forEach(t=> floors.forEach(f=>{
+            const key = `${beta ? 'b' : 'a'}|${L}|${f}|${t.id}`;
+            Math.random = mulberry32(parseInt(strHash(key), 16));
+            const e = makeEnemy(t, f, L);
+            out.enemigos[key] = [e.maxHP, e.atk, JSON.stringify(e.res), +e.evasion.toFixed(4), +(e.precision || 0).toFixed(4), +(e.critChance || 0).toFixed(4)].join(',');
+          }));
+        }
+      }
+      Math.random = realRandom; BETA_BALANCE = true;
+      // 2) Jugador: derived() de cada senda y raza en 12 niveles y con cada rango de equipo.
+      const LV = [1, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100], RANKS = ['none', 'comun', 'poco_comun', 'raro', 'rango_b', 'rango_a', 'legendario'];
+      // Calentamiento: algunas piezas se guardan en caché al crearse la primera vez y eso cambia cuántos números al azar
+      // se consumen; una pasada previa deja todas las cachés llenas para que la foto no dependa de lo que se hizo antes.
+      for(const st of Object.keys(STYLES)) for(const L of LV) for(const g of RANKS) for(const stn of ['A', 'E']) simBuildState({style:st, level:L, dungeonLevel:L, gear:g, stoneTier:stn, petRarity:'epico'});
+      for(let pass = 0; pass < 2; pass++) for(const st of Object.keys(STYLES)) for(const race of Object.keys(RACES)) for(const L of LV) for(const g of RANKS){ // dos pasadas: vale la segunda
+        const key = `${st}|${race}|${L}|${g}`;
+        Math.random = mulberry32(parseInt(strHash(key), 16));
+        state = simBuildState({style:st, race, level:L, dungeonLevel:L, gear:g, stoneTier: L >= 20 ? 'A' : 'E', petRarity:'none', allies:0}).st;
+        ensureSoulSlots();
+        const d = derived();
+        out.jugador[key] = strHash(JSON.stringify(d, (k, v)=> typeof v === 'number' ? +v.toFixed(4) : v));
+      }
+      Math.random = realRandom;
+      // 3) Partidas con semilla: niveles enteros, sin aprendizaje, registro turno a turno resumido en un hash.
+      if(opts.partidas !== false){
+        const learnWas = SIM_AI.learn; SIM_AI.learn = false;
+        const ref = (L)=> ({gear: L < 20 ? 'rango_b' : 'rango_a', stoneTier:'A', petRarity:'epico'}); // fija: no depende de calib_harness
+        for(const st of Object.keys(STYLES)) for(const L of [5, 15, 25, 35, 47, 55, 65, 75, 85, 95]){
+          const key = `${st}|${L}`;
+          let h = '', n = 0;
+          window.__simLog = {push: (line)=>{ h = strHash(h + line); n++; }, shift: ()=>{}, get length(){ return 0; }};
+          Math.random = mulberry32(parseInt(strHash(key), 16));
+          const r = await simLevels(Object.assign({style:st, level:L, dungeonLevel:L, n:2, beta:true}, ref(L)));
+          Math.random = realRandom;
+          out.partidas[key] = `${r.cleared}/${r.n}|${n}|${h}`;
+        }
+        window.__simLog = null; SIM_AI.learn = learnWas;
+      }
+    } finally {
+      Math.random = realRandom; simMode = saved.sim; BETA_BALANCE = saved.beta; state = saved.state; combat = saved.combat;
+    }
+    const sec = (o)=> strHash(Object.keys(o).sort().map(k=> k + '=' + o[k]).join(';'));
+    const resumen = {enemigos: sec(out.enemigos), jugador: sec(out.jugador), partidas: sec(out.partidas), cuentas: {enemigos: Object.keys(out.enemigos).length, jugador: Object.keys(out.jugador).length, partidas: Object.keys(out.partidas).length}};
+    if(opts.save){ try{ localStorage.setItem('snapshot.' + opts.save, JSON.stringify(out)); }catch(e){ resumen.aviso = 'no se pudo guardar: ' + e.message; } }
+    if(opts.compare){
+      let base = null; try{ base = JSON.parse(localStorage.getItem('snapshot.' + opts.compare)); }catch(e){}
+      if(!base) resumen.diferencias = 'no hay foto guardada con ese nombre';
+      else {
+        const dif = [];
+        ['enemigos', 'jugador', 'partidas'].forEach(s=> new Set(Object.keys(base[s]).concat(Object.keys(out[s]))).forEach(k=>{ if(base[s][k] !== out[s][k]) dif.push(`${s}:${k}`); }));
+        resumen.diferencias = dif.length ? {total: dif.length, primeras: dif.slice(0, 30)} : 'ninguna';
+      }
+    }
+    window.__snapshotUltima = out;
+    return resumen;
+  };
   window.__decreto = (cfg)=>{ if(cfg) Object.assign(DECREE_CFG, cfg); return DECREE_CFG; };
   window.__votos = (v)=>{ if(v){ state.dungeon.vows = v; renderAll(); return vowsLine(); } showVowsOverlay(p=> console.log('votos', p)); };
   window.__muerte = (lvl, floor)=>{ state.dungeon.level = lvl; state.dungeon.atFloor = floor || 0; handleDefeat(); };
