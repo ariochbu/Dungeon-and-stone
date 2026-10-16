@@ -431,6 +431,7 @@ aplicar el cambio de kit que corresponda y volver a medir.
 | `GUARDIAN_ELITE_81` / `_91`, `PARAISO_GUARDIAN_GROUP` | ~8 | **Fusionar**: la escolta se lleva una parte fija del presupuesto del guardián | 1 |
 | `GAME_MODES.enemy` (HardMode ×1,3) | 1 | **Queda**, expresado como R ×1,3 y G ÷1,3 | 1 |
 | Aliados de referencia por década, tamaño de grupo | (implícito) | **Nuevo**, explícito | 20 |
+| Golpes que aguanta un aliado (`Ga`, tanque y retaguardia, por tramo) | (nada: los jefes se calibran solo contra el jugador) | **Nuevo**, ver `tools/mediciones/aliados-2026-10-16.md` | 8 |
 | Objetivos por rango | 20 | **Queda y crece** (sección 3) | 4 columnas |
 | Fórmula de daño, crítico 1,5 / 1,3, `DOT_ENEMY`, reglas, votos, decretos, Ley, Corrupción | — | **Queda** (son reglas, no calibración) | — |
 
@@ -664,3 +665,23 @@ porcentaje y los rendimientos decrecientes de crítico y evasión (sección 1.6)
 la condición de no empeorar a ningún personaje en su piso. Como las estadísticas se derivan al cargar
 (`refreshGearFromTemplate`, `derived()`), no hace falta migrar la base. Lo único que habrá que revisar es que las piezas
 SS numeradas mantengan su "S +15%" relativo.
+
+---
+
+## 9. Aliados (añadido el 2026-10-16, rama `medicion-referencia`)
+
+Estudio completo en `tools/mediciones/aliados-2026-10-16.md`. En resumen:
+- Desde el jefe 50 se pierde a los cuatro aliados en casi todos los combates. Desde el 60, el primero cae en la ronda 2-3.
+- Las causas son de código:
+  - su vida sale de la tabla vieja (10 por nivel en la retaguardia);
+  - no aplican la resistencia mágica ni la reducción por Vigor;
+  - los jefes se calibraron solo contra el jugador, porque las tablas por senda no protegen al aliado;
+  - desde el 61 todos los golpes de un objetivo van al primer tanque aliado.
+- Recomendación: paridad de defensas con el jugador y área al 50% contra la retaguardia aliada mientras haya frente.
+  Además, un presupuesto propio de aliado (`Ga`) en la tabla de presupuestos.
+- Orden en el plan:
+  - `Ga` entra en el paso 4;
+  - la paridad y el área van **antes** de quitar las tablas por senda (paso 6), porque las sendas de retaguardia dependen
+    de sus tanques aliados;
+  - la curva del aliado sigue a la del jugador en el paso 9.
+

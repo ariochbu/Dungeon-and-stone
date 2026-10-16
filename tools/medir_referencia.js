@@ -6,6 +6,8 @@
 //   REF.prog                           // progreso
 //   refMarkdown()                      // tablas en Markdown con error estándar
 //   localStorage.removeItem('refMed.v1') para empezar de cero.
+//   Dos pestañas a la vez: medirReferencia({solo:'niveles', orden:[7], key:'refMed.v1.b'}) en la segunda, y luego
+//   refFusionar('refMed.v1.b') en la primera junta los datos.
 //
 // Qué mide (con la referencia de tools/calib_harness.js y las reglas de década encendidas):
 //   - niveles enteros x3, x5 y x7 de cada década: completado, llegar vivo al guardián y ganarle cuando se llega;
@@ -23,7 +25,7 @@ if(!W.__st){
 const CLS = ['pesada', 'paladin', 'doblefilo', 'tirador', 'mago', 'hechicero'];
 const PROFS = {pesada:['baluarte','verdugo'], paladin:['custodio','inquisidor'], doblefilo:['danzante','ejecutor'],
   tirador:['ballestero','francotirador'], mago:['piromante','criomante'], hechicero:['plaguero','maldecidor']};
-const KEY = 'refMed.v1';
+let KEY = 'refMed.v1';   // medirReferencia({key}) usa otra clave (para medir en dos pestañas a la vez sin pisarse)
 const yieldNow = ()=> new Promise(res=>{ const ch = new MessageChannel(); ch.port1.onmessage = ()=> res(); ch.port2.postMessage(0); });
 const race = (p, ms)=> Promise.race([p, new Promise(res=> W.__st(()=> res(null), ms))]);
 const load = ()=>{ try{ return JSON.parse(localStorage.getItem(KEY)) || {}; }catch(e){ return {}; } };
@@ -63,6 +65,7 @@ async function runBoss(key, lv, prof, total){
 }
 W.medirReferencia = async (opts)=>{
   opts = opts || {};
+  if(opts.key && opts.key !== KEY){ KEY = opts.key; W.REF.data = load(); }
   W.__simIA({rules:true, learn:false});
   W.__alter && W.__alter(true);
   const N = opts.n || 204;          // 204 = 34 por senda o 17 por profesión
@@ -83,6 +86,7 @@ W.medirReferencia = async (opts)=>{
   }
   W.REF.done = true; W.REF.prog = 'terminado';
 };
+W.refFusionar = (otra)=>{ let o = {}; try{ o = JSON.parse(localStorage.getItem(otra)) || {}; }catch(e){} Object.assign(W.REF.data, o); save(); return Object.keys(o).length; };
 // ---- informe ----
 const pct = (k, n)=> n ? Math.round(k / n * 100) : null;
 // error estándar de la media de las variantes (cada una binomial), en puntos
