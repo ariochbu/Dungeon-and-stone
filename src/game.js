@@ -13182,6 +13182,7 @@ function dealDamageToAlly(ally, amount){
     shieldBroke = ally.shield<=0;
   }
   if(amount>0 && simMode && ALLY_TEST.lastBreath && ally.hp > 1 && amount >= ally.hp && !ally.simLastBreath){ ally.simLastBreath = true; amount = ally.hp - 1; }
+  if(amount>0 && combat){ const u = allyStatFor(ally); u.taken += Math.min(amount, ally.hp); if(ally.hp - amount <= 0 && u.diedRound == null) u.diedRound = combat.turnCount || 0; }
   if(amount>0) ally.hp = Math.max(0, ally.hp - amount);
   if(ally.guest && ally.hp<=0 && ally.lastWords){ log(ally.lastWords); ally.lastWords = null; }
   if(ally.hp<=0 && !ally.guest && !ally.isShadow && ssOn(4) && !combat.tierSFired.has('ss4')){ combat.tierSFired.add('ss4'); combat.ssRaise = ally; } // 004 Grebas del Guardatumbas
@@ -15259,6 +15260,22 @@ document.addEventListener('keydown', (e)=>{
   }
 });
 
+// UTILIDAD DE LOS ALIADOS (2026-10-16, pedido de ariochbu): qué aporta cada aliado en cada combate. Se mide
+// comparando el estado antes y después de su turno: vida quitada a los enemigos (daño), vida y escudo devueltos a tu
+// lado (curación y escudo), estados aplicados a enemigos (control) y a tu lado (apoyo). El daño que recibe y la ronda
+// en que cae se anotan en dealDamageToAlly. Solo es un registro: no cambia nada del combate.
+function allyStatFor(ally){
+  if(!combat.allyStats) combat.allyStats = {};
+  return combat.allyStats[ally.id] || (combat.allyStats[ally.id] = {tpl: ally.templateId || ally.id, name: ally.name, role: ally.role, dmg:0, heal:0, shield:0, control:0, apoyo:0, taken:0, turns:0, diedRound:null});
+}
+function allyUtilSnap(){
+  const fr = [{hp: state.char.curHP, sh: combat.playerShield || 0, st: combat.playerStatuses.length}].concat(livingAllies().map(a=> ({hp: a.hp, sh: a.shield || 0, st: (a.statuses || []).length})));
+  return {
+    enemyHp: combat.enemies.reduce((t, e)=> t + Math.max(0, e.hp), 0),
+    enemySt: combat.enemies.reduce((t, e)=> t + (e.hp > 0 ? (e.statuses || []).length : 0), 0),
+    hp: fr.reduce((t, x)=> t + x.hp, 0), sh: fr.reduce((t, x)=> t + x.sh, 0), st: fr.reduce((t, x)=> t + x.st, 0),
+  };
+}
 async function resolveAllyTurns(){
   // myCombat ancla esta llamada al combate que la disparó: a velocidad x1
   // cada aliado espera stepDelay (ver playBattleAnim) antes del siguiente,
@@ -15275,7 +15292,17 @@ async function resolveAllyTurns(){
     if(combat !== myCombat) return;
     combat.lastActor = {kind:'ally', id: ally.id};
     combat.lastAction = null;
+    const before = allyUtilSnap();
     resolveOneAllyTurn(ally);
+    if(combat === myCombat){
+      const after = allyUtilSnap(), u = allyStatFor(ally);
+      u.turns++;
+      u.dmg += Math.max(0, before.enemyHp - after.enemyHp);
+      u.heal += Math.max(0, after.hp - before.hp);
+      u.shield += Math.max(0, after.sh - before.sh);
+      u.control += Math.max(0, after.enemySt - before.enemySt);
+      u.apoyo += Math.max(0, after.st - before.st);
+    }
     if(!combat || combat.over) break;
     if(stepDelay>0){ renderCombat(); await withAnimTimeout(playBattleAnim(combat.lastActor, combat.lastAction)); combat.lastActor = null; combat.lastAction = null; }
     if(combat !== myCombat) return;
@@ -16858,7 +16885,7 @@ function simPickSkill(usable){
 // Interruptores (localhost): window.__simIA({rules, learn, eps, persist}) y window.__simAprende() para ver o borrar
 // la tabla. Con rules:false el simulador se porta exactamente como antes (misma política, mismas tiradas de azar).
 // ============================================================
-const SIM_AI = {rules:true, learn:false, eps:0.15, persist:true};
+const SIM_AI = {rules:true, learn:true, eps:0.10, persist:true}; // aprende siempre (ariochbu, 2026-10-16); __snapshot mide sin aprendizaje
 const SIM_LEARN_KEY = 'simAprende.v1';
 let SIM_LEARN = null;
 function simLearnTable(){
@@ -17041,7 +17068,22 @@ async function simPlayCombat(){
   }
   const res = simOutcome === 'win' ? 'win' : simOutcome === 'loss' ? 'loss' : 'stuck';
   simLearnEnd(res === 'win');
+  simAllyUtilAdd(res);
   return res;
+}
+// Acumulado de utilidad de aliados en las simulaciones: por aliado, década y tipo de combate.
+// __simAliadosUtil() da medias por combate; __simAliadosUtil(true) lo vacía.
+let SIM_ALLY_UTIL = {};
+function simAllyUtilAdd(res){
+  if(!combat || !combat.allyStats || !state.dungeon) return;
+  const dec = decadeIndexForLevel(state.dungeon.level || 1), node = (combat.node && combat.node.type) || '?';
+  Object.values(combat.allyStats).forEach(u=>{
+    const k = `${u.tpl}|${dec*10 + 1}-${dec*10 + 10}|${node}`;
+    const a = SIM_ALLY_UTIL[k] || (SIM_ALLY_UTIL[k] = {combates:0, victorias:0, dmg:0, heal:0, shield:0, control:0, apoyo:0, taken:0, turns:0, muertes:0, rondaMuerte:0});
+    a.combates++; if(res === 'win') a.victorias++;
+    ['dmg', 'heal', 'shield', 'control', 'apoyo', 'taken', 'turns'].forEach(f=> a[f] += u[f]);
+    if(u.diedRound != null){ a.muertes++; a.rondaMuerte += u.diedRound; }
+  });
 }
 async function simOneFight(cfg){
   const {st, petPool} = simBuildState(cfg);
@@ -17294,6 +17336,12 @@ if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
     }
     window.__snapshotUltima = out;
     return resumen;
+  };
+  window.__simAliadosUtil = (reset)=>{
+    if(reset){ SIM_ALLY_UTIL = {}; return 'vacío'; }
+    const out = {};
+    Object.entries(SIM_ALLY_UTIL).forEach(([k, a])=>{ const n = a.combates || 1; out[k] = {combates: a.combates, dañoPorCombate: Math.round(a.dmg/n), curaPorCombate: Math.round(a.heal/n), escudoPorCombate: Math.round(a.shield/n), controlPorCombate: +(a.control/n).toFixed(2), apoyoPorCombate: +(a.apoyo/n).toFixed(2), recibePorCombate: Math.round(a.taken/n), turnosPorCombate: +(a.turns/n).toFixed(1), muere: Math.round(a.muertes/n*100) + '%', rondaMedia: a.muertes ? +(a.rondaMuerte/a.muertes).toFixed(1) : null}; });
+    return out;
   };
   window.__decreto = (cfg)=>{ if(cfg) Object.assign(DECREE_CFG, cfg); return DECREE_CFG; };
   window.__votos = (v)=>{ if(v){ state.dungeon.vows = v; renderAll(); return vowsLine(); } showVowsOverlay(p=> console.log('votos', p)); };
