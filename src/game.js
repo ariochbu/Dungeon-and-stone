@@ -12952,10 +12952,10 @@ const DECADE_RULES = {
       text:'Cada 3 rondas, si estás en el Frente quedas <b>Enredado</b> 2 rondas: no puedes cambiar de posición y recibes un 15% más de daño. Una ronda antes, los hilos tiemblan.'},
   2: {name:'Manada', icon:'🐺', intro:'Huele a sangre. Aquí las bestias no huyen cuando cae una de ellas: se enfurecen.',
       text:'Cada vez que muere un enemigo, los que quedan vivos pegan un 10% más hasta el final del combate (se acumula). Piensa a quién dejas para el final.'},
-  3: {name:'Decreto', icon:'⚖️', intro:'El Usurpador dicta la ley en estos salones. Cada combate trae su propio decreto.',
+  3: {name:'Espejismo', icon:'🏝️', intro:'En la corte del Usurpador nadie es quien dice ser. No todos los que te rodean son reales.',
+      text:'En cada combate (salvo contra el Usurpador) aparece un enemigo de más que es un <b>espejismo</b>: una copia de otro que no hace daño y se deshace al primer golpe. No se distingue a simple vista; no gastes en él lo mejor que tienes.'},
+  4: {name:'Decreto', icon:'⚖️', intro:'En esta isla manda una ley que nadie escribió. Cada combate trae su propio decreto.',
       text:'Al empezar cada combate se dicta un decreto que dura toda la pelea: <b>Doble coste</b> (tus habilidades cuestan el doble), <b>Curas a medias</b> (toda curación vale la mitad) o <b>Muralla</b> (los enemigos reciben un 30% menos de daño las 2 primeras rondas).'},
-  4: {name:'Espejismo', icon:'🏝️', intro:'El calor dobla el aire. No todo lo que ves en esta isla es real.',
-      text:'En cada combate (salvo contra el jefe de la isla) aparece un enemigo de más que es un <b>espejismo</b>: una copia de otro que no hace daño y se deshace al primer golpe. No se distingue a simple vista; no gastes en él lo mejor que tienes.'},
   5: {name:'Marea', icon:'🌊', intro:'El agua sube y baja con un ritmo propio. Escucha la marea.',
       text:'Cada 4 rondas una ola barre el Frente y te quita el 8% de tu vida máxima, salvo que estés en la Retaguardia o te hayas defendido esa ronda. Una ronda antes se oye crecer.'},
   6: {name:'Ley del Caos', icon:'🌀', intro:'Aquí el caos cambia las reglas en cada combate… pero nunca las oculta.',
@@ -12978,29 +12978,29 @@ function ruleStatusInfo(){
     'Enredado': {buff:false, desc:'Telaraña: no puedes cambiar de posición y recibes un 15% más de daño.'},
     'Furia de la manada': {buff:true, desc:'Manada: pega más por cada compañero caído en este combate.'},
     'Muralla': {buff:true, desc:'Decreto: recibe un 30% menos de daño.'},
-    'Espejismo': {buff:true, desc:'Isla Paraíso: uno de estos enemigos no es real.'},
+    'Espejismo': {buff:true, desc:'Salón del Usurpador: uno de estos enemigos no es real.'},
   });
-  DECREES.forEach(dc=>{ STATUS_INFO[dc.name] = {buff:false, desc:`Decreto del Usurpador de este combate: ${dc.text}.`}; });
+  DECREES.forEach(dc=>{ STATUS_INFO[dc.name] = {buff:false, desc:`Decreto de la isla para este combate: ${dc.text}.`}; });
 }
 function decadeRulesCombatStart(){
   const dIdx = ruleDecade(); if(dIdx < 0) return;
   ruleStatusInfo();
   combat.ruleRound = 0; combat.burnPos = {pos: combat.playerPos, rounds: 0};
-  if(dIdx === 3){
+  if(dIdx === 4){
     const dc = pick(DECREES);
     combat.decree = dc.id;
     combat.playerStatuses.push({name: dc.name, duration:99, decree:true});
     if(dc.id === 'muralla') combat.enemies.forEach(e=>{ if(e.hp > 0) e.statuses.push({name:'Muralla', duration:2, incomingDmgReduction:0.30}); });
     log(`<b>${dc.name}</b>: ${dc.text}.`);
   }
-  if(dIdx === 4){
+  if(dIdx === 3){
     // El espejismo es un enemigo DE MÁS (copia de uno real): convertir a uno real en falso hacía la isla más fácil.
     const pool = combat.enemies.filter(e=> e.hp > 0 && !(e.tpl && (e.tpl.boss || e.tpl.decoy)) && !e.summoned);
     if(pool.length && combat.enemies.length < enemyCap()){
       const src = pick(pool), m = makeEnemy(src.tpl, state.dungeon.atFloor, state.dungeon.level);
       m.maxHP = src.maxHP; m.hp = src.hp; m.atk = src.atk; m.mirage = true;
       combat.enemies.splice(rnd(0, combat.enemies.length), 0, m);
-      log('El aire tiembla de calor: <b>uno de tus enemigos es un espejismo</b>.');
+      log('Algo no encaja en la corte: <b>uno de tus enemigos es un espejismo</b>.');
     }
   }
   if(dIdx === 9){
@@ -13618,7 +13618,7 @@ const ENEMY_CRIT_MULT = 1.3;
 function healMultiplierFor(statuses){
   const c = hasStatus(statuses, 'Corrosion');
   const mask = hasStatus(statuses, 'Máscara de Llanto'); // 051
-  return (c ? c.healMult : 1) * (mask ? mask.healMult : 1) * (combat && combat.decree === 'curas' ? 0.5 : 1); // Decreto (31-40)
+  return (c ? c.healMult : 1) * (mask ? mask.healMult : 1) * (combat && combat.decree === 'curas' ? 0.5 : 1); // Decreto (41-50)
 }
 
 function hasStatus(list, name){ return list.find(s=>s.name===name); }
@@ -14304,7 +14304,7 @@ function effectiveSkillCost(skillId, skill){
   let v = Math.max(0, skill.cost.valor - controlDiscountFor(skillId));
   if(skillId==='grito_guerra' && ssOn(27)) v = Math.ceil(v/2); // 027 Tambor del Trueno
   if(skill.cost.tipo==='espiritu' && combat && combat.espHalfNext) v = Math.ceil(v/2); // Piedra de Voluntad A+
-  if(combat && combat.decree === 'costes') v *= 2; // Decreto del Usurpador (31-40)
+  if(combat && combat.decree === 'costes') v *= 2; // Decreto (41-50)
   return v;
 }
 
@@ -15821,7 +15821,7 @@ function enemyAct(enemy){
 }
 function enemyActInner(enemy){
   enemy.ssActed = true;
-  if(enemy.mirage){ log(`${enemy.name} ataca… y su golpe te atraviesa sin hacer nada.`); combat.lastAction = {label:'…', effects:[]}; return; } // Espejismo (41-50)
+  if(enemy.mirage){ log(`${enemy.name} ataca… y su golpe te atraviesa sin hacer nada.`); combat.lastAction = {label:'…', effects:[]}; return; } // Espejismo (31-40)
   if(!enemy.cooldowns) enemy.cooldowns = {};
   Object.keys(enemy.cooldowns).forEach(k=> enemy.cooldowns[k] = Math.max(0, enemy.cooldowns[k]-1));
 
@@ -17631,7 +17631,7 @@ const TUTORIAL_SLIDES = [
   {title:'El laberinto', body:'Cada nivel es un mapa de salas. Toca una sala iluminada para avanzar: hay combates, élites, cofres y hogueras donde descansar, y al final te espera un guardián. Cada diez niveles, un jefe de década; vencerlo abre un punto de entrada nuevo.'},
   {title:'Si caes', art:'src/assets/escenas/hogar.jpg', body:'Quien muere abajo pierde parte de su oro y, más hondo, lo que llevaba encima; los primeros niveles son más clementes. Lo que guardes en tu Hogar —equipo, pociones y oro— está a salvo pase lo que pase. Guarda antes de arriesgar.'},
   {title:'El combate', body:'Se pelea por turnos. Hay dos posiciones: el Frente recibe los golpes y permite los ataques cuerpo a cuerpo; la Retaguardia favorece los ataques a distancia. Los enemigos también se reparten así: primero hay que abrirse paso por su frente.'},
-  {title:'Cada década, sus reglas', body:'Desde el nivel 11, cada década del laberinto cambia una regla del combate: telarañas que atrapan al que va delante, bestias que se enfurecen, decretos, espejismos, mareas… Al entrar, el laberinto te lo anuncia, y en el mapa el botón «Reglas de la década» te recuerda qué cambia. Tras vencer al Ogro podrás además jurar votos al bajar: castigos que eliges a cambio de más premio.'},
+  {title:'Cada década, sus reglas', body:'Desde el nivel 11, cada década del laberinto cambia una regla del combate: telarañas que atrapan al que va delante, bestias que se enfurecen, espejismos, decretos, mareas… Al entrar, el laberinto te lo anuncia, y en el mapa el botón «Reglas de la década» te recuerda qué cambia. Tras vencer al Ogro podrás además jurar votos al bajar: castigos que eliges a cambio de más premio.'},
   {title:'MP, Espíritu y defensa', body:'El MP paga casi todas las habilidades de ataque; el Espíritu, las del Paladín y las de apoyo. Si la cosa se tuerce, Defenderse te da media oportunidad de esquivar y reduce a la mitad el golpe que entre.'},
   {title:'Tu senda crece contigo', body:'Al nivel 30 tus tres habilidades se vuelven más fuertes. Al 60 despiertas tu definitiva: muy poderosa, con tres usos por bajada. Y quien derrota al guardián del nivel 80 absorbe su corazón y elige una profesión, para siempre.'},
   {title:'Equipo y piedras', art:'src/assets/escenas/tienda.jpg', body:'En «Personaje e inventario» cada objeto tiene su botón de Equipar, y cada pieza puesta, el de Desequipar. Las piedras de alma se engarzan aparte. Gerd, en la Tienda, vende lo básico y compra lo que subas.'},
