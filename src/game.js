@@ -6961,7 +6961,7 @@ const SS_ITEMS = [
   [27, "Tambor del Trueno", "arma2", "tormenta", "pesada", "Grito de guerra aturde 1 turno a todo el frente enemigo (una vez por combate) y cuesta la mitad."],
   [28, "Ojo de la Tormenta", "amuleto", "tormenta", "voluntad", "Cada tercer turno tuyo cae un rayo sobre un enemigo al azar por el 150% de tu daño base. No puede fallar."],
   [29, "Yelmo Alado", "casco", "tormenta", "voluntad", "Tienes una acción extra en el primer turno de cada combate."],
-  [30, "Plumas del Halcón", "botas", "tormenta", "voluntad", "Una vez por turno, cambiar de fila no gasta el turno y te da +50% de evasión hasta tu siguiente turno."],
+  [30, "Plumas del Halcón", "botas", "tormenta", "voluntad", "Puedes cambiar de fila dos veces por turno, y la primera te da +50% de evasión hasta tu siguiente turno."],
   [31, "Aguijón de la Reina", "arma", "nido", "doblefilo", "Cada golpe crítico hace nacer una Larva aliada (hasta 3) que ataca por el 20% de tu daño y muere de un golpe."],
   [32, "Caparazón de Escarabajo", "armadura", "nido", "guardian", "El primer golpe que recibes en cada turno enemigo se reduce a la mitad."],
   [33, "Huevo Ámbar", "amuleto", "nido", "voluntad", "Tienes una ranura más para Caídos equipados."],
@@ -7488,7 +7488,7 @@ function ssOnReposition(){
   const ex = hasStatus(combat.playerStatuses, 'Plumas del Halcón');
   if(ex) ex.duration = 1; else combat.playerStatuses.push({name:'Plumas del Halcón', duration:1, evasionDelta:50});
   statusInfoFor({name:'Plumas del Halcón', evasionDelta:50});
-  log(`<b>${plumas.name}</b>: te mueves sin gastar el turno.`);
+  log(`<b>${plumas.name}</b>: +50% de evasión, y puedes volver a moverte este turno.`);
   return true;
 }
 // Fin de tu turno (antes de aliados y enemigos). Devuelve true si te toca jugar otra vez.
@@ -14402,11 +14402,14 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
   if(skill.utility==='reposition'){
     if(hasStatus(combat.playerStatuses, 'Enredado')){ log('Estás <b>Enredado</b> en la telaraña: no puedes cambiar de posición.'); return; }
     if(decreeOn('anclado')){ log('El <b>Decreto: Anclado</b> te impide cambiar de posición en este combate.'); return; }
+    // Moverse ya no gasta el turno (ariochbu, 2026-10-16), pero solo una vez por turno (dos con 030 Plumas del Halcón).
+    if((combat.movesThisTurn || 0) >= maxMovesPerTurn()){ log('Ya cambiaste de posición en este turno.'); return; }
+    combat.movesThisTurn = (combat.movesThisTurn || 0) + 1;
     combat.playerPos = combat.playerPos==='frente' ? 'retaguardia' : 'frente';
     combat.ssMoved = true;
-    log(`Te mueves a ${combat.playerPos==='frente'?'el Frente':'la Retaguardia'}.`);
-    if(ssOnReposition()) return;
-    await endPlayerTurn(); return;
+    log(`Te mueves a ${combat.playerPos==='frente'?'el Frente':'la Retaguardia'}. Aún puedes actuar.`);
+    ssOnReposition();
+    renderAll(); return;
   }
   // Escudo del Juramento (Paladín) — reusa el mismo pozo de escudo genérico
   // (combat.playerShield/grantShield) que ya usan las piedras de Sabiduría y
@@ -15107,7 +15110,10 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
   await endPlayerTurn();
 }
 
+function maxMovesPerTurn(){ return ssOn(30) ? 2 : 1; }
+function canMoveNow(){ return !!combat && (combat.movesThisTurn || 0) < maxMovesPerTurn() && !decreeOn('anclado') && !hasStatus(combat.playerStatuses, 'Enredado'); }
 async function endPlayerTurn(){
+  if(combat) combat.movesThisTurn = 0;
   // myCombat: mismo candado que resolveAllyTurns/processEnemyTurns (ver esos
   // comentarios) — si el combate ya terminó y empezó uno nuevo durante los
   // await de abajo, esta llamada no debe seguir resolviendo turnos sobre el
@@ -17850,7 +17856,7 @@ const TUTORIAL_SLIDES = [
   {title:'La Última Ciudad', art:'src/assets/ciudad/mapa.jpg', body:'Esta ciudad es tu refugio entre una bajada y otra. Toca un edificio del mapa, o usa el menú, para ir a cada lugar. Cada vez que entras al laberinto, tú y tus aliados salís con la vida y el MP completos.'},
   {title:'El laberinto', body:'Cada nivel es un mapa de salas. Toca una sala iluminada para avanzar: hay combates, élites, cofres y hogueras donde descansar, y al final te espera un guardián. Cada diez niveles, un jefe de década; vencerlo abre un punto de entrada nuevo.'},
   {title:'Si caes', art:'src/assets/escenas/hogar.jpg', body:'Quien muere abajo pierde parte de su oro y, más hondo, lo que llevaba encima; los primeros niveles son más clementes. Lo que guardes en tu Hogar —equipo, pociones y oro— está a salvo pase lo que pase. Guarda antes de arriesgar.'},
-  {title:'El combate', body:'Se pelea por turnos. Hay dos posiciones: el Frente recibe los golpes y permite los ataques cuerpo a cuerpo; la Retaguardia favorece los ataques a distancia. Los enemigos también se reparten así: primero hay que abrirse paso por su frente.'},
+  {title:'El combate', body:'Se pelea por turnos. Hay dos posiciones: el Frente recibe los golpes y permite los ataques cuerpo a cuerpo; la Retaguardia favorece los ataques a distancia. Los enemigos también se reparten así: primero hay que abrirse paso por su frente. Cambiar de posición no gasta tu turno, pero solo puedes hacerlo una vez por turno.'},
   {title:'Cada década, sus reglas', body:'Desde el nivel 11, cada década del laberinto cambia una regla del combate: telarañas que atrapan al que va delante, bestias que se enfurecen, espejismos, decretos, mareas… Al entrar, el laberinto te lo anuncia, y en el mapa el botón «Reglas de la década» te recuerda qué cambia. Tras vencer al Ogro podrás además jurar votos al bajar: castigos que eliges a cambio de más premio.'},
   {title:'MP, Espíritu y defensa', body:'El MP paga casi todas las habilidades de ataque; el Espíritu, las del Paladín y las de apoyo. Si la cosa se tuerce, Defenderse te da media oportunidad de esquivar y reduce a la mitad el golpe que entre.'},
   {title:'Tu senda crece contigo', body:'Al nivel 30 tus tres habilidades se vuelven más fuertes. Al 60 despiertas tu definitiva: muy poderosa, con tres usos por bajada. Y quien derrota al guardián del nivel 80 absorbe su corazón y elige una profesión, para siempre.'},
@@ -18143,7 +18149,7 @@ function renderCombat(){
         <button class="menu-btn" id="menu-habilidades" ${combat.turnBusy?'disabled':''}>💥 Habilidades</button>
         <button class="menu-btn" id="menu-mochila" ${combat.turnBusy?'disabled':''}>🎒 Mochila</button>
         <button class="menu-btn" id="menu-defensa" ${combat.turnBusy?'disabled':''}>🛡 Defensa</button>
-        <button class="menu-btn wide" id="menu-reposicionar" ${combat.turnBusy?'disabled':''}>↔ Reposicionarse (${combat.playerPos==='frente'?'a Retaguardia':'al Frente'})</button>
+        <button class="menu-btn wide" id="menu-reposicionar" ${combat.turnBusy || !canMoveNow() ?'disabled':''}>↔ Reposicionarse (${combat.playerPos==='frente'?'a Retaguardia':'al Frente'})</button>
       </div>
       <div class="battle-submenu" id="battle-submenu" style="display:${combat.openSubmenu?'flex':'none'};">
         <div class="submenu-list" id="battle-submenu-list">${combat.openSubmenu==='habilidades' ? skillSubmenuHTML : combat.openSubmenu==='mochila' ? potionSubmenuHTML : ''}</div>
