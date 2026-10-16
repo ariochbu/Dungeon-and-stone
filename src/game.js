@@ -5505,6 +5505,9 @@ function guardianVsFront(enemy){
   const lvl = (state.dungeon && state.dungeon.level) || 0;
   const [G, C] = lvl >= GUARDIAN_VS_FRONT_81.from ? [GUARDIAN_VS_FRONT_81, COMMON_VS_TANK_81] : [GUARDIAN_VS_FRONT, COMMON_VS_TANK];
   if(lvl < G.from || lvl > G.to || lvl % 10 === 0 || !enemy.tpl) return null;
+  // El jefe de un rift pelea como un jefe de década, no como un guardián de piso: sin castigo al frente. Con él los
+  // tanques le ganaban el 7-20% de las veces en 61-69 y el resto de sendas el 70-86% (calibración de rifts, 2026-10-11).
+  if(enemy.tpl.riftBoss) return null;
   if((enemy.tpl.boss && !enemy.summoned) || enemy.escort) return G; // el guardián y su escolta
   if(enemy.summoned || enemy.tpl.decoy) return null;                // invocaciones a mitad de combate: sin castigo
   return C;
@@ -6531,6 +6534,8 @@ function generateDungeon(level){
 // (dos oleadas y el jefe del rift) con criaturas de un tema propio que no depende de la década. La fuerza sí:
 // las oleadas pelean como el último nivel normal de la década y el jefe como su jefe de década con +10% de
 // vida. Al ganar: llave de ese tema y botín 75% Rango A / 23% S / 2% SS (el SS aún no cae: RIFT_SS_ENABLED).
+// Encima de esa fuerza va el ajuste por década de RIFT_TUNING (calibración del 2026-10-11): sin él, la segunda oleada
+// y el jefe eran casi imposibles de 11 en adelante, porque entre etapas no se cura nadie.
 // ============================================================
 const RIFTS_OPEN = true;    // abiertos por orden de ariochbu (2026-10-11)
 const RIFTS_HERE = RIFTS_OPEN || /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
@@ -6538,14 +6543,29 @@ const RIFT_CHANCE_PER_DECADE = 0.10;
 const RIFT_LOOT = {rolls:3, tiers:[['ss', 0.02], ['s', 0.23], ['a', 0.75]], stoneShare:0.30};
 const RIFT_SS_ENABLED = true; // encendido por orden de ariochbu (2026-10-11)
 const RIFT_BOSS_HP = 1.10;
+// Ajuste de los rifts por década (índice 0 = pisos 1-10). hp/atk multiplican a las criaturas de las oleadas (élite
+// incluida) y a la escolta del jefe; bossHp/bossAtk, al jefe del rift. Se aplican en buildRiftGroup, encima de la
+// escala normal de la década. Calibrado con simRifts (ver tools/calib_rifts.js y calibracion-rifts.md).
+const RIFT_TUNING = {
+  0: {hp:0.84, atk:0.84, bossHp:1.00, bossAtk:1.00},
+  1: {hp:0.60, atk:0.60, bossHp:0.43, bossAtk:0.43},
+  2: {hp:0.76, atk:0.76, bossHp:0.34, bossAtk:0.34},
+  3: {hp:0.76, atk:0.76, bossHp:0.50, bossAtk:0.50},
+  4: {hp:1.40, atk:1.40, bossHp:0.99, bossAtk:0.99},
+  5: {hp:0.71, atk:0.71, bossHp:0.33, bossAtk:0.33},
+  6: {hp:0.68, atk:0.68, bossHp:0.50, bossAtk:0.50},
+  7: {hp:0.74, atk:0.74, bossHp:0.57, bossAtk:0.57},
+  8: {hp:0.71, atk:0.71, bossHp:0.66, bossAtk:0.66},
+  9: {hp:0.66, atk:0.66, bossHp:0.35, bossAtk:0.35},
+};
 const RIFT_THEMES = {
   cripta: {name:'Cripta sin dueño', night:1, status:{name:'Miedo', chance:0.30, duration:2, procChance:0.4}, mobs:[['rift_cripta_esqueleto_guardatumbas','Esqueleto Guardatumbas'], ['rift_cripta_necrofago','Necrófago'], ['rift_cripta_arquero_de_hueso','Arquero de Hueso'], ['rift_cripta_planidera','Plañidera'], ['rift_cripta_caballero_sepulto','Caballero Sepulto'], ['rift_cripta_el_liche_sin_corona','El Liche sin Corona']]},
-  forja: {name:'Forja apagada', night:-1, status:{name:'Quemadura', chance:0.45, duration:3, stack:true, maxStack:3}, mobs:[['rift_forja_automata_de_yunque','Autómata de Yunque'], ['rift_forja_tenaza_viva','Tenaza Viva'], ['rift_forja_ballestero_de_hierro','Ballestero de Hierro'], ['rift_forja_fuelle_errante','Fuelle Errante'], ['rift_forja_maestro_martillador','Maestro Martillador'], ['rift_forja_el_herrero_sin_rostro','El Herrero sin Rostro']]},
+  forja: {name:'Forja apagada', night:-1, status:{name:'Quemadura', chance:0.22, duration:2, stack:true, maxStack:3}, mobs:[['rift_forja_automata_de_yunque','Autómata de Yunque'], ['rift_forja_tenaza_viva','Tenaza Viva'], ['rift_forja_ballestero_de_hierro','Ballestero de Hierro'], ['rift_forja_fuelle_errante','Fuelle Errante'], ['rift_forja_maestro_martillador','Maestro Martillador'], ['rift_forja_el_herrero_sin_rostro','El Herrero sin Rostro']]},
   hielo: {name:'Pozo de hielo', night:0, status:{name:'Ralentizado', chance:0.50, duration:2}, mobs:[['rift_hielo_carambano_andante','Carámbano Andante'], ['rift_hielo_lobo_de_escarcha','Lobo de Escarcha'], ['rift_hielo_lanzador_de_granizo','Lanzador de Granizo'], ['rift_hielo_espiritu_de_ventisca','Espíritu de Ventisca'], ['rift_hielo_oso_glaciar','Oso Glaciar'], ['rift_hielo_el_coloso_dormido','El Coloso Dormido']]},
   espejos: {name:'Sala de espejos', night:1, status:{name:'Confusion', chance:0.30, duration:2, procChance:0.35}, mobs:[['rift_espejos_guardian_de_marco','Guardián de Marco'], ['rift_espejos_reflejo_roto','Reflejo Roto'], ['rift_espejos_lanzacristales','Lanzacristales'], ['rift_espejos_doncella_de_azogue','Doncella de Azogue'], ['rift_espejos_caballero_espejado','Caballero Espejado'], ['rift_espejos_el_reflejo','El Reflejo']]},
-  jardin: {name:'Jardín devorador', night:-1, status:{name:'Veneno', chance:0.55, duration:3, stack:true, maxStack:4}, mobs:[['rift_jardin_tronco_espinoso','Tronco Espinoso'], ['rift_jardin_planta_mordedora','Planta Mordedora'], ['rift_jardin_escupesemillas','Escupesemillas'], ['rift_jardin_flor_somnifera','Flor Somnífera'], ['rift_jardin_enredadera_estranguladora','Enredadera Estranguladora'], ['rift_jardin_la_madre_espina','La Madre Espina']]},
+  jardin: {name:'Jardín devorador', night:-1, status:{name:'Veneno', chance:0.30, duration:3, stack:true, maxStack:3}, mobs:[['rift_jardin_tronco_espinoso','Tronco Espinoso'], ['rift_jardin_planta_mordedora','Planta Mordedora'], ['rift_jardin_escupesemillas','Escupesemillas'], ['rift_jardin_flor_somnifera','Flor Somnífera'], ['rift_jardin_enredadera_estranguladora','Enredadera Estranguladora'], ['rift_jardin_la_madre_espina','La Madre Espina']]},
   tormenta: {name:'Tormenta quieta', night:0, status:{name:'Paralisis', chance:0.20, duration:1}, mobs:[['rift_tormenta_nube_acorazada','Nube Acorazada'], ['rift_tormenta_chispa_errante','Chispa Errante'], ['rift_tormenta_lancero_del_rayo','Lancero del Rayo'], ['rift_tormenta_tamborilero_del_trueno','Tamborilero del Trueno'], ['rift_tormenta_halcon_de_tormenta','Halcón de Tormenta'], ['rift_tormenta_el_ojo_de_la_tormenta','El Ojo de la Tormenta']]},
-  nido: {name:'Nido profundo', night:0, status:{name:'Veneno', chance:0.50, duration:3, stack:true, maxStack:4}, mobs:[['rift_nido_escarabajo_coraza','Escarabajo Coraza'], ['rift_nido_avispa_cortadora','Avispa Cortadora'], ['rift_nido_escupidora_de_acido','Escupidora de Ácido'], ['rift_nido_nodriza_del_nido','Nodriza del Nido'], ['rift_nido_mantis_verdugo','Mantis Verdugo'], ['rift_nido_la_reina_ciega','La Reina Ciega']]},
+  nido: {name:'Nido profundo', night:0, status:{name:'Veneno', chance:0.25, duration:2, stack:true, maxStack:3}, mobs:[['rift_nido_escarabajo_coraza','Escarabajo Coraza'], ['rift_nido_avispa_cortadora','Avispa Cortadora'], ['rift_nido_escupidora_de_acido','Escupidora de Ácido'], ['rift_nido_nodriza_del_nido','Nodriza del Nido'], ['rift_nido_mantis_verdugo','Mantis Verdugo'], ['rift_nido_la_reina_ciega','La Reina Ciega']]},
   biblioteca: {name:'Biblioteca hundida', night:1, status:{name:'Silencio', chance:0.25, duration:1}, mobs:[['rift_biblioteca_estante_andante','Estante Andante'], ['rift_biblioteca_tomo_mordedor','Tomo Mordedor'], ['rift_biblioteca_escriba_ahogado','Escriba Ahogado'], ['rift_biblioteca_bibliotecaria_muda','Bibliotecaria Muda'], ['rift_biblioteca_golem_de_pergamino','Gólem de Pergamino'], ['rift_biblioteca_el_archivista','El Archivista']]},
   arena: {name:'Arena olvidada', night:-1, status:{name:'Sangrado', chance:0.50, duration:3, stack:true, maxStack:3}, mobs:[['rift_arena_mirmillon_oxidado','Mirmillón Oxidado'], ['rift_arena_reciario','Reciario'], ['rift_arena_hondero','Hondero'], ['rift_arena_portaestandarte','Portaestandarte'], ['rift_arena_leon_de_arena','León de Arena'], ['rift_arena_el_campeon','El Campeón']]},
   mina: {name:'Mina de sangre', night:0, status:{name:'Debilitado', chance:0.45, duration:2}, mobs:[['rift_mina_golem_de_cuarzo','Gólem de Cuarzo'], ['rift_mina_minero_maldito','Minero Maldito'], ['rift_mina_lagarto_de_esquirlas','Lagarto de Esquirlas'], ['rift_mina_linterna_viva','Linterna Viva'], ['rift_mina_topo_tallador','Topo Tallador'], ['rift_mina_el_corazon_de_cuarzo','El Corazón de Cuarzo']]},
@@ -6554,12 +6574,16 @@ const RIFT_THEMES = {
   astillero: {name:'Astillero fantasma', night:1, status:{name:'Ralentizado', chance:0.45, duration:2}, mobs:[['rift_astillero_golem_de_casco','Gólem de Casco'], ['rift_astillero_abordador_ahogado','Abordador Ahogado'], ['rift_astillero_artillero_fantasma','Artillero Fantasma'], ['rift_astillero_sirena_del_naufragio','Sirena del Naufragio'], ['rift_astillero_contramaestre_fantasma','Contramaestre Fantasma'], ['rift_astillero_el_capitan_sin_barco','El Capitán sin Barco']]},
   circo: {name:'Circo abandonado', night:1, status:{name:'Miedo', chance:0.30, duration:2, procChance:0.4}, mobs:[['rift_circo_forzudo_de_madera','Forzudo de Madera'], ['rift_circo_muneca_acrobata','Muñeca Acróbata'], ['rift_circo_lanzacuchillos','Lanzacuchillos'], ['rift_circo_mono_de_los_platillos','Mono de los Platillos'], ['rift_circo_oso_de_retazos','Oso de Retazos'], ['rift_circo_el_maestro_de_pista','El Maestro de Pista']]},
   reloj: {name:'Torre del reloj', night:0, status:{name:'Ralentizado', chance:0.50, duration:2}, mobs:[['rift_reloj_guardia_del_pendulo','Guardia del Péndulo'], ['rift_reloj_bailarina_de_agujas','Bailarina de Agujas'], ['rift_reloj_cuco_tirador','Cuco Tirador'], ['rift_reloj_pequeno_relojero','Pequeño Relojero'], ['rift_reloj_campanero_de_bronce','Campanero de Bronce'], ['rift_reloj_el_guardian_de_las_horas','El Guardián de las Horas']]},
-  hongos: {name:'Cueva de hongos', night:0, status:{name:'Veneno', chance:0.60, duration:3, stack:true, maxStack:4}, mobs:[['rift_hongos_seta_bruta','Seta Bruta'], ['rift_hongos_sabueso_de_moho','Sabueso de Moho'], ['rift_hongos_lanzador_de_esporas','Lanzador de Esporas'], ['rift_hongos_chaman_de_esporas','Chamán de Esporas'], ['rift_hongos_trol_fungico','Trol Fúngico'], ['rift_hongos_la_madre_micelio','La Madre Micelio']]},
+  hongos: {name:'Cueva de hongos', night:0, status:{name:'Veneno', chance:0.30, duration:2, stack:true, maxStack:2}, mobs:[['rift_hongos_seta_bruta','Seta Bruta'], ['rift_hongos_sabueso_de_moho','Sabueso de Moho'], ['rift_hongos_lanzador_de_esporas','Lanzador de Esporas'], ['rift_hongos_chaman_de_esporas','Chamán de Esporas'], ['rift_hongos_trol_fungico','Trol Fúngico'], ['rift_hongos_la_madre_micelio','La Madre Micelio']]},
   templo: {name:'Templo del sol muerto', night:-1, status:{name:'Debilitado', chance:0.45, duration:2}, mobs:[['rift_templo_centinela_de_arenisca','Centinela de Arenisca'], ['rift_templo_guerrero_vendado','Guerrero Vendado'], ['rift_templo_arquero_escarabajo','Arquero Escarabajo'], ['rift_templo_sacerdotisa_del_sol','Sacerdotisa del Sol'], ['rift_templo_esfinge_de_piedra','Esfinge de Piedra'], ['rift_templo_el_faraon_del_sol_muerto','El Faraón del Sol Muerto']]},
   sombras: {name:'Fosa de sombras', night:1, status:{name:'Ceguera', chance:0.35, duration:2}, mobs:[['rift_sombras_mole_de_sombra','Mole de Sombra'], ['rift_sombras_acechador_oscuro','Acechador Oscuro'], ['rift_sombras_ojo_vigilante','Ojo Vigilante'], ['rift_sombras_apagavelas','Apagavelas'], ['rift_sombras_caballero_hueco','Caballero Hueco'], ['rift_sombras_lo_que_habita_la_fosa','Lo que Habita la Fosa']]},
-  ceniza: {name:'Santuario de ceniza', night:-1, status:{name:'Quemadura', chance:0.50, duration:3, stack:true, maxStack:3}, mobs:[['rift_ceniza_guardian_de_ceniza','Guardián de Ceniza'], ['rift_ceniza_monje_de_brasa','Monje de Brasa'], ['rift_ceniza_portador_del_incensario','Portador del Incensario'], ['rift_ceniza_guardiana_de_la_campana','Guardiana de la Campana'], ['rift_ceniza_abad_de_carbon','Abad de Carbón'], ['rift_ceniza_la_ultima_llama','La Última Llama']]},
+  ceniza: {name:'Santuario de ceniza', night:-1, status:{name:'Quemadura', chance:0.25, duration:2, stack:true, maxStack:3}, mobs:[['rift_ceniza_guardian_de_ceniza','Guardián de Ceniza'], ['rift_ceniza_monje_de_brasa','Monje de Brasa'], ['rift_ceniza_portador_del_incensario','Portador del Incensario'], ['rift_ceniza_guardiana_de_la_campana','Guardiana de la Campana'], ['rift_ceniza_abad_de_carbon','Abad de Carbón'], ['rift_ceniza_la_ultima_llama','La Última Llama']]},
   observatorio: {name:'Observatorio roto', night:1, status:{name:'Marcado', chance:0.50, duration:2}, mobs:[['rift_observatorio_golem_planetario','Gólem Planetario'], ['rift_observatorio_cazador_de_constelaciones','Cazador de Constelaciones'], ['rift_observatorio_telescopio_vivo','Telescopio Vivo'], ['rift_observatorio_lector_de_estrellas','Lector de Estrellas'], ['rift_observatorio_cometa_caido','Cometa Caído'], ['rift_observatorio_el_astronomo','El Astrónomo']]},
 };
+// CALIBRACIÓN 2026-10-11 (tools/calib_rifts.js): los cinco temas de Quemadura y Veneno (forja, ceniza, hongos, jardín y
+// nido) se completaban el 22-43% de las veces cuando el resto rondaba el 50-60%. Con el estado apagado subían a 55-65%,
+// así que se les baja la probabilidad (y la duración o el tope de cargas) del estado. Antes: forja 0.45/3 turnos,
+// ceniza 0.50/3, hongos 0.60/3 con 4 cargas, jardín 0.55 con 4 cargas, nido 0.50/3 con 4 cargas.
 let SIM_RIFT = null; // solo pruebas: fuerza el tema o la aparición
 // De noche (hora de Ecuador, la del reloj del juego) pesan más unos temas y de día otros; ninguno queda a cero.
 function riftPickTheme(){
@@ -6646,10 +6670,14 @@ const RIFT_KITS = {
   ],
   nido: (S, w, T)=> [
     {caparazon: riftWard('Caparazón Cerrado', 0.35), golpe:{label:'Cornada', mult:1.00}},
-    {aguijon:{label:'Aguijón', mult:1.10, cooldown:2, applies:S}, corte:{label:'Corte de Ala', mult:1.00, applies:RIFT_BLEED(0.25)}},
-    {acido:{label:'Escupitajo Ácido', mult:1.10, cooldown:3, applies:{name:'Corrosion', chance:0.55, duration:3}}, disparo:{label:'Ácido', mult:1.00, applies:w}},
-    {huevos: riftCall('Poner Huevos', T(1), 1, 0.50, 5), cura: riftHeal('Jalea'), toque:{label:'Picotazo', mult:0.90, applies:w}},
-    {guadana:{label:'Guadaña del Verdugo', mult:1.50, cooldown:3, bonusVsLowHp:{below:0.40, mult:1.40}}, tajo:{label:'Tajo de Mantis', mult:1.00, applies:RIFT_BLEED(0.35)}},
+    // Calibración 2026-10-11: el nido juntaba Veneno, Sangrado, Corrosión (que además parte las curas a la mitad) y una
+    // cría con media vida de la Nodriza cada 5 turnos; ninguna pieza sola explicaba la diferencia (33% completado frente
+    // al ~50% del resto), todas juntas sí (61% sin ellas). Se quita el Sangrado, la Corrosión baja de 0.55/3 a 0.25/2,
+    // la cría nace con el 15% de la vida en vez del 50% y el remate de la Guadaña baja de x1.40 a x1.25.
+    {aguijon:{label:'Aguijón', mult:1.10, cooldown:2, applies:S}, corte:{label:'Corte de Ala', mult:1.00}},
+    {acido:{label:'Escupitajo Ácido', mult:1.10, cooldown:3, applies:{name:'Corrosion', chance:0.25, duration:2}}, disparo:{label:'Ácido', mult:1.00, applies:w}},
+    {huevos: riftCall('Poner Huevos', T(1), 1, 0.15, 5), cura: riftHeal('Jalea'), toque:{label:'Picotazo', mult:0.90, applies:w}},
+    {guadana:{label:'Guadaña del Verdugo', mult:1.50, cooldown:3, bonusVsLowHp:{below:0.40, mult:1.25}}, tajo:{label:'Tajo de Mantis', mult:1.00}},
     {enjambre: riftCall('Llamar al Enjambre', T(1), 2, 0.05), furia: riftRage('Furia de la Reina', 1.20, 0.4), chillido: riftAoe('Chillido', 0.50, RIFT_STUN(0.15)), real:{label:'Aguijón Real', mult:1.55, cooldown:3, applies:S, bonusVsTargetStatus:{name:'Veneno', mult:1.25}}, golpe:{label:'Mandíbulas', mult:1.00, applies:w},
       $:{phases:[{below:0.50, msg:'chilla: <b>todo el nido la oye</b> (fase 2).'}]}},
   ],
@@ -6801,14 +6829,17 @@ function buildRiftGroup(node, f, level){
   const mobLevel = dec*10 + 9, bossLevel = dec*10 + 10;
   const n = level >= 40 ? 5 : level >= 20 ? 3 : 2;
   const group = [];
+  const rt = RIFT_TUNING[dec] || {};
+  const tuned = (e, h, a)=>{ e.maxHP = e.hp = Math.max(1, Math.round(e.hp*(h || 1))); e.atk = Math.max(1, Math.round(e.atk*(a || 1))); return e; };
+  const mob = (t)=> tuned(makeEnemy(t, f, mobLevel), rt.hp, rt.atk);
   if(node.riftStage < 2){
-    pickSmartTemplates(tp.regular, node.riftStage === 0 ? n : Math.max(1, n - 1)).forEach(t=> group.push(makeEnemy(t, f, mobLevel)));
-    if(node.riftStage === 1) group.push(makeEnemy(tp.elite, f, mobLevel));
+    pickSmartTemplates(tp.regular, node.riftStage === 0 ? n : Math.max(1, n - 1)).forEach(t=> group.push(mob(t)));
+    if(node.riftStage === 1) group.push(mob(tp.elite));
   } else {
     const ref = DECADE_BESTIARY[dec].decadeBoss;
     const bossTpl = Object.assign({}, tp.boss, {hp: ref.hp*RIFT_BOSS_HP, atk: ref.atk, decadeBossOf: bossLevel});
-    group.push(makeEnemy(bossTpl, f, bossLevel));
-    pickSmartTemplates(tp.regular, Math.max(1, Math.min(2, n - 1))).forEach(t=> group.push(makeEnemy(t, f, mobLevel)));
+    group.push(tuned(makeEnemy(bossTpl, f, bossLevel), rt.bossHp, rt.bossAtk));
+    pickSmartTemplates(tp.regular, Math.max(1, Math.min(2, n - 1))).forEach(t=> group.push(mob(t)));
   }
   group.sort((a,b)=> (b.tpl.frontline?1:0) - (a.tpl.frontline?1:0));
   return group;
@@ -16714,6 +16745,55 @@ async function simLevels(cfg){
     return {style: cfg.style, dungeonLevel: cfg.dungeonLevel, n, clear: Math.round(cleared/n*100), cleared, peleas: fights, muereEn: died, ganaCombate: pct(fights.combate), ganaElite: pct(fights.elite), ganaGuardian: pct(fights.jefe)};
   } finally { simMode = false; BETA_BALANCE = saved.beta; state = saved.state; combat = saved.combat; }
 }
+// Pelea UN rift entero (dos oleadas y el jefe) con la referencia de simBuildState. Entre etapas no se cura
+// nadie: la vida, el MP y las pociones del jugador siguen como quedaron y los aliados conservan su vida
+// (syncAllyHPToDungeon), igual que en riftAdvance. cfg.theme es el tema; cfg.floor, la sala (por defecto al
+// azar entre las intermedias, como en generateDungeon); cfg.stages, cuántas etapas pelear (por defecto las 3).
+// Devuelve cuántas etapas ganó (0-3).
+async function simRiftOnce(cfg){
+  const {st, petPool} = simBuildState(cfg);
+  state = st;
+  if(cfg.petRarity !== 'none') petPool.slice(0, maxPetSlots()).forEach(t=>{ state.char.pets.owned[t.id] = 1; state.char.pets.equipped.push(t.id); });
+  ensureSoulSlots();
+  const d0 = derived();
+  state.char.curHP = d0.maxHP; state.char.curSta = d0.maxSta; state.char.curSpi = d0.maxSpi;
+  const level = cfg.dungeonLevel;
+  const dg = Object.assign(generateDungeon(level), {allyHP:{}, allyMP:{}, allySpirit:{}});
+  const f = cfg.floor != null ? cfg.floor : rnd(1, Math.max(1, dg.floors.length - 2));
+  const node = {type:'rift', done:false, rift: cfg.theme, riftStage:0};
+  dg.floors[f][0] = node; dg.atFloor = f; dg.atNode = 0; dg.visited[f + '-0'] = true;
+  state.dungeon = dg; combat = null;
+  const out = {won:0, stuck:false, hpPct:[], turns:[]};
+  for(let stage = 0; stage < (cfg.stages || 3); stage++){
+    node.riftStage = stage;
+    startCombat(buildRiftGroup(node, f, level), node);
+    const won = await simFightLoop();
+    out.turns.push(combat ? combat.turnCount : 0);
+    if(!won){ out.stuck = !simOutcome; return out; }
+    out.won++; out.hpPct.push(state.char.curHP / (derived().maxHP || 1));
+    syncAllyHPToDungeon();
+  }
+  return out;
+}
+// Repite el rift cfg.n veces. etapa[i] = [veces que se llegó a la etapa i, veces que se ganó].
+//   await __simRift({style:'pesada', theme:'cripta', level:95, dungeonLevel:95, n:40})
+async function simRifts(cfg){
+  const saved = {state, combat, beta: BETA_BALANCE};
+  simMode = true; BETA_BALANCE = cfg.beta !== false;
+  try{
+    const n = cfg.n || 40, etapa = [[0,0],[0,0],[0,0]]; let full = 0, stuck = 0; const turns = [0,0,0];
+    for(let i = 0; i < n; i++){
+      const r = await simRiftOnce(cfg);
+      for(let s = 0; s < 3 && s <= r.won; s++){ etapa[s][0]++; if(s < r.won) etapa[s][1]++; }
+      r.turns.forEach((t, s)=>{ turns[s] += t; });
+      if(r.won === 3) full++;
+      if(r.stuck) stuck++;
+    }
+    const pct = (a)=> a[0] ? Math.round(a[1]/a[0]*100) : null;
+    return {style: cfg.style, theme: cfg.theme, dungeonLevel: cfg.dungeonLevel, n, etapa, oleada1: pct(etapa[0]), oleada2: pct(etapa[1]), jefe: pct(etapa[2]), completo: Math.round(full/n*100), full, stuck,
+      turnos: turns.map((t, s)=> etapa[s][0] ? +(t/etapa[s][0]).toFixed(1) : null)};
+  } finally { simMode = false; BETA_BALANCE = saved.beta; state = saved.state; combat = saved.combat; }
+}
 async function simRun(cfg){
   const saved = {state, combat, beta: BETA_BALANCE};
   simMode = true; BETA_BALANCE = cfg.beta !== false;
@@ -16725,6 +16805,7 @@ async function simRun(cfg){
 }
 if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
   window.__sim = simRun; window.__simLevel = simLevels;
+  window.__simRift = simRifts; window.__riftTuning = RIFT_TUNING; window.__riftTemas = RIFT_THEMES; // calibración de rifts (tools/calib_rifts.js); tras tocar un tema, borrar su _tpl
   // Dibuja la ficha de un personaje de prueba (para revisar la pestaña de profesión sin iniciar sesión).
   window.__tutorial = ()=>{ showTutorial(); };
   window.__corazon = (cfg)=>{ window.__ficha(Object.assign({level:82}, cfg || {})); state.char.maxLevelUnlocked = 81; lsGet = ()=> null; lsSet = ()=>{}; professionSceneOpen = false; maybeOfferProfession(); };
