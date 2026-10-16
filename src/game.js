@@ -16901,6 +16901,199 @@ function simPickSkill(usable){
   if(can('toque_venenoso')) return 'toque_venenoso';
   return byDmg();
 }
+// ============================================================
+// IA DEL SIMULADOR v2 (2026-10-16, rama investigacion-calibracion). Hasta ahora el simulador nunca se movía ni se
+// defendía y no leía las reglas de década: medía mal Telaraña, Marea, Suelo ardiente, Espejismo, Decreto y Ley del
+// Caos. Ahora:
+//   1. Tácticas de regla (gastan el turno): salir del Frente antes de que se cierre la Telaraña, defenderse o ir atrás
+//      cuando se anuncia la Marea, moverse antes de que el suelo arda, defenderse ante un «Prepara…».
+//   2. Filtros de habilidad: no pegar con un tipo de daño al que el objetivo es inmune (Ley del Caos), no gastar la
+//      definitiva en un posible espejismo, ahorrar MP con Doble/Triple coste, no abrir con lo mejor bajo Muralla,
+//      pegar primero al frente con Baluarte, no moverse con Anclado, no beber con Sin pociones.
+//   3. Aprendizaje: en cada situación con varias opciones (reaccionar o no, guardar la definitiva o no…) elige con
+//      épsilon-greedy entre los «brazos» y, al acabar el combate, a cada elección le suma la recompensa del combate
+//      (0 si pierde; 0,6 + 0,4 × vida que le queda si gana). La tabla se guarda por senda | década | tipo de combate |
+//      situación, en memoria y en localStorage ('simAprende.v1').
+// Interruptores (localhost): window.__simIA({rules, learn, eps, persist}) y window.__simAprende() para ver o borrar
+// la tabla. Con rules:false el simulador se porta exactamente como antes (misma política, mismas tiradas de azar).
+// ============================================================
+const SIM_AI = {rules:true, learn:false, eps:0.15, persist:true};
+const SIM_LEARN_KEY = 'simAprende.v1';
+let SIM_LEARN = null;
+function simLearnTable(){
+  if(SIM_LEARN) return SIM_LEARN;
+  try{ SIM_LEARN = JSON.parse(localStorage.getItem(SIM_LEARN_KEY) || '{}') || {}; }catch(e){ SIM_LEARN = {}; }
+  return SIM_LEARN;
+}
+function simLearnSave(){ if(SIM_AI.persist) try{ localStorage.setItem(SIM_LEARN_KEY, JSON.stringify(SIM_LEARN || {})); }catch(e){} }
+// Tipo de combate para la clave de aprendizaje.
+function simFightKind(){
+  const lvl = (state.dungeon && state.dungeon.level) || 1;
+  const es = combat.enemies.filter(e=> e.tpl && !e.summoned && !e.mirage);
+  if(es.some(e=> e.tpl.riftBoss)) return 'rift';
+  if(es.some(e=> e.tpl.boss) && lvl % 10 === 0) return 'jefe';
+  if(es.some(e=> e.tpl.boss)) return 'guardian';
+  if(es.some(e=> e.tpl.elite)) return 'elite';
+  return 'normal';
+}
+// Opción por defecto (sin aprendizaje) de cada situación. Sale de la tabla que aprendió el propio simulador en
+// 15-85 (2026-10-16, ver plan-reestructuracion.md): reaccionar siempre era peor que no hacerlo en Telaraña y Suelo
+// ardiente, porque moverse gasta el turno; en la Marea solo le compensa defenderse al Guerrero.
+function simDefaultArm(situation){
+  const st = state.char.style, hpPct = state.char.curHP/(derived().maxHP || 1);
+  switch(situation){
+    case 'telarana': return 'quedarse';
+    case 'marea': return st === 'pesada' ? 'defender' : 'ignorar';
+    case 'suelo': return 'ignorar';
+    case 'prepara': return hpPct < 0.5 ? 'defender' : 'ignorar';
+    case 'espejismo': return st === 'doblefilo' ? 'gastar' : 'esperar';
+    case 'muralla': return (st === 'pesada' || st === 'doblefilo') ? 'pegar' : 'esperar';
+    case 'coste': return 'ahorrar';
+    case 'definitiva': return 'usar';
+    case 'sinpociones': return 'defender';
+  }
+  return null;
+}
+// Elige un brazo para la situación. Sin aprendizaje, el de simDefaultArm (o el primero).
+function simChoose(situation, arms){
+  const def = simDefaultArm(situation);
+  if(def && arms.includes(def) && arms[0] !== def) arms = [def].concat(arms.filter(a=> a !== def));
+  if(!SIM_AI.learn) return arms[0];
+  if(!combat.simCtx) combat.simCtx = `${state.char.style}|d${decadeIndexForLevel((state.dungeon && state.dungeon.level) || 1)}|${simFightKind()}`;
+  const key = combat.simCtx + '|' + situation, T = simLearnTable(), row = T[key] || (T[key] = {});
+  let arm;
+  const untried = arms.filter(a=> !row[a] || !row[a][0]);
+  if(untried.length) arm = untried[0];
+  else if(Math.random() < SIM_AI.eps) arm = arms[Math.floor(Math.random()*arms.length)];
+  else arm = arms.slice().sort((a, b)=> row[b][1]/row[b][0] - row[a][1]/row[a][0])[0];
+  (combat.simChoices || (combat.simChoices = new Map())).set(key, arm); // una elección por situación y combate
+  return arm;
+}
+// Fin de combate: reparte la recompensa entre las elecciones que se hicieron.
+function simLearnEnd(win){
+  if(!SIM_AI.learn || !combat || !combat.simChoices) return;
+  const d = derived(), reward = win ? 0.6 + 0.4*Math.max(0, state.char.curHP)/(d.maxHP || 1) : 0, T = simLearnTable();
+  combat.simChoices.forEach((arm, key)=>{ const row = T[key] || (T[key] = {}); const c = row[arm] || (row[arm] = [0, 0]); c[0]++; c[1] += reward; });
+  combat.simChoices = null;
+  simLearnSave();
+}
+// Decretos: con o sin la tanda nueva (combat.decrees con varios, o combat.decree con uno).
+function simDecree(id){ return !!combat && ((combat.decrees && combat.decrees.includes(id)) || combat.decree === id); }
+function simCanMove(){
+  return !simDecree('anclado') && !hasStatus(combat.playerStatuses || [], 'Enredado');
+}
+// Las sendas que pelean de cerca necesitan el Frente para su kit.
+function simHomePos(){ return combat.simHome || (combat.simHome = combat.playerPos); }
+function simSkillKind(id){ const sk = SKILLS[id]; return sk && sk.dmgType === 'fisico' ? 'fisico' : 'magico'; }
+// Táctica de regla que gasta el turno, o null.
+function simTactic(){
+  if(!SIM_AI.rules) return null;
+  const dIdx = ruleDecade(), r = combat.ruleRound || 0, pos = combat.playerPos, home = simHomePos();
+  const d = derived(), hpPct = state.char.curHP/(d.maxHP || 1);
+  // Volver a casa cuando ya pasó el peligro (Telaraña, Marea, Suelo ardiente): los de Frente pierden su kit atrás.
+  const backHome = ()=> pos !== home && simCanMove() && combat.simAway && (combat.ruleRound || 0) > combat.simAway ? 'reposicionar' : null;
+  if(dIdx === 1 && pos === 'frente' && r % 3 === 2 && simCanMove()){
+    if(simChoose('telarana', ['salir', 'quedarse']) === 'salir'){ combat.simAway = r + 1; return 'reposicionar'; }
+  }
+  if(dIdx === 5 && pos === 'frente' && r % 4 === 3){
+    const a = simChoose('marea', ['defender', 'atras', 'ignorar']);
+    if(a === 'defender') return 'defender';
+    if(a === 'atras' && simCanMove()){ combat.simAway = r + 1; return 'reposicionar'; }
+  }
+  if(dIdx === 8 && combat.burnPos && combat.burnPos.pos === pos && combat.burnPos.rounds % 3 === 2 && simCanMove()){
+    if(simChoose('suelo', ['mover', 'ignorar']) === 'mover'){ combat.simAway = r + 1; return 'reposicionar'; }
+  }
+  // «Prepara…»: algún enemigo anuncia un golpe fuerte (intenciones a la vista en 1-20 o con las Lentes del Escriba).
+  const heavy = livingEnemies().some(e=> e.ssIntent && /^Prepara/.test(e.ssIntent.label || ''));
+  if(heavy && hpPct < 0.85 && simChoose('prepara', ['defender', 'ignorar']) === 'defender') return 'defender';
+  // Sin pociones: si va muy bajo, defenderse en vez de seguir pegando.
+  if(simDecree('sinpociones') && hpPct < 0.25 && simChoose('sinpociones', ['defender', 'pegar']) === 'defender') return 'defender';
+  return backHome();
+}
+// Quita de la lista lo que las reglas desaconsejan. Nunca deja la lista vacía (queda el ataque básico).
+function simRuleFilter(usable){
+  if(!SIM_AI.rules) return usable;
+  const dIdx = ruleDecade();
+  let out = usable.slice();
+  const keep = (f)=>{ const k = out.filter(f); if(k.length) out = k; };
+  // Ley del Caos: no pegar con el tipo de daño al que el objetivo del frente es inmune.
+  const front = combat.enemies[playerFrontTargetIndices()[0]];
+  if(front && (lawImmune(front.statuses, 'fisico') || lawImmune(front.statuses, 'magico'))){
+    keep(id=> !SKILLS[id].mult || resolvedTargetMode(SKILLS[id]) === 'any' || !lawImmune(front.statuses, simSkillKind(id)));
+  }
+  // Espejismo: la definitiva de un solo objetivo no se gasta mientras no se haya visto el falso.
+  if(dIdx === 3 && !combat.enemies.some(e=> e.mirageGone) && combat.enemies.some(e=> e.hp > 0 && !(e.tpl && (e.tpl.boss || e.tpl.elite)))){
+    if(simChoose('espejismo', ['esperar', 'gastar']) === 'esperar') keep(id=> !SKILLS[id].ultimate || SKILLS[id].targetMode === 'all');
+  }
+  // Muralla: las primeras rondas, sin la definitiva (se la come la reducción).
+  if(livingEnemies().some(e=> hasStatus(e.statuses, 'Muralla'))){
+    if(simChoose('muralla', ['esperar', 'pegar']) === 'esperar') keep(id=> !SKILLS[id].ultimate);
+  }
+  // Doble o triple coste: ahorrar MP para lo que importa.
+  if(simDecree('costes') || simDecree('triple')){
+    const d = derived(), mpPct = state.char.curSta/(d.maxSta || 1);
+    if(mpPct < 0.6 && simChoose('coste', ['ahorrar', 'gastar']) === 'ahorrar') keep(id=> !SKILLS[id].cost || SKILLS[id].cost.tipo !== 'estamina' || SKILLS[id].ultimate);
+  }
+  // Definitiva en combates normales durante un nivel entero: gastarla o guardarla para el guardián.
+  if(combat.simInLevel && simFightKind() === 'normal' && out.some(id=> SKILLS[id].ultimate)){
+    if(simChoose('definitiva', ['usar', 'guardar']) === 'guardar') keep(id=> !SKILLS[id].ultimate);
+  }
+  return out;
+}
+// Objetivo para habilidades de objetivo libre, corregido por las reglas.
+function simRuleTarget(idx, skillId){
+  if(!SIM_AI.rules || idx == null || idx < 0) return idx;
+  const kind = simSkillKind(skillId), alive = (i)=> combat.enemies[i] && combat.enemies[i].hp > 0;
+  let pool = combat.enemies.map((e, i)=> i).filter(alive);
+  // Baluarte: la retaguardia enemiga es inmune mientras quede alguien delante.
+  if(simDecree('baluarte')){ const f = livingFrontlineEnemyIndices(); if(f.length) pool = pool.filter(i=> f.includes(i)); }
+  // Ley del Caos: no apuntar a quien es inmune a este golpe.
+  const ok = pool.filter(i=> !lawImmune(combat.enemies[i].statuses, kind));
+  if(ok.length) pool = ok;
+  if(pool.includes(idx)) return idx;
+  return pool.slice().sort((a, b)=> combat.enemies[a].hp - combat.enemies[b].hp)[0];
+}
+// Un turno del jugador simulado (lo comparten simOneFight, simFightLoop y por tanto niveles y rifts).
+async function simPlayTurn(skillIds){
+  const tc = combat.turnCount, d = derived();
+  const tactic = simTactic();
+  if(tactic){
+    await playerUseSkill(tactic, null);
+    if(!combat || combat.over || simOutcome || combat.turnCount !== tc) return;
+  }
+  const potion = !decreeOn('sinpociones') && state.char.inventory.find(i=> i.kind === 'potion' && i.potionId === 'vida_mayor' && i.qty > 0);
+  if(potion && state.char.curHP / d.maxHP < 0.35){
+    await usePotionInCombat('vida_mayor');
+    if(!combat || combat.over || simOutcome || combat.turnCount !== tc) return;
+  }
+  // la habilidad que elija la rotación entre las que se puedan pagar y usar desde donde está
+  const ok = (id)=>{
+    if(combat.chained === id) return false;
+    const sk = SKILLS[id]; if(!sk || (!sk.mult && !SIM_UTILITY_SKILLS.has(id))) return false;
+    if(sk.ultimate && ((ultimateMaxUses() - (state.dungeon.ultimateUses||0)) <= 0 || (state.dungeon.ultimateCooldown||0) > 0)) return false;
+    if(sk.cost && (sk.cost.tipo === 'estamina' ? state.char.curSta : state.char.curSpi) < effectiveSkillCost(id, sk)) return false;
+    if(sk.requiresPos && combat.playerPos !== sk.requiresPos && !sk.penaltyIfFrente) return false;
+    return true;
+  };
+  const best = simPickSkill(simRuleFilter(skillIds.filter(ok)));
+  const any = resolvedTargetMode(SKILLS[best]) === 'any' || best === 'lluvia_flechas';
+  await playerUseSkill(best, any ? simRuleTarget(simTargetIndex(), best) : null); // mismo objetivo que evaluó simPickSkill
+  // si por lo que sea no consumió el turno, ataque básico para no quedar en bucle
+  if(combat && !combat.over && !simOutcome && combat.turnCount === tc) await playerUseSkill('ataque_basico', resolvedTargetMode(SKILLS.ataque_basico) === 'any' ? simRuleTarget(autoPickEnemyIndex(), 'ataque_basico') : null);
+  if(combat && !combat.over && !simOutcome && combat.turnCount === tc){ combat.turnCount++; await endPlayerTurn(); }
+}
+// Juega el combate en curso hasta el final. Devuelve 'win', 'loss' o 'stuck' (no terminó en 400 turnos).
+async function simPlayCombat(){
+  const skillIds = style().skills.concat(ultimateUnlocked() ? [ULTIMATE_BY_STYLE[state.char.style]] : []);
+  let guard = 0;
+  while(combat && !combat.over && !simOutcome && guard++ < 400){
+    await simPlayTurn(skillIds);
+    checkCombatEnd();
+  }
+  const res = simOutcome === 'win' ? 'win' : simOutcome === 'loss' ? 'loss' : 'stuck';
+  simLearnEnd(res === 'win');
+  return res;
+}
 async function simOneFight(cfg){
   const {st, petPool} = simBuildState(cfg);
   state = st;
@@ -16911,59 +17104,14 @@ async function simOneFight(cfg){
   simOutcome = null; combat = null;
   const node = state.dungeon.floors[0][0], f = numFloorsForLevel(cfg.dungeonLevel) - 1;
   startCombat(buildEncounterGroup(node.type, f, cfg.dungeonLevel), node);
-  const skillIds = style().skills.concat(ultimateUnlocked() ? [ULTIMATE_BY_STYLE[state.char.style]] : []);
-  let guard = 0;
-  while(combat && !combat.over && !simOutcome && guard++ < 400){
-    const tc = combat.turnCount, d = derived();
-    const potion = state.char.inventory.find(i=> i.kind === 'potion' && i.potionId === 'vida_mayor' && i.qty > 0);
-    if(potion && !decreeOn('sinpociones') && state.char.curHP / d.maxHP < 0.35){ await usePotionInCombat('vida_mayor'); }
-    else {
-      // la habilidad de daño más fuerte que se pueda pagar y usar desde donde está
-      const ok = (id)=>{
-        if(combat.chained === id) return false;
-        const sk = SKILLS[id]; if(!sk || (!sk.mult && !SIM_UTILITY_SKILLS.has(id))) return false;
-        if(sk.ultimate && ((ultimateMaxUses() - (state.dungeon.ultimateUses||0)) <= 0 || (state.dungeon.ultimateCooldown||0) > 0)) return false;
-        if(sk.cost && (sk.cost.tipo === 'estamina' ? state.char.curSta : state.char.curSpi) < effectiveSkillCost(id, sk)) return false;
-        if(sk.requiresPos && combat.playerPos !== sk.requiresPos && !sk.penaltyIfFrente) return false;
-        return true;
-      };
-      const best = simPickSkill(skillIds.filter(ok));
-      const idx = (resolvedTargetMode(SKILLS[best]) === 'any' || best === 'lluvia_flechas') ? simTargetIndex() : null;
-      await playerUseSkill(best, idx);
-      // si por lo que sea no consumió el turno, ataque básico para no quedar en bucle
-      if(combat && !combat.over && !simOutcome && combat.turnCount === tc) await playerUseSkill('ataque_basico', resolvedTargetMode(SKILLS.ataque_basico) === 'any' ? autoPickEnemyIndex() : null);
-      if(combat && !combat.over && !simOutcome && combat.turnCount === tc){ combat.turnCount++; await endPlayerTurn(); }
-    }
-    checkCombatEnd();
-  }
-  return {win: simOutcome === 'win', turns: combat ? combat.turnCount : 0, hp: d0.maxHP, boss: combat && combat.enemies[0] ? {name: combat.enemies[0].name, maxHP: combat.enemies[0].maxHP, atk: combat.enemies[0].atk} : null};
+  const res = await simPlayCombat();
+  return {win: res === 'win', stuck: res === 'stuck', turns: combat ? combat.turnCount : 0, hp: d0.maxHP, boss: combat && combat.enemies[0] ? {name: combat.enemies[0].name, maxHP: combat.enemies[0].maxHP, atk: combat.enemies[0].atk} : null};
 }
-// Juega un combate ya iniciado hasta que termina (misma política que simOneFight).
+// Juega un combate ya iniciado hasta que termina (misma política que simOneFight). Dentro de un nivel o un rift.
 async function simFightLoop(){
-  const skillIds = style().skills.concat(ultimateUnlocked() ? [ULTIMATE_BY_STYLE[state.char.style]] : []);
-  let guard = 0;
   simOutcome = null;
-  while(combat && !combat.over && !simOutcome && guard++ < 400){
-    const tc = combat.turnCount, d = derived();
-    const potion = state.char.inventory.find(i=> i.kind === 'potion' && i.potionId === 'vida_mayor' && i.qty > 0);
-    if(potion && !decreeOn('sinpociones') && state.char.curHP / d.maxHP < 0.35){ await usePotionInCombat('vida_mayor'); }
-    else {
-      const ok = (id)=>{
-        if(combat.chained === id) return false;
-        const sk = SKILLS[id]; if(!sk || (!sk.mult && !SIM_UTILITY_SKILLS.has(id))) return false;
-        if(sk.ultimate && ((ultimateMaxUses() - (state.dungeon.ultimateUses||0)) <= 0 || (state.dungeon.ultimateCooldown||0) > 0)) return false;
-        if(sk.cost && (sk.cost.tipo === 'estamina' ? state.char.curSta : state.char.curSpi) < effectiveSkillCost(id, sk)) return false;
-        if(sk.requiresPos && combat.playerPos !== sk.requiresPos && !sk.penaltyIfFrente) return false;
-        return true;
-      };
-      const best = simPickSkill(skillIds.filter(ok));
-      await playerUseSkill(best, (resolvedTargetMode(SKILLS[best]) === 'any' || best === 'lluvia_flechas') ? simTargetIndex() : null); // mismo objetivo que evaluó simPickSkill (antes: el más débil)
-      if(combat && !combat.over && !simOutcome && combat.turnCount === tc) await playerUseSkill('ataque_basico', resolvedTargetMode(SKILLS.ataque_basico) === 'any' ? autoPickEnemyIndex() : null);
-      if(combat && !combat.over && !simOutcome && combat.turnCount === tc){ combat.turnCount++; await endPlayerTurn(); }
-    }
-    checkCombatEnd();
-  }
-  return simOutcome === 'win';
+  if(combat) combat.simInLevel = true;
+  return (await simPlayCombat()) === 'win';
 }
 // Recorre UN nivel entero del laberinto (todas sus salas hasta el guardián),
 // arrastrando vida, MP, pociones y bajas de aliados de sala en sala, como en
@@ -16995,23 +17143,37 @@ async function simLevelOnce(cfg){
     startCombat(buildEncounterGroup(type, f, cfg.dungeonLevel), pick.node);
     const won = await simFightLoop();
     tally[type][0]++; if(won) tally[type][1]++;
-    if(!won) return {cleared:false, diedAt:type, tally};
+    if(!won) return {cleared:false, diedAt:type, tally, stuck: !simOutcome};
     syncAllyHPToDungeon(); pick.node.done = true; combat = null;
   }
   return {cleared:true, diedAt:null, tally};
+}
+// Errores dentro del simulador: se guardan los últimos 20 en window.__simErrores (localhost) en vez de cortar la medida.
+const SIM_ERRORS = [];
+function simNoteError(where, cfg, e){
+  SIM_ERRORS.push({where, style: cfg && cfg.style, level: cfg && cfg.dungeonLevel, msg: String(e && e.message || e), stack: String(e && e.stack || '').split('\n').slice(0, 6).join(' | '),
+    log: (state && state.log ? state.log.slice(-8) : [])});
+  if(SIM_ERRORS.length > 20) SIM_ERRORS.shift();
+  try{ console.warn('simulador:', where, e); }catch(_){}
 }
 async function simLevels(cfg){
   const saved = {state, combat, beta: BETA_BALANCE};
   simMode = true; BETA_BALANCE = cfg.beta !== false;
   try{
-    const n = cfg.n || 20; let cleared = 0; const died = {combate:0, elite:0, jefe:0}, fights = {combate:[0,0], elite:[0,0], jefe:[0,0]};
+    const n = cfg.n || 20; let cleared = 0, done = 0, errores = 0, atascados = 0; const died = {combate:0, elite:0, jefe:0}, fights = {combate:[0,0], elite:[0,0], jefe:[0,0]};
     for(let i = 0; i < n; i++){
-      const r = await simLevelOnce(cfg);
+      // Un error dentro de un recorrido rechazaba la promesa entera y el bucle de calibración que la esperaba se
+      // quedaba parado sin aviso (lo que se veía como "el simulador se cuelga"). Ahora el recorrido se descarta y se anota.
+      let r;
+      try{ r = await simLevelOnce(cfg); }
+      catch(e){ errores++; simNoteError('nivel', cfg, e); continue; }
+      done++;
+      if(r.stuck) atascados++;
       if(r.cleared) cleared++; else died[r.diedAt]++;
       Object.keys(fights).forEach(k=>{ fights[k][0] += r.tally[k][0]; fights[k][1] += r.tally[k][1]; });
     }
     const pct = (a)=> a[0] ? Math.round(a[1]/a[0]*100) : null;
-    return {style: cfg.style, dungeonLevel: cfg.dungeonLevel, n, clear: Math.round(cleared/n*100), cleared, peleas: fights, muereEn: died, ganaCombate: pct(fights.combate), ganaElite: pct(fights.elite), ganaGuardian: pct(fights.jefe)};
+    return {style: cfg.style, dungeonLevel: cfg.dungeonLevel, n: done, clear: done ? Math.round(cleared/done*100) : null, cleared, peleas: fights, muereEn: died, ganaCombate: pct(fights.combate), ganaElite: pct(fights.elite), ganaGuardian: pct(fights.jefe), errores, atascados};
   } finally { simMode = false; BETA_BALANCE = saved.beta; state = saved.state; combat = saved.combat; }
 }
 // Pelea UN rift entero (dos oleadas y el jefe) con la referencia de simBuildState. Entre etapas no se cura
@@ -17068,13 +17230,28 @@ async function simRun(cfg){
   const saved = {state, combat, beta: BETA_BALANCE};
   simMode = true; BETA_BALANCE = cfg.beta !== false;
   try{
-    const n = cfg.n || 50; let wins = 0, turns = 0, last = null;
-    for(let i = 0; i < n; i++){ last = await simOneFight(cfg); if(last.win) wins++; turns += last.turns; }
-    return {style: cfg.style, level: cfg.level, dungeonLevel: cfg.dungeonLevel, n, winRate: Math.round(wins/n*100), avgTurns: +(turns/n).toFixed(1), playerHP: last.hp, boss: last.boss};
+    const n = cfg.n || 50; let wins = 0, turns = 0, last = null, done = 0, errores = 0, atascados = 0;
+    for(let i = 0; i < n; i++){
+      let r;
+      try{ r = await simOneFight(cfg); }
+      catch(e){ errores++; simNoteError('combate', cfg, e); continue; }
+      last = r; done++; if(r.win) wins++; if(r.stuck) atascados++; turns += r.turns;
+    }
+    return {style: cfg.style, level: cfg.level, dungeonLevel: cfg.dungeonLevel, n: done, winRate: done ? Math.round(wins/done*100) : null, avgTurns: done ? +(turns/done).toFixed(1) : null, playerHP: last && last.hp, boss: last && last.boss, errores, atascados};
   } finally { simMode = false; BETA_BALANCE = saved.beta; state = saved.state; combat = saved.combat; }
 }
 if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
   window.__sim = simRun; window.__simLevel = simLevels;
+  // IA del simulador v2: __simIA({rules, learn, eps, persist}) cambia los interruptores y devuelve cómo quedan;
+  // __simAprende() devuelve la tabla aprendida (con medias), __simAprende('borrar') la vacía.
+  window.__simIA = (cfg)=>{ if(cfg) Object.assign(SIM_AI, cfg); return Object.assign({}, SIM_AI); };
+  window.__simAprende = (cmd)=>{
+    if(cmd === 'borrar'){ SIM_LEARN = {}; simLearnSave(); return {}; }
+    const T = simLearnTable(), out = {};
+    Object.keys(T).sort().forEach(k=>{ out[k] = {}; Object.keys(T[k]).forEach(a=>{ const [n, s] = T[k][a]; out[k][a] = {n, media: n ? +(s/n).toFixed(3) : null}; }); });
+    return out;
+  };
+  window.__simErrores = SIM_ERRORS;
   window.__simRift = simRifts; window.__riftTuning = RIFT_TUNING; window.__riftTemas = RIFT_THEMES; // calibración de rifts (tools/calib_rifts.js); tras tocar un tema, borrar su _tpl
   // Dibuja la ficha de un personaje de prueba (para revisar la pestaña de profesión sin iniciar sesión).
   window.__tutorial = ()=>{ showTutorial(); };

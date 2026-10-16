@@ -60,7 +60,7 @@ async function measureLevels(dec, n){
       for(let i = 0; i < n; i++){
         W.CAL.tick = `${lv} ${st} ${i}`;
         const r = await race(W.__simLevel(cfg(st, lv)), 25000); await yieldNow();
-        if(!r) continue;
+        if(!r || !r.n) continue;   // r.n 0: el recorrido dio error (ver __simErrores)
         p.clear[0]++; p.clear[1] += r.cleared;
         p.lle[0]++; p.lle[1] += (r.muereEn.combate + r.muereEn.elite) ? 0 : 1;   // llegó al guardián
         p.gua[0] += r.peleas.jefe[0]; p.gua[1] += r.peleas.jefe[1];
@@ -79,7 +79,7 @@ async function measureFights(lvs, node, n){
     for(const lv of lvs) for(let i = 0; i < n; i++){
       W.CAL.tick = `${lv} ${st} ${node} ${i}`;
       const r = await race(W.__sim(cfg(st, lv, {node})), 6000); if(i % 4 === 0) await yieldNow();
-      if(!r) continue; k++; if(r.winRate === 100) w++;
+      if(!r || !r.n) continue; k++; if(r.winRate === 100) w++;
     }
     per[st] = pct(w, k); if(k){ tot += w / k * 100; cnt++; }
   }

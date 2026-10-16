@@ -22,11 +22,11 @@ W.fight = async (st, lv)=>{
   W.prog = `${lv} ${st} #${++fights} ${new Date().toISOString().slice(11, 19)}`;
   if(fights % 5 === 0) await yieldNow();
   const r = await race(W.__sim(Object.assign({style: st, level: lv, dungeonLevel: lv, n: 1, beta: true}, W.refFor(lv))), 4000);
-  return r ? (r.winRate === 100 ? 1 : 0) : null;
+  return r && r.n ? (r.winRate === 100 ? 1 : 0) : null; // r.n 0: el combate dio error (ver __simErrores) y no cuenta
 };
 W.clearLevel = async (st, lv)=>{
   const r = await race(W.__simLevel(Object.assign({style: st, level: lv, dungeonLevel: lv, n: 1, beta: true}, W.refFor(lv))), 15000);
-  return r ? (r.clear === 100 ? 1 : 0) : null;
+  return r && r.n ? (r.clear === 100 ? 1 : 0) : null;
 };
 W.measure = async (fn, lv, n)=>{
   const per = {}; let tot = 0, cnt = 0;
