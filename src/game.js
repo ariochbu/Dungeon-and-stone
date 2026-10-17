@@ -109,6 +109,8 @@ const STYLES = {
     // siguiera pagando con Espíritu, itemizar Habilidad lo dejaría sin pozo.
     id:'mago', name:'Mago', icon:'🔥', scaleStat:'hab',
     desc:'Fuego y hielo. Siembra el elemento y detónalo después.',
+    // Barrera arcana (2026-10-17, kits de retaguardia): pasiva de la senda, ver KIT_RETAGUARDIA y magoBarreraInicio.
+    passive: ()=> KIT_RETAGUARDIA.barrera ? `<b>Barrera arcana:</b> empiezas cada combate con un escudo del ${pctTxt(KIT_RETAGUARDIA.barrera)} de tu vida máxima.` : '',
     skills:['bola_fuego','lanza_hielo','explosion_arcana']
   },
   // Paladín y Hechicero (pedido explícito 2026-09-28, "Paso 1" del rediseño
@@ -820,12 +822,31 @@ function skillBonus(skillId, field, base){
 const ULTIMATE_BY_STYLE = {pesada:'furia_titan', doblefilo:'vals_sangre', tirador:'disparo_cazador_final', mago:'cataclismo_elemental', paladin:'juicio_divino', hechicero:'grito_del_abismo'};
 const ULTIMATE_MAX_USES = 3;
 const ULTIMATE_COOLDOWN_TURNS = 5;
+// KITS DE RETAGUARDIA (2026-10-17, rama kits-retaguardia; plan-reestructuracion.md, sección 4.2; medido en
+// tools/mediciones/kits-retaguardia-2026-10-17.md). Sustituyen a las tablas ocultas por senda que se quitaron en 1-80:
+// todo lo que hay aquí sale escrito en el texto de la habilidad o de la senda, y vale en todos los pisos.
+const KIT_RETAGUARDIA = {
+  pasoAtras: 0.04,          // Arquero, ataque básico desde la Retaguardia: te cura este % del daño hecho ("Paso atrás")
+  lluviaLento: 2,           // Lluvia de flechas: turnos de Ralentizado a los enemigos que golpea (0 = nada). Los estados del enemigo
+                            // se descuentan al empezar su fase: con 1 turno se iría antes de tu siguiente golpe [estimación]
+  barrera: 0.12,            // Mago, Barrera arcana: escudo al empezar cada combate (% de la vida máxima)
+  barreraCombo: 0.06,       // cada detonación de Explosión arcana suma este % al escudo, sin pasar de `barrera`
+  lanzaLinea: true,         // Lanza de hielo: el Ralentizado alcanza a toda la línea del objetivo
+  venenoJefeMenos: 1,       // Hechicero: contra jefes y guardianes, el Veneno se apila esta cantidad de cargas menos
+  drenajePorVeneno: 0.10,   // Drenaje de Esencia: +este % de curación por cada enemigo con Veneno
+  // Añadidos tras medir (el plan no los traía) [estimación]: con lo de arriba las tres sendas seguían en 0-15% contra los
+  // guardianes de 61-79 (la causa es el daño que encajan los aliados, no la vida propia; ver el informe).
+  lentoMenosDano: 0.30,     // un ENEMIGO Ralentizado hace este % menos de daño (Lluvia de flechas, Lanza de hielo, Cataclismo)
+  drenajeMerma: 0.40,       // Drenaje de Esencia deja al objetivo Mermado (hace este % menos de daño) los 3 turnos del Quebranto
+};
+const KIT_RETAGUARDIA_BASE = Object.assign({}, KIT_RETAGUARDIA);
+const pctTxt = (x)=> `${Math.round(x*100)}%`;
 
 const SKILLS = {
   ataque_basico: {
     id:'ataque_basico', name:'Ataque básico', cost:null, dmgType:'fisico', mult:0.55,
     desc: ()=> state && state.char && state.char.style==='tirador'
-      ? 'Un golpe simple y confiable. No cuesta recursos. +60% de daño para el Arquero — su golpe más fuerte.'
+      ? `Un golpe simple y confiable. No cuesta recursos. +60% de daño para el Arquero — su golpe más fuerte.${KIT_RETAGUARDIA.pasoAtras ? ` <b>Paso atrás:</b> desde la Retaguardia, te cura el ${pctTxt(KIT_RETAGUARDIA.pasoAtras)} del daño que hace.` : ''}`
       : 'Un golpe simple y confiable. No cuesta recursos.',
     targetMode:'front'
   },
@@ -899,7 +920,7 @@ const SKILLS = {
     // cuando no queda nadie al frente cae sobre la retaguardia (misma regla
     // de línea que playerFrontTargetIndices). Se eligió esto en vez de un
     // enfriamiento para no tener que meter enfriamientos en todas las sendas.
-    desc: ()=> `Daño a toda una línea enemiga, la que elijas: el frente o la retaguardia (toca a un enemigo de esa línea). +${Math.round(skillBonus('lluvia_flechas','bonusVsMarked',0.25)*100)}% contra los Marcados.`, targetMode:'all'
+    desc: ()=> `Daño a toda una línea enemiga, la que elijas: el frente o la retaguardia (toca a un enemigo de esa línea). +${Math.round(skillBonus('lluvia_flechas','bonusVsMarked',0.25)*100)}% contra los Marcados.${KIT_RETAGUARDIA.lluviaLento ? ` Deja Ralentizados (-20% de evasión${KIT_RETAGUARDIA.lentoMenosDano ? ` y -${pctTxt(KIT_RETAGUARDIA.lentoMenosDano)} de daño` : ''}) ${KIT_RETAGUARDIA.lluviaLento === 1 ? '1 turno' : KIT_RETAGUARDIA.lluviaLento + ' turnos'} a los enemigos que golpea.` : ''}`, targetMode:'all'
   },
 
   bola_fuego: {
@@ -910,13 +931,13 @@ const SKILLS = {
   lanza_hielo: {
     id:'lanza_hielo', name:'Lanza de hielo', cost:{tipo:'estamina', valor:15}, dmgType:'hielo', mult:0.8, // 0.9 hasta el 2026-10-09
     applies:{name:'Ralentizado', chance:0.8, duration:2},
-    desc: ()=> `Daño de hielo. Aplica Ralentizado (-20% evasión, actúa después) durante ${skillBonus('lanza_hielo','duration',2)} turnos.`, targetMode:'any'
+    desc: ()=> `Daño de hielo. ${Math.round(skillBonus('lanza_hielo','applyChance',0.8)*100)}% de aplicar Ralentizado (-20% evasión${KIT_RETAGUARDIA.lentoMenosDano ? ` y -${pctTxt(KIT_RETAGUARDIA.lentoMenosDano)} de daño` : ''}) durante ${skillBonus('lanza_hielo','duration',2)} turnos${KIT_RETAGUARDIA.lanzaLinea ? ' al objetivo y a toda su línea (frente o retaguardia), cada enemigo con su propia tirada' : ''}.`, targetMode:'any'
   },
   explosion_arcana: {
     id:'explosion_arcana', name:'Explosión arcana', cost:{tipo:'estamina', valor:25}, dmgType:'arcano', mult:0.75,
     consumesEither:[{name:'Quemadura', bonusMult:0.6},{name:'Ralentizado', bonusMult:0.6}], penaltyIfNone:0.3,
     comboLineSplash:0.5, // al detonar un estado, el resto de la línea del objetivo recibe este % del daño (2026-10-09)
-    desc: ()=> `Consume Quemadura o Ralentizado del objetivo para +${Math.round(skillBonus('explosion_arcana','bonusMult',0.6)*100)}% de daño; la detonación alcanza al resto de su línea con el ${Math.round((SKILLS.explosion_arcana.comboLineSplash||0)*100)}% de ese daño.`,
+    desc: ()=> `Consume Quemadura o Ralentizado del objetivo para +${Math.round(skillBonus('explosion_arcana','bonusMult',0.6)*100)}% de daño; la detonación alcanza al resto de su línea con el ${Math.round((SKILLS.explosion_arcana.comboLineSplash||0)*100)}% de ese daño.${KIT_RETAGUARDIA.barrera && KIT_RETAGUARDIA.barreraCombo ? ` Cada detonación renueva tu <b>Barrera arcana</b>: +${pctTxt(KIT_RETAGUARDIA.barreraCombo)} de tu vida máxima en escudo, hasta el ${pctTxt(KIT_RETAGUARDIA.barrera)}.` : ''}`,
     targetMode:'any'
   },
 
@@ -944,7 +965,7 @@ const SKILLS = {
   toque_venenoso: {
     id:'toque_venenoso', name:'Toque Venenoso', cost:{tipo:'estamina', valor:15}, dmgType:'veneno', mult:0.90,
     applies:{name:'Veneno', chance:0.85, duration:3, stack:true, maxStack:3},
-    desc: ()=> `Daño de veneno. Apila Veneno (hasta x${skillBonus('toque_venenoso','maxStack',3)}) durante 3 turnos.` + (saviaPodridaActive() ? ' <b>Savia podrida</b> (Bosque muerto): ignora la resistencia al veneno y, con el Veneno al tope, marchita cada turno a las invocaciones enemigas.' : ''), targetMode:'any'
+    desc: ()=> `Daño de veneno. Apila Veneno (hasta x${skillBonus('toque_venenoso','maxStack',3)}${KIT_RETAGUARDIA.venenoJefeMenos ? `; contra jefes y guardianes, hasta x${Math.max(1, skillBonus('toque_venenoso','maxStack',3) - KIT_RETAGUARDIA.venenoJefeMenos)}` : ''}) durante 3 turnos. Si muere un enemigo envenenado, todas sus cargas pasan a otro enemigo de su línea.` + (saviaPodridaActive() ? ' <b>Savia podrida</b> (Bosque muerto): ignora la resistencia al veneno y, con el Veneno al tope, marchita cada turno a las invocaciones enemigas.' : ''), targetMode:'any'
   },
   // Rediseño del Hechicero (2026-10-08): Grito de Pánico y Mirada de Locura se
   // funden en una sola habilidad que aplica Miedo o Confusión al azar (ver
@@ -964,7 +985,7 @@ const SKILLS = {
     id:'drenaje_de_esencia', name:'Drenaje de Esencia', cost:{tipo:'estamina', valor:18}, dmgType:'arcano', mult:0.70,
     selfHealPctOfDmg:0.30,
     applies:{name:'Quebranto', chance:1, duration:3, resPenalty:15, mentalPenalty:0.5},
-    desc: ()=> `Daño arcano moderado. ${skillBonus('drenaje_de_esencia','healPct',0) > 0 ? `Te cura el ${Math.round(skillBonus('drenaje_de_esencia','healPct',0)*100)}% de lo infligido y deja` : 'Deja'} al objetivo Quebrantado 3 turnos: -15 a todas sus resistencias y la mitad de su resistencia a estados.`,
+    desc: ()=> `Daño arcano moderado. ${skillBonus('drenaje_de_esencia','healPct',0) > 0 ? `Te cura el ${Math.round(skillBonus('drenaje_de_esencia','healPct',0)*100)}% de lo infligido${KIT_RETAGUARDIA.drenajePorVeneno ? ` (+${pctTxt(KIT_RETAGUARDIA.drenajePorVeneno)} por cada enemigo con Veneno)` : ''} y deja` : 'Deja'} al objetivo Quebrantado 3 turnos: -15 a todas sus resistencias y la mitad de su resistencia a estados${KIT_RETAGUARDIA.drenajeMerma ? `, y Mermado: hace un ${pctTxt(KIT_RETAGUARDIA.drenajeMerma)} menos de daño` : ''}.`,
     targetMode:'any'
   },
   mirada_de_locura: {
@@ -1013,6 +1034,7 @@ const SKILLS = {
     desc:'Ultimate del Hechicero. Daño arcano a TODOS los enemigos y los deja con Miedo o Confusión (al azar) durante 2 turnos.'
   }
 };
+applyKitRetaguardia(); // Lanza de hielo en línea según KIT_RETAGUARDIA
 
 // Tema goblin para los niveles 1-10: arqueros/guerreros/saqueadores/chamanes
 // como tropa regular, un Jefe goblin como élite, y Hobgoblin/Gilgoblin como
@@ -7196,9 +7218,27 @@ function ssMirrorBuff(buff){
   statusInfoFor(copy);
   log(`<b>${it.name}</b> copia en ti <b>${buff.name}</b>.`);
 }
+// Kits de retaguardia (2026-10-17, ver KIT_RETAGUARDIA). Tope de Veneno contra jefes y guardianes.
+function venenoJefeTope(max){ return Math.max(1, max - (KIT_RETAGUARDIA.venenoJefeMenos||0)); }
+// Barrera arcana del Mago: escudo al empezar cada combate…
+function magoBarreraInicio(d){
+  if(state.char.style!=='mago' || !KIT_RETAGUARDIA.barrera) return;
+  const amt = Math.round(d.maxHP*KIT_RETAGUARDIA.barrera);
+  grantShield(true, null, amt);
+  log(`<b>Barrera arcana</b>: empiezas el combate con un escudo de ${amt}.`);
+}
+// …y cada detonación de Explosión arcana la renueva, sin pasar del tope inicial.
+function magoBarreraCombo(d){
+  if(state.char.style!=='mago' || !KIT_RETAGUARDIA.barrera || !KIT_RETAGUARDIA.barreraCombo || !combat) return;
+  const cap = Math.round(d.maxHP*KIT_RETAGUARDIA.barrera), cur = combat.playerShield||0;
+  const add = Math.min(Math.round(d.maxHP*KIT_RETAGUARDIA.barreraCombo), cap - cur);
+  if(add > 0){ grantShield(true, null, add); log(`<b>Barrera arcana</b> se renueva: +${add} de escudo.`); }
+}
+function applyKitRetaguardia(){ SKILLS.lanza_hielo.controlLine = !!KIT_RETAGUARDIA.lanzaLinea; }
 // Al empezar cada combate.
 function ssCombatStart(){
   const d = derived();
+  magoBarreraInicio(d);
   ssCombatStart2();
   const yunque = ssOn(7);
   if(yunque && state.dungeon.ssShield > 0){
@@ -7249,6 +7289,7 @@ function ultimateMaxUses(){ return ULTIMATE_MAX_USES + (ssOn(20) ? 1 : 0); }
 // así que "actúas el primero" no hacía nada (014, 048) y 054 habría sido crítico siempre. 058 y 073 no tienen
 // botón propio: se activan solas.
 const SS_TEXT_FIX = {
+  13:'Lluvia de flechas deja Ralentizados 3 turnos a los enemigos que golpea (sin la pieza, 2). Tus disparos contra enemigos Ralentizados son siempre críticos.',
   14:'No puedes ser Ralentizado ni Paralizado. El enemigo que lo intenta queda Ralentizado 2 turnos.',
   48:'El mapa del nivel se ve entero, sin niebla. Todos los enemigos empiezan cada combate Marcados 2 turnos.',
   54:'Tus golpes contra un enemigo que todavía no ha actuado en ese combate son críticos seguros.',
@@ -12081,7 +12122,7 @@ function pickSmartTemplates(pool, count){
 // guardián va al frente, casi siempre una de retaguardia, y al revés. La élite llega debilitada (hpPct,
 // atkPct) y el guardián bajó de 2.40/3.04 a 1.69/2.15 (DECADE_ENEMY_TUNING[8]): con la élite entera y el
 // guardián de antes, los niveles se superaban el 7-15% de las veces en vez del ~50% pedido.
-const PARAISO_GUARDIAN_GROUP = {hp:1.08, atk:1.08}; // 2026-10-17, sin invisibles: ×1,01 sobre 1.07 (más el ×1,84 de las salas de 41-49)
+const PARAISO_GUARDIAN_GROUP = {hp:1.06, atk:1.06}; // 2026-10-17, kits de retaguardia: ×0,982 (antes 1.08). // 2026-10-17, sin invisibles: ×1,01 sobre 1.07 (más el ×1,84 de las salas de 41-49)
 const GUARDIAN_ELITE_81 = {from:81, to:89, complementChance:0.7, hpPct:0.50, atkPct:0.65};
 function guardianEliteFor(guardianTpl, elites){
   const wantFront = !guardianTpl.frontline;
@@ -12636,19 +12677,19 @@ const DECADE_BOSS_TUNING = {
   // sin modificadores invisibles en 1-80, aliados ×1,5 con paridad y área a la retaguardia al 50%, mochila completa e IA
   // que aprende consumibles. 30 y 40 son de las cuentas alfa: mismo factor que la beta (×1,355 y ×1,48), sin medir aparte.
   // Antes: 30 → 1.49/1.20, 40 → 1.32/1.16; 50 → 1.52/1.56, 60 → 2.52/2.80, 70 → 2.08/2.30, 80 → 2.14/2.32.
-  30: {hp:2.02, atk:1.63},
-  40: {hp:1.96, atk:1.72},
+  30: {hp:2.08, atk:1.68},  // 2026-10-17, kits de retaguardia: ×1,031 (antes 2.02/1.63); alfa, sin medir aparte
+  40: {hp:2.14, atk:1.88},  // ídem ×1,093 (antes 1.96/1.72)
   // REDISEÑO DE CLASES (2026-10-08, rama rediseno-clases): recalibrados con el
   // arnés tools/calib_harness.js — media de las seis sendas, 40 combates cada
   // una, 4 aliados y todo rango A. Metas: 50 → 60%, 60 → 50%, 70 → 40%, 80 → 30%.
   // 2026-10-08, quinta vuelta (rama clases-x1): daño x1, vida nueva, kit y rotación del Hechicero, dos tanques para la retaguardia.
   // RECALIBRACIÓN 2026-10-09 (objetivos nuevos: 50 → 70%, 60 → 50%, 70 → 40%, 80 → 30%; reparto por senda en BOSS_VS_CLASS).
   // Antes: 1.62/1.66, 2.42/2.68, 1.93/2.13, 2.06/2.23.
-  50: {hp:1.27, atk:1.30},  // 2026-10-17: ×0,835 (sus invocaciones son normales de la Isla, que subieron ×1,84). Antes 1.52/1.56. Custodio: 63% con 1.55/1.59 tras el último reparto por senda; bajado un 2% sin volver a medir
-  60: {hp:3.78, atk:4.20},  // 2026-10-17: ×1,50 (antes 2.52/2.80). Storm Gush: 48% // antes 59% con sus áreas al 75% (Arquero 30, Mago 43; antes 10 y 3)
+  50: {hp:1.33, atk:1.37},  // 2026-10-17, kits de retaguardia: ×1,05 (antes 1.27/1.30). // 2026-10-17: ×0,835 (sus invocaciones son normales de la Isla, que subieron ×1,84). Antes 1.52/1.56. Custodio: 63% con 1.55/1.59 tras el último reparto por senda; bajado un 2% sin volver a medir
+  60: {hp:4.48, atk:4.97},  // 2026-10-17, kits de retaguardia: ×1,184 (antes 3.78/4.20). // 2026-10-17: ×1,50 (antes 2.52/2.80). Storm Gush: 48% // antes 59% con sus áreas al 75% (Arquero 30, Mago 43; antes 10 y 3)
   // Área (Pliegue Espacial) -25% por decisión de ariochbu (2026-10-08); los Reflejos no se tocan.
-  70: {hp:2.90, atk:3.21},  // 2026-10-17: ×1,396 (antes 2.08/2.30). El Sin Forma: 36% // antes: 37% (sin bono de frente, área -25%, castigo al frente; con 2.08/2.30 daba 21%)
-  80: {hp:2.79, atk:3.03},  // 2026-10-17: ×1,305 (antes 2.14/2.32). El Corazón Marchito: 32% (muy sensible: 2.17/2.35 daba 23 y 2.12/2.29, 39)
+  70: {hp:3.35, atk:3.71},  // 2026-10-17, kits de retaguardia: ×1,155 (antes 2.90/3.21). // 2026-10-17: ×1,396 (antes 2.08/2.30). El Sin Forma: 36% // antes: 37% (sin bono de frente, área -25%, castigo al frente; con 2.08/2.30 daba 21%)
+  80: {hp:3.06, atk:3.32},  // 2026-10-17, kits de retaguardia: ×1,096 (antes 2.79/3.03). // 2026-10-17: ×1,305 (antes 2.14/2.32). El Corazón Marchito: 32% (muy sensible: 2.17/2.35 daba 23 y 2.12/2.29, 39)
   // 2026-10-09, objetivo de ariochbu: ninguna senda por encima del 20% con la referencia de rango A.
   // Medido con 200 combates por senda en 2.38/2.55: Asesino 23, Arquero 21, Mago 13, Guerrero 12, Paladín 12, Hechicero 8;
   // se sube el ataque a 2.60 para bajar a los dos primeros. El reparto entre sendas sale del propio jefe
@@ -12674,8 +12715,8 @@ const BETA_DECADE_BOSS_TUNING = {
   // un aliado, equipo raro, piedras F y Caídos raros. Antes: .24/.50 y .80/.80 (con esa referencia el Ogro se ganaba el 22-26%).
   10: {hp:0.213, atk:0.439},  // Ogro: 87% con la referencia de la segunda vuelta (ver BETA_ENEMY_SCALE)
   20: {hp:0.81, atk:0.81},  // Matriarca: 70% con 0.858 y el reparto por senda suavizado (Guerrero 49, Arquero 45); bajada un 6%
-  30: {hp:2.25, atk:2.13},  // 2026-10-17, sin invisibles: ×1,355 (antes 1.66/1.57). // 2026-10-10: bajó de 1.82/1.73 porque a Riakis ya se le enfrenta sin la mejora de habilidades (64% -> ~80%).  // Riakis: 81% (objetivo nuevo 80; antes 1.96/1.87 para 65%)
-  40: {hp:2.34, atk:2.21},  // 2026-10-17, sin invisibles: ×1,48 (antes 1.58/1.49). Usurpador: 75% con el reparto por senda (objetivo nuevo 75). Muy sensible.
+  30: {hp:2.32, atk:2.20},  // 2026-10-17, kits de retaguardia: ×1,031 (antes 2.25/2.13). // 2026-10-17, sin invisibles: ×1,355 (antes 1.66/1.57). // 2026-10-10: bajó de 1.82/1.73 porque a Riakis ya se le enfrenta sin la mejora de habilidades (64% -> ~80%).  // Riakis: 81% (objetivo nuevo 80; antes 1.96/1.87 para 65%)
+  40: {hp:2.56, atk:2.42},  // 2026-10-17, kits de retaguardia: ×1,093 (antes 2.34/2.21). // 2026-10-17, sin invisibles: ×1,48 (antes 1.58/1.49). Usurpador: 75% con el reparto por senda (objetivo nuevo 75). Muy sensible.
 };
 // Enemigos que NO son jefe de década, por índice de década (1 = pisos 11-19...).
 // Medido: con 2-3 aliados los combates normales/élite/guardián rinden igual
@@ -12704,8 +12745,10 @@ const BETA_ENEMY_SCALE = {
   // CALIBRACIÓN SIN INVISIBLES (2026-10-17, rama calibrar-sin-invisibles; tools/mediciones/calibracion-21-80-2026-10-17.md):
   // salas ×1,63 y guardián ×1,875 en 21-29; salas ×1,65 y guardián ×1,48 en 31-39. Antes: 2 → 2.58 todo y guardián 1.57;
   // 3 → 3.77/4.35 y guardián 2.95/3.32.
-  2: {regular:{hp:4.21, atk:4.21}, elite:{hp:4.21, atk:4.21}, guardian:{hp:2.94, atk:2.94}},
-  3: {regular:{hp:6.22, atk:7.18}, elite:{hp:6.22, atk:7.18}, guardian:{hp:4.37, atk:4.91}},
+  // 2026-10-17, kits de retaguardia (tools/mediciones/kits-retaguardia-2026-10-17.md): salas ×1,024 y guardián ×1,088
+  // (antes 4.21 y 2.94); 31-39: salas ×1,014 y guardián ×1,145 (antes 6.22/7.18 y 4.37/4.91).
+  2: {regular:{hp:4.31, atk:4.31}, elite:{hp:4.31, atk:4.31}, guardian:{hp:3.20, atk:3.20}},
+  3: {regular:{hp:6.31, atk:7.28}, elite:{hp:6.31, atk:7.28}, guardian:{hp:5.00, atk:5.62}},
 };
 // Normales, élites y guardianes por década (índice 4 = pisos 41-50, 5 = 51-60).
 // Calibrado con el simulador de balance (simLevels) contra la misma referencia
@@ -12720,8 +12763,9 @@ const DECADE_ENEMY_TUNING = {
   //   51-59 duro (~75%): antes 100%. Referencia: rango A + piedras A + Caídos épicos.
   // 2 y 3 son de las cuentas alfa (la beta usa BETA_ENEMY_SCALE). 2026-10-17: mismos factores que la beta.
   // Antes: 2 → 1.3/1.5, 1.2/1.4, 1.1/1.15; 3 → 1.4/1.8, 1.3/1.6, 1.2/1.3.
-  2: {regular:{hp:2.12, atk:2.45}, elite:{hp:1.96, atk:2.28}, guardian:{hp:2.06, atk:2.16}},
-  3: {regular:{hp:2.31, atk:2.97}, elite:{hp:2.15, atk:2.64}, guardian:{hp:1.78, atk:1.92}},
+  // 2026-10-17, kits de retaguardia: mismos factores que la beta (antes 2.12/2.45, 1.96/2.28, 2.06/2.16 y 2.31/2.97, 2.15/2.64, 1.78/1.92).
+  2: {regular:{hp:2.17, atk:2.51}, elite:{hp:2.01, atk:2.33}, guardian:{hp:2.24, atk:2.35}},
+  3: {regular:{hp:2.34, atk:3.01}, elite:{hp:2.18, atk:2.68}, guardian:{hp:2.04, atk:2.20}},
   // REDISEÑO DE CLASES (2026-10-08), mismos objetivos que arriba. Medido (dos
   // niveles por década, 8 intentos por senda): 41-49 → 73%, 51-59 → 75% antes
   // del último retoque, 61-69 → 69% y 71-79 → 65% antes del último retoque.
@@ -12731,10 +12775,12 @@ const DECADE_ENEMY_TUNING = {
   // por década, salas (normales y élites) y guardián: 41-49 ×1,84 (el guardián es el grupo de PARAISO_GUARDIAN_GROUP, que
   // hereda el ×1,84 de las salas y lleva ×1,01 propio); 51-59 ×1,67 y ×1,40; 61-69 ×1,517 y ×1,53; 71-79 ×1,415 y ×1,75.
   // Antes: 4 → 1.49 todo y guardián 1.36; 5 → 2.88/4.18, 2.74/3.86, 3.20/3.74; 6 → 3.29/4.99 y 2.31/2.92; 7 → 3.48/5.33 y 2.02/2.55.
-  4: {regular:{hp:2.74, atk:2.74}, elite:{hp:2.74, atk:2.74}, guardian:{hp:2.50, atk:2.50}},
-  5: {regular:{hp:4.81, atk:6.98}, elite:{hp:4.58, atk:6.45}, guardian:{hp:4.48, atk:5.24}},
-  6: {regular:{hp:4.99, atk:7.57}, elite:{hp:4.99, atk:7.57}, guardian:{hp:3.53, atk:4.47}},
-  7: {regular:{hp:4.92, atk:7.54}, elite:{hp:4.92, atk:7.54}, guardian:{hp:3.54, atk:4.46}},
+  // 2026-10-17, kits de retaguardia: salas ×1,011, ×1,025, ×1,042 y ×1,011; guardián ×1,201, ×1,175 y ×1,182 (41-49: grupo de la
+  // Isla, ver PARAISO_GUARDIAN_GROUP). Antes: 2.74; 4.81/6.98, 4.58/6.45, 4.48/5.24; 4.99/7.57, 3.53/4.47; 4.92/7.54, 3.54/4.46.
+  4: {regular:{hp:2.77, atk:2.77}, elite:{hp:2.77, atk:2.77}, guardian:{hp:2.53, atk:2.53}},
+  5: {regular:{hp:4.93, atk:7.16}, elite:{hp:4.69, atk:6.61}, guardian:{hp:5.38, atk:6.29}},
+  6: {regular:{hp:5.20, atk:7.89}, elite:{hp:5.20, atk:7.89}, guardian:{hp:4.15, atk:5.25}},
+  7: {regular:{hp:4.97, atk:7.62}, elite:{hp:4.97, atk:7.62}, guardian:{hp:4.19, atk:5.27}},
   // 2026-10-10: recalibrado con profesiones (antes 4.90/7.52, 3.60/5.60 y guardián 1.69/2.15, cuando el objetivo era ~50% de niveles).
   8: {regular:{hp:5.20, atk:7.98}, elite:{hp:3.82, atk:5.94}, guardian:{hp:2.52, atk:3.21}},   // guardián: 2.40/3.04 hasta que se le sumó la élite de escolta (GUARDIAN_ELITE_81) // 2026-10-09, segunda pasada: más duro en general y el reparto por senda en ENEMY_VS_CLASS_81 (objetivo de ariochbu: ~50% de niveles completados por senda). Élites algo por debajo: el simulador casi nunca les ganaba
   9: {regular:{hp:6.68, atk:10.26}, elite:{hp:4.89, atk:7.64}, guardian:{hp:2.69, atk:3.37}},   // La Celda (2026-10-10, 12 profesiones): llega 57-61, guardián 15-21
@@ -13411,7 +13457,9 @@ function applyMermado(target, reduction, duration){
 }
 function enemyMermadoMult(enemy){
   const st = hasStatus(enemy.statuses||[], 'Mermado');
-  return st ? (1 - (st.dmgReduction||0)) : 1;
+  // Kits de retaguardia (2026-10-17): un enemigo Ralentizado también pega más flojo (texto del estado y de las habilidades).
+  const lento = KIT_RETAGUARDIA.lentoMenosDano && hasStatus(enemy.statuses||[], 'Ralentizado') ? (1 - KIT_RETAGUARDIA.lentoMenosDano) : 1;
+  return (st ? (1 - (st.dmgReduction||0)) : 1) * lento;
 }
 // "Enemigo debilitado" en los textos de las armas = tiene Debilitado o Mermado.
 function isEnemyWeakened(target){
@@ -13915,6 +13963,8 @@ function applyStatus(target, statusDef, isPlayer){
   } else if(!isPlayer && target && target.tpl && statusDef.stack){
     const cap = statusDef.name==='Sangrado' && ssOn(1) ? 8 : statusDef.name==='Quemadura' && ssOn(10) ? 6 : statusDef.name==='Veneno' && ssOn(21) ? 10 : 0;
     if(cap) statusDef = Object.assign({}, statusDef, {maxStack:cap});
+    // Kits de retaguardia (2026-10-17): contra jefes y guardianes el Veneno se apila una carga menos (texto de Toque Venenoso).
+    else if(statusDef.name==='Veneno' && target.tpl.boss && KIT_RETAGUARDIA.venenoJefeMenos) statusDef = Object.assign({}, statusDef, {maxStack: venenoJefeTope(statusDef.maxStack||3)});
   }
   if(!isPlayer && target && target.tpl && combat){
     const info = STATUS_INFO[statusDef.name];
@@ -14019,7 +14069,7 @@ const STATUS_INFO = {
   Veneno:       {buff:false, desc:'Sufre daño de veneno cada turno según la Habilidad de quien lo causó. Se acumula hasta x3.'},
   Marcado:      {buff:false, desc:'Recibe +20% de todo el daño mientras dura.'},
   Quemadura:    {buff:false, desc:'Sufre daño de fuego por turno.'},
-  Ralentizado:  {buff:false, desc:'-20% evasión y actúa después que el resto.'},
+  Ralentizado:  {buff:false, get desc(){ return '-20% evasión y actúa después que el resto.' + (KIT_RETAGUARDIA.lentoMenosDano ? ` Un enemigo Ralentizado hace además un ${pctTxt(KIT_RETAGUARDIA.lentoMenosDano)} menos de daño.` : ''); }},
   Bendecido:    {buff:false, desc:'Sus resistencias caen -20 en todos los elementos mientras dura.'},
   'Bendición':  {buff:true,  desc:'+resistencias y -daño recibido mientras dura (Grimorio de plegarias Tier S).'},
   Fortalecido:  {buff:true,  desc:'Se fortalece con cada turno que pasa: sus estadísticas suben por carga.'},
@@ -14775,6 +14825,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
           removeStatus(target.statuses, opt.name);
           comboText = ` ¡Combo elemental! ${opt.name} detonado.`;
           used = true;
+          if(skillId==='explosion_arcana') magoBarreraCombo(d);
         }
       }
       if(!used){
@@ -14868,6 +14919,8 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
     if(skill.selfHealPctOfDmg && !(skillId==='drenaje_de_esencia' && skillBonus('drenaje_de_esencia','healPct',0) <= 0)){
       let healPct = skillId==='golpe_consagrado' ? skillBonus('golpe_consagrado','healPct', skill.selfHealPctOfDmg) : skillId==='drenaje_de_esencia' ? skillBonus('drenaje_de_esencia','healPct',0) : skill.selfHealPctOfDmg;
       if(skillId==='golpe_consagrado' && ssOn(81)) healPct = 1; // 081 Cayado del Faraón
+      // Drenaje de Esencia (kits de retaguardia, 2026-10-17): +X% por cada enemigo con Veneno (está en su texto).
+      if(skillId==='drenaje_de_esencia' && KIT_RETAGUARDIA.drenajePorVeneno) healPct += KIT_RETAGUARDIA.drenajePorVeneno * combat.enemies.filter(e=> e.hp>0 && hasStatus(e.statuses||[], 'Veneno')).length;
       // Sello de la Sentencia épico+: Golpe Consagrado cura más contra un
       // enemigo debilitado (puntos porcentuales sumados al % base).
       if(skillId==='golpe_consagrado' && targetWasWeakened){
@@ -14886,6 +14939,14 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
       if(state.char.curHP>beforeHeal) log(`Recuperas ${state.char.curHP-beforeHeal} de vida.`);
       ssOnPlayerHeal(state.char.curHP-beforeHeal, selfHeal);
       if(firstHealOfCast) graciaAfterHeal(playerHealSps, combat, 'Tú', amt=>gainPlayerSpirit(amt, 'Milagro'), {isPlayer:true, ally:null, maxHP:d.maxHP});
+    }
+    // Paso atrás (kits de retaguardia, 2026-10-17): el ataque básico del Arquero desde la Retaguardia le cura una parte
+    // del daño hecho. Está en el texto del ataque básico.
+    if(skillId==='ataque_basico' && state.char.style==='tirador' && combat.playerPos==='retaguardia' && KIT_RETAGUARDIA.pasoAtras && dmg>0 && state.char.curHP < d.maxHP){
+      const beforeHeal = state.char.curHP, want = Math.max(1, Math.round(dmg*KIT_RETAGUARDIA.pasoAtras));
+      state.char.curHP = Math.min(d.maxHP, state.char.curHP + want);
+      log(`<b>Paso atrás</b>: recuperas ${state.char.curHP-beforeHeal} de vida.`);
+      ssOnPlayerHeal(state.char.curHP-beforeHeal, want);
     }
 
     log(`Usas <b>${skill.name}</b> sobre ${target.name}: ${dmg} de daño${isCrit?' (¡crítico!)':''}.${comboText}`);
@@ -14953,6 +15014,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
       }
       if(target.hp>0 && applyStatus(target, applyDef, false)){
         onPlayerAppliedStatus(target, applyDef.name);
+        if(skillId==='drenaje_de_esencia' && KIT_RETAGUARDIA.drenajeMerma) applyMermado(target, KIT_RETAGUARDIA.drenajeMerma, applyDef.duration||3); // kits de retaguardia
         const et = playerSetSp('set_eclipse_total');
         if(et && targetNegStatuses>=2) applyMermado(target, et.reduction, 2);
       }
@@ -14973,7 +15035,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
       if(target.hp>0){
         const fuelle = ssOn(10) && hasStatus(target.statuses, 'Quemadura');
         if(fuelle) fuelle.duration = Math.max(fuelle.duration, 3); // 010: la Quemadura no se apaga mientras sigas golpeando
-        if(skillId==='lluvia_flechas' && ssOn(13)) applyStatus(target, {name:'Ralentizado', duration:2}, false);
+        if(skillId==='lluvia_flechas' && (ssOn(13) || KIT_RETAGUARDIA.lluviaLento)) applyStatus(target, {name:'Ralentizado', duration: ssOn(13) ? KIT_RETAGUARDIA.lluviaLento + 1 : KIT_RETAGUARDIA.lluviaLento}, false); // 013 Arco de Gina: 1 turno más
         if(skill.dmgType==='hielo' && wasSlowed && !target.ssFrozen && ssOn(11)){
           target.ssFrozen = true;
           applyStatus(target, {name:'Aturdido', duration:1}, false);
@@ -16867,6 +16929,8 @@ function simPickSkill(usable){
     simTargetOverride = tIdx;
     const marcado = !!hasStatus(t.statuses, 'Marcado');
     const fuerte = !!(t.tpl && (t.tpl.boss || t.tpl.elite));
+    // Kits de retaguardia (2026-10-17): Lluvia deja Ralentizado (y el Ralentizado resta daño): mantenerlo sobre el jefe.
+    if(can('lluvia_flechas') && KIT_RETAGUARDIA.lluviaLento && KIT_RETAGUARDIA.lentoMenosDano && fuerte && !hasStatus(t.statuses, 'Ralentizado')) return 'lluvia_flechas';
     if(can('marca_cazador') && !marcado && (fuerte || t.hp > t.maxHP*0.5)) return 'marca_cazador';
     if(can('disparo_cazador_final') && (marcado || fuerte)) return 'disparo_cazador_final';
     // guarda MP para la próxima Lluvia si todavía queda retaguardia enemiga
@@ -16894,6 +16958,13 @@ function simPickSkill(usable){
     const q = hasStatus(target.statuses, 'Quemadura'), lento = !!hasStatus(target.statuses, 'Ralentizado');
     const qMax = q && (q.stacks||1) >= skillBonus('bola_fuego','maxStack',3) && (q.duration||0) > 1;
     if(can('cataclismo_elemental') && livingEnemies().length >= 2) return 'cataclismo_elemental';
+    // Kits de retaguardia (2026-10-17): contra un enemigo fuerte, el Ralentizado le resta daño: mantenerlo y detonar la
+    // Quemadura (Explosión arcana gasta primero la Quemadura) en vez del hielo.
+    if(KIT_RETAGUARDIA.lentoMenosDano && target.tpl && (target.tpl.boss || target.tpl.elite)){
+      if(can('lanza_hielo') && !lento) return 'lanza_hielo';
+      if(can('explosion_arcana') && qMax) return 'explosion_arcana';
+      if(can('bola_fuego') && !qMax) return 'bola_fuego';
+    }
     if(can('explosion_arcana') && lento && !q) return 'explosion_arcana';
     if(can('bola_fuego') && !qMax) return 'bola_fuego';
     if(can('lanza_hielo')) return 'lanza_hielo';
@@ -16904,6 +16975,8 @@ function simPickSkill(usable){
   const has = (n)=> !!hasStatus(target.statuses, n);
   const hpPct = state.char.curHP / (derived().maxHP || 1);
   if(can('grito_del_abismo') && livingEnemies().length >= 2) return 'grito_del_abismo';
+  // Kits de retaguardia (2026-10-17): Drenaje deja Mermado al objetivo; contra un jefe o guardián, mantenerlo siempre.
+  if(KIT_RETAGUARDIA.drenajeMerma && can('drenaje_de_esencia') && target.tpl && target.tpl.boss && !has('Quebranto')) return 'drenaje_de_esencia';
   // Grito de Locura cae sobre toda una línea: contra grupos, primero a la línea
   // con más enemigos todavía sin Miedo ni Confusión.
   if(can('grito_de_panico') && !window.__simHechiceroSinLinea){
@@ -16915,7 +16988,9 @@ function simPickSkill(usable){
   }
   // primero el Veneno al tope (es su daño), después el resto
   const vn = hasStatus(target.statuses, 'Veneno');
-  if(can('toque_venenoso') && (!vn || (vn.stacks||1) < skillBonus('toque_venenoso','maxStack',3) || (vn.duration||0) <= 1)) return 'toque_venenoso';
+  // tope real del objetivo: contra jefes y guardianes, una carga menos (kits de retaguardia, 2026-10-17)
+  const vnMax = (target.tpl && target.tpl.boss && !ssOn(21) && KIT_RETAGUARDIA.venenoJefeMenos) ? venenoJefeTope(skillBonus('toque_venenoso','maxStack',3)) : skillBonus('toque_venenoso','maxStack',3);
+  if(can('toque_venenoso') && (!vn || (vn.stacks||1) < vnMax || (vn.duration||0) <= 1)) return 'toque_venenoso';
   if(can('drenaje_de_esencia') && (!has('Quebranto') || hpPct < 0.5)) return 'drenaje_de_esencia';
   if(can('grito_de_panico') && !has('Miedo') && !has('Confusion')) return 'grito_de_panico';
   if(can('toque_venenoso')) return 'toque_venenoso';
@@ -17318,6 +17393,8 @@ async function simRun(cfg){
 }
 if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
   window.__sim = simRun; window.__simLevel = simLevels;
+  // Kits de retaguardia (2026-10-17): __kits({pasoAtras:0.08}) prueba valores sin tocar el archivo; __kits(null) vuelve a los del código.
+  window.__kits = (o)=>{ Object.keys(KIT_RETAGUARDIA).forEach(k=> delete KIT_RETAGUARDIA[k]); Object.assign(KIT_RETAGUARDIA, KIT_RETAGUARDIA_BASE, o || {}); applyKitRetaguardia(); return Object.assign({}, KIT_RETAGUARDIA); };
   // IA del simulador v2: __simIA({rules, learn, eps, persist}) cambia los interruptores y devuelve cómo quedan;
   // __simAprende() devuelve la tabla aprendida (con medias), __simAprende('borrar') la vacía.
   window.__sinInvisibles = (on)=>{ if(on !== undefined) NO_HIDDEN = on === null ? null : !!on; return NO_HIDDEN; };
@@ -17537,8 +17614,9 @@ function spreadVenenoFromDead(){
     const heir = sameLine.length ? pick(sameLine) : (alive.length ? pick(alive) : null);
     if(!heir) return;
     const ex = hasStatus(heir.statuses, 'Veneno');
-    if(ex){ ex.stacks = Math.max(ex.stacks||1, st.stacks||1); ex.duration = Math.max(ex.duration||0, 3); }
-    else heir.statuses.push({name:'Veneno', duration:3, stack:true, stacks: st.stacks||1, maxStack: st.maxStack||3});
+    const tope = (heir.tpl && heir.tpl.boss && !ssOn(21) && KIT_RETAGUARDIA.venenoJefeMenos) ? venenoJefeTope(skillBonus('toque_venenoso','maxStack',3)) : 99;
+    if(ex){ ex.stacks = Math.min(tope, Math.max(ex.stacks||1, st.stacks||1)); ex.duration = Math.max(ex.duration||0, 3); }
+    else heir.statuses.push({name:'Veneno', duration:3, stack:true, stacks: Math.min(tope, st.stacks||1), maxStack: Math.min(tope, st.maxStack||3)});
     log(`El veneno salta de ${dead.name} a <b>${heir.name}</b> con ${st.stacks||1} carga(s).`);
   });
 }
@@ -18466,6 +18544,7 @@ function renderCreation(){
     info.innerHTML = `<h2>${st.icon} ${st.name} <small>${r.name}</small></h2>
       <div class="cr-sub">Atributo principal: ${CR_STAT_NAMES[st.scaleStat]||st.scaleStat} · Posición: ${pos}</div>
       <p class="cr-desc">“${st.desc}”</p>
+      ${st.passive && st.passive() ? `<div class="cr-passive">${st.passive()}</div>` : ''}
       <div class="cr-skills">${st.skills.map((id,k)=>`<div class="cr-skill"><span>${k+1}</span>${SKILLS[id] ? SKILLS[id].name : id}</div>`).join('')}</div>
       <div class="cr-passive">Así se verá tu <b>${st.name.toLowerCase()} ${r.name.toLowerCase()}</b> en combate.</div>
       <div class="cr-cta"><button class="reset-btn" id="cr-back">← Raza</button><button class="btn-main" id="cr-next">Elegir ${st.name} →</button></div>`;

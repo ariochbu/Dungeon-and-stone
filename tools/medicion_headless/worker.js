@@ -68,6 +68,14 @@ try{ const stl = document.createElement('style'); stl.textContent = 'html,body{d
     try{ t = await get('/__next?w=' + WID); }catch(e){ await sleep(2000); continue; }
     if(!t || !t.id){ await sleep(1500); continue; }
     applyTune(t.tune);
+    if(W.__kits) W.__kits(t.kit || null); // kits de retaguardia: valores de prueba por tarea (null = los del código)
+    // Tarea de depuración: ejecuta código en la página y devuelve lo que salga (ver dbg.py).
+    if(t.kind === 'js'){
+      let out;
+      try{ out = await (new Function('W', 'cfgOf', `return (async ()=>{ ${t.code} })();`))(W, cfgOf); }catch(e){ out = 'ERR ' + (e && e.stack || e); }
+      for(let k = 0; k < 20; k++){ const ok = await post('/__result', {id: t.id, batch: t.batch, cell: 'js', kind: 'js', out, w: WID}); if(ok) break; await sleep(2000); }
+      continue;
+    }
     const res = [0, 0, 0, 0, 0]; let err = 0;
     const t0 = Date.now();
     for(let i = 0; i < t.n && err < t.n; ){

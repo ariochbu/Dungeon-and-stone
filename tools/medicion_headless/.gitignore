@@ -1,0 +1,4 @@
+# Perfiles de Chrome headless, resultados crudos y fotos __snapshot de cada medición (se rehacen con cal.py / ctl.py).
+profiles/
+results/
+snap_*.json
