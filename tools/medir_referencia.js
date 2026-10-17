@@ -80,8 +80,8 @@ W.medirReferencia = async (opts)=>{
   opts = opts || {};
   if(opts.key && opts.key !== KEY){ KEY = opts.key; W.REF.data = load(); }
   VAR = opts.variante || {};
-  if(W.__sinInvisibles) W.__sinInvisibles(!!VAR.noHidden);
-  if(W.__aliados) W.__aliados(Object.assign({hpMult:1, lastBreath:false, spread:false, rearAoe:1, reviveAfter:0, parity:false}, VAR.ally || {}));
+  if(W.__sinInvisibles) W.__sinInvisibles(VAR.noHidden == null ? null : !!VAR.noHidden);   // null: la regla del juego (sin invisibles en 1-80)
+  if(W.__aliados) W.__aliados(Object.assign({hpMult:null, lastBreath:false, spread:false, rearAoe:null, reviveAfter:0, parity:null}, VAR.ally || {}));   // null: la regla del juego (ALLY_BOOST)
   W.__simIA({rules:true, learn: VAR.learn != null ? !!VAR.learn : false, eps: VAR.eps || 0.10, persist:false, tag: VAR.tag || ''});
   if(VAR.warm){ await warmUp(VAR.warm); }
   if(W.__simAliadosUtil) W.__simAliadosUtil(true);

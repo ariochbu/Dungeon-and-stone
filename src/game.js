@@ -5509,10 +5509,18 @@ ENEMY_VS_CLASS[8] = ENEMY_VS_CLASS_81.mult; BOSS_VS_CLASS[90] = ENEMY_VS_CLASS_8
 // COMMON_VS_TANK, _81, VS_FRONT_BOSS, VS_FRONT_CARCELERO), la guardia oculta de los aliados de frente (HIDDEN_FRONT_GUARD),
 // la penetración propia del Arquero (ARQUERO_PENETRACION), la ventaja de estados de Asesino y Hechicero
 // (CLASS_STATUS_EDGE) y la perforación de bloqueo por nivel (TANK_TUNE.blockPierce). Lo visible no cambia.
-// Por defecto false: el juego queda igual. En localhost: __sinInvisibles(true|false).
-let NO_HIDDEN = false;
+// REGLA DEL JUEGO DESDE 2026-10-17 (rama calibrar-sin-invisibles, decidido por ariochbu): en los pisos 1-80 no hay
+// ninguno de esos ajustes (VISIBLE_RULES_TO). 81-100 se queda como estaba, con sus tablas por senda, hasta que se cambien
+// los kits de las sendas de retaguardia. NO_HIDDEN = null sigue la regla; true/false la fuerza en todos los pisos (solo
+// para medir, en localhost: __sinInvisibles(true|false|null)).
+const VISIBLE_RULES_TO = 80;
+let NO_HIDDEN = null;
+function noHidden(){
+  if(NO_HIDDEN !== null) return NO_HIDDEN;
+  return ((state.dungeon && state.dungeon.level) || 0) <= VISIBLE_RULES_TO;
+}
 function enemyVsClassMult(){
-  if(NO_HIDDEN) return 1;
+  if(noHidden()) return 1;
   const lvl = (state.dungeon && state.dungeon.level) || 0, st = state.char.style, prof = myProfession();
   if(lvl < 1 || lvl > 100 || (lvl <= 40 && !BETA_BALANCE)) return 1;
   if(lvl <= 2) return 1;
@@ -5523,7 +5531,7 @@ function enemyVsClassMult(){
   return of(ENEMY_VS_CLASS[d]) * (combat && combat.node && combat.node.type === 'jefe' ? of(GUARDIAN_VS_CLASS[d]) : 1);
 }
 function guardianVsFront(enemy){
-  if(NO_HIDDEN) return null;
+  if(noHidden()) return null;
   const lvl = (state.dungeon && state.dungeon.level) || 0;
   const [G, C] = lvl >= GUARDIAN_VS_FRONT_81.from ? [GUARDIAN_VS_FRONT_81, COMMON_VS_TANK_81] : [GUARDIAN_VS_FRONT, COMMON_VS_TANK];
   if(lvl < G.from || lvl > G.to || lvl % 10 === 0 || !enemy.tpl) return null;
@@ -5550,7 +5558,7 @@ function enemyHealLocked(){
 // Valores elegidos tras medir el 2026-10-09 (Guerrero 93% → ~66% y Paladín 76% → ~64% en pisos 65-77).
 const TANK_TUNE = {comboStunChance:0.35, blockPierce:{from:1, perLevel:0.0075, max:0.8}};
 function blockPierceChance(){
-  if(NO_HIDDEN) return 0;
+  if(noHidden()) return 0;
   const lvl = (state.dungeon && state.dungeon.level) || 1, B = TANK_TUNE.blockPierce;
   return Math.max(0, Math.min(B.max, (lvl - B.from) * B.perLevel));
 }
@@ -12073,7 +12081,7 @@ function pickSmartTemplates(pool, count){
 // guardián va al frente, casi siempre una de retaguardia, y al revés. La élite llega debilitada (hpPct,
 // atkPct) y el guardián bajó de 2.40/3.04 a 1.69/2.15 (DECADE_ENEMY_TUNING[8]): con la élite entera y el
 // guardián de antes, los niveles se superaban el 7-15% de las veces en vez del ~50% pedido.
-const PARAISO_GUARDIAN_GROUP = {hp:1.07, atk:1.07};
+const PARAISO_GUARDIAN_GROUP = {hp:1.08, atk:1.08}; // 2026-10-17, sin invisibles: ×1,01 sobre 1.07 (más el ×1,84 de las salas de 41-49)
 const GUARDIAN_ELITE_81 = {from:81, to:89, complementChance:0.7, hpPct:0.50, atkPct:0.65};
 function guardianEliteFor(guardianTpl, elites){
   const wantFront = !guardianTpl.frontline;
@@ -12624,19 +12632,23 @@ function generateLoot(floorIdx, level){
 const DECADE_BOSS_TUNING = {
   10: {hp:1.01, atk:1.02},
   20: {hp:1.68, atk:1.28},
-  30: {hp:1.49, atk:1.20},
-  40: {hp:1.32, atk:1.16},
+  // CALIBRACIÓN SIN INVISIBLES (2026-10-17, rama calibrar-sin-invisibles; tools/mediciones/calibracion-21-80-2026-10-17.md):
+  // sin modificadores invisibles en 1-80, aliados ×1,5 con paridad y área a la retaguardia al 50%, mochila completa e IA
+  // que aprende consumibles. 30 y 40 son de las cuentas alfa: mismo factor que la beta (×1,355 y ×1,48), sin medir aparte.
+  // Antes: 30 → 1.49/1.20, 40 → 1.32/1.16; 50 → 1.52/1.56, 60 → 2.52/2.80, 70 → 2.08/2.30, 80 → 2.14/2.32.
+  30: {hp:2.02, atk:1.63},
+  40: {hp:1.96, atk:1.72},
   // REDISEÑO DE CLASES (2026-10-08, rama rediseno-clases): recalibrados con el
   // arnés tools/calib_harness.js — media de las seis sendas, 40 combates cada
   // una, 4 aliados y todo rango A. Metas: 50 → 60%, 60 → 50%, 70 → 40%, 80 → 30%.
   // 2026-10-08, quinta vuelta (rama clases-x1): daño x1, vida nueva, kit y rotación del Hechicero, dos tanques para la retaguardia.
   // RECALIBRACIÓN 2026-10-09 (objetivos nuevos: 50 → 70%, 60 → 50%, 70 → 40%, 80 → 30%; reparto por senda en BOSS_VS_CLASS).
   // Antes: 1.62/1.66, 2.42/2.68, 1.93/2.13, 2.06/2.23.
-  50: {hp:1.52, atk:1.56},  // Custodio: 63% con 1.55/1.59 tras el último reparto por senda; bajado un 2% sin volver a medir
-  60: {hp:2.52, atk:2.80},  // Storm Gush: 48% // antes 59% con sus áreas al 75% (Arquero 30, Mago 43; antes 10 y 3)
+  50: {hp:1.27, atk:1.30},  // 2026-10-17: ×0,835 (sus invocaciones son normales de la Isla, que subieron ×1,84). Antes 1.52/1.56. Custodio: 63% con 1.55/1.59 tras el último reparto por senda; bajado un 2% sin volver a medir
+  60: {hp:3.78, atk:4.20},  // 2026-10-17: ×1,50 (antes 2.52/2.80). Storm Gush: 48% // antes 59% con sus áreas al 75% (Arquero 30, Mago 43; antes 10 y 3)
   // Área (Pliegue Espacial) -25% por decisión de ariochbu (2026-10-08); los Reflejos no se tocan.
-  70: {hp:2.08, atk:2.30},  // El Sin Forma: 36% // antes: 37% (sin bono de frente, área -25%, castigo al frente; con 2.08/2.30 daba 21%)
-  80: {hp:2.14, atk:2.32},  // El Corazón Marchito: 32% (muy sensible: 2.17/2.35 daba 23 y 2.12/2.29, 39)
+  70: {hp:2.90, atk:3.21},  // 2026-10-17: ×1,396 (antes 2.08/2.30). El Sin Forma: 36% // antes: 37% (sin bono de frente, área -25%, castigo al frente; con 2.08/2.30 daba 21%)
+  80: {hp:2.79, atk:3.03},  // 2026-10-17: ×1,305 (antes 2.14/2.32). El Corazón Marchito: 32% (muy sensible: 2.17/2.35 daba 23 y 2.12/2.29, 39)
   // 2026-10-09, objetivo de ariochbu: ninguna senda por encima del 20% con la referencia de rango A.
   // Medido con 200 combates por senda en 2.38/2.55: Asesino 23, Arquero 21, Mago 13, Guerrero 12, Paladín 12, Hechicero 8;
   // se sube el ataque a 2.60 para bajar a los dos primeros. El reparto entre sendas sale del propio jefe
@@ -12662,8 +12674,8 @@ const BETA_DECADE_BOSS_TUNING = {
   // un aliado, equipo raro, piedras F y Caídos raros. Antes: .24/.50 y .80/.80 (con esa referencia el Ogro se ganaba el 22-26%).
   10: {hp:0.213, atk:0.439},  // Ogro: 87% con la referencia de la segunda vuelta (ver BETA_ENEMY_SCALE)
   20: {hp:0.81, atk:0.81},  // Matriarca: 70% con 0.858 y el reparto por senda suavizado (Guerrero 49, Arquero 45); bajada un 6%
-  30: {hp:1.66, atk:1.57},  // 2026-10-10: bajó de 1.82/1.73 porque a Riakis ya se le enfrenta sin la mejora de habilidades (64% -> ~80%).  // Riakis: 81% (objetivo nuevo 80; antes 1.96/1.87 para 65%)
-  40: {hp:1.58, atk:1.49},  // Usurpador: 75% con el reparto por senda (objetivo nuevo 75). Muy sensible.
+  30: {hp:2.25, atk:2.13},  // 2026-10-17, sin invisibles: ×1,355 (antes 1.66/1.57). // 2026-10-10: bajó de 1.82/1.73 porque a Riakis ya se le enfrenta sin la mejora de habilidades (64% -> ~80%).  // Riakis: 81% (objetivo nuevo 80; antes 1.96/1.87 para 65%)
+  40: {hp:2.34, atk:2.21},  // 2026-10-17, sin invisibles: ×1,48 (antes 1.58/1.49). Usurpador: 75% con el reparto por senda (objetivo nuevo 75). Muy sensible.
 };
 // Enemigos que NO son jefe de década, por índice de década (1 = pisos 11-19...).
 // Medido: con 2-3 aliados los combates normales/élite/guardián rinden igual
@@ -12689,8 +12701,11 @@ const BETA_ENEMY_SCALE = {
   1: {regular:{hp:2.40, atk:2.58}, elite:{hp:2.40, atk:2.58}, guardian:{hp:0.80, atk:0.85}},
   // RECALIBRACIÓN 2026-10-09 (objetivos nuevos de ariochbu, ver tools/calib_1_80.js): llegar al guardián 85%,
   // guardián 85% (21-29) y 80% (31-39). Antes: 1.73 todo; 2.79/3.22 y guardián 2.57/2.89.
-  2: {regular:{hp:2.58, atk:2.58}, elite:{hp:2.58, atk:2.58}, guardian:{hp:1.57, atk:1.57}},   // medido: llega 82, guardián 89, niveles 73
-  3: {regular:{hp:3.77, atk:4.35}, elite:{hp:3.77, atk:4.35}, guardian:{hp:2.95, atk:3.32}},   // medido: llega 83, guardián 79, niveles 65
+  // CALIBRACIÓN SIN INVISIBLES (2026-10-17, rama calibrar-sin-invisibles; tools/mediciones/calibracion-21-80-2026-10-17.md):
+  // salas ×1,63 y guardián ×1,875 en 21-29; salas ×1,65 y guardián ×1,48 en 31-39. Antes: 2 → 2.58 todo y guardián 1.57;
+  // 3 → 3.77/4.35 y guardián 2.95/3.32.
+  2: {regular:{hp:4.21, atk:4.21}, elite:{hp:4.21, atk:4.21}, guardian:{hp:2.94, atk:2.94}},
+  3: {regular:{hp:6.22, atk:7.18}, elite:{hp:6.22, atk:7.18}, guardian:{hp:4.37, atk:4.91}},
 };
 // Normales, élites y guardianes por década (índice 4 = pisos 41-50, 5 = 51-60).
 // Calibrado con el simulador de balance (simLevels) contra la misma referencia
@@ -12703,17 +12718,23 @@ const DECADE_ENEMY_TUNING = {
   //   31-39 moderado (~90%): antes ~100%. Misma referencia.
   //   41-49 duro: SIN ajuste — ya promediaba ~78% (82 / 89 / 63), que es el perfil duro.
   //   51-59 duro (~75%): antes 100%. Referencia: rango A + piedras A + Caídos épicos.
-  2: {regular:{hp:1.3, atk:1.5}, elite:{hp:1.2, atk:1.4}, guardian:{hp:1.1,  atk:1.15}},
-  3: {regular:{hp:1.4, atk:1.8}, elite:{hp:1.3, atk:1.6}, guardian:{hp:1.2,  atk:1.3}},
+  // 2 y 3 son de las cuentas alfa (la beta usa BETA_ENEMY_SCALE). 2026-10-17: mismos factores que la beta.
+  // Antes: 2 → 1.3/1.5, 1.2/1.4, 1.1/1.15; 3 → 1.4/1.8, 1.3/1.6, 1.2/1.3.
+  2: {regular:{hp:2.12, atk:2.45}, elite:{hp:1.96, atk:2.28}, guardian:{hp:2.06, atk:2.16}},
+  3: {regular:{hp:2.31, atk:2.97}, elite:{hp:2.15, atk:2.64}, guardian:{hp:1.78, atk:1.92}},
   // REDISEÑO DE CLASES (2026-10-08), mismos objetivos que arriba. Medido (dos
   // niveles por década, 8 intentos por senda): 41-49 → 73%, 51-59 → 75% antes
   // del último retoque, 61-69 → 69% y 71-79 → 65% antes del último retoque.
   // RECALIBRACIÓN 2026-10-09 (tools/calib_1_80.js). Objetivos: llegar al guardián 80% (41-59) y 75% (61-79); guardián
   // 75 / 55 / 45 / 35%. Antes: 4 → 1.36 todo; 5 → 2.36/3.42, 2.24/3.16, 1.98/2.31; 6 → guardián 1.95/2.46; 7 → 3.63/5.57 y 1.78/2.25.
-  4: {regular:{hp:1.49, atk:1.49}, elite:{hp:1.49, atk:1.49}, guardian:{hp:1.36, atk:1.36}},   // medido: llega 76, guardián (grupo, ver PARAISO_GUARDIAN_GROUP) 73, niveles 55
-  5: {regular:{hp:2.88, atk:4.18}, elite:{hp:2.74, atk:3.86}, guardian:{hp:3.20, atk:3.74}},   // medido: llega 78, guardián 55, niveles 43
-  6: {regular:{hp:3.29, atk:4.99}, elite:{hp:3.29, atk:4.99}, guardian:{hp:2.31, atk:2.92}},   // medido: llega 71-76, guardián 44 //   // 2026-10-09: guardian correcto por nivel + castigo al frente; media 61-69 ~60%
-  7: {regular:{hp:3.48, atk:5.33}, elite:{hp:3.48, atk:5.33}, guardian:{hp:2.02, atk:2.55}},   // medido: llega 76, guardián 38, niveles 29 //   // 2026-10-09: idem; media 71-79 ~63%
+  // CALIBRACIÓN SIN INVISIBLES (2026-10-17, rama calibrar-sin-invisibles; tools/mediciones/calibracion-21-80-2026-10-17.md):
+  // por década, salas (normales y élites) y guardián: 41-49 ×1,84 (el guardián es el grupo de PARAISO_GUARDIAN_GROUP, que
+  // hereda el ×1,84 de las salas y lleva ×1,01 propio); 51-59 ×1,67 y ×1,40; 61-69 ×1,517 y ×1,53; 71-79 ×1,415 y ×1,75.
+  // Antes: 4 → 1.49 todo y guardián 1.36; 5 → 2.88/4.18, 2.74/3.86, 3.20/3.74; 6 → 3.29/4.99 y 2.31/2.92; 7 → 3.48/5.33 y 2.02/2.55.
+  4: {regular:{hp:2.74, atk:2.74}, elite:{hp:2.74, atk:2.74}, guardian:{hp:2.50, atk:2.50}},
+  5: {regular:{hp:4.81, atk:6.98}, elite:{hp:4.58, atk:6.45}, guardian:{hp:4.48, atk:5.24}},
+  6: {regular:{hp:4.99, atk:7.57}, elite:{hp:4.99, atk:7.57}, guardian:{hp:3.53, atk:4.47}},
+  7: {regular:{hp:4.92, atk:7.54}, elite:{hp:4.92, atk:7.54}, guardian:{hp:3.54, atk:4.46}},
   // 2026-10-10: recalibrado con profesiones (antes 4.90/7.52, 3.60/5.60 y guardián 1.69/2.15, cuando el objetivo era ~50% de niveles).
   8: {regular:{hp:5.20, atk:7.98}, elite:{hp:3.82, atk:5.94}, guardian:{hp:2.52, atk:3.21}},   // guardián: 2.40/3.04 hasta que se le sumó la élite de escolta (GUARDIAN_ELITE_81) // 2026-10-09, segunda pasada: más duro en general y el reparto por senda en ENEMY_VS_CLASS_81 (objetivo de ariochbu: ~50% de niveles completados por senda). Élites algo por debajo: el simulador casi nunca les ganaba
   9: {regular:{hp:6.68, atk:10.26}, elite:{hp:4.89, atk:7.64}, guardian:{hp:2.69, atk:3.37}},   // La Celda (2026-10-10, 12 profesiones): llega 57-61, guardián 15-21
@@ -13154,7 +13175,21 @@ let SIM_REAR_LAST = false; // variante en pruebas (solo localhost): con aliados 
 // reviveAfter: un aliado caído vuelve con el 30% de su vida tras esas rondas (una vez por combate; 0 = no).
 // parity: el aliado usa las defensas del jugador con su equipo: resistencia mágica del conjunto contra golpes
 // elementales y reducción de daño por Vigor (0,2% por punto, tope 25%), contando 1 de Vigor por nivel (estimación).
-const ALLY_TEST = {hpMult:1, lastBreath:false, spread:false, rearAoe:1, reviveAfter:0, parity:false};
+// hpMult, parity y rearAoe en null siguen la regla del juego (ALLY_BOOST); un número o true/false la fuerza (solo simulador).
+const ALLY_TEST = {hpMult:null, lastBreath:false, spread:false, rearAoe:null, reviveAfter:0, parity:null};
+// ALIADOS REFORZADOS (regla del juego desde 2026-10-17, decidido por ariochbu; medido en
+// tools/mediciones/sin-invisibles-2026-10-16.md). En los pisos 1-80: vida ×1,5; paridad de defensas con el jugador
+// (resistencia mágica de su equipo contra golpes elementales y reducción de daño por Vigor, 0,2% por punto con tope del
+// 25%, contando 1 de Vigor por nivel más el de su equipo); y el área de guardianes y jefes llega al 50% a los aliados de
+// retaguardia mientras quede alguien vivo al frente. 81-100 sin cambios por ahora. Fuera del laberinto (ficha, hoguera)
+// manda el nivel del aliado.
+const ALLY_BOOST = {to:80, hpMult:1.5, parity:true, rearAoe:0.5};
+function allyBoost(key, row){
+  if(simMode && ALLY_TEST[key] != null) return ALLY_TEST[key];
+  const lvl = (state && state.dungeon && state.dungeon.level) || (row && row.level) || 1;
+  if(lvl <= ALLY_BOOST.to) return ALLY_BOOST[key];
+  return key === 'parity' ? false : 1;
+}
 function frontlineTarget(){
   // Pisos 1-60 (pedido explícito 2026-09-28): IA propia de los enemigos —
   // acaban SÍ o SÍ con toda la línea frontal antes de tocar la retaguardia.
@@ -13262,7 +13297,8 @@ function allyMaxHP(row){
   maxHP += equipModsSum(equip, 'maxhp_flat'); // Casco (nuevo): HP real, sin el ×8 de arriba
   maxHP += equipModsSum(equip, 'vig') * 3; // Vigor de piezas de conjunto: mismo +3 HP/punto que el jugador
   allySocketedStones(row).forEach(s=>{ if(s.bonus && s.bonus.stat==='maxhp') maxHP += s.bonus.value*8; }); // Vitalidad
-  if(simMode && ALLY_TEST.hpMult !== 1) maxHP = Math.round(maxHP*ALLY_TEST.hpMult);
+  const hpMult = allyBoost('hpMult', row);
+  if(hpMult !== 1) maxHP = Math.round(maxHP*hpMult);
   return maxHP;
 }
 // MP y Espíritu de un aliado: mismo pool de nivel para los dos, más lo que
@@ -13330,8 +13366,8 @@ function makeCombatAlly(row){
     pos: tpl.frontline ? 'frente' : 'retaguardia',
     maxHP, hp, maxMP, mp, maxSpirit, spirit, atk, statuses:[], shield:0, skillCooldown: 1, // 1: no usan su habilidad en el primer turno
     res, specials, mentalResist, statusResist,
-    resMagica: simMode && ALLY_TEST.parity ? clamp(equipModsSum(equip,'res_magica'), -60, 80) : 0,
-    vigRed: simMode && ALLY_TEST.parity ? clamp((lvl + equipModsSum(equip,'vig'))*0.002, 0, 0.25) : 0
+    resMagica: allyBoost('parity', row) ? clamp(equipModsSum(equip,'res_magica'), -60, 80) : 0,
+    vigRed: allyBoost('parity', row) ? clamp((lvl + equipModsSum(equip,'vig'))*0.002, 0, 0.25) : 0
   };
 }
 const ALLY_SKILL_COOLDOWN = 3; // cada cuántos turnos propios repite su habilidad
@@ -13584,7 +13620,7 @@ function allyOnHealPenitencia(ally, healedPctBefore){
 const CORROSION_RES_PENALTY = 15;
 const CORROSION_HEAL_MULT = 0.5;
 function corrosionResPenalty(statuses){
-  // Armadura Rota (jefes del 40 y del 70 contra el frente): resta resistencia física igual que la Corrosión, y se suman.
+  // Armadura Rota (Carcelero y guardianes de 81-89 contra el frente; en 1-80 ya no, ver noHidden): resta resistencia física igual que la Corrosión, y se suman.
   const rota = hasStatus(statuses, 'Armadura Rota');
   return (hasStatus(statuses, 'Corrosion') ? CORROSION_RES_PENALTY : 0) + (rota ? (rota.resPenalty||0) : 0);
 }
@@ -13599,7 +13635,7 @@ function corrosionResPenalty(statuses){
 // para que el retiro de la bonificación de arriba solo le pese al Guerrero.
 // A propósito NO se muestra en ninguna parte (ni estado, ni ficha, ni texto).
 const HIDDEN_FRONT_GUARD = 0.10;
-function hiddenFrontGuard(isPlayer){ return isPlayer || NO_HIDDEN ? 1 : (1-HIDDEN_FRONT_GUARD); } // el Paladín la tuvo unas horas; ariochbu se la quitó el mismo 2026-10-08
+function hiddenFrontGuard(isPlayer){ return isPlayer || noHidden() ? 1 : (1-HIDDEN_FRONT_GUARD); } // el Paladín la tuvo unas horas; ariochbu se la quitó el mismo 2026-10-08
 // Crítico de enemigo (pedido explícito 2026-09-28) — antes NINGÚN enemigo
 // criteaba. Multiplicador conservador a propósito (el jugador usa 1.5x+
 // bono): mejor que arranque sobrio y lo subamos si en la práctica se siente
@@ -13917,7 +13953,7 @@ function applyStatus(target, statusDef, isPlayer){
       // les opone la mitad de su resistencia y parten con +15 puntos de
       // probabilidad (tope 95%). Antes un jefe (resistencia mental 50%) dejaba
       // el Miedo del Hechicero en ~40%.
-      const edge = !NO_HIDDEN && state.char && CLASS_STATUS_EDGE.styles.includes(state.char.style) && CLASS_STATUS_EDGE.statuses.includes(statusDef.name);
+      const edge = !noHidden() && state.char && CLASS_STATUS_EDGE.styles.includes(state.char.style) && CLASS_STATUS_EDGE.statuses.includes(statusDef.name);
       const qb = hasStatus(target.statuses||[], 'Quebranto');
       const resist = (isMental ? (target.mentalResist||0) : (target.statusResist||0)) * (qb ? 1 - (qb.mentalPenalty||0) : 1);
       effChance *= 1 - resist*(edge ? CLASS_STATUS_EDGE.resistFactor : 1)*(statusDef.ssHalfResist ? 0.5 : 1);
@@ -14000,7 +14036,7 @@ const STATUS_INFO = {
   Mermado:      {buff:false, desc:'Su daño cae un poco mientras dura (armas de Paladín, Hechicero o Sacerdote).'},
   Ruina:        {buff:false, desc:'Pierde puntos en todas sus resistencias mientras dura (Vara de la Ruina).'},
   Paralisis:    {buff:false, desc:'Evasión a 0: no puede esquivar nada, ni defendiéndose.'},
-  'Armadura Rota': {buff:false, desc:'-15 de resistencia física mientras dura. La causan El Usurpador y El Sin Forma a quien esté en primera línea.'},
+  'Armadura Rota': {buff:false, desc:'-15 de resistencia física mientras dura. La causan El Carcelero y los guardianes del Abismo en Llamas (81-89) a quien esté en primera línea.'},
   Quebranto:    {buff:false, desc:'-15 a todas sus resistencias y la mitad de su resistencia a estados (Drenaje de Esencia del Hechicero).'},
   Ceguera:      {buff:false, desc:'Probabilidad de que sus golpes fallen por completo.'},
   Miedo:        {buff:false, desc:'Probabilidad de perder el turno por pánico.'},
@@ -14797,7 +14833,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
     // Arquero (2026-10-08, pedido explícito): penetración de armadura propia de
     // la senda — sus golpes físicos ignoran 10 puntos de resistencia física.
     // Era la clase que peor rendía contra jefes muy acorazados (Storm Gush).
-    if(!NO_HIDDEN && state.char.style==='tirador' && resKey==='fisico') resVal -= ARQUERO_PENETRACION;
+    if(!noHidden() && state.char.style==='tirador' && resKey==='fisico') resVal -= ARQUERO_PENETRACION;
     specialsFromEquip(state.char.equip).forEach(sp=>{
       if(sp.type==='penetracion_armadura' && resKey==='fisico') resVal -= sp.value*100;
       if(sp.type==='penetracion_magica' && resKey && resKey!=='fisico') resVal -= sp.value*100;
@@ -16535,7 +16571,7 @@ function resolveNewStyleEnemyMove(enemy, target, enemyCrit){
     }
     livingAllies().filter(a=> !frontOnly || a.pos==='frente').forEach(ally=>{
       const aRes = ((ally.res && ally.res.fisico)||0) - corrosionResPenalty(ally.statuses);
-      const aDmg = Math.max(1, Math.round(base*(1-aRes/100)*(ally.pos==='frente' ? 1 : rearFactor*(simMode && enemy.tpl.boss && frontAlive ? ALLY_TEST.rearAoe : 1))));
+      const aDmg = Math.max(1, Math.round(base*(1-aRes/100)*(ally.pos==='frente' ? 1 : rearFactor*(enemy.tpl.boss && frontAlive ? allyBoost('rearAoe') : 1))));
       dealDamageToAlly(ally, aDmg);
       if(ability.applies) applyStatus(ally, Object.assign({}, ability.applies), false);
       effects.push({targetKind:'ally', key:ally.id, amount:aDmg, kind:'dmg'});
@@ -16563,7 +16599,7 @@ function resolveNewStyleEnemyMove(enemy, target, enemyCrit){
   // "+X% si el objetivo está por debajo del Y% de vida" (PDFs de décadas
   // 3 y 4 — auditoría 2026-10-02: antes solo existía como condición de uso
   // y el +X% se perdía).
-  const vsFront = NO_HIDDEN ? null : (tpl.vsFront || guardianVsFront(enemy));
+  const vsFront = noHidden() ? null : (tpl.vsFront || guardianVsFront(enemy));
   if(vsFront && (onPlayer ? (combat.playerPos==='frente' && (!vsFront.tanksOnly || state.char.style==='pesada' || state.char.style==='paladin')) : target.ally.pos==='frente')){
     dmg = Math.round(dmg*vsFront.dmgMult);
     if(vsFront.armorBreak){
@@ -17284,7 +17320,7 @@ if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
   window.__sim = simRun; window.__simLevel = simLevels;
   // IA del simulador v2: __simIA({rules, learn, eps, persist}) cambia los interruptores y devuelve cómo quedan;
   // __simAprende() devuelve la tabla aprendida (con medias), __simAprende('borrar') la vacía.
-  window.__sinInvisibles = (on)=>{ if(on !== undefined) NO_HIDDEN = !!on; return NO_HIDDEN; };
+  window.__sinInvisibles = (on)=>{ if(on !== undefined) NO_HIDDEN = on === null ? null : !!on; return NO_HIDDEN; };
   window.__simIA = (cfg)=>{ if(cfg) Object.assign(SIM_AI, cfg); return Object.assign({}, SIM_AI); };
   // Aliados en prueba (solo simulador): __aliados({hpMult, lastBreath, spread, rearAoe}); sin argumentos, cómo están.
   window.__aliados = (cfg)=>{ if(cfg) Object.assign(ALLY_TEST, cfg); return Object.assign({}, ALLY_TEST); };
@@ -17974,7 +18010,7 @@ const TUTORIAL_SLIDES = [
   {title:'La Última Ciudad', art:'src/assets/ciudad/mapa.jpg', body:'Esta ciudad es tu refugio entre una bajada y otra. Toca un edificio del mapa, o usa el menú, para ir a cada lugar. Cada vez que entras al laberinto, tú y tus aliados salís con la vida y el MP completos.'},
   {title:'El laberinto', body:'Cada nivel es un mapa de salas. Toca una sala iluminada para avanzar: hay combates, élites, cofres y hogueras donde descansar, y al final te espera un guardián. Cada diez niveles, un jefe de década; vencerlo abre un punto de entrada nuevo.'},
   {title:'Si caes', art:'src/assets/escenas/hogar.jpg', body:'Quien muere abajo pierde parte de su oro y, más hondo, lo que llevaba encima; los primeros niveles son más clementes. Lo que guardes en tu Hogar —equipo, pociones y oro— está a salvo pase lo que pase. Guarda antes de arriesgar.'},
-  {title:'El combate', body:'Se pelea por turnos. Hay dos posiciones: el Frente recibe los golpes y permite los ataques cuerpo a cuerpo; la Retaguardia favorece los ataques a distancia. Los enemigos también se reparten así: primero hay que abrirse paso por su frente. Cambiar de posición no gasta tu turno, pero solo puedes hacerlo una vez por turno.'},
+  {title:'El combate', body:'Se pelea por turnos. Hay dos posiciones: el Frente recibe los golpes y permite los ataques cuerpo a cuerpo; la Retaguardia favorece los ataques a distancia. Los enemigos también se reparten así: primero hay que abrirse paso por su frente. Mientras quede alguien vivo al frente, el área de normales y élites no alcanza a la retaguardia, y hasta el nivel 80 la de guardianes y jefes llega a la mitad a tus aliados de atrás. Cambiar de posición no gasta tu turno, pero solo puedes hacerlo una vez por turno.'},
   {title:'Cada década, sus reglas', body:'Desde el nivel 11, cada década del laberinto cambia una regla del combate: telarañas que atrapan al que va delante, bestias que se enfurecen, espejismos, decretos, mareas… Al entrar, el laberinto te lo anuncia, y en el mapa el botón «Reglas de la década» te recuerda qué cambia. Tras vencer al Ogro podrás además jurar votos al bajar: castigos que eliges a cambio de más premio.'},
   {title:'MP, Espíritu y defensa', body:'El MP paga casi todas las habilidades de ataque; el Espíritu, las del Paladín y las de apoyo. Si la cosa se tuerce, Defenderse te da media oportunidad de esquivar y reduce a la mitad el golpe que entre.'},
   {title:'Tu senda crece contigo', body:'Al nivel 30 tus tres habilidades se vuelven más fuertes. Al 60 despiertas tu definitiva: muy poderosa, con tres usos por bajada. Y quien derrota al guardián del nivel 80 absorbe su corazón y elige una profesión, para siempre.'},
