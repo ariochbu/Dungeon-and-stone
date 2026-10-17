@@ -4473,16 +4473,24 @@ function buyGearPocoComun(slot){
 
 // Raro (C): un escalón por encima de Poco Común, todavía con oro — el techo
 // del oro antes de tener que pasar a Sellos del Gremio por Único/Épico.
+// 2026-10-17 (pedido explícito: "en la tienda, vender en el Tier C el equipo
+// de los diversos conjuntos"): el Tier C ya no vende solo Voluntad
+// Inquebrantable, sino la pieza Raro de CUALQUIERA de los 8 conjuntos
+// (SET_CATALOG), con filtros por conjunto y por parte. Precio: el mismo de
+// siempre para el Raro de oro, igual para todos los conjuntos — dentro de un
+// mismo rango las piezas de conjunto tienen un presupuesto de estadísticas
+// parecido y el botín ya las suelta al azar entre los 8 (ver
+// generateEquipOfRarity), así que ninguno vale más que otro.
 function shopGearPriceRaro(slot){ return Math.round(shopGearPrice(slot) * 3.4); }
-function buyGearRaro(slot){
-  const cls = shopWeaponRole || state.char.style;
+function buyGearRaro(slot, setId){
+  setId = SET_CATALOG[setId] ? setId : 'voluntad';
   const price = shopGearPriceRaro(slot);
   if(state.char.gold < price){ log('No tienes suficiente oro para eso.'); return; }
-  const item = makeGearItem(slot, cls, 'raro');
+  const item = makeSetItem(setId, slot, 'raro');
   if(!item) return;
   state.char.gold -= price;
   addToInventory(item);
-  log(`Compras <b>${item.name}</b> por ${price} de oro.`);
+  log(`Compras <b>${item.name}</b> (conjunto ${SET_CATALOG[setId].name}) por ${price} de oro.`);
   renderAll(); save();
 }
 // Arma Raro (C): mismo trato que la de senda común, pero con más bono de daño.
@@ -11368,6 +11376,10 @@ let shopWeaponRole = null; // null = usa tu propia senda por defecto
 let shopGoldTierFilter = 'todos'; // filtro de rareza de la tienda de oro (comun/poco_comun/raro)
 let shopSelloTierFilter = 'todos'; // filtro de rango de la tienda de Sellos (rango_b/rango_a)
 let shopSetFilter = 'jack'; // conjunto que se muestra en la Tienda de Sellos (2026-10-02)
+// Filtros del Tier C (Raro) de conjuntos en Armaduras (2026-10-17): por
+// conjunto ('todos' o un id de SET_CATALOG) y por parte ('todos' o una de SET_SLOTS).
+let shopRaroSetFilter = 'todos';
+let shopRaroSlotFilter = 'todos';
 const shopPotionQty = {}; // potionId -> cantidad elegida en el desplegable (x1/x10/x100), default 1
 // Cada arma con nombre propio ahora tiene su propio bono/especial por rango
 // (ver WEAPON_CATALOG), así que la tienda ya no puede mostrar "una fila por
@@ -11454,8 +11466,41 @@ function renderShop(){
   const pocoComunTag = ` <span class="slot-tag" style="border-color:${RARITIES.poco_comun.color}; color:${RARITIES.poco_comun.color};">Poco común</span>`;
   const pocoComunHTML = SHOP_GEAR_SLOTS.map(slot=> gearShopRow(slot, 'poco_comun', pocoComunTag, 'buy-gear-poco', shopGearPricePocoComun(slot))).join('');
 
-  const raroTagGear = ` <span class="slot-tag" style="border-color:${RARITIES.raro.color}; color:${RARITIES.raro.color};">Raro</span>`;
-  const raroHTML = SHOP_GEAR_SLOTS.map(slot=> gearShopRow(slot, 'raro', raroTagGear, 'buy-gear-raro', shopGearPriceRaro(slot))).join('');
+  // Tier C (Raro) por conjuntos (2026-10-17): una cabecera por conjunto con su
+  // afinidad y sus bonos, y debajo sus piezas, filtradas por conjunto y por parte.
+  if(shopRaroSetFilter!=='todos' && !SET_CATALOG[shopRaroSetFilter]) shopRaroSetFilter = 'todos';
+  if(shopRaroSlotFilter!=='todos' && !SET_SLOTS.includes(shopRaroSlotFilter)) shopRaroSlotFilter = 'todos';
+  const raroColor = RARITIES.raro.color;
+  const raroMinLvl = gearEquipMinLevel('raro');
+  const raroLvlNote = raroMinLvl>0
+    ? `Nivel ${raroMinLvl} para equipar${state.char.level<raroMinLvl ? ` (tú: nivel ${state.char.level}; puedes comprarla para un aliado que llegue)` : ''}.`
+    : 'Sin nivel mínimo para equipar.';
+  const raroFilterHTML = `
+    <div class="shop-filter-row"><span class="shop-filter-label">Conjunto</span><div class="inv-filter-bar">
+      <button class="nav-btn ${shopRaroSetFilter==='todos'?'active':''}" data-raro-set="todos">Todos</button>
+      ${SET_IDS.map(id=>`<button class="nav-btn ${shopRaroSetFilter===id?'active':''}" data-raro-set="${id}">${SET_CATALOG[id].name}</button>`).join('')}
+    </div></div>
+    <div class="shop-filter-row"><span class="shop-filter-label">Parte</span><div class="inv-filter-bar">
+      <button class="nav-btn ${shopRaroSlotFilter==='todos'?'active':''}" data-raro-slot="todos">Todas</button>
+      ${SET_SLOTS.map(slot=>`<button class="nav-btn ${shopRaroSlotFilter===slot?'active':''}" data-raro-slot="${slot}">${slotLabel(slot)}</button>`).join('')}
+    </div></div>`;
+  const raroSlotsShown = SET_SLOTS.filter(slot=> shopRaroSlotFilter==='todos' || slot===shopRaroSlotFilter);
+  const raroHTML = raroFilterHTML + SET_IDS.filter(id=> shopRaroSetFilter==='todos' || id===shopRaroSetFilter).map(setId=>{
+    const set = SET_CATALOG[setId], b = SET_BONUSES[setId];
+    const rows = raroSlotsShown.map(slot=>{
+      const preview = makeSetItem(setId, slot, 'raro');
+      if(!preview) return '';
+      const price = shopGearPriceRaro(slot);
+      return `<div class="inv-item-row" style="${rarityRowStyle(preview)}">
+        ${itemRowCompact(preview)}
+        <button class="inv-btn" data-buy-gear-raro="${setId}|${slot}" ${state.char.gold<price?'disabled':''}>Comprar (${price.toLocaleString('es')} oro)</button>
+      </div>`;
+    }).join('');
+    return `<div class="shop-set-head" style="border-color:${raroColor};">
+        <div class="shop-set-title"><b>${set.name}</b><span class="slot-tag" style="border-color:${raroColor}; color:${raroColor};">Tier C · Raro</span><span class="shop-set-aff">Afinidad: ${set.affinity}</span></div>
+        <div class="shop-set-bonus">${[2,3,5].map(k=>`<span><b>${k} piezas — ${b[k].name}:</b> ${b[k].text}</span>`).join('')}</div>
+      </div>${rows}`;
+  }).join('');
 
   // Separado por rango Y por armas/equipo (2026-09-25, pedido explícito:
   // "la misma separacion de armas / equipamiento y tier") — antes venía todo
@@ -11612,7 +11657,8 @@ function renderShop(){
     armaduras: ()=> `${goldTierSelectHTML}
       ${showTier('comun') ? `<div class="section-label">Equipo — Común</div>${gearHTML}` : ''}
       ${showTier('poco_comun') ? `<div class="section-label">Equipo — Poco Común</div>${pocoComunHTML}` : ''}
-      ${showTier('raro') ? `<div class="section-label">Equipo — Raro</div>${raroHTML}` : ''}`,
+      ${showTier('raro') ? `<div class="section-label">Equipo de conjunto — Raro (Tier C)</div>
+        <p class="sc-note">Las piezas de los 8 conjuntos: cualquier senda puede usarlas y piezas de rangos distintos cuentan igual para el bono. ${raroLvlNote}</p>${raroHTML}` : ''}`,
     sellos: ()=> `<p class="sc-note">Sellos del Laberinto: <b>🎖️ ${(state.char.missionCurrency||0).toLocaleString('es')}</b></p>${roleSelectorHTML}${selloHTML}`,
     forja: ()=> `${roleSelectorHTML}${tierSHTML}`,
     pociones: ()=> potionHTML,
@@ -11668,7 +11714,16 @@ function renderShop(){
     };
   });
   document.querySelectorAll('[data-buy-gear-raro]').forEach(btn=>{
-    btn.onclick = ()=> buyGearRaro(btn.dataset.buyGearRaro);
+    btn.onclick = ()=>{
+      const [setId, slot] = btn.dataset.buyGearRaro.split('|');
+      buyGearRaro(slot, setId);
+    };
+  });
+  document.querySelectorAll('[data-raro-set]').forEach(btn=>{
+    btn.onclick = ()=>{ shopRaroSetFilter = btn.dataset.raroSet; renderShop(); };
+  });
+  document.querySelectorAll('[data-raro-slot]').forEach(btn=>{
+    btn.onclick = ()=>{ shopRaroSlotFilter = btn.dataset.raroSlot; renderShop(); };
   });
   const shopSetSelect = document.getElementById('shop-set-select');
   if(shopSetSelect) shopSetSelect.onchange = ()=>{ shopSetFilter = shopSetSelect.value; renderShop(); };
@@ -17253,6 +17308,9 @@ if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
   window.__intro = (key)=>{ window.__ficha({}); lsGet = ()=> null; lsSet = ()=>{}; maybeShowPlaceIntro(key); };
   window.__crisol = (cfg, owned, egg)=>{ window.__ficha(cfg || {}); ensurePets(); state.char.pets.fusionEgg = egg || {}; Object.assign(state.char.pets.owned, owned || {1:5, 2:3, 3:2}); checkSessionStillActive = async ()=> true; flushSave = async ()=>{}; renderSheet = ()=>{}; fusionOpen = true; renderFusion(); };
   window.__gremio = (cfg)=>{ window.__ficha(cfg || {}); state.char.missionCurrency = 240; state.missions = [['A','rest',3,2,'active'],['S','chests',5,2,'active'],['A','floors',5,5,'completed'],['S','floors',6,6,'claimed'],['B','combats',8,6,'active'],['A','gear',5,3,'active']].map((m, i)=> ({id:'m'+i, rank:m[0], objective_type: MISSION_OBJECTIVE_TYPES[i % MISSION_OBJECTIVE_TYPES.length], objective_target:m[2], progress:m[3], status:m[4], reward_gold:200, reward_xp:150, reward_currency:12, reward_item:null})); missionsOpen = true; renderMissions(); };
+  // Tienda sin sesión (2026-10-17): abre Armaduras con oro de sobra; las compras re-dibujan la tienda y __tiendaInv() lista la mochila.
+  window.__tienda = (cfg)=>{ window.__ficha(Object.assign({gold:50000}, cfg || {})); state.char.inventory = []; renderAll = ()=> renderShop(); shopOpen = true; shopSection = 'armaduras'; renderShop(); };
+  window.__tiendaInv = ()=> ({gold: state.char.gold, items: state.char.inventory.filter(i=> i.kind === 'equip').map(i=> `${i.name} [${i.setId}|${i.slot}|${i.rarity}]`)});
   window.__inv = (cfg)=>{ window.__ficha(cfg || {}); for(let i = 0; i < 9; i++){ const it = generateLoot(2, state.char.level); if(it) state.char.inventory.push(it); } invTab = 'mochila'; renderInventory = ((orig)=> orig)(renderInventory); renderInventory(); };
   window.__ficha = (cfg)=>{ const {st} = simBuildState(Object.assign({style:'tirador', level:80, dungeonLevel:80}, cfg)); st.dungeon = null; st.char.gold = cfg.gold || 0; state = st; const d = derived(); state.char.curHP = d.maxHP; state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi; fichaTab = 'profesion'; fichaHostEl = null; save = ()=>{}; renderAll = ()=>{}; renderFicha(); };
   window.__celdaVer = (level, cfg)=>{ const {st} = simBuildState(Object.assign({style:'pesada', level:100, dungeonLevel:level}, cfg || {})); state = st; state.log = []; const d = derived(); state.char.curHP = d.maxHP; state.char.curSta = d.maxSta; state.char.curSpi = d.maxSpi; save = ()=>{}; lsGet = ()=> null; lsSet = ()=>{}; const dg = Object.assign(generateDungeon(level), {allyHP:{}, allyMP:{}, allySpirit:{}}); state.dungeon = dg; showScreen('screen-game'); const f = dg.floors.length - 1; dg.atFloor = f; dg.atNode = 0; startCombat(buildEncounterGroup('jefe', f, level), dg.floors[f][0]); };

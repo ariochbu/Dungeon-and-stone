@@ -1356,6 +1356,23 @@ canvas.cr-sprite.cr-chibi{ height:300px; image-rendering:pixelated; }
 .sc-tabs{ margin-bottom:8px; }
 .sc-note{ color:var(--text-dim); font-size:0.85em; margin:0 0 8px; }
 .sc-note b{ color:#ffd76a; }
+/* Tier C de conjuntos en la Tienda (2026-10-17): filtros con etiqueta y una
+   cabecera por conjunto con su afinidad y sus bonos de 2/3/5 piezas. */
+.shop-filter-row{ display:flex; align-items:center; gap:8px; margin-bottom:4px; }
+.shop-filter-label{ flex-shrink:0; width:72px; font-family:'Cinzel'; font-size:0.78em; color:var(--bronze-light); }
+.shop-filter-row .inv-filter-bar{ flex:1; min-width:0; margin-bottom:0; }
+.shop-set-head{ margin:12px 0 6px; padding:8px 12px; border-radius:6px; border:1px solid; border-left-width:4px;
+  background:linear-gradient(90deg, rgba(59,143,224,0.16), rgba(20,16,12,0.6) 70%); }
+.shop-set-title{ display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+.shop-set-title b{ font-family:'Cinzel'; color:#ffe9a8; font-size:1.02em; }
+.shop-set-aff{ margin-left:auto; font-size:0.78em; color:var(--text-dim); }
+.shop-set-bonus{ display:flex; flex-direction:column; gap:2px; margin-top:4px; font-size:0.76em; color:var(--text-dim); }
+.shop-set-bonus b{ color:var(--bronze-light); font-weight:600; }
+@media (max-width:640px){
+  .shop-filter-row{ flex-direction:column; align-items:stretch; gap:2px; }
+  .shop-filter-label{ width:auto; }
+  .shop-set-aff{ margin-left:0; width:100%; }
+}
 @media (max-width:640px){
   .sc-spot span{ font-size:0.74em; padding:3px 7px; }
   .sc-spot i{ width:22px; height:22px; }
