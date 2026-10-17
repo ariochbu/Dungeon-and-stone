@@ -1,7 +1,7 @@
 """Lanzar lotes y resumir.
 python cal.py PORT run NAME SPEC_JSON     -> envía y espera; imprime resumen y lo guarda en results/NAME.json
 SPEC: {"cells":[["level",25],["boss",30]], "n":204, "nb":300, "chunk":17, "chunkb":25, "tune":{...}, "prof":false,
-       "styles":["tirador","mago"] (solo esas sendas; n sigue siendo por 6), "kit":{...} (valores de KIT_RETAGUARDIA)}
+       "styles":["tirador","mago"] (solo esas sendas; n sigue siendo por 6), "kit":{...} (valores de KIT_RETAGUARDIA), "nerf":{...} (valores de NERF_TANQUES)}
 python cal.py PORT show NAME
 """
 import sys, json, time, math, os, urllib.request
@@ -28,7 +28,7 @@ def build(spec, batch):
             left = per
             while left > 0:
                 k = min(ch, left); left -= k
-                tasks.append({'kind': kind, 'lv': lv, 'style': st, 'n': k, 'cell': f'{kind} {lv}', 'tune': spec.get('tune'), 'ref': (spec.get('refs') or {}).get(str(lv)), 'kit': spec.get('kit')})
+                tasks.append({'kind': kind, 'lv': lv, 'style': st, 'n': k, 'cell': f'{kind} {lv}', 'tune': spec.get('tune'), 'ref': (spec.get('refs') or {}).get(str(lv)), 'kit': spec.get('kit'), 'nerf': spec.get('nerf')})
     # intercalar para que las celdas avancen a la vez (las de nivel alto tardan más: primero)
     tasks.sort(key=lambda t: (-t['lv'] if t['kind'] == 'level' else 0))
     return tasks

@@ -957,7 +957,7 @@ const SKILLS = {
   escudo_del_juramento: {
     id:'escudo_del_juramento', name:'Escudo del Juramento', cost:{tipo:'espiritu', valor:20}, utility:'shield_self',
     shieldPct:0.20,
-    desc: ()=> `Te otorga un escudo equivalente al ${Math.round(skillBonus('escudo_del_juramento','shieldPct',0.20)*100)}% de tu vida máxima.`,
+    desc: ()=> `Te otorga un escudo equivalente al ${Math.round(skillBonus('escudo_del_juramento','shieldPct',0.20)*100)}% de tu vida máxima.${NERF_TANQUES.juramentoMax ? ` Como mucho ${NERF_TANQUES.juramentoMax} veces por combate.` : ''}`,
     targetMode:'self'
   },
 
@@ -1022,7 +1022,7 @@ const SKILLS = {
   juicio_divino: {
     id:'juicio_divino', name:'Juicio Divino', cost:null, dmgType:'fisico', mult:0.8, ultimate:true,
     requiresPos:'frente', targetMode:'all', selfHealPctOfDmg:0.25,
-    desc:'Ultimate del Paladín. Golpea a todos los enemigos y te cura el 25% de todo lo infligido.'
+    desc: ()=> `Ultimate del Paladín. Golpea a todos los enemigos y te cura el 25% de lo infligido${NERF_TANQUES.juicioHealMax ? ` a ${NERF_TANQUES.juicioHealMax === 1 ? 'un enemigo' : `${NERF_TANQUES.juicioHealMax} enemigos como mucho (los primeros que golpea)`}` : ''}.`
   },
   // 2026-10-09 (decisiones de ariochbu): el ultimate deja de paralizar y pasa
   // a meter Miedo o Confusión (al azar por enemigo) a todos, con daño 0.50.
@@ -5584,6 +5584,73 @@ function blockPierceChance(){
   const lvl = (state.dungeon && state.dungeon.level) || 1, B = TANK_TUNE.blockPierce;
   return Math.max(0, Math.min(B.max, (lvl - B.from) * B.perLevel));
 }
+// NERF DE TANQUES (rama nerf-tanques, 2026-10-17, decidido por ariochbu). Todo visible: texto en la habilidad, estado en
+// combate o regla escrita de la década. Sustituye a la vista lo que hacían TANK_TUNE.blockPierce y GUARDIAN_VS_FRONT
+// (apagados en 1-80 desde la calibración del 17). Medido en tools/mediciones/nerf-tanques-2026-10-17.md.
+// - furia: guardianes y jefes de década de los pisos `from`-`to` entran en Furia al empezar la ronda `startRound`:
+//   +`perRound` de daño por ronda, hasta `maxStacks` rondas (estado «Furia xN» en el enemigo, aviso 2 rondas antes y al
+//   entrar). Recorta las victorias por aguante de 80-300 rondas, que solo conseguían Guerrero y Paladín. Sin tope los
+//   tanques caían a 0-5% (medido); con +30% quedan cerca de la media.
+// - perforante: habilidad «Golpe perforante» de los guardianes de piso de `from`-`to` (no jefes de década ni de rift):
+//   ignora el bloqueo y `ignoreResist` de la resistencia física de su objetivo, cada `cooldown` turnos.
+// - blockCap: tope total del bloqueo (antes 0.6). juramentoMax: usos del Escudo del Juramento por combate.
+//   juicioHealMax: enemigos que cuentan para la curación de Juicio Divino (los primeros que golpea).
+// null en cualquiera = sin ese recorte (solo para medir: __nerfTanques({...}) en localhost).
+const NERF_TANQUES = {
+  furia: {from:51, to:80, startRound:25, perRound:0.05, maxStacks:6},
+  perforante: {from:61, to:79, cooldown:3, mult:1.0, ignoreResist:0.5},
+  blockCap: 0.25,
+  juramentoMax: 2,
+  juicioHealMax: 3,
+};
+const NERF_TANQUES_BASE = JSON.parse(JSON.stringify(NERF_TANQUES));
+function nerfLvl(){ return (state.dungeon && state.dungeon.level) || 0; }
+// ¿Es este enemigo el guardián o el jefe de década del combate (no su escolta, ni invocaciones, ni el jefe de un rift)?
+function isFightBoss(e){ return !!(e && e.tpl && e.tpl.boss && !e.summoned && !e.tpl.riftBoss && !e.tpl.decoy); }
+function furiaRoundEnd(){
+  const F = NERF_TANQUES.furia;
+  if(!F || !combat || combat.over || !combat.node || combat.node.type !== 'jefe') return;
+  const lvl = nerfLvl();
+  if(lvl < F.from || lvl > F.to) return;
+  const bosses = combat.enemies.filter(e=> e.hp > 0 && isFightBoss(e));
+  if(!bosses.length) return;
+  const r = combat.turnCount || 0;
+  const names = bosses.map(e=> e.name).join(' y ');
+  if(r === F.startRound - 3) log(`<i>${names} se impacienta: dentro de 2 rondas entrará en Furia.</i>`);
+  if(r < F.startRound - 1) return;
+  const stacks = Math.min(F.maxStacks || 999, r - F.startRound + 2); // al acabar la ronda 24 queda x1, que ya vale para la 25
+  const mult = Math.round((1 + F.perRound*stacks)*100)/100;
+  STATUS_INFO['Furia'] = {buff:true, desc:`Lleva demasiado tiempo peleando: desde la ronda ${F.startRound} pega un ${pctTxt(F.perRound)} más por cada ronda${F.maxStacks ? `, hasta un +${Math.round(F.perRound*F.maxStacks*100)}%` : ''}. Hoy: +${Math.round((mult - 1)*100)}% de daño.`};
+  bosses.forEach(e=>{
+    const st = hasStatus(e.statuses, 'Furia');
+    if(st){ st.stacks = stacks; st.dmgMult = mult; st.duration = 99; }
+    else e.statuses.push({name:'Furia', duration:99, stacks, dmgMult:mult});
+  });
+  if(stacks === 1) log(`⚠ <b>${names}</b> entra en <b>Furia</b>: desde esta ronda pega un ${pctTxt(F.perRound)} más por cada ronda que pase${F.maxStacks ? `, hasta un +${Math.round(F.perRound*F.maxStacks*100)}%` : ''}.`);
+}
+// Golpe perforante: se le añade al guardián (a su copia de plantilla) al empezar el combate, con estado visible.
+const GOLPE_PERFORANTE_ID = 'golpe_perforante';
+function golpePerforanteText(){ const P = NERF_TANQUES.perforante; return P ? `cada ${P.cooldown} turnos usa <b>Golpe perforante</b>: ignora el bloqueo y ${P.ignoreResist === 0.5 ? 'la mitad' : pctTxt(P.ignoreResist)} de la resistencia física de su objetivo` : ''; }
+function golpePerforanteCombatStart(){
+  const P = NERF_TANQUES.perforante;
+  if(!P || !combat || !combat.node || combat.node.type !== 'jefe') return;
+  const lvl = nerfLvl();
+  if(lvl < P.from || lvl > P.to || lvl % 10 === 0) return;
+  combat.enemies.forEach(e=>{
+    if(!isFightBoss(e) || !e.tpl.abilities || e.tpl.abilities[GOLPE_PERFORANTE_ID]) return;
+    const ab = {label:'Golpe perforante', mult:P.mult, ignoreResist:P.ignoreResist, ignoreBlock:true, cooldown:P.cooldown};
+    e.tpl = Object.assign({}, e.tpl, {abilities: Object.assign({[GOLPE_PERFORANTE_ID]: ab}, e.tpl.abilities),
+      aiPriority: [GOLPE_PERFORANTE_ID].concat(e.tpl.aiPriority || Object.keys(e.tpl.abilities))});
+    STATUS_INFO['Golpe perforante'] = {buff:true, desc: golpePerforanteText().replace(/<[^>]+>/g, '').replace(/^./, c=> c.toUpperCase()) + '.'};
+    e.statuses.push({name:'Golpe perforante', duration:99});
+    log(`⚠ <b>${e.name}</b> ${golpePerforanteText()}.`);
+  });
+}
+// Escudo del Juramento: como mucho NERF_TANQUES.juramentoMax por combate.
+function skillSpent(id){
+  if(id === 'escudo_del_juramento' && NERF_TANQUES.juramentoMax && combat) return (combat.juramentoUses || 0) >= NERF_TANQUES.juramentoMax;
+  return false;
+}
 const SAVIA_PODRIDA = {from:71, to:80, witherPct:0.16}; // efecto de campo del Hechicero, ver saviaPodridaActive()
 const PALADIN_ESP_RES = {rate:0.05, cap:10}; // medido 2026-10-08: con 15 o más el Paladín pasa de 67% contra el jefe del 80
 function paladinEspRes(esp){ return state.char.style==='paladin' ? Math.round(Math.min(PALADIN_ESP_RES.cap, esp*PALADIN_ESP_RES.rate)) : 0; }
@@ -8111,7 +8178,7 @@ function renderSheetPanel(targetId){
       ${cs.reduccionDano>0?`<span class="res-chip pos">Reducción de daño recibido (equipo) ${Math.round(cs.reduccionDano*100)}%</span>`:''}
       ${d.reduccionVigor>0?`<span class="res-chip pos">Reducción de daño recibido (Vigor) ${Math.round(d.reduccionVigor*100)}%</span>`:''}
       ${setBonusChipsHTML(state.char.equip)}
-      ${cs.bloqueo>0?`<span class="res-chip pos">Bloqueo ${Math.round(cs.bloqueo*100)}%</span>`:''}
+      ${cs.bloqueo>0?`<span class="res-chip pos">Bloqueo ${Math.round(cs.bloqueo*100)}%${cs.bloqueo >= blockCapNow() ? ' (tope)' : ''}</span>`:''}
       ${cs.retroceso>0?`<span class="res-chip pos">Retroceso ${Math.round(cs.retroceso*100)}%</span>`:''}
       ${cs.robovida>0?`<span class="res-chip pos">Succión de vida ${Math.round(cs.robovida*100)}%</span>`:''}
       ${cs.succionHechizo>0?`<span class="res-chip pos">Succión de hechizo ${Math.round(cs.succionHechizo*100)}%</span>`:''}
@@ -8195,7 +8262,7 @@ function renderFicha(){
   const resKeys = [['fisico','Res. física'],['fuego','Res. al fuego'],['hielo','Res. al hielo'],['veneno','Res. al veneno'],['aturdimiento','Res. al aturdimiento']];
   const defensa = [
     tile('Evasión', pct(d.evasionBase)),
-    tile('Bloqueo', pct(cs.bloqueo), cs.bloqueo>0),
+    tile(cs.bloqueo >= blockCapNow() ? `Bloqueo (tope ${Math.round(blockCapNow()*100)}%)` : 'Bloqueo', pct(cs.bloqueo), cs.bloqueo>0),
     tile('Reducción de daño (equipo)', pct(cs.reduccionDano), cs.reduccionDano>0),
     tile('Reducción de daño (Vigor)', pct(d.reduccionVigor), d.reduccionVigor>0),
     tile('Resistencia mágica', (d.resMagica>=0?'+':'')+Math.round(d.resMagica)+'%', d.resMagica!==0),
@@ -12122,7 +12189,7 @@ function pickSmartTemplates(pool, count){
 // guardián va al frente, casi siempre una de retaguardia, y al revés. La élite llega debilitada (hpPct,
 // atkPct) y el guardián bajó de 2.40/3.04 a 1.69/2.15 (DECADE_ENEMY_TUNING[8]): con la élite entera y el
 // guardián de antes, los niveles se superaban el 7-15% de las veces en vez del ~50% pedido.
-const PARAISO_GUARDIAN_GROUP = {hp:1.06, atk:1.06}; // 2026-10-17, kits de retaguardia: ×0,982 (antes 1.08). // 2026-10-17, sin invisibles: ×1,01 sobre 1.07 (más el ×1,84 de las salas de 41-49)
+const PARAISO_GUARDIAN_GROUP = {hp:1.10, atk:1.10}; // 2026-10-17, nerf de tanques (tools/mediciones/nerf-tanques-2026-10-17.md): ×1,035 (antes 1.06). // 2026-10-17, kits de retaguardia: ×0,982 (antes 1.08). // 2026-10-17, sin invisibles: ×1,01 sobre 1.07 (más el ×1,84 de las salas de 41-49)
 const GUARDIAN_ELITE_81 = {from:81, to:89, complementChance:0.7, hpPct:0.50, atkPct:0.65};
 function guardianEliteFor(guardianTpl, elites){
   const wantFront = !guardianTpl.frontline;
@@ -12677,19 +12744,19 @@ const DECADE_BOSS_TUNING = {
   // sin modificadores invisibles en 1-80, aliados ×1,5 con paridad y área a la retaguardia al 50%, mochila completa e IA
   // que aprende consumibles. 30 y 40 son de las cuentas alfa: mismo factor que la beta (×1,355 y ×1,48), sin medir aparte.
   // Antes: 30 → 1.49/1.20, 40 → 1.32/1.16; 50 → 1.52/1.56, 60 → 2.52/2.80, 70 → 2.08/2.30, 80 → 2.14/2.32.
-  30: {hp:2.08, atk:1.68},  // 2026-10-17, kits de retaguardia: ×1,031 (antes 2.02/1.63); alfa, sin medir aparte
-  40: {hp:2.14, atk:1.88},  // ídem ×1,093 (antes 1.96/1.72)
+  30: {hp:2.09, atk:1.69},  // 2026-10-17, nerf de tanques (tools/mediciones/nerf-tanques-2026-10-17.md): ×1,006 (antes 2.08/1.68); alfa, sin medir aparte. // 2026-10-17, kits de retaguardia: ×1,031 (antes 2.02/1.63); alfa, sin medir aparte
+  40: {hp:2.10, atk:1.84},  // 2026-10-17, nerf de tanques (tools/mediciones/nerf-tanques-2026-10-17.md): ×0,981 (antes 2.14/1.88); alfa, sin medir aparte. // ídem ×1,093 (antes 1.96/1.72)
   // REDISEÑO DE CLASES (2026-10-08, rama rediseno-clases): recalibrados con el
   // arnés tools/calib_harness.js — media de las seis sendas, 40 combates cada
   // una, 4 aliados y todo rango A. Metas: 50 → 60%, 60 → 50%, 70 → 40%, 80 → 30%.
   // 2026-10-08, quinta vuelta (rama clases-x1): daño x1, vida nueva, kit y rotación del Hechicero, dos tanques para la retaguardia.
   // RECALIBRACIÓN 2026-10-09 (objetivos nuevos: 50 → 70%, 60 → 50%, 70 → 40%, 80 → 30%; reparto por senda en BOSS_VS_CLASS).
   // Antes: 1.62/1.66, 2.42/2.68, 1.93/2.13, 2.06/2.23.
-  50: {hp:1.33, atk:1.37},  // 2026-10-17, kits de retaguardia: ×1,05 (antes 1.27/1.30). // 2026-10-17: ×0,835 (sus invocaciones son normales de la Isla, que subieron ×1,84). Antes 1.52/1.56. Custodio: 63% con 1.55/1.59 tras el último reparto por senda; bajado un 2% sin volver a medir
-  60: {hp:4.48, atk:4.97},  // 2026-10-17, kits de retaguardia: ×1,184 (antes 3.78/4.20). // 2026-10-17: ×1,50 (antes 2.52/2.80). Storm Gush: 48% // antes 59% con sus áreas al 75% (Arquero 30, Mago 43; antes 10 y 3)
+  50: {hp:1.32, atk:1.36},  // 2026-10-17, nerf de tanques (tools/mediciones/nerf-tanques-2026-10-17.md): ×0,995 (antes 1.33/1.37). // 2026-10-17, kits de retaguardia: ×1,05 (antes 1.27/1.30). // 2026-10-17: ×0,835 (sus invocaciones son normales de la Isla, que subieron ×1,84). Antes 1.52/1.56. Custodio: 63% con 1.55/1.59 tras el último reparto por senda; bajado un 2% sin volver a medir
+  60: {hp:3.85, atk:4.27},  // 2026-10-17, nerf de tanques (tools/mediciones/nerf-tanques-2026-10-17.md): ×0,86 (antes 4.48/4.97). // 2026-10-17, kits de retaguardia: ×1,184 (antes 3.78/4.20). // 2026-10-17: ×1,50 (antes 2.52/2.80). Storm Gush: 48% // antes 59% con sus áreas al 75% (Arquero 30, Mago 43; antes 10 y 3)
   // Área (Pliegue Espacial) -25% por decisión de ariochbu (2026-10-08); los Reflejos no se tocan.
-  70: {hp:3.35, atk:3.71},  // 2026-10-17, kits de retaguardia: ×1,155 (antes 2.90/3.21). // 2026-10-17: ×1,396 (antes 2.08/2.30). El Sin Forma: 36% // antes: 37% (sin bono de frente, área -25%, castigo al frente; con 2.08/2.30 daba 21%)
-  80: {hp:3.06, atk:3.32},  // 2026-10-17, kits de retaguardia: ×1,096 (antes 2.79/3.03). // 2026-10-17: ×1,305 (antes 2.14/2.32). El Corazón Marchito: 32% (muy sensible: 2.17/2.35 daba 23 y 2.12/2.29, 39)
+  70: {hp:3.13, atk:3.47},  // 2026-10-17, nerf de tanques (tools/mediciones/nerf-tanques-2026-10-17.md): ×0,935 (antes 3.35/3.71). // 2026-10-17, kits de retaguardia: ×1,155 (antes 2.90/3.21). // 2026-10-17: ×1,396 (antes 2.08/2.30). El Sin Forma: 36% // antes: 37% (sin bono de frente, área -25%, castigo al frente; con 2.08/2.30 daba 21%)
+  80: {hp:2.86, atk:3.10},  // 2026-10-17, nerf de tanques (tools/mediciones/nerf-tanques-2026-10-17.md): ×0,935 (antes 3.06/3.32). // 2026-10-17, kits de retaguardia: ×1,096 (antes 2.79/3.03). // 2026-10-17: ×1,305 (antes 2.14/2.32). El Corazón Marchito: 32% (muy sensible: 2.17/2.35 daba 23 y 2.12/2.29, 39)
   // 2026-10-09, objetivo de ariochbu: ninguna senda por encima del 20% con la referencia de rango A.
   // Medido con 200 combates por senda en 2.38/2.55: Asesino 23, Arquero 21, Mago 13, Guerrero 12, Paladín 12, Hechicero 8;
   // se sube el ataque a 2.60 para bajar a los dos primeros. El reparto entre sendas sale del propio jefe
@@ -12715,8 +12782,8 @@ const BETA_DECADE_BOSS_TUNING = {
   // un aliado, equipo raro, piedras F y Caídos raros. Antes: .24/.50 y .80/.80 (con esa referencia el Ogro se ganaba el 22-26%).
   10: {hp:0.213, atk:0.439},  // Ogro: 87% con la referencia de la segunda vuelta (ver BETA_ENEMY_SCALE)
   20: {hp:0.81, atk:0.81},  // Matriarca: 70% con 0.858 y el reparto por senda suavizado (Guerrero 49, Arquero 45); bajada un 6%
-  30: {hp:2.32, atk:2.20},  // 2026-10-17, kits de retaguardia: ×1,031 (antes 2.25/2.13). // 2026-10-17, sin invisibles: ×1,355 (antes 1.66/1.57). // 2026-10-10: bajó de 1.82/1.73 porque a Riakis ya se le enfrenta sin la mejora de habilidades (64% -> ~80%).  // Riakis: 81% (objetivo nuevo 80; antes 1.96/1.87 para 65%)
-  40: {hp:2.56, atk:2.42},  // 2026-10-17, kits de retaguardia: ×1,093 (antes 2.34/2.21). // 2026-10-17, sin invisibles: ×1,48 (antes 1.58/1.49). Usurpador: 75% con el reparto por senda (objetivo nuevo 75). Muy sensible.
+  30: {hp:2.33, atk:2.21},  // 2026-10-17, nerf de tanques (tools/mediciones/nerf-tanques-2026-10-17.md): ×1,006 (antes 2.32/2.20). // 2026-10-17, kits de retaguardia: ×1,031 (antes 2.25/2.13). // 2026-10-17, sin invisibles: ×1,355 (antes 1.66/1.57). // 2026-10-10: bajó de 1.82/1.73 porque a Riakis ya se le enfrenta sin la mejora de habilidades (64% -> ~80%).  // Riakis: 81% (objetivo nuevo 80; antes 1.96/1.87 para 65%)
+  40: {hp:2.51, atk:2.37},  // 2026-10-17, nerf de tanques (tools/mediciones/nerf-tanques-2026-10-17.md): ×0,981 (antes 2.56/2.42). // 2026-10-17, kits de retaguardia: ×1,093 (antes 2.34/2.21). // 2026-10-17, sin invisibles: ×1,48 (antes 1.58/1.49). Usurpador: 75% con el reparto por senda (objetivo nuevo 75). Muy sensible.
 };
 // Enemigos que NO son jefe de década, por índice de década (1 = pisos 11-19...).
 // Medido: con 2-3 aliados los combates normales/élite/guardián rinden igual
@@ -12747,8 +12814,10 @@ const BETA_ENEMY_SCALE = {
   // 3 → 3.77/4.35 y guardián 2.95/3.32.
   // 2026-10-17, kits de retaguardia (tools/mediciones/kits-retaguardia-2026-10-17.md): salas ×1,024 y guardián ×1,088
   // (antes 4.21 y 2.94); 31-39: salas ×1,014 y guardián ×1,145 (antes 6.22/7.18 y 4.37/4.91).
-  2: {regular:{hp:4.31, atk:4.31}, elite:{hp:4.31, atk:4.31}, guardian:{hp:3.20, atk:3.20}},
-  3: {regular:{hp:6.31, atk:7.28}, elite:{hp:6.31, atk:7.28}, guardian:{hp:5.00, atk:5.62}},
+  // 2026-10-17, nerf de tanques: 21-29 salas ×1,024 y guardián ×1,015 (antes 4.31 y 3.20); 31-39 salas ×1,021 y guardián
+  // ×0,985 (antes 6.31/7.28 y 5.00/5.62).
+  2: {regular:{hp:4.41, atk:4.41}, elite:{hp:4.41, atk:4.41}, guardian:{hp:3.25, atk:3.25}},
+  3: {regular:{hp:6.44, atk:7.43}, elite:{hp:6.44, atk:7.43}, guardian:{hp:4.93, atk:5.54}},
 };
 // Normales, élites y guardianes por década (índice 4 = pisos 41-50, 5 = 51-60).
 // Calibrado con el simulador de balance (simLevels) contra la misma referencia
@@ -12764,8 +12833,10 @@ const DECADE_ENEMY_TUNING = {
   // 2 y 3 son de las cuentas alfa (la beta usa BETA_ENEMY_SCALE). 2026-10-17: mismos factores que la beta.
   // Antes: 2 → 1.3/1.5, 1.2/1.4, 1.1/1.15; 3 → 1.4/1.8, 1.3/1.6, 1.2/1.3.
   // 2026-10-17, kits de retaguardia: mismos factores que la beta (antes 2.12/2.45, 1.96/2.28, 2.06/2.16 y 2.31/2.97, 2.15/2.64, 1.78/1.92).
-  2: {regular:{hp:2.17, atk:2.51}, elite:{hp:2.01, atk:2.33}, guardian:{hp:2.24, atk:2.35}},
-  3: {regular:{hp:2.34, atk:3.01}, elite:{hp:2.18, atk:2.68}, guardian:{hp:2.04, atk:2.20}},
+  // 2026-10-17, nerf de tanques: mismos factores que la beta, sin medir aparte (antes 2.17/2.51, 2.01/2.33, 2.24/2.35 y
+  // 2.34/3.01, 2.18/2.68, 2.04/2.20).
+  2: {regular:{hp:2.22, atk:2.57}, elite:{hp:2.06, atk:2.39}, guardian:{hp:2.27, atk:2.39}},
+  3: {regular:{hp:2.39, atk:3.07}, elite:{hp:2.23, atk:2.74}, guardian:{hp:2.01, atk:2.17}},
   // REDISEÑO DE CLASES (2026-10-08), mismos objetivos que arriba. Medido (dos
   // niveles por década, 8 intentos por senda): 41-49 → 73%, 51-59 → 75% antes
   // del último retoque, 61-69 → 69% y 71-79 → 65% antes del último retoque.
@@ -12777,10 +12848,13 @@ const DECADE_ENEMY_TUNING = {
   // Antes: 4 → 1.49 todo y guardián 1.36; 5 → 2.88/4.18, 2.74/3.86, 3.20/3.74; 6 → 3.29/4.99 y 2.31/2.92; 7 → 3.48/5.33 y 2.02/2.55.
   // 2026-10-17, kits de retaguardia: salas ×1,011, ×1,025, ×1,042 y ×1,011; guardián ×1,201, ×1,175 y ×1,182 (41-49: grupo de la
   // Isla, ver PARAISO_GUARDIAN_GROUP). Antes: 2.74; 4.81/6.98, 4.58/6.45, 4.48/5.24; 4.99/7.57, 3.53/4.47; 4.92/7.54, 3.54/4.46.
-  4: {regular:{hp:2.77, atk:2.77}, elite:{hp:2.77, atk:2.77}, guardian:{hp:2.53, atk:2.53}},
-  5: {regular:{hp:4.93, atk:7.16}, elite:{hp:4.69, atk:6.61}, guardian:{hp:5.38, atk:6.29}},
-  6: {regular:{hp:5.20, atk:7.89}, elite:{hp:5.20, atk:7.89}, guardian:{hp:4.15, atk:5.25}},
-  7: {regular:{hp:4.97, atk:7.62}, elite:{hp:4.97, atk:7.62}, guardian:{hp:4.19, atk:5.27}},
+  // 2026-10-17, nerf de tanques (Furia y Golpe perforante en guardianes y jefes de 51-80; tools/mediciones/nerf-tanques-2026-10-17.md):
+  // salas ×0,992, ×1,015, ×1,000 y ×1,006; guardián ×0,90, ×0,829 y ×0,810 (41-49: PARAISO_GUARDIAN_GROUP ×1,035). Antes: 2.77
+  // y 2.53; 4.93/7.16, 4.69/6.61, 5.38/6.29; 5.20/7.89, 4.15/5.25; 4.97/7.62, 4.19/5.27.
+  4: {regular:{hp:2.75, atk:2.75}, elite:{hp:2.75, atk:2.75}, guardian:{hp:2.51, atk:2.51}},
+  5: {regular:{hp:5.00, atk:7.27}, elite:{hp:4.76, atk:6.71}, guardian:{hp:4.84, atk:5.66}},
+  6: {regular:{hp:5.20, atk:7.89}, elite:{hp:5.20, atk:7.89}, guardian:{hp:3.44, atk:4.35}},
+  7: {regular:{hp:5.00, atk:7.67}, elite:{hp:5.00, atk:7.67}, guardian:{hp:3.39, atk:4.27}},
   // 2026-10-10: recalibrado con profesiones (antes 4.90/7.52, 3.60/5.60 y guardián 1.69/2.15, cuando el objetivo era ~50% de niveles).
   8: {regular:{hp:5.20, atk:7.98}, elite:{hp:3.82, atk:5.94}, guardian:{hp:2.52, atk:3.21}},   // guardián: 2.40/3.04 hasta que se le sumó la élite de escolta (GUARDIAN_ELITE_81) // 2026-10-09, segunda pasada: más duro en general y el reparto por senda en ENEMY_VS_CLASS_81 (objetivo de ariochbu: ~50% de niveles completados por senda). Élites algo por debajo: el simulador casi nunca les ganaba
   9: {regular:{hp:6.68, atk:10.26}, elite:{hp:4.89, atk:7.64}, guardian:{hp:2.69, atk:3.37}},   // La Celda (2026-10-10, 12 profesiones): llega 57-61, guardián 15-21
@@ -12953,6 +13027,9 @@ function applyChaosLaw(){
 // y en el mapa queda el botón «Reglas de la década». 61-70 (Ley del Caos) y 71-80 (Corrupción) ya existían.
 // Las reglas que dependen de la posición solo afectan al jugador: los aliados no pueden moverse.
 // ============================================================
+// Textos de las reglas de 51-80 que vienen del nerf de tanques (NERF_TANQUES, 2026-10-17).
+const FURIA_RULE_TEXT = NERF_TANQUES.furia ? `<br><br><b>Furia:</b> desde la ronda ${NERF_TANQUES.furia.startRound}, el guardián y el jefe de la década pegan un ${pctTxt(NERF_TANQUES.furia.perRound)} más por cada ronda que pase${NERF_TANQUES.furia.maxStacks ? `, hasta un +${Math.round(NERF_TANQUES.furia.perRound*NERF_TANQUES.furia.maxStacks*100)}%` : ''} (lo ves como el estado «Furia» y te avisa 2 rondas antes).` : '';
+const PERFORANTE_RULE_TEXT = NERF_TANQUES.perforante ? `<br><br><b>Golpe perforante:</b> los guardianes de piso (no el jefe de la década) ${golpePerforanteText()}.` : '';
 const DECADE_RULES = {
   0: {name:'Sin reglas', icon:'🌲', intro:'', text:'El Bosque Goblin todavía no cambia las reglas: es el lugar donde se aprende a pelear.'},
   1: {name:'Telaraña', icon:'🕸️', intro:'Los hilos tiemblan bajo tus pies. Quien se quede delante, quedará atrapado.',
@@ -12964,11 +13041,11 @@ const DECADE_RULES = {
   4: {name:'Decreto', icon:'⚖️', intro:'En esta isla manda una ley que nadie escribió. Cada combate trae su propio decreto.',
       text:'Al empezar cada combate se dicta un <b>decreto</b> que dura toda la pelea (contra el jefe de la isla, dos). Puede ser cualquiera de estos: Doble coste, Triple coste de MP, Curas a medias, Muralla, Tributo de vida, Filo, Baluarte (su retaguardia es inmune mientras quede alguien en su frente), Anclado (no puedes moverte), Desgaste, Sin pociones o Vigilia (se curan cada ronda). Se anuncia al empezar y lo ves como un estado tuyo.'},
   5: {name:'Marea', icon:'🌊', intro:'El agua sube y baja con un ritmo propio. Escucha la marea.',
-      text:'Cada 4 rondas una ola barre el Frente y te quita el 8% de tu vida máxima, salvo que estés en la Retaguardia o te hayas defendido esa ronda. Una ronda antes se oye crecer.'},
+      text:'Cada 4 rondas una ola barre el Frente y te quita el 8% de tu vida máxima, salvo que estés en la Retaguardia o te hayas defendido esa ronda. Una ronda antes se oye crecer.' + FURIA_RULE_TEXT},
   6: {name:'Ley del Caos', icon:'🌀', intro:'Aquí el caos cambia las reglas en cada combate… pero nunca las oculta.',
-      text:'En cada combate un enemigo recibe una Ley: esquiva más, pega más, o es <b>inmune a los golpes físicos</b> o <b>a los mágicos</b> (las inmunidades nunca le tocan a un guardián ni a un jefe). El daño por turno sí atraviesa la inmunidad.'},
+      text:'En cada combate un enemigo recibe una Ley: esquiva más, pega más, o es <b>inmune a los golpes físicos</b> o <b>a los mágicos</b> (las inmunidades nunca le tocan a un guardián ni a un jefe). El daño por turno sí atraviesa la inmunidad.' + PERFORANTE_RULE_TEXT + FURIA_RULE_TEXT},
   7: {name:'Corrupción', icon:'🍂', intro:'El bosque está muerto, pero algo en él sigue creciendo. Y quiere crecer dentro de ti.',
-      text:'Muchos enemigos aplican <b>Corrupción</b>: por cada carga haces un 3% más de daño y recibes un 4% más (hasta x10, dura todo el combate).'},
+      text:'Muchos enemigos aplican <b>Corrupción</b>: por cada carga haces un 3% más de daño y recibes un 4% más (hasta x10, dura todo el combate).' + PERFORANTE_RULE_TEXT + FURIA_RULE_TEXT},
   8: {name:'Suelo ardiente', icon:'🔥', intro:'La piedra arde. Quien se queda quieto aquí, se quema.',
       text:'Si pasas 3 rondas seguidas en la misma posición, el suelo te aplica <b>Quemadura</b>. Una ronda antes empieza a humear. Cambiar de posición reinicia la cuenta. A tus aliados no les afecta.'},
   9: {name:'Condena', icon:'⛓️', intro:'En la Celda nadie conserva todo lo que trae. Algo tuyo quedará encadenado.',
@@ -13198,6 +13275,7 @@ function startCombat(enemyGroup, node){
   log(`¡Emboscada! Te enfrentas a: ${enemyGroup.map(e=>e.name).join(', ')}.${allyText}`);
   applyChaosLaw();
   decadeRulesCombatStart();
+  golpePerforanteCombatStart();
   if(vowOn('piedad')) combat.enemies.forEach(e=>{ if(e.hp > 0) e.statuses.push({name:'Fortalecido', duration:99, stacks:3, stack:true}); });
   ssCombatStart();
   if(node.type==='jefe' && state.dungeon.level === 100 && !(SIM_CELDA && SIM_CELDA.sombras === false)){ combat.celdaShadows = celdaShadowTpls(); celdaShadowTick(); }
@@ -14203,8 +14281,10 @@ function specialsFromEquip(equip){
   if(equip === state.char.equip) specialsFromPets().forEach(sp=> out.push(sp));
   return out;
 }
+function blockCapNow(){ return NERF_TANQUES.blockCap != null ? NERF_TANQUES.blockCap : 0.6; }
 function blockChance(specialsArr){
-  return Math.min(0.6, (specialsArr||[]).filter(sp=>sp.type==='bloqueo').reduce((sum,sp)=>sum+sp.chance,0));
+  // Tope total: NERF_TANQUES.blockCap (25% desde 2026-10-17; antes 60%).
+  return Math.min(blockCapNow(), (specialsArr||[]).filter(sp=>sp.type==='bloqueo').reduce((sum,sp)=>sum+sp.chance,0));
 }
 
 function applyEquippedSpecials(target, dmgDealt, skill){
@@ -14404,6 +14484,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
   if(!isRepeat) trySummonShadow();
 
   if(!isRepeat && combat.chained === skillId){ log(`<b>${skill.name}</b> está encadenada en este combate (Condena).`); return; }
+  if(!isRepeat && skillSpent(skillId)){ log(`Ya usaste ${skill.name} ${NERF_TANQUES.juramentoMax} veces en este combate.`); return; }
   if(skill.ultimate && !isRepeat){
     const usesLeft = ultimateMaxUses() - (state.dungeon.ultimateUses||0);
     if(usesLeft<=0){ log(`Ya usaste ${skill.name} las ${ultimateMaxUses()} veces permitidas en esta entrada al laberinto.`); return; }
@@ -14454,6 +14535,8 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
   // el Grimorio Tier S de Sacerdote, ahora como una habilidad propia del
   // jugador en vez de solo un proc pasivo.
   if(skill.utility==='shield_self'){
+    if(skillSpent(skillId)){ log(`Ya usaste ${skill.name} ${NERF_TANQUES.juramentoMax} veces en este combate.`); return; }
+    if(skillId==='escudo_del_juramento') combat.juramentoUses = (combat.juramentoUses || 0) + 1;
     const pct = skillId==='escudo_del_juramento' ? skillBonus('escudo_del_juramento','shieldPct', skill.shieldPct) : skill.shieldPct;
     const shieldMult = 1 + specialsFromEquip(state.char.equip).filter(sp=>sp.type==='aumento_escudo').reduce((sum,sp)=>sum+sp.value,0);
     const amount = Math.round(d.maxHP*pct*shieldMult);
@@ -14679,6 +14762,7 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
   const lunaLlenaSp = (!isRepeat && skillId==='ataque_basico' && combat.lunaLlena) ? playerSetSp('set_luna_llena') : null;
   if(lunaLlenaSp) combat.lunaLlena = false;
   const splashHits = []; // [{dmg, exclude}] salpicaduras de Artemisa, se resuelven tras el bucle
+  let juicioHealCount = 0; // enemigos de este Juicio Divino que ya contaron para curar (NERF_TANQUES.juicioHealMax)
 
   targets.forEach(target=>{
     const tenaza = skillId==='ataque_basico' && !!ssOn(8); // 008 Guanteletes de Tenaza: el básico no falla ni se esquiva
@@ -14916,7 +15000,9 @@ async function playerUseSkill(skillId, targetIdx, isRepeat){
     turnEffects.push(target.tpl
       ? {targetKind:'enemy', key: combat.enemies.indexOf(target), amount:dmg, kind:'dmg'}
       : {targetKind:'ally', key: target.id, amount:dmg, kind:'dmg'});
-    if(skill.selfHealPctOfDmg && !(skillId==='drenaje_de_esencia' && skillBonus('drenaje_de_esencia','healPct',0) <= 0)){
+    // Juicio Divino (2026-10-17): la curación cuenta como mucho NERF_TANQUES.juicioHealMax enemigos (los primeros que golpea).
+    const juicioCapped = skillId==='juicio_divino' && NERF_TANQUES.juicioHealMax && dmg > 0 && (juicioHealCount++) >= NERF_TANQUES.juicioHealMax;
+    if(skill.selfHealPctOfDmg && !juicioCapped && !(skillId==='drenaje_de_esencia' && skillBonus('drenaje_de_esencia','healPct',0) <= 0)){
       let healPct = skillId==='golpe_consagrado' ? skillBonus('golpe_consagrado','healPct', skill.selfHealPctOfDmg) : skillId==='drenaje_de_esencia' ? skillBonus('drenaje_de_esencia','healPct',0) : skill.selfHealPctOfDmg;
       if(skillId==='golpe_consagrado' && ssOn(81)) healPct = 1; // 081 Cayado del Faraón
       // Drenaje de Esencia (kits de retaguardia, 2026-10-17): +X% por cada enemigo con Veneno (está en su texto).
@@ -15926,6 +16012,7 @@ async function processEnemyTurns(){
     if(e.pendingStun){ applyStatus(e, {name:'Aturdido', duration:1}, false); e.pendingStun = false; }
   });
   decadeRulesRoundEnd();
+  furiaRoundEnd();
   ssRoundEnd();
 
   checkCombatEnd();
@@ -16036,7 +16123,11 @@ function enemyActInner(enemy){
   // mientras el jugador se está Defendiendo este turno.
   if(target.kind==='player' && combat.playerDefending){
     defenderSpecials.forEach(sp=>{ if(sp.type==='defend_bloqueo_bonus') bChance += sp.value; });
+    bChance = Math.min(blockCapNow(), bChance); // el tope es total, también defendiéndote
   }
+  // Golpe perforante (guardianes de 61-79): ignora el bloqueo.
+  const pendingAb = enemy.pendingAbilityId && enemy.tpl.abilities && enemy.tpl.abilities[enemy.pendingAbilityId];
+  if(pendingAb && pendingAb.ignoreBlock) bChance = 0;
   if(!utilityMove && bChance>0 && chance(bChance)){
     delete enemy.pendingAbilityId;
     log(`${enemy.name} ataca a ${target.kind==='ally' ? target.ally.name : 'ti'}, ¡pero el escudo bloquea el golpe por completo!`);
@@ -17197,6 +17288,7 @@ async function simPlayTurn(skillIds){
   // la habilidad que elija la rotación entre las que se puedan pagar y usar desde donde está
   const ok = (id)=>{
     if(combat.chained === id) return false;
+    if(skillSpent(id)) return false;
     const sk = SKILLS[id]; if(!sk || (!sk.mult && !SIM_UTILITY_SKILLS.has(id))) return false;
     if(sk.ultimate && ((ultimateMaxUses() - (state.dungeon.ultimateUses||0)) <= 0 || (state.dungeon.ultimateCooldown||0) > 0)) return false;
     if(sk.cost && (sk.cost.tipo === 'estamina' ? state.char.curSta : state.char.curSpi) < effectiveSkillCost(id, sk)) return false;
@@ -17394,6 +17486,8 @@ async function simRun(cfg){
 if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
   window.__sim = simRun; window.__simLevel = simLevels;
   // Kits de retaguardia (2026-10-17): __kits({pasoAtras:0.08}) prueba valores sin tocar el archivo; __kits(null) vuelve a los del código.
+  // Nerf de tanques: valores de prueba sin tocar el archivo (null en una clave = sin ese recorte; __nerfTanques(null) = los del código).
+  window.__nerfTanques = (o)=>{ Object.keys(NERF_TANQUES).forEach(k=> delete NERF_TANQUES[k]); Object.assign(NERF_TANQUES, JSON.parse(JSON.stringify(NERF_TANQUES_BASE)), o || {}); return JSON.parse(JSON.stringify(NERF_TANQUES)); };
   window.__kits = (o)=>{ Object.keys(KIT_RETAGUARDIA).forEach(k=> delete KIT_RETAGUARDIA[k]); Object.assign(KIT_RETAGUARDIA, KIT_RETAGUARDIA_BASE, o || {}); applyKitRetaguardia(); return Object.assign({}, KIT_RETAGUARDIA); };
   // IA del simulador v2: __simIA({rules, learn, eps, persist}) cambia los interruptores y devuelve cómo quedan;
   // __simAprende() devuelve la tabla aprendida (con medias), __simAprende('borrar') la vacía.
@@ -18260,6 +18354,7 @@ function renderCombat(){
     if(sk.requiresPos && combat.playerPos!==sk.requiresPos && !sk.penaltyIfFrente) disabled = true;
     let costText = sk.cost ? `${effectiveSkillCost(sk.id, sk)} ${COST_LABELS[sk.cost.tipo] || sk.cost.tipo}` : 'Gratis';
     if(combat.chained === sid){ disabled = true; costText = 'Encadenada'; }
+    if(sid === 'escudo_del_juramento' && NERF_TANQUES.juramentoMax){ const used = combat.juramentoUses || 0; if(skillSpent(sid)){ disabled = true; costText = `Agotado (${used}/${NERF_TANQUES.juramentoMax})`; } else costText += ` · ${used}/${NERF_TANQUES.juramentoMax}`; }
     if(sk.ultimate){
       const usesLeft = ultimateMaxUses() - (state.dungeon.ultimateUses||0);
       const cooldown = state.dungeon.ultimateCooldown||0;

@@ -69,6 +69,7 @@ try{ const stl = document.createElement('style'); stl.textContent = 'html,body{d
     if(!t || !t.id){ await sleep(1500); continue; }
     applyTune(t.tune);
     if(W.__kits) W.__kits(t.kit || null); // kits de retaguardia: valores de prueba por tarea (null = los del código)
+    if(W.__nerfTanques) W.__nerfTanques(t.nerf || null); // nerf de tanques: valores de prueba por tarea (null = los del código)
     // Tarea de depuración: ejecuta código en la página y devuelve lo que salga (ver dbg.py).
     if(t.kind === 'js'){
       let out;
